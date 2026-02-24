@@ -172,7 +172,15 @@ func (s *Store) getPatternByID(id int64) (*PatternRow, error) {
 }
 
 // EmbedPending generates embeddings for patterns that don't have one yet.
-func (s *Store) EmbedPending(embedFunc func(text string) ([]float32, error), model string) (int, error) {
+// progressFn is called after each embedding is generated (can be nil).
+func (s *Store) EmbedPending(embedFunc func(text string) ([]float32, error), model string, progressFn func(done, total int)) (int, error) {
+	var total int
+	s.db.QueryRow(`
+		SELECT COUNT(*) FROM patterns p
+		WHERE NOT EXISTS (
+			SELECT 1 FROM embeddings e WHERE e.source = 'patterns' AND e.source_id = p.id
+		)`).Scan(&total)
+
 	rows, err := s.db.Query(`
 		SELECT p.id, p.embed_text FROM patterns p
 		WHERE NOT EXISTS (
@@ -200,6 +208,9 @@ func (s *Store) EmbedPending(embedFunc func(text string) ([]float32, error), mod
 			continue
 		}
 		count++
+		if progressFn != nil {
+			progressFn(count, total)
+		}
 	}
 
 	return count, nil

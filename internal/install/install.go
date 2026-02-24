@@ -122,18 +122,19 @@ func initialSync() error {
 	}
 	defer st.Close()
 
-	if err := st.SyncAll(); err != nil {
+	if err := st.SyncAllWithProgress(func(done, total int) {
+		renderProgress("Syncing sessions", done, total)
+	}); err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
+	clearLine()
 
-	// Count sessions and events for summary.
-	var sessionCount, eventCount int
-	row := st.DB().QueryRow("SELECT COUNT(*) FROM sessions")
-	row.Scan(&sessionCount)
-	row = st.DB().QueryRow("SELECT COUNT(*) FROM events")
-	row.Scan(&eventCount)
+	var sessionCount, eventCount, patternCount int
+	st.DB().QueryRow("SELECT COUNT(*) FROM sessions").Scan(&sessionCount)
+	st.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&eventCount)
+	st.DB().QueryRow("SELECT COUNT(*) FROM patterns").Scan(&patternCount)
 
-	fmt.Printf("✓ Initial sync complete (%d sessions, %d events)\n", sessionCount, eventCount)
+	fmt.Printf("✓ Synced %d sessions (%d events, %d patterns)\n", sessionCount, eventCount, patternCount)
 	return nil
 }
 
@@ -144,26 +145,49 @@ func generateEmbeddings() {
 
 	ctx := context.Background()
 	if !emb.EnsureAvailable(ctx) {
-		fmt.Println("ℹ Ollama not available — skipping embedding generation (FTS5 search only)")
+		fmt.Println("ℹ Ollama not available — skipping embeddings (FTS5 search only)")
 		return
 	}
 
-	fmt.Printf("⏳ Generating embeddings (%s)...\n", model)
-
 	st, err := store.OpenDefault()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: embedding generation failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: embedding failed: %v\n", err)
 		return
 	}
 	defer st.Close()
 
 	count, err := st.EmbedPending(func(text string) ([]float32, error) {
 		return emb.EmbedForStorage(ctx, text)
-	}, model)
+	}, model, func(done, total int) {
+		renderProgress("Generating embeddings", done, total)
+	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: embedding generation failed: %v\n", err)
+		clearLine()
+		fmt.Fprintf(os.Stderr, "Warning: embedding failed: %v\n", err)
 		return
 	}
+	clearLine()
 
-	fmt.Printf("✓ Embeddings generated (%d patterns, model: %s)\n", count, model)
+	if count > 0 {
+		fmt.Printf("✓ Generated %d embeddings (model: %s)\n", count, model)
+	} else {
+		fmt.Printf("✓ Embeddings up to date (model: %s)\n", model)
+	}
+}
+
+func renderProgress(prefix string, done, total int) {
+	if total == 0 {
+		return
+	}
+	const barWidth = 25
+	filled := barWidth * done / total
+	if filled > barWidth {
+		filled = barWidth
+	}
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+	fmt.Printf("\r⏳ %s [%s] %d/%d", prefix, bar, done, total)
+}
+
+func clearLine() {
+	fmt.Print("\r\033[K")
 }
