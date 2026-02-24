@@ -99,6 +99,10 @@ type ToolInput struct {
 	Description string `json:"description,omitempty"`
 	FilePath    string `json:"file_path,omitempty"`
 	Pattern     string `json:"pattern,omitempty"`
+	// Buddy MCP tool fields
+	Query     string `json:"query,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Project   string `json:"project,omitempty"`
 }
 
 // TaskInput is the input for TaskCreate/TaskUpdate tool calls.

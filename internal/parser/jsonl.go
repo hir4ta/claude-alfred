@@ -393,6 +393,11 @@ func extractToolSummary(toolName string, inputRaw json.RawMessage) string {
 		return ""
 	}
 
+	// Buddy MCP tools get dedicated summary extraction.
+	if strings.Contains(toolName, "buddy_") {
+		return extractBuddyToolSummary(toolName, ti)
+	}
+
 	var summary string
 	switch toolName {
 	case "Bash":
@@ -425,6 +430,44 @@ func extractToolSummary(toolName string, inputRaw json.RawMessage) string {
 	}
 
 	return Truncate(summary, maxInputSummaryLen)
+}
+
+// extractBuddyToolSummary builds a summary for buddy MCP tool calls.
+func extractBuddyToolSummary(toolName string, ti ToolInput) string {
+	// Query is the most informative field.
+	if ti.Query != "" {
+		return Truncate(fmt.Sprintf("%q", ti.Query), maxInputSummaryLen)
+	}
+
+	// Build from available fields.
+	var parts []string
+	if ti.Project != "" {
+		parts = append(parts, "project:"+ti.Project)
+	}
+	if ti.SessionID != "" {
+		sid := ti.SessionID
+		if len(sid) > 8 {
+			sid = sid[:8]
+		}
+		parts = append(parts, "session:"+sid)
+	}
+	if len(parts) > 0 {
+		return Truncate(strings.Join(parts, " "), maxInputSummaryLen)
+	}
+
+	// Default label based on tool name.
+	shortName := toolName
+	if idx := strings.LastIndex(toolName, "buddy_"); idx >= 0 {
+		shortName = toolName[idx:]
+	}
+	switch shortName {
+	case "buddy_resume":
+		return "latest session"
+	case "buddy_sessions":
+		return "recent"
+	default:
+		return "latest"
+	}
 }
 
 func parseTimestamp(s string) time.Time {

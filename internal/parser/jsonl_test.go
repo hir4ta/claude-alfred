@@ -400,6 +400,204 @@ func TestParseTaskListOutputNoMatch(t *testing.T) {
 	}
 }
 
+func TestParseBuddyResumeDefault(t *testing.T) {
+	line := []byte(`{
+		"type": "assistant",
+		"uuid": "buddy-001",
+		"timestamp": "2026-02-25T10:00:00.000Z",
+		"sessionId": "sess-001",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "tool_use",
+					"id": "toolu_b1",
+					"name": "mcp__claude-buddy__buddy_resume",
+					"input": {}
+				}
+			]
+		}
+	}`)
+
+	events, err := ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].ToolName != "mcp__claude-buddy__buddy_resume" {
+		t.Errorf("expected buddy_resume, got %q", events[0].ToolName)
+	}
+	if events[0].ToolInput != "latest session" {
+		t.Errorf("expected 'latest session', got %q", events[0].ToolInput)
+	}
+}
+
+func TestParseBuddyResumeWithProject(t *testing.T) {
+	line := []byte(`{
+		"type": "assistant",
+		"uuid": "buddy-002",
+		"timestamp": "2026-02-25T10:01:00.000Z",
+		"sessionId": "sess-001",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "tool_use",
+					"id": "toolu_b2",
+					"name": "mcp__claude-buddy__buddy_resume",
+					"input": {
+						"project": "claude-buddy"
+					}
+				}
+			]
+		}
+	}`)
+
+	events, err := ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].ToolInput != "project:claude-buddy" {
+		t.Errorf("expected 'project:claude-buddy', got %q", events[0].ToolInput)
+	}
+}
+
+func TestParseBuddyRecallWithQuery(t *testing.T) {
+	line := []byte(`{
+		"type": "assistant",
+		"uuid": "buddy-003",
+		"timestamp": "2026-02-25T10:02:00.000Z",
+		"sessionId": "sess-001",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "tool_use",
+					"id": "toolu_b3",
+					"name": "mcp__claude-buddy__buddy_recall",
+					"input": {
+						"query": "authentication flow"
+					}
+				}
+			]
+		}
+	}`)
+
+	events, err := ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].ToolInput != `"authentication flow"` {
+		t.Errorf("expected quoted query, got %q", events[0].ToolInput)
+	}
+}
+
+func TestParseBuddyPatternsWithQuery(t *testing.T) {
+	line := []byte(`{
+		"type": "assistant",
+		"uuid": "buddy-004",
+		"timestamp": "2026-02-25T10:03:00.000Z",
+		"sessionId": "sess-001",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "tool_use",
+					"id": "toolu_b4",
+					"name": "mcp__claude-buddy__buddy_patterns",
+					"input": {
+						"query": "error handling",
+						"type": "error_solution"
+					}
+				}
+			]
+		}
+	}`)
+
+	events, err := ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].ToolInput != `"error handling"` {
+		t.Errorf("expected quoted query, got %q", events[0].ToolInput)
+	}
+}
+
+func TestParseBuddyStatsDefault(t *testing.T) {
+	line := []byte(`{
+		"type": "assistant",
+		"uuid": "buddy-005",
+		"timestamp": "2026-02-25T10:04:00.000Z",
+		"sessionId": "sess-001",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "tool_use",
+					"id": "toolu_b5",
+					"name": "mcp__claude-buddy__buddy_stats",
+					"input": {}
+				}
+			]
+		}
+	}`)
+
+	events, err := ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].ToolInput != "latest" {
+		t.Errorf("expected 'latest', got %q", events[0].ToolInput)
+	}
+}
+
+func TestParseBuddyDecisionsWithSessionID(t *testing.T) {
+	line := []byte(`{
+		"type": "assistant",
+		"uuid": "buddy-006",
+		"timestamp": "2026-02-25T10:05:00.000Z",
+		"sessionId": "sess-001",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "tool_use",
+					"id": "toolu_b6",
+					"name": "mcp__claude-buddy__buddy_decisions",
+					"input": {
+						"session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+					}
+				}
+			]
+		}
+	}`)
+
+	events, err := ParseLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].ToolInput != "session:a1b2c3d4" {
+		t.Errorf("expected 'session:a1b2c3d4', got %q", events[0].ToolInput)
+	}
+}
+
 func TestParseBashWithCommand(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
