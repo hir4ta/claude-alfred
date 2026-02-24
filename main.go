@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/hir4ta/claude-buddy/internal/coach"
+	"github.com/hir4ta/claude-buddy/internal/embedder"
 	"github.com/hir4ta/claude-buddy/internal/install"
 	"github.com/hir4ta/claude-buddy/internal/locale"
 	"github.com/hir4ta/claude-buddy/internal/mcpserver"
@@ -136,7 +137,13 @@ func runServe() error {
 	}
 	defer st.Close()
 
-	s := mcpserver.New(claudeHome, lang, st)
+	// Try to initialize embedder (graceful degradation if Ollama not available).
+	model := embedder.ModelForLocale(lang.Code)
+	emb := embedder.NewEmbedder("", model)
+	ctx := context.Background()
+	emb.EnsureAvailable(ctx)
+
+	s := mcpserver.New(claudeHome, lang, st, emb)
 	return server.ServeStdio(s)
 }
 

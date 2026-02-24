@@ -70,6 +70,8 @@ claude
 **Features:**
 
 - **Header**: Session ID, turn count, tool usage, elapsed time, pulsing activity indicator
+- **Anti-pattern detection**: Real-time alerts for retry loops, context thrashing, excessive tools, destructive commands, and more
+  - Warning (yellow) and Action (red) level alert bars
 - **Task progress**: TaskCreate/TaskUpdate tracking with shimmer animation
   - `○` pending / `▶` in_progress (animated) / `✔` completed
 - **Message stream**: Live display of user input, assistant responses, tool summaries
@@ -126,9 +128,11 @@ claude-buddy serve
 | `buddy_stats` | Session statistics (turns, tool frequency, duration) |
 | `buddy_tips` | AI-powered feedback and improvement suggestions |
 | `buddy_sessions` | List recent sessions with metadata |
-| `buddy_resume` | Restore previous session context (summary, files modified, decisions) |
+| `buddy_resume` | Restore previous session context (goal, intent, compaction history, files changed/referenced, decisions) |
 | `buddy_recall` | FTS5 full-text search across past session history |
 | `buddy_decisions` | Extract design decisions from past sessions |
+| `buddy_alerts` | Real-time anti-pattern detection (retry loops, context thrashing, etc.) |
+| `buddy_patterns` | Cross-project knowledge search with hybrid FTS5 + semantic search |
 
 ---
 
@@ -151,12 +155,13 @@ claude-buddy/
 ├── internal/
 │   ├── parser/                # JSONL parser (type definitions + parsing)
 │   ├── watcher/               # File watching (fsnotify + tail)
-│   ├── analyzer/              # Live stats + Feedback type
+│   ├── analyzer/              # Live stats + Feedback type + anti-pattern detector
 │   ├── coach/                 # AI feedback generation via claude -p
+│   ├── embedder/              # Ollama integration for semantic search
 │   ├── locale/                # System locale detection (18 languages)
 │   ├── tui/                   # Bubble Tea TUI (watch / browse / select)
-│   ├── mcpserver/             # MCP server (stdio, 6 tools)
-│   ├── store/                 # SQLite persistence (FTS5 + incremental sync)
+│   ├── mcpserver/             # MCP server (stdio, 8 tools)
+│   ├── store/                 # SQLite persistence (FTS5 + vector search + incremental sync)
 │   └── install/               # MCP registration + CLAUDE.md + initial sync
 ├── go.mod
 └── go.sum
@@ -171,3 +176,22 @@ claude-buddy/
 | [fsnotify/fsnotify](https://github.com/fsnotify/fsnotify) | File change watching |
 | [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) | MCP server SDK |
 | [ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3) | SQLite driver (FTS5 support) |
+
+## Optional: Semantic Search
+
+`buddy_patterns` supports hybrid FTS5 + vector search when [Ollama](https://ollama.com) is available. Without Ollama, FTS5 full-text search is used as fallback.
+
+```bash
+# Install Ollama (macOS)
+brew install ollama
+ollama serve &
+
+# Pull embedding model
+ollama pull kun432/cl-nagoya-ruri-large    # Japanese (recommended for JA locale)
+ollama pull nomic-embed-text               # English / multilingual
+
+# Re-sync to generate embeddings
+claude-buddy install
+```
+
+The model is auto-selected based on your system locale: `kun432/cl-nagoya-ruri-large` (1024d) for Japanese, `nomic-embed-text` (768d) for other languages.

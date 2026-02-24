@@ -158,6 +158,79 @@ func (s *Store) GetFilesModified(sessionID string, limit int) ([]string, error) 
 	return paths, nil
 }
 
+// FileActivity represents a file path with its action and occurrence count.
+type FileActivity struct {
+	Path   string
+	Action string // "Write" or "Edit" for changed; "Read" for referenced
+	Count  int
+}
+
+// GetFilesWritten returns files that were written or edited in a session, grouped by path and action.
+func (s *Store) GetFilesWritten(sessionID string, limit int) ([]FileActivity, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	rows, err := s.db.Query(`
+		SELECT tool_input, tool_name, COUNT(*)
+		FROM events
+		WHERE session_id = ?
+		  AND tool_name IN ('Write','Edit')
+		  AND tool_input != ''
+		GROUP BY tool_input, tool_name
+		ORDER BY COUNT(*) DESC
+		LIMIT ?`, sessionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: get files written: %w", err)
+	}
+	defer rows.Close()
+
+	var result []FileActivity
+	for rows.Next() {
+		var fa FileActivity
+		if err := rows.Scan(&fa.Path, &fa.Action, &fa.Count); err != nil {
+			continue
+		}
+		result = append(result, fa)
+	}
+	return result, nil
+}
+
+// GetFilesReadOnly returns files that were only read (never written/edited) in a session.
+func (s *Store) GetFilesReadOnly(sessionID string, limit int) ([]FileActivity, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	rows, err := s.db.Query(`
+		SELECT tool_input, 'Read', COUNT(*)
+		FROM events
+		WHERE session_id = ?
+		  AND tool_name = 'Read'
+		  AND tool_input != ''
+		  AND tool_input NOT IN (
+			SELECT tool_input FROM events
+			WHERE session_id = ?
+			  AND tool_name IN ('Write','Edit')
+			  AND tool_input != ''
+		  )
+		GROUP BY tool_input
+		ORDER BY COUNT(*) DESC
+		LIMIT ?`, sessionID, sessionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: get files read-only: %w", err)
+	}
+	defer rows.Close()
+
+	var result []FileActivity
+	for rows.Next() {
+		var fa FileActivity
+		if err := rows.Scan(&fa.Path, &fa.Action, &fa.Count); err != nil {
+			continue
+		}
+		result = append(result, fa)
+	}
+	return result, nil
+}
+
 func scanEventRows(rows *sql.Rows) []EventRow {
 	var result []EventRow
 	for rows.Next() {

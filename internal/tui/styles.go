@@ -146,6 +146,16 @@ var (
 
 	mdHorizontalRuleStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#686068"))
+
+	// Alert styles
+	alertWarningStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#1A1A1A")).
+				Background(lipgloss.Color("#B5A06A"))
+
+	alertActionStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#D0D0D0")).
+			Background(lipgloss.Color("#C15F3C")).
+			Bold(true)
 )
 
 // Nerd Fonts glyphs (Font Awesome set).

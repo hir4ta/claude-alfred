@@ -23,6 +23,8 @@ type TaskState struct {
 type Model struct {
 	events         []parser.SessionEvent
 	stats          analyzer.Stats
+	detector       *analyzer.Detector
+	alerts         []analyzer.Alert
 	tasks          []TaskState // ordered by creation
 	taskMap        map[string]int // taskID -> index in tasks
 	taskCounter    int
@@ -50,6 +52,7 @@ type Model struct {
 // NewModel creates a new TUI model with initial events pre-loaded.
 func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.SessionEvent, sessionID string, lang locale.Lang) Model {
 	stats := analyzer.NewStats()
+	det := analyzer.NewDetector()
 	var tasks []TaskState
 	taskMap := make(map[string]int)
 	taskCounter := 0
@@ -60,6 +63,7 @@ func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.Session
 	for i := range initialEvents {
 		ev := &initialEvents[i]
 		stats.Update(*ev)
+		det.Update(*ev)
 
 		// Auto-compact boundary: reset displayed events to avoid duplicates.
 		// After compaction, Claude Code re-serializes context messages to the JSONL,
@@ -103,6 +107,7 @@ func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.Session
 	return Model{
 		events:        events,
 		stats:         stats,
+		detector:      det,
 		tasks:         tasks,
 		taskMap:       taskMap,
 		taskCounter:   taskCounter,
@@ -148,8 +153,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ev := parser.SessionEvent(msg)
 		applyModeFlags(&ev, &m.inPlanMode, &m.awaitingAnswer)
 
-		// Update stats and tasks always
+		// Update stats, detector, and tasks always
 		m.stats.Update(ev)
+		newAlerts := m.detector.Update(ev)
+		for _, a := range newAlerts {
+			if a.Level >= analyzer.LevelWarning {
+				m.alerts = append(m.alerts, a)
+			}
+		}
+		// Keep only last 3 alerts
+		if len(m.alerts) > 3 {
+			m.alerts = m.alerts[len(m.alerts)-3:]
+		}
 
 		// Auto-compact boundary: reset displayed events to avoid duplicates.
 		if ev.Type == parser.EventCompactBoundary {
@@ -334,6 +349,9 @@ func applyModeFlags(ev *parser.SessionEvent, inPlanMode *bool, awaitingAnswer *b
 func (m Model) fixedHeight() int {
 	// header: 2 lines (title + stats)
 	h := 2
+
+	// alerts
+	h += len(m.alerts)
 
 	// tasks
 	for _, t := range m.tasks {

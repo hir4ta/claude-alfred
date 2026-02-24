@@ -9,13 +9,15 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/hir4ta/claude-buddy/internal/analyzer"
 	"github.com/hir4ta/claude-buddy/internal/coach"
+	"github.com/hir4ta/claude-buddy/internal/embedder"
 	"github.com/hir4ta/claude-buddy/internal/locale"
 	"github.com/hir4ta/claude-buddy/internal/store"
 	"github.com/hir4ta/claude-buddy/internal/watcher"
 )
 
 // New creates a new MCP server with all tools registered.
-func New(claudeHome string, lang locale.Lang, st *store.Store) *server.MCPServer {
+// emb may be nil if Ollama is not available.
+func New(claudeHome string, lang locale.Lang, st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 	s := server.NewMCPServer(
 		"claude-buddy",
 		"0.2.0",
@@ -85,6 +87,15 @@ func New(claudeHome string, lang locale.Lang, st *store.Store) *server.MCPServer
 			Handler: recallHandler(st),
 		},
 		server.ServerTool{
+			Tool: mcp.NewTool("buddy_alerts",
+				mcp.WithDescription("Detect anti-patterns in Claude Code sessions. Returns active alerts and session health score."),
+				mcp.WithString("session_id",
+					mcp.Description("Session ID (optional, defaults to latest)"),
+				),
+			),
+			Handler: alertsHandler(claudeHome),
+		},
+		server.ServerTool{
 			Tool: mcp.NewTool("buddy_decisions",
 				mcp.WithDescription("List design decisions from past sessions. Decisions are extracted from assistant messages containing architectural choices. Use before making related changes."),
 				mcp.WithString("session_id",
@@ -101,6 +112,28 @@ func New(claudeHome string, lang locale.Lang, st *store.Store) *server.MCPServer
 				),
 			),
 			Handler: decisionsHandler(st),
+		},
+		server.ServerTool{
+			Tool: mcp.NewTool("buddy_patterns",
+				mcp.WithDescription("Cross-project knowledge search with hybrid FTS5 + semantic search. Searches patterns extracted from past sessions."),
+				mcp.WithString("query",
+					mcp.Description("Search query (required)"),
+					mcp.Required(),
+				),
+				mcp.WithString("type",
+					mcp.Description("Pattern type filter: error_solution, architecture, tool_usage, decision (optional)"),
+				),
+				mcp.WithString("project",
+					mcp.Description("Project name to filter (optional)"),
+				),
+				mcp.WithBoolean("cross_project",
+					mcp.Description("Search across all projects (default: false)"),
+				),
+				mcp.WithNumber("limit",
+					mcp.Description("Maximum results (default: 5)"),
+				),
+			),
+			Handler: patternsHandler(st, emb),
 		},
 	)
 
@@ -287,9 +320,19 @@ func resumeHandler(st *store.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("failed to get decisions: " + err.Error()), nil
 		}
 
-		filesModified, err := st.GetFilesModified(sess.ID, 30)
+		filesChanged, err := st.GetFilesWritten(sess.ID, 30)
 		if err != nil {
-			return mcp.NewToolResultError("failed to get files: " + err.Error()), nil
+			return mcp.NewToolResultError("failed to get files changed: " + err.Error()), nil
+		}
+
+		filesReferenced, err := st.GetFilesReadOnly(sess.ID, 30)
+		if err != nil {
+			return mcp.NewToolResultError("failed to get files referenced: " + err.Error()), nil
+		}
+
+		compactEvents, err := st.GetCompactEvents(sess.ID)
+		if err != nil {
+			return mcp.NewToolResultError("failed to get compact events: " + err.Error()), nil
 		}
 
 		chain, err := st.GetSessionChain(sess.ID)
@@ -297,8 +340,8 @@ func resumeHandler(st *store.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("failed to get session chain: " + err.Error()), nil
 		}
 
-		// Find last user and assistant messages from recent events.
-		var lastUser, lastAssistant string
+		// Find last user message, last assistant message, and current intent.
+		var lastUser, lastAssistant, currentIntent string
 		for _, ev := range recentEvents {
 			if lastUser == "" && ev.UserText != "" {
 				lastUser = ev.UserText
@@ -306,7 +349,13 @@ func resumeHandler(st *store.Store) server.ToolHandlerFunc {
 			if lastAssistant == "" && ev.AssistantText != "" {
 				lastAssistant = ev.AssistantText
 			}
-			if lastUser != "" && lastAssistant != "" {
+			// current_intent: last user message that is NOT an answer.
+			if currentIntent == "" && ev.EventType == 0 && ev.UserText != "" {
+				if !strings.HasPrefix(ev.UserText, "User has answered") {
+					currentIntent = ev.UserText
+				}
+			}
+			if lastUser != "" && lastAssistant != "" && currentIntent != "" {
 				break
 			}
 		}
@@ -353,30 +402,81 @@ func resumeHandler(st *store.Store) server.ToolHandlerFunc {
 			decisionSummaries = append(decisionSummaries, dm)
 		}
 
-		// Build parent session summaries.
+		// Build compaction history.
+		compactionHistory := make([]map[string]any, 0, len(compactEvents))
+		for _, ce := range compactEvents {
+			compactionHistory = append(compactionHistory, map[string]any{
+				"segment":   ce.SegmentIndex,
+				"timestamp": ce.Timestamp,
+				"summary":   ce.SummaryText,
+				"pre_turns": ce.PreTurnCount,
+				"pre_tools": ce.PreToolCount,
+			})
+		}
+
+		// Build files_changed.
+		filesChangedList := make([]map[string]any, 0, len(filesChanged))
+		for _, fa := range filesChanged {
+			filesChangedList = append(filesChangedList, map[string]any{
+				"path":   fa.Path,
+				"action": fa.Action,
+				"count":  fa.Count,
+			})
+		}
+
+		// Build files_referenced.
+		filesReferencedList := make([]map[string]any, 0, len(filesReferenced))
+		for _, fa := range filesReferenced {
+			filesReferencedList = append(filesReferencedList, map[string]any{
+				"path":  fa.Path,
+				"count": fa.Count,
+			})
+		}
+
+		// Build parent session summaries with decisions.
 		parentSummaries := make([]map[string]any, 0, len(chain))
 		for _, ps := range chain {
 			if ps.ID == sess.ID {
 				continue
 			}
-			parentSummaries = append(parentSummaries, map[string]any{
+			pm := map[string]any{
 				"session_id": ps.ID,
 				"summary":    ps.Summary,
 				"turns":      ps.TurnCount,
-			})
+			}
+			// Fetch decisions for each parent session.
+			parentDecisions, pdErr := st.GetDecisions(ps.ID, "", 5)
+			if pdErr == nil && len(parentDecisions) > 0 {
+				pdList := make([]map[string]any, 0, len(parentDecisions))
+				for _, pd := range parentDecisions {
+					pdm := map[string]any{
+						"topic":    truncate(pd.Topic, 200),
+						"decision": truncate(pd.DecisionText, 200),
+					}
+					if pd.Reasoning != "" {
+						pdm["reasoning"] = truncate(pd.Reasoning, 200)
+					}
+					pdList = append(pdList, pdm)
+				}
+				pm["decisions"] = pdList
+			}
+			parentSummaries = append(parentSummaries, pm)
 		}
 
 		result := map[string]any{
 			"session_id":             sess.ID,
 			"project":               sess.ProjectName,
-			"summary":               sess.Summary,
+			"initial_goal":          truncate(sess.FirstPrompt, 300),
+			"current_intent":        truncate(currentIntent, 300),
 			"turn_count":            sess.TurnCount,
 			"compact_count":         sess.CompactCount,
+			"compaction_history":    compactionHistory,
+			"files_changed":         filesChangedList,
+			"files_referenced":      filesReferencedList,
+			"decisions":             decisionSummaries,
+			"recent_events":         eventSummaries,
 			"last_user_message":     truncate(lastUser, 300),
 			"last_assistant_message": truncate(lastAssistant, 300),
-			"recent_events":         eventSummaries,
-			"decisions":             decisionSummaries,
-			"files_modified":        filesModified,
 			"parent_sessions":       parentSummaries,
 		}
 
@@ -519,6 +619,118 @@ func levelString(l analyzer.FeedbackLevel) string {
 		return "action"
 	default:
 		return "info"
+	}
+}
+
+func patternsHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if st == nil {
+			return mcp.NewToolResultError("store not available"), nil
+		}
+
+		query := req.GetString("query", "")
+		if query == "" {
+			return mcp.NewToolResultError("query parameter is required"), nil
+		}
+
+		patternType := req.GetString("type", "")
+		project := req.GetString("project", "")
+		crossProject := req.GetBool("cross_project", false)
+		limit := req.GetInt("limit", 5)
+		if limit < 1 {
+			limit = 5
+		}
+
+		// Try hybrid search if embedder is available.
+		var queryVec []float32
+		if emb != nil && emb.Available() {
+			if vec, err := emb.EmbedForSearch(ctx, query); err == nil {
+				queryVec = vec
+			}
+		}
+
+		patterns, searchMode, err := st.HybridSearchPatterns(query, queryVec, patternType, project, crossProject, limit)
+		if err != nil {
+			return mcp.NewToolResultError("search failed: " + err.Error()), nil
+		}
+
+		total, _ := st.CountPatterns(query)
+
+		patternList := make([]map[string]any, 0, len(patterns))
+		for _, p := range patterns {
+			patternList = append(patternList, store.PatternJSON(p))
+		}
+
+		result := map[string]any{
+			"query":         query,
+			"search_mode":   searchMode,
+			"patterns":      patternList,
+			"total_matches": total,
+			"fallback":      searchMode != "hybrid",
+		}
+
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}
+
+func alertsHandler(claudeHome string) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		sessions, err := watcher.ListSessions(claudeHome)
+		if err != nil || len(sessions) == 0 {
+			return mcp.NewToolResultError("no sessions found"), nil
+		}
+
+		sessionID := req.GetString("session_id", "")
+		var target watcher.SessionInfo
+		if sessionID != "" {
+			for _, s := range sessions {
+				if strings.HasPrefix(s.SessionID, sessionID) {
+					target = s
+					break
+				}
+			}
+			if target.Path == "" {
+				return mcp.NewToolResultError("session not found: " + sessionID), nil
+			}
+		} else {
+			target = sessions[0]
+		}
+
+		detail, err := watcher.LoadSessionDetail(target)
+		if err != nil {
+			return mcp.NewToolResultError("failed to load session: " + err.Error()), nil
+		}
+
+		det := analyzer.NewDetector()
+		totalDetected := 0
+		for _, ev := range detail.Events {
+			alerts := det.Update(ev)
+			totalDetected += len(alerts)
+		}
+
+		activeAlerts := det.ActiveAlerts()
+		alertList := make([]map[string]any, 0, len(activeAlerts))
+		for _, a := range activeAlerts {
+			alertList = append(alertList, map[string]any{
+				"pattern_name": analyzer.PatternName(a.Pattern),
+				"level":        levelString(a.Level),
+				"situation":    a.Situation,
+				"observation":  a.Observation,
+				"suggestion":   a.Suggestion,
+				"event_count":  a.EventCount,
+				"timestamp":    a.Timestamp.Format("2006-01-02 15:04:05"),
+			})
+		}
+
+		result := map[string]any{
+			"active_alerts":  alertList,
+			"session_health": det.SessionHealth(),
+			"total_detected": totalDetected,
+		}
+
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(data)), nil
 	}
 }
 

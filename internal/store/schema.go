@@ -2,7 +2,7 @@ package store
 
 import "database/sql"
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -105,6 +105,116 @@ CREATE TRIGGER IF NOT EXISTS decisions_ad AFTER DELETE ON decisions BEGIN
 END;
 `
 
+const ddlV2 = `
+-- ==========================================================
+-- tags master (normalized: junction table instead of JSON array)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS tags (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- ==========================================================
+-- patterns table (knowledge unit)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS patterns (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      TEXT NOT NULL,
+    pattern_type    TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    embed_text      TEXT NOT NULL,
+    language        TEXT,
+    scope           TEXT NOT NULL DEFAULT 'project',
+    source_event_id INTEGER,
+    timestamp       TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    FOREIGN KEY (source_event_id) REFERENCES events(id)
+);
+
+CREATE TABLE IF NOT EXISTS pattern_tags (
+    pattern_id INTEGER NOT NULL,
+    tag_id     INTEGER NOT NULL,
+    PRIMARY KEY (pattern_id, tag_id),
+    FOREIGN KEY (pattern_id) REFERENCES patterns(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS pattern_files (
+    pattern_id INTEGER NOT NULL,
+    file_path  TEXT NOT NULL,
+    role       TEXT NOT NULL DEFAULT 'related',
+    PRIMARY KEY (pattern_id, file_path),
+    FOREIGN KEY (pattern_id) REFERENCES patterns(id) ON DELETE CASCADE
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS patterns_fts USING fts5(
+    title, content,
+    content='patterns', content_rowid='id'
+);
+CREATE TRIGGER IF NOT EXISTS patterns_ai AFTER INSERT ON patterns BEGIN
+    INSERT INTO patterns_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
+END;
+CREATE TRIGGER IF NOT EXISTS patterns_ad AFTER DELETE ON patterns BEGIN
+    INSERT INTO patterns_fts(patterns_fts, rowid, title, content) VALUES ('delete', old.id, old.title, old.content);
+END;
+
+-- ==========================================================
+-- alerts table (anti-pattern detection records)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS alerts (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      TEXT NOT NULL,
+    pattern_type    TEXT NOT NULL,
+    level           TEXT NOT NULL,
+    situation       TEXT,
+    observation     TEXT,
+    suggestion      TEXT,
+    event_count     INTEGER,
+    first_event_id  INTEGER,
+    last_event_id   INTEGER,
+    timestamp       TEXT NOT NULL,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    FOREIGN KEY (first_event_id) REFERENCES events(id),
+    FOREIGN KEY (last_event_id) REFERENCES events(id)
+);
+
+CREATE TABLE IF NOT EXISTS alert_events (
+    alert_id  INTEGER NOT NULL,
+    event_id  INTEGER NOT NULL,
+    PRIMARY KEY (alert_id, event_id),
+    FOREIGN KEY (alert_id) REFERENCES alerts(id) ON DELETE CASCADE,
+    FOREIGN KEY (event_id) REFERENCES events(id)
+);
+
+-- ==========================================================
+-- embeddings (BLOB storage, cosine similarity computed in Go)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS embeddings (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    source     TEXT NOT NULL,
+    source_id  INTEGER NOT NULL,
+    model      TEXT NOT NULL,
+    dims       INTEGER NOT NULL,
+    vector     BLOB NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (source, source_id)
+);
+
+-- ==========================================================
+-- indexes
+-- ==========================================================
+CREATE INDEX IF NOT EXISTS idx_patterns_session ON patterns(session_id);
+CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(pattern_type);
+CREATE INDEX IF NOT EXISTS idx_patterns_scope ON patterns(scope);
+CREATE INDEX IF NOT EXISTS idx_alerts_session ON alerts(session_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(pattern_type);
+CREATE INDEX IF NOT EXISTS idx_pattern_tags_tag ON pattern_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source, source_id);
+`
+
 // Migrate applies all pending schema migrations to the database.
 func Migrate(db *sql.DB) error {
 	var current int
@@ -119,6 +229,11 @@ func Migrate(db *sql.DB) error {
 
 	if current < 1 {
 		if _, err := db.Exec(ddlV1); err != nil {
+			return err
+		}
+	}
+	if current < 2 {
+		if _, err := db.Exec(ddlV2); err != nil {
 			return err
 		}
 	}

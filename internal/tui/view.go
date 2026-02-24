@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hir4ta/claude-buddy/internal/analyzer"
 	"github.com/hir4ta/claude-buddy/internal/parser"
 )
 
@@ -21,6 +22,9 @@ func (m Model) View() string {
 	var sections []string
 
 	sections = append(sections, m.renderHeader())
+	if len(m.alerts) > 0 {
+		sections = append(sections, m.renderAlerts())
+	}
 	if len(m.tasks) > 0 {
 		sections = append(sections, m.renderTasks())
 	}
@@ -64,6 +68,35 @@ func (m Model) renderHeader() string {
 		top = lipgloss.JoinHorizontal(lipgloss.Top, top, "  ", planBadge)
 	}
 	return top + "\n" + statsStyle.Render(statsText)
+}
+
+func (m Model) renderAlerts() string {
+	var lines []string
+	for _, a := range m.alerts {
+		patternName := analyzer.PatternName(a.Pattern)
+
+		// Truncate observation + suggestion to fit one line
+		maxWidth := m.width - 4
+		if maxWidth < 40 {
+			maxWidth = 40
+		}
+		text := fmt.Sprintf(" \u26a0 [%s] %s \u2014 %s ", patternName, a.Observation, a.Suggestion)
+		// Truncate to fit width using lipgloss.Width for CJK support
+		runes := []rune(text)
+		for lipgloss.Width(string(runes)) > maxWidth && len(runes) > 4 {
+			runes = runes[:len(runes)-1]
+		}
+		text = string(runes)
+
+		var styled string
+		if a.Level >= analyzer.LevelAction {
+			styled = alertActionStyle.Render(text)
+		} else {
+			styled = alertWarningStyle.Render(text)
+		}
+		lines = append(lines, "  "+styled)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) renderTasks() string {
