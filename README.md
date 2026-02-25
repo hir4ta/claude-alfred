@@ -22,19 +22,7 @@ go build -o claude-buddy .
 claude-buddy install
 ```
 
-This generates the plugin bundle (`~/.claude-buddy/plugin/`), registers the MCP server, and syncs all existing sessions to the local SQLite database (`~/.claude-buddy/buddy.db`).
-
-To enable plugin hooks and skills, launch Claude Code with:
-
-```bash
-claude --plugin-dir ~/.claude-buddy/plugin
-```
-
-To make this permanent, add an alias to `~/.zshrc` (or `~/.bashrc`):
-
-```bash
-alias claude='claude --plugin-dir ~/.claude-buddy/plugin'
-```
+This registers the MCP server, writes hooks to `~/.claude/settings.json`, and syncs all existing sessions to the local SQLite database (`~/.claude-buddy/buddy.db`). No additional configuration needed — hooks are active the next time you start Claude Code.
 
 ## Upgrade
 
@@ -42,7 +30,11 @@ alias claude='claude --plugin-dir ~/.claude-buddy/plugin'
 brew update && brew upgrade claude-buddy
 ```
 
-The MCP server uses the same binary path, so upgrading the binary automatically updates the server. No additional steps required.
+After upgrading, re-run install to update hook paths:
+
+```bash
+claude-buddy install
+```
 
 ## Language
 
@@ -117,7 +109,7 @@ claude-buddy browse
 
 ### `claude-buddy install`
 
-One-time setup: generates the plugin bundle, registers the MCP server, syncs sessions, and generates embeddings (if Ollama available).
+One-time setup: registers the MCP server, writes hooks to `~/.claude/settings.json`, syncs sessions, and generates embeddings (if Ollama available).
 
 ```bash
 claude-buddy install
@@ -159,9 +151,17 @@ claude-buddy analyze de999fa4 # Specific session by ID prefix
 
 Requires `claude` CLI in PATH.
 
-## Plugin & Hooks
+### `claude-buddy uninstall`
 
-When installed as a Claude Code plugin, claude-buddy actively monitors your session through lifecycle hooks:
+Remove hooks and MCP server registration:
+
+```bash
+claude-buddy uninstall
+```
+
+## Hooks
+
+`claude-buddy install` writes hooks directly to `~/.claude/settings.json`. These hooks actively monitor your session through Claude Code's lifecycle events:
 
 | Hook Event | Behavior |
 |---|---|
@@ -205,7 +205,7 @@ claude-buddy/
 │   ├── tui/                   # Bubble Tea TUI (watch / browse / select)
 │   ├── mcpserver/             # MCP server (stdio, 8 tools)
 │   ├── store/                 # SQLite persistence (FTS5 + vector search + incremental sync)
-│   └── install/               # Plugin bundle generation + MCP registration + initial sync
+│   └── install/               # Hook registration + MCP registration + initial sync
 ├── go.mod
 └── go.sum
 ```

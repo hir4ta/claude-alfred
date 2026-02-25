@@ -43,6 +43,8 @@ func run() error {
 		return runServe()
 	case "install":
 		return install.Run()
+	case "uninstall":
+		return install.Uninstall()
 	case "analyze":
 		return runAnalyze()
 	case "hook-handler":
@@ -223,7 +225,8 @@ Commands:
   browse        Browse past session history
   serve         Run as MCP server (stdio) for Claude Code integration
   hook-handler  Handle Claude Code hook events (stdin/stdout JSON)
-  install       Register plugin bundle, MCP server, and sync sessions
+  install       Register MCP server, hooks, and sync sessions
+  uninstall     Remove hooks and MCP server registration
   analyze       AI-powered session analysis via claude -p (no extra cost)
   help          Show this help
 
