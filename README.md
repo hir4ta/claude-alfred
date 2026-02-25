@@ -24,18 +24,16 @@ claude-buddy install
 
 This generates the plugin bundle (`~/.claude-buddy/plugin/`), registers the MCP server, and syncs all existing sessions to the local SQLite database (`~/.claude-buddy/buddy.db`).
 
-To enable plugin hooks and skills:
+To enable plugin hooks and skills, launch Claude Code with:
 
 ```bash
-claude plugin install ~/.claude-buddy/plugin --scope user
+claude --plugin-dir ~/.claude-buddy/plugin
 ```
 
-Or manually add to `~/.claude/settings.json`:
+To make this permanent, add an alias to `~/.zshrc` (or `~/.bashrc`):
 
-```json
-{
-  "plugins": [{"path": "~/.claude-buddy/plugin"}]
-}
+```bash
+alias claude='claude --plugin-dir ~/.claude-buddy/plugin'
 ```
 
 ## Upgrade

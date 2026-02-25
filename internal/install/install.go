@@ -173,12 +173,10 @@ func printPluginInstructions() {
 Plugin bundle: %s
 
 To enable the plugin (hooks + skills):
-  claude plugin install %s --scope user
+  claude --plugin-dir %s
 
-Or manually add to ~/.claude/settings.json:
-  {
-    "plugins": [{"path": "%s"}]
-  }
+To make this permanent, add to ~/.zshrc (or ~/.bashrc):
+  alias claude='claude --plugin-dir %s'
 
 Hooks enabled:
   SessionStart   → Auto-restore previous session context
