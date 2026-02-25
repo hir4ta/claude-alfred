@@ -231,6 +231,44 @@ func (s *Store) GetFilesReadOnly(sessionID string, limit int) ([]FileActivity, e
 	return result, nil
 }
 
+// FileHotspot represents a file modified across multiple sessions.
+type FileHotspot struct {
+	Path         string
+	SessionCount int
+}
+
+// GetFileReworkHotspots returns files written/edited in multiple sessions for a project.
+func (s *Store) GetFileReworkHotspots(projectPath string, minSessions int) ([]FileHotspot, error) {
+	if minSessions < 2 {
+		minSessions = 2
+	}
+	rows, err := s.db.Query(`
+		SELECT e.tool_input, COUNT(DISTINCT e.session_id) AS sess_count
+		FROM events e
+		JOIN sessions s ON e.session_id = s.id
+		WHERE s.project_path = ?
+		  AND e.tool_name IN ('Write','Edit')
+		  AND e.tool_input != ''
+		GROUP BY e.tool_input
+		HAVING sess_count >= ?
+		ORDER BY sess_count DESC
+		LIMIT 20`, projectPath, minSessions)
+	if err != nil {
+		return nil, fmt.Errorf("store: get file rework hotspots: %w", err)
+	}
+	defer rows.Close()
+
+	var result []FileHotspot
+	for rows.Next() {
+		var fh FileHotspot
+		if err := rows.Scan(&fh.Path, &fh.SessionCount); err != nil {
+			continue
+		}
+		result = append(result, fh)
+	}
+	return result, nil
+}
+
 func scanEventRows(rows *sql.Rows) []EventRow {
 	var result []EventRow
 	for rows.Next() {

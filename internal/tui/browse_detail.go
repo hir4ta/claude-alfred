@@ -74,8 +74,8 @@ func (m BrowseModel) detailFixedHeight() int {
 // detailAreaHeight returns available lines for the event list.
 func (m BrowseModel) detailAreaHeight() int {
 	h := m.height - m.detailFixedHeight()
-	if h < 5 {
-		h = 5
+	if h < 3 {
+		h = 3
 	}
 	return h
 }
@@ -105,7 +105,7 @@ func (m BrowseModel) detailExpandMaxOffset() int {
 		}
 	}
 
-	maxOff := totalLines - (m.detailAreaHeight() - 1)
+	maxOff := totalLines - (m.detailAreaHeight() - 3) // 1 cursor line + 2 box border lines
 	if maxOff < 0 {
 		return 0
 	}
@@ -267,15 +267,20 @@ func (m BrowseModel) viewDetail() string {
 		}
 
 		var start int
+		windowLines := availableLines
 		if m.detailExpanded[m.detailCursor] {
 			start = cursorLine
+			windowLines = availableLines - 2 // reserve 2 lines for expanded box border
+			if windowLines < 3 {
+				windowLines = 3
+			}
 		} else {
 			start = cursorLine - availableLines/2
 		}
 		if start < 0 {
 			start = 0
 		}
-		end := start + availableLines
+		end := start + windowLines
 		if end > len(lines) {
 			end = len(lines)
 			start = end - availableLines

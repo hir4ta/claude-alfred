@@ -1,9 +1,12 @@
 package coach
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/analyzer"
+	"github.com/hir4ta/claude-buddy/internal/parser"
 )
 
 func TestParseFeedbackOutput(t *testing.T) {
@@ -111,5 +114,122 @@ LEVEL: insight`,
 				t.Errorf("Level = %d, want %d", got.Level, tt.want.Level)
 			}
 		})
+	}
+}
+
+func TestBuildSummaryIncludesAlerts(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	events := []parser.SessionEvent{
+		{Type: parser.EventUserMessage, UserText: "fix the bug", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Read", ToolInput: "main.go", Timestamp: now},
+	}
+	stats := analyzer.NewStats()
+	for _, ev := range events {
+		stats.Update(ev)
+	}
+	alerts := []analyzer.Alert{
+		{Pattern: analyzer.PatternRetryLoop, Level: analyzer.LevelWarning, Observation: "same tool repeated 3 times"},
+	}
+
+	summary := buildSummary(events, stats, alerts, 0.8, nil)
+
+	if !strings.Contains(summary, "Anti-Pattern Alerts") {
+		t.Error("summary should contain Anti-Pattern Alerts section")
+	}
+	if !strings.Contains(summary, "retry-loop") {
+		t.Error("summary should contain pattern name 'retry-loop'")
+	}
+	if !strings.Contains(summary, "same tool repeated 3 times") {
+		t.Error("summary should contain alert observation")
+	}
+	if !strings.Contains(summary, "Session Health: 80%") {
+		t.Errorf("summary should contain Session Health: 80%%, got:\n%s", summary)
+	}
+}
+
+func TestBuildSummaryTurnNumbers(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	events := []parser.SessionEvent{
+		{Type: parser.EventUserMessage, UserText: "first task", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Read", ToolInput: "file.go", Timestamp: now},
+		{Type: parser.EventUserMessage, UserText: "second task", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Edit", ToolInput: "file.go", Timestamp: now},
+	}
+	stats := analyzer.NewStats()
+	for _, ev := range events {
+		stats.Update(ev)
+	}
+
+	summary := buildSummary(events, stats, nil, 1.0, nil)
+
+	if !strings.Contains(summary, "T1 U: first task") {
+		t.Errorf("summary should contain 'T1 U: first task', got:\n%s", summary)
+	}
+	if !strings.Contains(summary, "T2 U: second task") {
+		t.Errorf("summary should contain 'T2 U: second task', got:\n%s", summary)
+	}
+}
+
+func TestComputeUsageHintsVagueInstructions(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	events := []parser.SessionEvent{
+		{Type: parser.EventUserMessage, UserText: "fix", Timestamp: now},
+		{Type: parser.EventUserMessage, UserText: "do it", Timestamp: now},
+		{Type: parser.EventUserMessage, UserText: "ok", Timestamp: now},
+	}
+	stats := analyzer.NewStats()
+	for _, ev := range events {
+		stats.Update(ev)
+	}
+
+	hints := computeUsageHints(events, stats)
+	if !strings.Contains(hints, "under 20 chars") {
+		t.Errorf("should detect vague instructions, got: %q", hints)
+	}
+}
+
+func TestComputeUsageHintsMultiFileNoPlan(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	events := []parser.SessionEvent{
+		{Type: parser.EventUserMessage, UserText: "refactor everything", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Edit", ToolInput: "a.go", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Edit", ToolInput: "b.go", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Edit", ToolInput: "c.go", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Edit", ToolInput: "d.go", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Edit", ToolInput: "e.go", Timestamp: now},
+		{Type: parser.EventUserMessage, UserText: "done?", Timestamp: now},
+	}
+	stats := analyzer.NewStats()
+	for _, ev := range events {
+		stats.Update(ev)
+	}
+
+	hints := computeUsageHints(events, stats)
+	if !strings.Contains(hints, "files modified without Plan Mode") {
+		t.Errorf("should detect multi-file without plan mode, got: %q", hints)
+	}
+}
+
+func TestComputeUsageHintsCleanSession(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	events := []parser.SessionEvent{
+		{Type: parser.EventUserMessage, UserText: "Please implement user authentication with JWT tokens in the auth module", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "EnterPlanMode", ToolInput: "", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Read", ToolInput: "auth.go", Timestamp: now},
+		{Type: parser.EventToolUse, ToolName: "Edit", ToolInput: "auth.go", Timestamp: now},
+	}
+	stats := analyzer.NewStats()
+	for _, ev := range events {
+		stats.Update(ev)
+	}
+
+	hints := computeUsageHints(events, stats)
+	if hints != "" {
+		t.Errorf("clean session should produce no hints, got: %q", hints)
 	}
 }

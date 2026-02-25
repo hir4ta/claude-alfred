@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func makeCompactEvent(ts time.Time) parser.SessionEvent {
 }
 
 func TestDetectRetryLoop(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 
 	// Start with a user message
@@ -55,23 +56,28 @@ func TestDetectRetryLoop(t *testing.T) {
 		alerts = append(alerts, result...)
 	}
 
-	// Should get at least a Warning (at 3 consecutive)
-	found := false
+	// Should get proposal at 2, warning at 3, action at 5
+	var hasProposal, hasWarning bool
 	for _, a := range alerts {
 		if a.Pattern == PatternRetryLoop {
-			found = true
-			if a.Level < LevelWarning {
-				t.Errorf("expected at least Warning level, got %d", a.Level)
+			if a.Kind == KindProposal {
+				hasProposal = true
+			}
+			if a.Level >= LevelWarning {
+				hasWarning = true
 			}
 		}
 	}
-	if !found {
-		t.Error("expected retry-loop alert, got none")
+	if !hasProposal {
+		t.Error("expected proposal at 2 retries")
+	}
+	if !hasWarning {
+		t.Error("expected warning/action at 3+ retries")
 	}
 }
 
 func TestDetectRetryLoopFalsePositive(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 
 	d.Update(makeUserEvent("do something", now))
@@ -116,7 +122,7 @@ func TestDetectDestructiveCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDetector()
+			d := NewDetector("en")
 			now := time.Now()
 			d.Update(makeUserEvent("test", now))
 
@@ -138,7 +144,7 @@ func TestDetectDestructiveCmd(t *testing.T) {
 }
 
 func TestDetectDestructiveCmdSafe(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("test", now))
 
@@ -151,7 +157,7 @@ func TestDetectDestructiveCmdSafe(t *testing.T) {
 }
 
 func TestDetectExcessiveTools(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("do something big", now))
 
@@ -175,7 +181,7 @@ func TestDetectExcessiveTools(t *testing.T) {
 }
 
 func TestDetectFileReadLoop(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("help me", now))
 
@@ -198,7 +204,7 @@ func TestDetectFileReadLoop(t *testing.T) {
 }
 
 func TestDetectContextThrashing(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("start", now))
 
@@ -231,7 +237,7 @@ func TestDetectContextThrashing(t *testing.T) {
 }
 
 func TestDetectExploreLoop(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("explore codebase", now))
 
@@ -259,7 +265,7 @@ func TestDetectExploreLoop(t *testing.T) {
 }
 
 func TestDetectCompactAmnesia(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("start", now))
 
@@ -296,7 +302,7 @@ func TestDetectCompactAmnesia(t *testing.T) {
 }
 
 func TestCooldown(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("test", now))
 
@@ -316,7 +322,7 @@ func TestCooldown(t *testing.T) {
 }
 
 func TestSessionHealth(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("test", now))
 
@@ -363,7 +369,7 @@ func TestPatternName(t *testing.T) {
 }
 
 func TestNewDetectorInitialization(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	if d == nil {
 		t.Fatal("NewDetector returned nil")
 	}
@@ -379,7 +385,7 @@ func TestNewDetectorInitialization(t *testing.T) {
 }
 
 func TestDetectApologizeRetry(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("fix this bug", now))
 
@@ -407,7 +413,7 @@ func TestDetectApologizeRetry(t *testing.T) {
 }
 
 func TestDetectTestFailCycle(t *testing.T) {
-	d := NewDetector()
+	d := NewDetector("en")
 	now := time.Now()
 	d.Update(makeUserEvent("fix test", now))
 
@@ -427,5 +433,1211 @@ func TestDetectTestFailCycle(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected test-fail-cycle alert after 3 edit-test cycles")
+	}
+}
+
+// --- Contextual message content tests (English locale) ---
+
+func TestRetryLoopMessageEditFile(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("fix this", now))
+
+	var alerts []Alert
+	for i := range 5 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Edit", "/proj/src/store.go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	// Check escalation: Proposal → Warning → Action
+	var hasProposal, hasWarning, hasAction bool
+	for _, a := range alerts {
+		if a.Pattern != PatternRetryLoop {
+			continue
+		}
+		if !strings.Contains(a.Observation, "Edit") {
+			t.Errorf("Observation should contain tool name 'Edit', got: %s", a.Observation)
+		}
+		if !strings.Contains(a.Observation, "store.go") {
+			t.Errorf("Observation should contain short file name 'store.go', got: %s", a.Observation)
+		}
+		switch {
+		case a.Kind == KindProposal:
+			hasProposal = true
+			if !strings.Contains(a.Suggestion, "Same Edit") {
+				t.Errorf("Proposal for Edit should mention Same Edit, got: %s", a.Suggestion)
+			}
+		case a.Level == LevelWarning:
+			hasWarning = true
+			if !strings.Contains(a.Suggestion, "target text") {
+				t.Errorf("Warning for Edit should mention target text, got: %s", a.Suggestion)
+			}
+		case a.Level == LevelAction:
+			hasAction = true
+			if !strings.Contains(a.Suggestion, "line") {
+				t.Errorf("Action for Edit should mention line, got: %s", a.Suggestion)
+			}
+		}
+	}
+	if !hasProposal {
+		t.Error("expected proposal at 2 retries")
+	}
+	if !hasWarning {
+		t.Error("expected warning at 3 retries")
+	}
+	if !hasAction {
+		t.Error("expected action at 5 retries")
+	}
+}
+
+func TestRetryLoopMessageBash(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("run it", now))
+
+	var alerts []Alert
+	for i := range 5 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Bash", "npm test", ts))
+		alerts = append(alerts, result...)
+	}
+
+	var hasWarning, hasAction bool
+	for _, a := range alerts {
+		if a.Pattern != PatternRetryLoop {
+			continue
+		}
+		if !strings.Contains(a.Observation, "Bash") {
+			t.Errorf("Observation should contain 'Bash', got: %s", a.Observation)
+		}
+		switch {
+		case a.Level == LevelWarning && a.Kind == KindAlert:
+			hasWarning = true
+			if !strings.Contains(a.Suggestion, "failing") {
+				t.Errorf("Warning for Bash should mention failing, got: %s", a.Suggestion)
+			}
+		case a.Level == LevelAction:
+			hasAction = true
+			if !strings.Contains(a.Suggestion, "different") {
+				t.Errorf("Action for Bash should mention different, got: %s", a.Suggestion)
+			}
+		}
+	}
+	if !hasWarning {
+		t.Error("expected warning at 3 retries")
+	}
+	if !hasAction {
+		t.Error("expected action at 5 retries")
+	}
+}
+
+func TestExcessiveToolsReadOnly(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("explore", now))
+
+	var alerts []Alert
+	for i := range 30 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternExcessiveTools {
+			if !strings.Contains(a.Observation, "no writes") {
+				t.Errorf("Observation should indicate no writes, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Observation, "files read") {
+				t.Errorf("Observation should mention files read, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "Plan Mode") {
+				t.Errorf("Suggestion should recommend Plan Mode for read-only burst, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected excessive-tools alert")
+}
+
+func TestExcessiveToolsWithWrites(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("refactor", now))
+
+	var alerts []Alert
+	for i := range 30 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		var result []Alert
+		if i%3 == 0 {
+			result = d.Update(makeToolEvent("Edit", "/file"+itoa(i)+".go", ts))
+		} else {
+			result = d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+		}
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternExcessiveTools {
+			if !strings.Contains(a.Observation, "files modified") {
+				t.Errorf("Observation should mention files modified, got: %s", a.Observation)
+			}
+			return
+		}
+	}
+	t.Error("expected excessive-tools alert")
+}
+
+func TestFileReadLoopShortPath(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("help", now))
+
+	var alerts []Alert
+	for i := range 6 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/Users/user/Projects/foo/internal/store/store.go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternFileReadLoop {
+			if strings.Contains(a.Observation, "/Users/user") {
+				t.Errorf("Observation should use short path, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Observation, "store.go") {
+				t.Errorf("Observation should contain 'store.go', got: %s", a.Observation)
+			}
+			return
+		}
+	}
+	t.Error("expected file-read-loop alert")
+}
+
+func TestExploreLoopTopFile(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("explore", now))
+
+	var alerts []Alert
+	for i := range 15 {
+		ts := now.Add(time.Duration(i*24) * time.Second) // spread over 6 minutes
+		var result []Alert
+		if i%2 == 0 {
+			result = d.Update(makeToolEvent("Read", "/proj/main.go", ts))
+		} else {
+			result = d.Update(makeToolEvent("Grep", "/proj/file"+itoa(i)+".go", ts))
+		}
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternExploreLoop {
+			if !strings.Contains(a.Observation, "main.go") {
+				t.Errorf("Observation should contain top file 'main.go', got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Observation, "no writes") {
+				t.Errorf("Observation should indicate no writes, got: %s", a.Observation)
+			}
+			return
+		}
+	}
+	t.Error("expected explore-loop alert")
+}
+
+func TestCompactAmnesiaFileList(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("start", now))
+
+	d.Update(makeToolEvent("Read", "/proj/alpha.go", now.Add(1*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/beta.go", now.Add(2*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/gamma.go", now.Add(3*time.Second)))
+
+	d.Update(makeCompactEvent(now.Add(4 * time.Second)))
+
+	d.Update(makeToolEvent("Read", "/proj/alpha.go", now.Add(5*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/beta.go", now.Add(6*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/gamma.go", now.Add(7*time.Second)))
+
+	var alerts []Alert
+	for i := range 27 {
+		ts := now.Add(time.Duration(8+i) * time.Second)
+		result := d.Update(makeToolEvent("Bash", "echo "+itoa(i), ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternCompactAmnesia {
+			hasFile := strings.Contains(a.Observation, "alpha.go") ||
+				strings.Contains(a.Observation, "beta.go") ||
+				strings.Contains(a.Observation, "gamma.go")
+			if !hasFile {
+				t.Errorf("Observation should contain overlapping file names, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "buddy_recall") {
+				t.Errorf("Suggestion should mention buddy_recall, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected compact-amnesia alert")
+}
+
+func TestDestructiveCmdSpecificSuggestions(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		input      string
+		wantInObs  string
+		wantInSugg string
+	}{
+		{"rm-rf", "rm -rf /tmp/foo", "rm -rf", "git checkout"},
+		{"push-force", "git push --force origin main", "push --force", "--force-with-lease"},
+		{"reset-hard", "git reset --hard HEAD~1", "reset --hard", "git reflog"},
+		{"checkout-dot", "git checkout -- .", "changes discarded", "git stash"},
+		{"clean-f", "git clean -f", "untracked files", "git clean -n"},
+		{"branch-D", "git branch -D feature", "force-deleted", "git reflog"},
+		{"chmod-777", "chmod 777 /tmp/file", "chmod 777", "644 or 755"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := NewDetector("en")
+			now := time.Now()
+			d.Update(makeUserEvent("test", now))
+
+			alerts := d.Update(makeToolEvent("Bash", tt.input, now.Add(time.Second)))
+			for _, a := range alerts {
+				if a.Pattern == PatternDestructiveCmd {
+					if !strings.Contains(a.Observation, tt.wantInObs) {
+						t.Errorf("Observation = %q, want containing %q", a.Observation, tt.wantInObs)
+					}
+					if !strings.Contains(a.Suggestion, tt.wantInSugg) {
+						t.Errorf("Suggestion = %q, want containing %q", a.Suggestion, tt.wantInSugg)
+					}
+					return
+				}
+			}
+			t.Errorf("expected destructive-cmd alert for input %q", tt.input)
+		})
+	}
+}
+
+func TestContextThrashingSuggestion(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("start", now))
+
+	var alerts []Alert
+	for i := range 3 {
+		ts := now.Add(time.Duration(i*4) * time.Minute)
+		result := d.Update(makeCompactEvent(ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternContextThrashing && a.Level == LevelAction {
+			if !strings.Contains(a.Suggestion, "/clear") {
+				t.Errorf("Action-level suggestion should mention /clear, got: %s", a.Suggestion)
+			}
+			if !strings.Contains(a.Suggestion, "CLAUDE.md") {
+				t.Errorf("Action-level suggestion should mention CLAUDE.md, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected context-thrashing action alert")
+}
+
+func TestApologizeRetryMessage(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("fix bug", now))
+
+	var alerts []Alert
+	texts := []string{
+		"I apologize for the confusion.",
+		"Sorry about that, let me try again.",
+		"My mistake, I should have done it differently.",
+	}
+	for i, text := range texts {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeAssistantEvent(text, ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternApologizeRetry {
+			if !strings.Contains(a.Observation, "apologies") {
+				t.Errorf("Observation should mention apologies, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Observation, "turns") {
+				t.Errorf("Observation should mention turns, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "/clear") {
+				t.Errorf("Suggestion should mention /clear, got: %s", a.Suggestion)
+			}
+			if !strings.Contains(a.Suggestion, "expected outcome") {
+				t.Errorf("Suggestion should mention expected outcome, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected apologize-retry alert")
+}
+
+func TestTestFailCycleMessage(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("fix test", now))
+
+	var alerts []Alert
+	for i := range 3 {
+		offset := time.Duration(i*3) * time.Second
+		d.Update(makeToolEvent("Edit", "/test.go", now.Add(offset+1*time.Second)))
+		result := d.Update(makeToolEvent("Bash", "go test ./...", now.Add(offset+2*time.Second)))
+		alerts = append(alerts, result...)
+	}
+
+	var hasProposal, hasWarning bool
+	for _, a := range alerts {
+		if a.Pattern != PatternTestFailCycle {
+			continue
+		}
+		if !strings.Contains(a.Observation, "test-edit-retest") {
+			t.Errorf("Observation should describe the cycle, got: %s", a.Observation)
+		}
+		if a.Kind == KindProposal {
+			hasProposal = true
+		}
+		if a.Kind == KindAlert && a.Level == LevelWarning {
+			hasWarning = true
+			if !strings.Contains(a.Suggestion, "root cause") {
+				t.Errorf("Warning suggestion should mention root cause, got: %s", a.Suggestion)
+			}
+		}
+	}
+	if !hasProposal {
+		t.Error("expected proposal at 2 cycles")
+	}
+	if !hasWarning {
+		t.Error("expected warning at 3 cycles")
+	}
+}
+
+// --- Japanese locale tests ---
+
+func TestRetryLoopMessageJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("直して", now))
+
+	var alerts []Alert
+	for i := range 5 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Edit", "/proj/src/store.go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	// Check each escalation stage: Proposal → Warning → Action
+	var hasProposal, hasWarning, hasAction bool
+	for _, a := range alerts {
+		if a.Pattern != PatternRetryLoop {
+			continue
+		}
+		if !strings.Contains(a.Observation, "連続リトライ中") {
+			t.Errorf("Observation should be in Japanese, got: %s", a.Observation)
+		}
+		switch {
+		case a.Kind == KindProposal:
+			hasProposal = true
+			if !strings.Contains(a.Suggestion, "同じ Edit") {
+				t.Errorf("Proposal suggestion should mention 同じ Edit, got: %s", a.Suggestion)
+			}
+		case a.Level == LevelWarning:
+			hasWarning = true
+			if !strings.Contains(a.Suggestion, "指定テキスト") {
+				t.Errorf("Warning suggestion should mention 指定テキスト, got: %s", a.Suggestion)
+			}
+		case a.Level == LevelAction:
+			hasAction = true
+			if !strings.Contains(a.Suggestion, "行目") {
+				t.Errorf("Action suggestion should mention 行目, got: %s", a.Suggestion)
+			}
+		}
+	}
+	if !hasProposal {
+		t.Error("expected proposal at 2 retries")
+	}
+	if !hasWarning {
+		t.Error("expected warning at 3 retries")
+	}
+	if !hasAction {
+		t.Error("expected action at 5 retries")
+	}
+}
+
+func TestExcessiveToolsJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("探して", now))
+
+	var alerts []Alert
+	for i := range 30 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternExcessiveTools {
+			if !strings.Contains(a.Observation, "書込なし") {
+				t.Errorf("Observation should be in Japanese, got: %s", a.Observation)
+			}
+			return
+		}
+	}
+	t.Error("expected excessive-tools alert")
+}
+
+func TestDestructiveCmdJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("test", now))
+
+	alerts := d.Update(makeToolEvent("Bash", "rm -rf /tmp/foo", now.Add(time.Second)))
+	for _, a := range alerts {
+		if a.Pattern == PatternDestructiveCmd {
+			if !strings.Contains(a.Observation, "rm -rf が実行されました") {
+				t.Errorf("Observation should be in Japanese, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "git checkout で復元") {
+				t.Errorf("Suggestion should be in Japanese, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected destructive-cmd alert")
+}
+
+func TestApologizeRetryMessageJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("修正して", now))
+
+	var alerts []Alert
+	texts := []string{
+		"I apologize for the confusion.",
+		"Sorry about that, let me try again.",
+		"My mistake, I should have done it differently.",
+	}
+	for i, text := range texts {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeAssistantEvent(text, ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternApologizeRetry {
+			if !strings.Contains(a.Observation, "回謝罪") {
+				t.Errorf("Observation should be in Japanese, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "/clear") {
+				t.Errorf("Suggestion should mention /clear, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected apologize-retry alert")
+}
+
+// --- Feature tracking tests ---
+
+func TestFeatureTrackingPlanMode(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+
+	if d.Features().PlanModeUsed {
+		t.Error("PlanModeUsed should be false initially")
+	}
+
+	d.Update(makeUserEvent("plan", now))
+	d.Update(makeToolEvent("EnterPlanMode", "", now.Add(time.Second)))
+
+	if !d.Features().PlanModeUsed {
+		t.Error("PlanModeUsed should be true after EnterPlanMode")
+	}
+}
+
+func TestFeatureTrackingSubagent(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+
+	d.Update(makeUserEvent("research", now))
+	d.Update(makeToolEvent("Task", "explore codebase", now.Add(time.Second)))
+
+	if !d.Features().SubagentUsed {
+		t.Error("SubagentUsed should be true after Task tool")
+	}
+}
+
+func TestFeatureTrackingAgentSpawn(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+
+	d.Update(makeUserEvent("delegate", now))
+	d.Update(parser.SessionEvent{
+		Type:      parser.EventAgentSpawn,
+		AgentName: "researcher",
+		Timestamp: now.Add(time.Second),
+	})
+
+	if !d.Features().SubagentUsed {
+		t.Error("SubagentUsed should be true after AgentSpawn")
+	}
+}
+
+func TestFeatureTrackingCLAUDEMD(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+
+	d.Update(makeUserEvent("start", now))
+	d.Update(makeToolEvent("Read", "/proj/CLAUDE.md", now.Add(time.Second)))
+
+	if !d.Features().CLAUDEMDRead {
+		t.Error("CLAUDEMDRead should be true after reading CLAUDE.md")
+	}
+}
+
+func TestFeatureTrackingRules(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+
+	d.Update(makeUserEvent("start", now))
+	d.Update(makeToolEvent("Read", "/proj/.claude/rules/go-style.md", now.Add(time.Second)))
+
+	if !d.Features().RulesRead {
+		t.Error("RulesRead should be true after reading .claude/rules/")
+	}
+}
+
+func TestFeatureTrackingSkill(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+
+	d.Update(makeUserEvent("commit", now))
+	d.Update(makeToolEvent("Skill", "commit", now.Add(time.Second)))
+
+	if !d.Features().SkillUsed {
+		t.Error("SkillUsed should be true after Skill tool")
+	}
+}
+
+// --- Feature-aware suggestion tests ---
+
+func TestExcessiveToolsSuggestsPlanMode(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("explore", now))
+
+	// Generate read-only burst without Plan Mode used
+	var alerts []Alert
+	for i := range 30 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternExcessiveTools {
+			if !strings.Contains(a.Suggestion, "Plan Mode") {
+				t.Errorf("Should suggest Plan Mode when unused, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected excessive-tools alert")
+}
+
+func TestExcessiveToolsSuggestsSubagentWhenPlanModeUsed(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("explore", now))
+
+	// Mark Plan Mode as used
+	d.Update(makeToolEvent("EnterPlanMode", "", now.Add(500*time.Millisecond)))
+
+	var alerts []Alert
+	for i := range 30 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternExcessiveTools {
+			if !strings.Contains(a.Suggestion, "subagent") {
+				t.Errorf("Should suggest subagents when Plan Mode already used, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected excessive-tools alert")
+}
+
+func TestContextThrashingSuggestsSubagent(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("start", now))
+
+	// 2 compacts in 15 min → Warning level suggests subagents
+	var alerts []Alert
+	for i := range 2 {
+		ts := now.Add(time.Duration(i*4) * time.Minute)
+		result := d.Update(makeCompactEvent(ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternContextThrashing && a.Level == LevelWarning {
+			if !strings.Contains(a.Suggestion, "subagent") {
+				t.Errorf("Warning-level should suggest subagents when unused, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected context-thrashing warning alert")
+}
+
+func TestRetryLoopSuggestsSubagentForGrep(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("find it", now))
+
+	var alerts []Alert
+	for i := range 5 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Grep", "searchPattern", ts))
+		alerts = append(alerts, result...)
+	}
+
+	// Warning-level suggestion for Grep should mention subagents
+	found := false
+	for _, a := range alerts {
+		if a.Pattern == PatternRetryLoop && a.Kind == KindAlert && a.Level == LevelWarning {
+			found = true
+			if !strings.Contains(a.Suggestion, "subagent") {
+				t.Errorf("Grep retry warning should suggest subagents when unused, got: %s", a.Suggestion)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected warning-level retry-loop alert for Grep")
+	}
+}
+
+// --- Alert selection tests (v2: group-based dedup via SelectTopAlerts) ---
+
+func TestSelectTopAlertsGroupDedup(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("do work", now))
+
+	// Feed 25+ identical tool calls → triggers both retry-loop AND excessive-tools
+	var allAlerts []Alert
+	for i := range 30 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/same/file.go", ts))
+		allAlerts = append(allAlerts, result...)
+	}
+
+	// Both should fire from the detector
+	hasRetryLoop := false
+	for _, a := range allAlerts {
+		if a.Pattern == PatternRetryLoop {
+			hasRetryLoop = true
+		}
+	}
+	if !hasRetryLoop {
+		t.Error("expected retry-loop to fire")
+	}
+
+	// SelectTopAlerts should keep only one per group
+	selected := SelectTopAlerts(allAlerts, 3)
+	groups := make(map[AlertGroup]int)
+	for _, a := range selected {
+		groups[groupFor(a.Pattern)]++
+	}
+	for g, count := range groups {
+		if count > 1 {
+			t.Errorf("group %d has %d alerts, expected at most 1", g, count)
+		}
+	}
+}
+
+func TestExcessiveToolsNotSuppressedAlone(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("explore", now))
+
+	// Feed 30 different files → excessive-tools fires but NOT retry-loop
+	var allAlerts []Alert
+	for i := range 30 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+		allAlerts = append(allAlerts, result...)
+	}
+
+	hasExcessiveTools := false
+	for _, a := range allAlerts {
+		if a.Pattern == PatternExcessiveTools {
+			hasExcessiveTools = true
+		}
+	}
+	if !hasExcessiveTools {
+		t.Error("excessive-tools should fire when no specific pattern is active")
+	}
+}
+
+// --- Rate limit stuck tests ---
+
+func TestDetectRateLimitStuck(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("do work", now))
+
+	// Build up a burst with no user messages or writes (no progress)
+	for i := range 10 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+	}
+
+	// Assistant text with rate limit keyword after 6 minutes (>5min threshold)
+	var alerts []Alert
+	result := d.Update(makeAssistantEvent("Got rate limit error 429, retrying...", now.Add(6*time.Minute)))
+	alerts = append(alerts, result...)
+
+	found := false
+	for _, a := range alerts {
+		if a.Pattern == PatternRateLimitStuck {
+			found = true
+			if a.Level != LevelAction {
+				t.Errorf("expected LevelAction, got %d", a.Level)
+			}
+			if !strings.Contains(a.Observation, "6 minutes") {
+				t.Errorf("Observation should mention elapsed time, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "Esc") {
+				t.Errorf("Suggestion should mention Esc, got: %s", a.Suggestion)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected rate-limit-stuck alert after 5+ min with no progress")
+	}
+}
+
+func TestDetectRateLimitStuckNotTriggeredWithProgress(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("do work", now))
+
+	// Write event = progress
+	d.Update(makeToolEvent("Edit", "/file.go", now.Add(time.Second)))
+
+	// Rate limit text after 6 minutes, but there was a write (progress)
+	alerts := d.Update(makeAssistantEvent("Got rate limit error 429", now.Add(6*time.Minute)))
+
+	for _, a := range alerts {
+		if a.Pattern == PatternRateLimitStuck {
+			t.Error("should not trigger rate-limit-stuck when there's recent progress (write)")
+		}
+	}
+}
+
+func TestDetectRateLimitStuckNotTriggeredEarly(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("do work", now))
+
+	for i := range 5 {
+		d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", now.Add(time.Duration(i+1)*time.Second)))
+	}
+
+	// Rate limit text at only 3 minutes (under 5min threshold)
+	alerts := d.Update(makeAssistantEvent("Got rate limit error 429", now.Add(3*time.Minute)))
+
+	for _, a := range alerts {
+		if a.Pattern == PatternRateLimitStuck {
+			t.Error("should not trigger rate-limit-stuck before 5 minutes")
+		}
+	}
+}
+
+func TestDetectRateLimitStuckJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("作業", now))
+
+	for i := range 10 {
+		d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", now.Add(time.Duration(i+1)*time.Second)))
+	}
+
+	alerts := d.Update(makeAssistantEvent("Got 429 rate limit error", now.Add(6*time.Minute)))
+
+	for _, a := range alerts {
+		if a.Pattern == PatternRateLimitStuck {
+			if !strings.Contains(a.Observation, "レート制限") {
+				t.Errorf("Japanese observation expected, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "Esc") {
+				t.Errorf("Suggestion should mention Esc, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected rate-limit-stuck alert in Japanese")
+}
+
+// --- Missing Japanese locale tests ---
+
+func TestCompactAmnesiaJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("開始", now))
+
+	d.Update(makeToolEvent("Read", "/proj/alpha.go", now.Add(1*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/beta.go", now.Add(2*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/gamma.go", now.Add(3*time.Second)))
+
+	d.Update(makeCompactEvent(now.Add(4 * time.Second)))
+
+	d.Update(makeToolEvent("Read", "/proj/alpha.go", now.Add(5*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/beta.go", now.Add(6*time.Second)))
+	d.Update(makeToolEvent("Read", "/proj/gamma.go", now.Add(7*time.Second)))
+
+	var alerts []Alert
+	for i := range 27 {
+		ts := now.Add(time.Duration(8+i) * time.Second)
+		result := d.Update(makeToolEvent("Bash", "echo "+itoa(i), ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternCompactAmnesia {
+			if !strings.Contains(a.Observation, "compact 後に") {
+				t.Errorf("Japanese observation expected, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "buddy_recall") {
+				t.Errorf("Suggestion should mention buddy_recall, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected compact-amnesia alert in Japanese")
+}
+
+func TestFileReadLoopJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("見て", now))
+
+	var alerts []Alert
+	for i := range 6 {
+		ts := now.Add(time.Duration(i+1) * time.Second)
+		result := d.Update(makeToolEvent("Read", "/proj/store.go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternFileReadLoop {
+			if !strings.Contains(a.Observation, "store.go") {
+				t.Errorf("Observation should contain file name, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Observation, "編集なし") {
+				t.Errorf("Japanese observation expected, got: %s", a.Observation)
+			}
+			return
+		}
+	}
+	t.Error("expected file-read-loop alert in Japanese")
+}
+
+func TestContextThrashingJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("開始", now))
+
+	var alerts []Alert
+	for i := range 3 {
+		ts := now.Add(time.Duration(i*4) * time.Minute)
+		result := d.Update(makeCompactEvent(ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternContextThrashing && a.Level == LevelAction {
+			if !strings.Contains(a.Observation, "context compact") {
+				t.Errorf("Japanese observation expected, got: %s", a.Observation)
+			}
+			if !strings.Contains(a.Suggestion, "/clear") {
+				t.Errorf("Suggestion should mention /clear, got: %s", a.Suggestion)
+			}
+			return
+		}
+	}
+	t.Error("expected context-thrashing action alert in Japanese")
+}
+
+func TestTestFailCycleJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("テスト直して", now))
+
+	var alerts []Alert
+	for i := range 3 {
+		offset := time.Duration(i*3) * time.Second
+		d.Update(makeToolEvent("Edit", "/test.go", now.Add(offset+1*time.Second)))
+		result := d.Update(makeToolEvent("Bash", "go test ./...", now.Add(offset+2*time.Second)))
+		alerts = append(alerts, result...)
+	}
+
+	var hasProposal, hasWarning bool
+	for _, a := range alerts {
+		if a.Pattern != PatternTestFailCycle {
+			continue
+		}
+		if !strings.Contains(a.Observation, "テスト→編集→再テスト") {
+			t.Errorf("Japanese observation expected, got: %s", a.Observation)
+		}
+		if a.Kind == KindProposal {
+			hasProposal = true
+			if !strings.Contains(a.Suggestion, "繰り返し失敗") {
+				t.Errorf("Proposal should mention 繰り返し失敗, got: %s", a.Suggestion)
+			}
+		}
+		if a.Kind == KindAlert && a.Level == LevelWarning {
+			hasWarning = true
+			if !strings.Contains(a.Suggestion, "根本原因") {
+				t.Errorf("Warning should mention 根本原因, got: %s", a.Suggestion)
+			}
+		}
+	}
+	if !hasProposal {
+		t.Error("expected proposal at 2 cycles")
+	}
+	if !hasWarning {
+		t.Error("expected warning at 3 cycles")
+	}
+}
+
+func TestExploreLoopJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("調べて", now))
+
+	var alerts []Alert
+	for i := range 15 {
+		ts := now.Add(time.Duration(i*24) * time.Second)
+		toolName := "Read"
+		if i%3 == 0 {
+			toolName = "Grep"
+		}
+		result := d.Update(makeToolEvent(toolName, "/file"+itoa(i)+".go", ts))
+		alerts = append(alerts, result...)
+	}
+
+	for _, a := range alerts {
+		if a.Pattern == PatternExploreLoop {
+			if !strings.Contains(a.Observation, "書込なし") {
+				t.Errorf("Japanese observation expected, got: %s", a.Observation)
+			}
+			return
+		}
+	}
+	t.Error("expected explore-loop alert in Japanese")
+}
+
+// --- Alert outcome / effect tracking tests ---
+
+func TestAlertOutcomeResolved(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("test", now))
+
+	// Trigger destructive cmd alert (LevelAction = 10min cooldown)
+	d.Update(makeToolEvent("Bash", "rm -rf /tmp", now.Add(1*time.Second)))
+
+	// Several events pass
+	for i := range 6 {
+		ts := now.Add(time.Duration(i+3) * time.Second)
+		d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+	}
+
+	// User message AFTER cooldown expires → alert no longer active → resolved
+	d.Update(makeUserEvent("ok continue", now.Add(11*time.Minute)))
+
+	outcomes := d.RecentOutcomes()
+	if len(outcomes) == 0 {
+		t.Fatal("expected at least one outcome after user message")
+	}
+
+	found := false
+	for _, o := range outcomes {
+		if o.Pattern == PatternDestructiveCmd {
+			found = true
+			if !o.Resolved {
+				t.Error("destructive-cmd should be resolved (cooldown expired, no recurrence)")
+			}
+			if !strings.Contains(o.Description, "resolved") {
+				t.Errorf("Description should mention resolved, got: %s", o.Description)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected destructive-cmd outcome")
+	}
+}
+
+func TestAlertOutcomePersistedEn(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("en")
+	now := time.Now()
+	d.Update(makeUserEvent("test", now))
+
+	// Trigger retry-loop: 3 identical calls → Warning at call 3
+	for i := range 3 {
+		d.Update(makeToolEvent("Bash", "ls -la", now.Add(time.Duration(i+1)*time.Second)))
+	}
+	// 2 more → escalation to Action at call 5 (same pattern fires again → recurrence)
+	for i := range 2 {
+		d.Update(makeToolEvent("Bash", "ls -la", now.Add(time.Duration(i+4)*time.Second)))
+	}
+	// Fill events so eventsAfter >= 5 for the Warning-level pending
+	for i := range 3 {
+		d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", now.Add(time.Duration(i+7)*time.Second)))
+	}
+
+	// User message triggers checkResolutions: Warning pending sees Action recurrence → persisted
+	d.Update(makeUserEvent("continue", now.Add(11*time.Second)))
+
+	outcomes := d.RecentOutcomes()
+	found := false
+	for _, o := range outcomes {
+		if o.Pattern == PatternRetryLoop && !o.Resolved {
+			found = true
+			if !strings.Contains(o.Description, "persisted") {
+				t.Errorf("Description should mention persisted, got: %s", o.Description)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected persisted retry-loop outcome")
+	}
+}
+
+func TestAlertOutcomeResolvedJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("テスト", now))
+
+	// Trigger destructive cmd alert
+	d.Update(makeToolEvent("Bash", "rm -rf /tmp", now.Add(1*time.Second)))
+
+	// Several events pass
+	for i := range 6 {
+		ts := now.Add(time.Duration(i+3) * time.Second)
+		d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", ts))
+	}
+
+	// User message AFTER cooldown → resolved in Japanese
+	d.Update(makeUserEvent("続けて", now.Add(11*time.Minute)))
+
+	outcomes := d.RecentOutcomes()
+	found := false
+	for _, o := range outcomes {
+		if o.Pattern == PatternDestructiveCmd && o.Resolved {
+			found = true
+			if !strings.Contains(o.Description, "解消しました") {
+				t.Errorf("Japanese outcome should contain 解消, got: %s", o.Description)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected resolved destructive-cmd outcome in Japanese")
+	}
+}
+
+func TestAlertOutcomePersistedJa(t *testing.T) {
+	t.Parallel()
+	d := NewDetector("ja")
+	now := time.Now()
+	d.Update(makeUserEvent("テスト", now))
+
+	// Same escalation pattern as English test
+	for i := range 3 {
+		d.Update(makeToolEvent("Bash", "ls -la", now.Add(time.Duration(i+1)*time.Second)))
+	}
+	for i := range 2 {
+		d.Update(makeToolEvent("Bash", "ls -la", now.Add(time.Duration(i+4)*time.Second)))
+	}
+	for i := range 3 {
+		d.Update(makeToolEvent("Read", "/file"+itoa(i)+".go", now.Add(time.Duration(i+7)*time.Second)))
+	}
+
+	d.Update(makeUserEvent("続けて", now.Add(11*time.Second)))
+
+	outcomes := d.RecentOutcomes()
+	found := false
+	for _, o := range outcomes {
+		if o.Pattern == PatternRetryLoop && !o.Resolved {
+			found = true
+			if !strings.Contains(o.Description, "継続中") {
+				t.Errorf("Japanese persisted should contain 継続中, got: %s", o.Description)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected persisted retry-loop outcome in Japanese")
 	}
 }

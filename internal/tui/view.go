@@ -8,6 +8,19 @@ import (
 	"github.com/hir4ta/claude-buddy/internal/analyzer"
 )
 
+// Layout:
+//   Title + Stats + Score
+//   ─── Feedback ─────────
+//   ⚠ [pattern] observation
+//     → suggestion
+//   ─── Tasks ────────────
+//   ✔ task1
+//   ▶ task2
+//   ─── Monitor ──────────
+//   messages...
+//   ───────────────────────
+//   q: quit | ↑↓: select | Enter: expand | ?: help
+
 func (m Model) View() string {
 	if !m.ready {
 		return "Waiting for session data..."
@@ -19,15 +32,30 @@ func (m Model) View() string {
 
 	var sections []string
 
+	// Title area (always shown)
 	sections = append(sections, m.renderHeader())
+
+	// Feedback section
+	sections = append(sections, m.renderLabeledSeparator("Feedback"))
 	if len(m.alerts) > 0 {
 		sections = append(sections, m.renderAlerts())
 	}
-	if len(m.tasks) > 0 {
-		sections = append(sections, m.renderTasks())
+	if m.outcome != nil {
+		sections = append(sections, m.renderOutcome())
 	}
-	sections = append(sections, m.renderSeparator())
+
+	// Tasks section
+	taskLines := m.renderTasks()
+	if taskLines != "" {
+		sections = append(sections, m.renderLabeledSeparator("Tasks"))
+		sections = append(sections, taskLines)
+	}
+
+	// Monitor section (conversation history)
+	sections = append(sections, m.renderLabeledSeparator("Monitor"))
 	sections = append(sections, m.renderMessages())
+
+	// Bottom
 	sections = append(sections, m.renderSeparator())
 	if m.sessionEnded {
 		sections = append(sections, dimStyle.Render("  Session ended"))
@@ -65,7 +93,33 @@ func (m Model) renderHeader() string {
 		planBadge := planModeStyle.Render(" PLAN ")
 		top = lipgloss.JoinHorizontal(lipgloss.Top, top, "  ", planBadge)
 	}
-	return top + "\n" + statsStyle.Render(statsText)
+	scoreLine := m.renderScoreLine()
+	return top + "\n" + statsStyle.Render(statsText) + "\n" + scoreLine
+}
+
+func (m Model) renderScoreLine() string {
+	score := m.scoreCalc.Score()
+
+	scoreStr := fmt.Sprintf("Score: %d/100", score.Total)
+
+	filled := score.Total / 10
+	if filled > 10 {
+		filled = 10
+	}
+	bar := strings.Repeat("\u2588", filled) + strings.Repeat("\u2591", 10-filled)
+
+	text := fmt.Sprintf("%s %s | %s", scoreStr, bar, score.Label)
+
+	var style lipgloss.Style
+	switch {
+	case score.Total >= 80:
+		style = scoreGoodStyle
+	case score.Total >= 60:
+		style = scoreFairStyle
+	default:
+		style = scorePoorStyle
+	}
+	return style.Render(text)
 }
 
 func (m Model) renderAlerts() string {
@@ -78,20 +132,27 @@ func (m Model) renderAlerts() string {
 			contentWidth = 40
 		}
 
-		style := alertWarningStyle
-		if a.Level >= analyzer.LevelAction {
+		// Style and icon based on Kind/Level
+		var style lipgloss.Style
+		var icon string
+		switch {
+		case a.Kind == analyzer.KindProposal:
+			style = alertProposalStyle
+			icon = "\u25b8" // ▸ Proposal
+		case a.Level >= analyzer.LevelAction:
 			style = alertActionStyle
+			icon = "\u25b2" // ▲ Action
+		default:
+			style = alertWarningStyle
+			icon = "\u26a0" // ⚠ Warning
 		}
 
-		// First line: icon + pattern name + observation
-		firstLine := fmt.Sprintf(" \u26a0 [%s] %s", patternName, a.Observation)
-		// Continuation: suggestion prefixed with arrow
+		firstLine := fmt.Sprintf(" %s [%s] %s", icon, patternName, a.Observation)
 		contLine := fmt.Sprintf("   \u2192 %s ", a.Suggestion)
 
 		for _, text := range []string{firstLine, contLine} {
 			wrapped := wrapText(text, contentWidth)
 			for _, wl := range wrapped {
-				// Pad to contentWidth so the background color fills the full width
 				pad := contentWidth - lipgloss.Width(wl)
 				if pad > 0 {
 					wl += strings.Repeat(" ", pad)
@@ -101,6 +162,38 @@ func (m Model) renderAlerts() string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m Model) renderOutcome() string {
+	if m.outcome == nil {
+		return ""
+	}
+	return "  " + alertOutcomeStyle.Render("\u2714 "+m.outcome.Description)
+}
+
+// alertLineCount returns the number of rendered lines the alerts section will occupy.
+func (m Model) alertLineCount() int {
+	count := 0
+	for _, a := range m.alerts {
+		contentWidth := m.width - 4
+		if contentWidth < 40 {
+			contentWidth = 40
+		}
+		var icon string
+		switch {
+		case a.Kind == analyzer.KindProposal:
+			icon = "\u25b8"
+		case a.Level >= analyzer.LevelAction:
+			icon = "\u25b2"
+		default:
+			icon = "\u26a0"
+		}
+		firstLine := fmt.Sprintf(" %s [%s] %s", icon, analyzer.PatternName(a.Pattern), a.Observation)
+		contLine := fmt.Sprintf("   \u2192 %s ", a.Suggestion)
+		count += len(wrapText(firstLine, contentWidth))
+		count += len(wrapText(contLine, contentWidth))
+	}
+	return count
 }
 
 func (m Model) renderTasks() string {
@@ -157,6 +250,21 @@ func (m Model) shimmerText(text string) string {
 		}
 	}
 	return result.String()
+}
+
+func (m Model) renderLabeledSeparator(label string) string {
+	w := m.width
+	if w < 40 {
+		w = 40
+	}
+	prefix := "\u2500\u2500\u2500 " + label + " "
+	prefixWidth := lipgloss.Width(prefix)
+	remaining := w - prefixWidth
+	if remaining < 1 {
+		remaining = 1
+	}
+	line := prefix + strings.Repeat("\u2500", remaining)
+	return sectionSepStyle.Render(line)
 }
 
 func (m Model) renderSeparator() string {

@@ -117,7 +117,7 @@ func New(claudeHome string, lang locale.Lang, st *store.Store, emb *embedder.Emb
 					mcp.Description("Session ID (optional, defaults to latest)"),
 				),
 			),
-			Handler: alertsHandler(claudeHome),
+			Handler: alertsHandler(claudeHome, lang),
 		},
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_decisions",

@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -45,7 +46,6 @@ func (d *Detector) detectRetryLoop() *Alert {
 		return nil
 	}
 
-	// Count consecutive identical tool calls (from newest)
 	consecutiveCount := 1
 	for i := 1; i < len(recent); i++ {
 		cur := recent[i-1]
@@ -60,27 +60,53 @@ func (d *Detector) detectRetryLoop() *Alert {
 		}
 	}
 
-	if consecutiveCount >= 5 {
-		return &Alert{
-			Pattern:     PatternRetryLoop,
-			Level:       LevelAction,
-			Situation:   "Claude is repeating the same tool call",
-			Observation: "Same tool+input called " + itoa(consecutiveCount) + " times consecutively",
-			Suggestion:  "Interrupt and provide a different approach or clarify the goal",
-			EventCount:  consecutiveCount,
-		}
+	if consecutiveCount < 2 {
+		return nil
 	}
-	if consecutiveCount >= 3 {
-		return &Alert{
-			Pattern:     PatternRetryLoop,
-			Level:       LevelWarning,
-			Situation:   "Claude is repeating the same tool call",
-			Observation: "Same tool+input called " + itoa(consecutiveCount) + " times consecutively",
-			Suggestion:  "Consider interrupting if the retries don't seem productive",
-			EventCount:  consecutiveCount,
-		}
+
+	toolName := recent[0].ToolName
+	filePath := recent[0].FilePath
+	short := shortPath(filePath)
+	count := itoa(consecutiveCount)
+
+	kind := KindAlert
+	level := LevelWarning
+	switch {
+	case consecutiveCount >= 5:
+		level = LevelAction
+	case consecutiveCount >= 3:
+		level = LevelWarning
+	default: // 2 retries
+		kind = KindProposal
+		level = LevelInfo
 	}
-	return nil
+
+	var obs, suggestion string
+	if d.isJa() {
+		obs = toolName
+		if filePath != "" {
+			obs += " → " + short
+		}
+		obs += " を" + count + "回連続リトライ中"
+		suggestion = d.retrySuggestionJa(toolName, kind, level)
+	} else {
+		obs = toolName
+		if filePath != "" {
+			obs += " → " + short
+		}
+		obs += " retried " + count + " times consecutively"
+		suggestion = d.retrySuggestionEn(toolName, kind, level)
+	}
+
+	return &Alert{
+		Pattern:     PatternRetryLoop,
+		Kind:        kind,
+		Level:       level,
+		Situation:   "Consecutive identical tool calls detected",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  consecutiveCount,
+	}
 }
 
 // detectCompactAmnesia checks if files are being re-read after compact.
@@ -107,43 +133,106 @@ func (d *Detector) detectCompactAmnesia() *Alert {
 	}
 
 	ratio := float64(overlap) / float64(len(d.compaction.postCompactReads))
-	if ratio > 0.6 {
-		d.compaction.inPostCompact = false // only alert once
-		return &Alert{
-			Pattern:     PatternCompactAmnesia,
-			Level:       LevelWarning,
-			Situation:   "Context was compacted recently",
-			Observation: "Claude is re-reading files it already read before compaction (" + itoa(overlap) + " overlapping)",
-			Suggestion:  "Use buddy_recall to recover lost context instead of re-reading files",
-			EventCount:  overlap,
-		}
+	if ratio <= 0.6 {
+		return nil
 	}
-	return nil
+
+	d.compaction.inPostCompact = false // only alert once
+
+	files := d.overlapFiles(3)
+	fileList := strings.Join(files, ", ")
+	n := itoa(overlap)
+
+	var obs, suggestion string
+	if d.isJa() {
+		obs = "compact 後に "
+		if len(files) > 0 {
+			obs += fileList
+			if overlap > len(files) {
+				obs += " など"
+			}
+			obs += " " + n + "ファイルを再読込中"
+		} else {
+			obs += n + "ファイルを再読込中"
+		}
+		suggestion = "buddy_recall でキーワード検索すると compact 前の文脈を復元できます — 再読込より高速です"
+	} else {
+		obs = "Re-reading " + n + " files after compact"
+		if len(files) > 0 {
+			obs += " (" + fileList
+			if overlap > len(files) {
+				obs += " etc."
+			}
+			obs += ")"
+		}
+		suggestion = "Use buddy_recall to search for pre-compact context — faster than re-reading files"
+	}
+
+	return &Alert{
+		Pattern:     PatternCompactAmnesia,
+		Level:       LevelWarning,
+		Situation:   "Files re-read after context compaction",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  overlap,
+	}
 }
 
 // detectExcessiveTools checks for too many tool calls without user input.
 func (d *Detector) detectExcessiveTools() *Alert {
+	if d.burst.toolCount < 25 {
+		return nil
+	}
+
+	level := LevelWarning
 	if d.burst.toolCount >= 40 {
-		return &Alert{
-			Pattern:     PatternExcessiveTools,
-			Level:       LevelAction,
-			Situation:   "Long autonomous tool burst",
-			Observation: itoa(d.burst.toolCount) + " tool calls without user input",
-			Suggestion:  "Interrupt to check progress — Claude may be going in circles",
-			EventCount:  d.burst.toolCount,
-		}
+		level = LevelAction
 	}
-	if d.burst.toolCount >= 25 {
-		return &Alert{
-			Pattern:     PatternExcessiveTools,
-			Level:       LevelWarning,
-			Situation:   "Extended autonomous tool burst",
-			Observation: itoa(d.burst.toolCount) + " tool calls without user input",
-			Suggestion:  "Check that Claude is making progress toward the goal",
-			EventCount:  d.burst.toolCount,
-		}
+
+	fileCount := len(d.burst.uniqueFiles)
+	tc := itoa(d.burst.toolCount)
+	fc := itoa(fileCount)
+
+	var elapsed time.Duration
+	if !d.burst.startTime.IsZero() && !d.burst.lastToolTime.IsZero() {
+		elapsed = d.burst.lastToolTime.Sub(d.burst.startTime)
 	}
-	return nil
+
+	var obs, suggestion string
+	if d.isJa() {
+		obs = tc + "回のツール呼び出し（"
+		if d.burst.hasWrite {
+			obs += fc + "ファイル変更"
+		} else {
+			obs += fc + "ファイル読込、書込なし"
+		}
+		if elapsed >= time.Minute {
+			obs += "、" + itoa(int(elapsed.Minutes())) + "分経過"
+		}
+		obs += "）"
+		suggestion = d.excessiveToolsSuggestionJa(fileCount)
+	} else {
+		obs = tc + " tool calls ("
+		if d.burst.hasWrite {
+			obs += fc + " files modified"
+		} else {
+			obs += fc + " files read, no writes"
+		}
+		if elapsed >= time.Minute {
+			obs += ", " + itoa(int(elapsed.Minutes())) + "m elapsed"
+		}
+		obs += ")"
+		suggestion = d.excessiveToolsSuggestionEn(fileCount)
+	}
+
+	return &Alert{
+		Pattern:     PatternExcessiveTools,
+		Level:       level,
+		Situation:   "Long burst of tool calls without user input",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  d.burst.toolCount,
+	}
 }
 
 // detectDestructiveCmd checks for dangerous shell commands.
@@ -157,34 +246,83 @@ func (d *Detector) detectDestructiveCmd(ev parser.SessionEvent) *Alert {
 		return nil
 	}
 
-	var observation string
+	type cmdMsg struct{ obsJa, obsEn, suggJa, suggEn string }
+
+	var m cmdMsg
 	switch {
 	case rmRFPattern.MatchString(input):
-		observation = "Detected rm -rf command"
+		m = cmdMsg{
+			"rm -rf が実行されました",
+			"rm -rf command executed",
+			"削除対象のパスを確認してください — 誤って実行された場合 git checkout で復元できます",
+			"Verify the target path — use git checkout to restore if unintended",
+		}
 	case gitPushForcePattern.MatchString(input) && !strings.Contains(input, "--force-with-lease"):
-		observation = "Detected git push --force"
+		m = cmdMsg{
+			"git push --force が実行されました",
+			"git push --force executed",
+			"リモートの変更が上書きされます — --force-with-lease の方が安全です",
+			"Remote changes will be overwritten — use --force-with-lease instead",
+		}
 	case gitResetHardPattern.MatchString(input):
-		observation = "Detected git reset --hard"
+		m = cmdMsg{
+			"git reset --hard が実行されました",
+			"git reset --hard executed",
+			"コミットしていない変更は失われます — git reflog で直前の状態を確認できます",
+			"Uncommitted changes are lost — use git reflog to find previous state",
+		}
 	case gitCheckoutDot.MatchString(input):
-		observation = "Detected git checkout -- . (discards all changes)"
+		m = cmdMsg{
+			"作業ディレクトリの全変更が破棄されました",
+			"All working directory changes discarded",
+			"git stash で変更を一時保存してから操作する方が安全です",
+			"Use git stash to save changes before discarding",
+		}
 	case gitRestoreDot.MatchString(input):
-		observation = "Detected git restore . (discards all changes)"
+		m = cmdMsg{
+			"作業ディレクトリの全変更が破棄されました",
+			"All working directory changes discarded",
+			"git stash で変更を一時保存してから操作する方が安全です",
+			"Use git stash to save changes before discarding",
+		}
 	case gitCleanF.MatchString(input):
-		observation = "Detected git clean -f (removes untracked files)"
+		m = cmdMsg{
+			"git clean -f で未追跡ファイルが削除されました",
+			"git clean -f removed untracked files",
+			"削除されたファイルは復元できません — 事前に git clean -n で確認してください",
+			"Removed files cannot be recovered — use git clean -n to preview first",
+		}
 	case gitBranchD.MatchString(input):
-		observation = "Detected git branch -D (force delete branch)"
+		m = cmdMsg{
+			"git branch -D でブランチが強制削除されました",
+			"git branch -D force-deleted a branch",
+			"マージ前のブランチなら git reflog からコミットを復元できます",
+			"If unmerged, use git reflog to recover the branch's commits",
+		}
 	case chmod777.MatchString(input):
-		observation = "Detected chmod 777 (world-writable permissions)"
+		m = cmdMsg{
+			"chmod 777 で全ユーザーに書込/実行権限が付与されました",
+			"chmod 777 granted world-writable permissions",
+			"セキュリティリスクがあります — 最小限の権限（644 or 755）を使ってください",
+			"Security risk — use minimal permissions (644 or 755)",
+		}
 	default:
 		return nil
+	}
+
+	var obs, sugg string
+	if d.isJa() {
+		obs, sugg = m.obsJa, m.suggJa
+	} else {
+		obs, sugg = m.obsEn, m.suggEn
 	}
 
 	return &Alert{
 		Pattern:     PatternDestructiveCmd,
 		Level:       LevelAction,
-		Situation:   "Potentially destructive command executed",
-		Observation: observation,
-		Suggestion:  "Verify this was intentional — these commands can cause data loss",
+		Situation:   "Destructive shell command executed",
+		Observation: obs,
+		Suggestion:  sugg,
 		EventCount:  1,
 	}
 }
@@ -200,27 +338,44 @@ func (d *Detector) detectFileReadLoop() *Alert {
 		}
 	}
 
+	if maxCount < 5 {
+		return nil
+	}
+
+	level := LevelWarning
 	if maxCount >= 8 {
-		return &Alert{
-			Pattern:     PatternFileReadLoop,
-			Level:       LevelAction,
-			Situation:   "Repeated file reads",
-			Observation: maxFile + " read " + itoa(maxCount) + " times without editing",
-			Suggestion:  "Claude may be stuck — provide specific guidance about this file",
-			EventCount:  maxCount,
+		level = LevelAction
+	}
+
+	short := shortPath(maxFile)
+	count := itoa(maxCount)
+	highBurst := d.burst.toolCount > 15
+
+	var obs, suggestion string
+	if d.isJa() {
+		obs = short + " を" + count + "回読込済み（編集なし）"
+		if highBurst {
+			suggestion = "このファイルの何を変更すべきか、具体的に指示してください（例: 関数名、行番号）"
+		} else {
+			suggestion = "ファイルの内容を理解できていない可能性があります — 変更したい箇所を具体的に伝えてください"
+		}
+	} else {
+		obs = short + " read " + count + " times (no edits)"
+		if highBurst {
+			suggestion = "Tell Claude specifically what to change in this file (e.g. function name, line number)"
+		} else {
+			suggestion = "Claude may not understand the file — describe the specific change you want"
 		}
 	}
-	if maxCount >= 5 {
-		return &Alert{
-			Pattern:     PatternFileReadLoop,
-			Level:       LevelWarning,
-			Situation:   "Repeated file reads",
-			Observation: maxFile + " read " + itoa(maxCount) + " times without editing",
-			Suggestion:  "Check if Claude is stuck in a read loop",
-			EventCount:  maxCount,
-		}
+
+	return &Alert{
+		Pattern:     PatternFileReadLoop,
+		Level:       level,
+		Situation:   "Same file read repeatedly without editing",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  maxCount,
 	}
-	return nil
 }
 
 // detectContextThrashing checks for frequent context compactions.
@@ -238,27 +393,47 @@ func (d *Detector) detectContextThrashing() *Alert {
 		}
 	}
 
+	if compactsInWindow < 2 {
+		return nil
+	}
+
+	n := itoa(compactsInWindow)
+	var obs, suggestion string
+	level := LevelWarning
+
 	if compactsInWindow >= 3 {
-		return &Alert{
-			Pattern:     PatternContextThrashing,
-			Level:       LevelAction,
-			Situation:   "Frequent context compactions",
-			Observation: itoa(compactsInWindow) + " compactions in 15 minutes",
-			Suggestion:  "Context is churning — break the task into smaller steps or start fresh",
-			EventCount:  compactsInWindow,
+		level = LevelAction
+		if d.isJa() {
+			obs = "15分間に" + n + "回の context compact が発生"
+			suggestion = "/clear で新しいセッションを開始してください — タスクを1つに絞り、CLAUDE.md に方針を書いておくと効果的です"
+		} else {
+			obs = n + " context compactions in 15 minutes"
+			suggestion = "Start a new session with /clear — focus on one task and document the approach in CLAUDE.md"
+		}
+	} else {
+		if d.isJa() {
+			obs = "15分間に" + n + "回の context compact が発生"
+			suggestion = "コンテキストが急速に消費されています — 不要なファイルの読込を避け、スコープを絞ってください"
+			if !d.features.SubagentUsed {
+				suggestion += "。複雑な調査はサブエージェント (Task) に委任すると本体の context を節約できます"
+			}
+		} else {
+			obs = n + " context compactions in 15 minutes"
+			suggestion = "Context filling fast — avoid unnecessary file reads and narrow the scope"
+			if !d.features.SubagentUsed {
+				suggestion += ". Delegate research to subagents (Task tool) to save main context"
+			}
 		}
 	}
-	if compactsInWindow >= 2 {
-		return &Alert{
-			Pattern:     PatternContextThrashing,
-			Level:       LevelWarning,
-			Situation:   "Multiple context compactions",
-			Observation: itoa(compactsInWindow) + " compactions in 15 minutes",
-			Suggestion:  "Session context is filling fast — consider summarizing or narrowing scope",
-			EventCount:  compactsInWindow,
-		}
+
+	return &Alert{
+		Pattern:     PatternContextThrashing,
+		Level:       level,
+		Situation:   "Frequent context compactions",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  compactsInWindow,
 	}
-	return nil
 }
 
 // detectTestFailCycle detects test->edit->test fail cycles.
@@ -279,17 +454,44 @@ func (d *Detector) detectTestFailCycle(ev parser.SessionEvent) *Alert {
 		}
 	}
 
-	if d.testCycleCount >= 3 {
-		return &Alert{
-			Pattern:     PatternTestFailCycle,
-			Level:       LevelWarning,
-			Situation:   "Test-edit-test cycle detected",
-			Observation: itoa(d.testCycleCount) + " test-edit-retest cycles without passing",
-			Suggestion:  "Claude may be fixing symptoms, not root cause — describe the expected behavior",
-			EventCount:  d.testCycleCount,
+	if d.testCycleCount < 2 {
+		return nil
+	}
+
+	kind := KindAlert
+	level := LevelWarning
+	if d.testCycleCount == 2 {
+		kind = KindProposal
+		level = LevelInfo
+	}
+
+	count := itoa(d.testCycleCount)
+	var obs, suggestion string
+	if d.isJa() {
+		obs = "テスト→編集→再テストを" + count + "回繰り返してもパスしていません"
+		if kind == KindProposal {
+			suggestion = "テストが繰り返し失敗しています — 次も失敗したら期待値と実際の出力を貼り付けてみてください"
+		} else {
+			suggestion = "テストの期待値と実際の出力の差分を貼り付けて、根本原因を特定するよう指示してください"
+		}
+	} else {
+		obs = count + " test-edit-retest cycles without passing"
+		if kind == KindProposal {
+			suggestion = "Tests failing repeatedly — if the next attempt fails too, paste the expected vs actual output"
+		} else {
+			suggestion = "Paste the expected vs actual output diff and ask Claude to find the root cause"
 		}
 	}
-	return nil
+
+	return &Alert{
+		Pattern:     PatternTestFailCycle,
+		Kind:        kind,
+		Level:       level,
+		Situation:   "Repeated test-edit-retest cycles",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  d.testCycleCount,
+	}
 }
 
 // detectApologizeRetry detects repeated apologies in assistant text.
@@ -313,17 +515,30 @@ func (d *Detector) detectApologizeRetry(ev parser.SessionEvent) *Alert {
 		d.lastApologyTime = ev.Timestamp
 	}
 
-	if d.recentApologies >= 3 && d.assistantTurnsSinceReset <= 10 {
-		return &Alert{
-			Pattern:     PatternApologizeRetry,
-			Level:       LevelWarning,
-			Situation:   "Repeated apologies detected",
-			Observation: itoa(d.recentApologies) + " apologies in " + itoa(d.assistantTurnsSinceReset) + " assistant turns",
-			Suggestion:  "Claude keeps failing and apologizing — try a different approach or rephrase the task",
-			EventCount:  d.recentApologies,
-		}
+	if d.recentApologies < 3 || d.assistantTurnsSinceReset > 10 {
+		return nil
 	}
-	return nil
+
+	turns := itoa(d.assistantTurnsSinceReset)
+	apologies := itoa(d.recentApologies)
+
+	var obs, suggestion string
+	if d.isJa() {
+		obs = "直近" + turns + "ターンで" + apologies + "回謝罪 — 同じアプローチを繰り返しています"
+		suggestion = "/clear で仕切り直すか、「期待する結果」と「現在の問題」を分けて伝え直してください"
+	} else {
+		obs = apologies + " apologies in " + turns + " turns — repeating the same approach"
+		suggestion = "Start fresh with /clear, or separately restate the expected outcome and the actual problem"
+	}
+
+	return &Alert{
+		Pattern:     PatternApologizeRetry,
+		Level:       LevelWarning,
+		Situation:   "Claude repeatedly apologizing and retrying",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  d.recentApologies,
+	}
 }
 
 // detectExploreLoop detects prolonged read-only exploration without writes.
@@ -339,28 +554,63 @@ func (d *Detector) detectExploreLoop() *Alert {
 	}
 
 	elapsed := d.burst.lastToolTime.Sub(d.burst.startTime)
+	if elapsed <= 5*time.Minute {
+		return nil
+	}
 
+	level := LevelWarning
 	if elapsed > 7*time.Minute {
-		return &Alert{
-			Pattern:     PatternExploreLoop,
-			Level:       LevelAction,
-			Situation:   "Extended read-only exploration",
-			Observation: "Over 7 minutes of Read/Grep without any Write/Edit",
-			Suggestion:  "Nudge Claude to start making changes or ask what's blocking it",
-			EventCount:  d.burst.toolCount,
+		level = LevelAction
+	}
+
+	fileCount := len(d.burst.uniqueFiles)
+	minutes := itoa(int(elapsed.Minutes()))
+	fc := itoa(fileCount)
+	topFile := d.topFileRead()
+	topShort := shortPath(topFile)
+	wideScope := fileCount > 8
+
+	var obs, suggestion string
+	if d.isJa() {
+		obs = minutes + "分間で" + fc + "ファイルを読込中"
+		if topFile != "" {
+			obs += "（最多: " + topShort + "）"
+		}
+		obs += " — 書込なし"
+
+		if wideScope {
+			suggestion = "探索範囲が広すぎます — 変更対象のファイルを指定して、具体的な作業を指示してください"
+			if !d.features.PlanModeUsed {
+				suggestion += "。Plan Mode で方針を決めてから実装に入ると効率的です"
+			}
+		} else {
+			suggestion = "調査が長引いています — 「まず○○を修正して」のように具体的なアクションを指示してください"
+		}
+	} else {
+		obs = minutes + "m exploring " + fc + " files"
+		if topFile != "" {
+			obs += " (most: " + topShort + ")"
+		}
+		obs += " — no writes"
+
+		if wideScope {
+			suggestion = "Too many files being explored — specify target files and give concrete instructions"
+			if !d.features.PlanModeUsed {
+				suggestion += ". Use Plan Mode to define the approach before implementation"
+			}
+		} else {
+			suggestion = "Exploration taking too long — give a concrete action like \"first fix X in Y\""
 		}
 	}
-	if elapsed > 5*time.Minute {
-		return &Alert{
-			Pattern:     PatternExploreLoop,
-			Level:       LevelWarning,
-			Situation:   "Prolonged exploration phase",
-			Observation: "Over 5 minutes of Read/Grep without any Write/Edit",
-			Suggestion:  "Check if Claude needs guidance to start making changes",
-			EventCount:  d.burst.toolCount,
-		}
+
+	return &Alert{
+		Pattern:     PatternExploreLoop,
+		Level:       level,
+		Situation:   "Prolonged read-only exploration without writes",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  d.burst.toolCount,
 	}
-	return nil
 }
 
 // detectRateLimitStuck detects being stuck on rate limits.
@@ -382,7 +632,6 @@ func (d *Detector) detectRateLimitStuck(ev parser.SessionEvent) *Alert {
 		return nil
 	}
 
-	// Check if no meaningful progress in last few events
 	recent := d.getRecentFingerprints(10)
 	hasProgress := false
 	for _, fp := range recent {
@@ -392,18 +641,189 @@ func (d *Detector) detectRateLimitStuck(ev parser.SessionEvent) *Alert {
 		}
 	}
 
-	if !hasProgress && d.burst.startTime.After(time.Time{}) {
-		elapsed := ev.Timestamp.Sub(d.burst.startTime)
-		if elapsed > 5*time.Minute {
-			return &Alert{
-				Pattern:     PatternRateLimitStuck,
-				Level:       LevelAction,
-				Situation:   "Rate limit detected with no progress",
-				Observation: "Rate limit/overload messages and no productive output for over 5 minutes",
-				Suggestion:  "Wait a few minutes or try again later — continued retries won't help",
-				EventCount:  1,
+	if hasProgress || !d.burst.startTime.After(time.Time{}) {
+		return nil
+	}
+
+	elapsed := ev.Timestamp.Sub(d.burst.startTime)
+	if elapsed <= 5*time.Minute {
+		return nil
+	}
+
+	minutes := itoa(int(elapsed.Minutes()))
+	var obs, suggestion string
+	if d.isJa() {
+		obs = "レート制限が発生し、" + minutes + "分間進捗がありません"
+		suggestion = "Esc で中断して数分待ってから再開してください — リトライを続けても解消しません"
+	} else {
+		obs = "Rate limited with no progress for " + minutes + " minutes"
+		suggestion = "Press Esc and wait a few minutes before resuming — continued retries won't help"
+	}
+
+	return &Alert{
+		Pattern:     PatternRateLimitStuck,
+		Level:       LevelAction,
+		Situation:   "Rate limited with no progress",
+		Observation: obs,
+		Suggestion:  suggestion,
+		EventCount:  1,
+	}
+}
+
+// --- Contextual message helpers ---
+
+// shortPath returns filepath.Base, or the original path if Base returns "." or empty.
+func shortPath(p string) string {
+	b := filepath.Base(p)
+	if b == "." || b == "" {
+		return p
+	}
+	return b
+}
+
+// topFileRead returns the most-read file path from the current burst.
+func (d *Detector) topFileRead() string {
+	max, name := 0, ""
+	for f, c := range d.burst.fileReads {
+		if c > max {
+			max, name = c, f
+		}
+	}
+	return name
+}
+
+// overlapFiles returns up to n overlapping file names between pre/post compact reads.
+func (d *Detector) overlapFiles(n int) []string {
+	var result []string
+	for f := range d.compaction.postCompactReads {
+		if d.compaction.preCompactReads[f] {
+			result = append(result, shortPath(f))
+			if len(result) >= n {
+				break
 			}
 		}
 	}
-	return nil
+	return result
+}
+
+// --- Feature-aware suggestion builders ---
+
+func (d *Detector) retrySuggestionJa(toolName string, kind FeedbackKind, level FeedbackLevel) string {
+	if kind == KindProposal {
+		switch toolName {
+		case "Edit", "Write":
+			return "同じ Edit が繰り返されています — 次も失敗したら行番号で指定すると確実です"
+		case "Bash":
+			return "同じコマンドを再試行中 — 別のアプローチも検討してみてください"
+		default:
+			return "同じ操作が繰り返されています — 次も失敗したらアプローチを変えてみてください"
+		}
+	}
+	switch toolName {
+	case "Edit", "Write":
+		if level >= LevelAction {
+			return "Esc で中断して「○行目付近の△△を××に変更して」と具体的に指示してください"
+		}
+		return "Edit の指定テキストがファイル内容と一致していない可能性があります — 変更箇所を行番号で指定すると確実です"
+	case "Bash":
+		if level >= LevelAction {
+			return "Esc で中断して、別のコマンドか手動での対処を検討してください"
+		}
+		return "コマンドがエラーを返しています — エラーの原因（パス、権限、依存関係）を伝えてください"
+	case "Read", "Grep", "Glob":
+		if level >= LevelAction {
+			return "Esc で中断して、探しているものの手がかり（ファイル名、関数名）を具体的に伝えてください"
+		}
+		s := "探しているものを具体的に説明してください（例: 関数名、パターン）"
+		if !d.features.SubagentUsed {
+			s += "。広範な検索にはサブエージェント (Task) の方が効率的です"
+		}
+		return s
+	default:
+		return "Esc で中断して、別のアプローチを指示してください"
+	}
+}
+
+func (d *Detector) retrySuggestionEn(toolName string, kind FeedbackKind, level FeedbackLevel) string {
+	if kind == KindProposal {
+		switch toolName {
+		case "Edit", "Write":
+			return "Same Edit retrying — if it fails again, try specifying by line number"
+		case "Bash":
+			return "Same command retrying — consider a different approach if it fails again"
+		default:
+			return "Same operation retrying — consider a different approach if it fails again"
+		}
+	}
+	switch toolName {
+	case "Edit", "Write":
+		if level >= LevelAction {
+			return "Press Esc and tell Claude exactly what to change, e.g. \"change X to Y near line N\""
+		}
+		return "The target text may not match the file — specify the change by line number for accuracy"
+	case "Bash":
+		if level >= LevelAction {
+			return "Press Esc and try a different command or manual workaround"
+		}
+		return "The command is failing — describe the error cause (path, permissions, dependencies)"
+	case "Read", "Grep", "Glob":
+		if level >= LevelAction {
+			return "Press Esc and give specific clues: file name, function name, or exact string"
+		}
+		s := "Describe what you're looking for specifically (e.g. function name, pattern)"
+		if !d.features.SubagentUsed {
+			s += ". For broad searches, subagents (Task tool) are more efficient"
+		}
+		return s
+	default:
+		return "Press Esc and try a different approach"
+	}
+}
+
+func (d *Detector) excessiveToolsSuggestionJa(fileCount int) string {
+	if !d.burst.hasWrite && fileCount > 5 {
+		s := "読込だけで書込がありません"
+		if !d.features.PlanModeUsed {
+			s += " — Plan Mode で方針を決めてから実装に入ると効率的です"
+		} else if !d.features.SubagentUsed {
+			s += " — 探索はサブエージェント (Task) に委任すると context を節約できます"
+		} else {
+			s += " — Esc で中断して進捗を確認してください"
+		}
+		return s
+	}
+	if fileCount > 10 {
+		s := "多数のファイルを変更中"
+		if !d.features.CLAUDEMDRead && !d.features.RulesRead {
+			s += " — CLAUDE.md や .claude/rules/ にプロジェクトルールを書いておくと一貫性が上がります"
+		} else {
+			s += " — Esc で中断して進捗を確認してください"
+		}
+		return s
+	}
+	return "Esc で中断して、期待する結果に近づいているか確認してください"
+}
+
+func (d *Detector) excessiveToolsSuggestionEn(fileCount int) string {
+	if !d.burst.hasWrite && fileCount > 5 {
+		s := "Read-only with no writes"
+		if !d.features.PlanModeUsed {
+			s += " — use Plan Mode to define the approach before implementation"
+		} else if !d.features.SubagentUsed {
+			s += " — delegate exploration to subagents (Task tool) to save context"
+		} else {
+			s += " — press Esc to check progress"
+		}
+		return s
+	}
+	if fileCount > 10 {
+		s := "Modifying many files"
+		if !d.features.CLAUDEMDRead && !d.features.RulesRead {
+			s += " — add project rules to CLAUDE.md or .claude/rules/ for consistency"
+		} else {
+			s += " — press Esc to check progress"
+		}
+		return s
+	}
+	return "Press Esc to check if Claude is making progress toward the goal"
 }

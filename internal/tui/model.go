@@ -45,6 +45,12 @@ type Model struct {
 	// Locale
 	lang locale.Lang
 
+	// Usage score
+	scoreCalc *analyzer.ScoreCalculator
+
+	// Alert outcome (positive feedback line)
+	outcome *analyzer.AlertOutcome
+
 	// Animation state
 	animFrame    int  // increments every animTick (for shimmer, pulse, etc.)
 }
@@ -52,7 +58,8 @@ type Model struct {
 // NewModel creates a new TUI model with initial events pre-loaded.
 func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.SessionEvent, sessionID string, lang locale.Lang) Model {
 	stats := analyzer.NewStats()
-	det := analyzer.NewDetector()
+	det := analyzer.NewDetector(lang.Code)
+	sc := analyzer.NewScoreCalculator()
 	var tasks []TaskState
 	taskMap := make(map[string]int)
 	taskCounter := 0
@@ -63,7 +70,8 @@ func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.Session
 	for i := range initialEvents {
 		ev := &initialEvents[i]
 		stats.Update(*ev)
-		det.Update(*ev)
+		initAlerts := det.Update(*ev)
+		sc.Update(*ev, initAlerts)
 
 		// Auto-compact boundary: reset displayed events to avoid duplicates.
 		// After compaction, Claude Code re-serializes context messages to the JSONL,
@@ -104,10 +112,15 @@ func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.Session
 		}
 	}
 
+	// Populate alerts from detector's active alerts (for --continue / resume).
+	alerts := analyzer.SelectTopAlerts(det.ActiveAlerts(), 3)
+
 	return Model{
 		events:        events,
 		stats:         stats,
 		detector:      det,
+		scoreCalc:     sc,
+		alerts:        alerts,
 		tasks:         tasks,
 		taskMap:       taskMap,
 		taskCounter:   taskCounter,
@@ -156,14 +169,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update stats, detector, and tasks always
 		m.stats.Update(ev)
 		newAlerts := m.detector.Update(ev)
+		m.scoreCalc.Update(ev, newAlerts)
+		// Collect new alerts (proposals + warnings + actions)
 		for _, a := range newAlerts {
-			if a.Level >= analyzer.LevelWarning {
+			if a.Kind == analyzer.KindProposal || a.Level >= analyzer.LevelWarning {
 				m.alerts = append(m.alerts, a)
 			}
 		}
-		// Keep only last 3 alerts
-		if len(m.alerts) > 3 {
-			m.alerts = m.alerts[len(m.alerts)-3:]
+		// Group dedup + priority selection, max 3
+		m.alerts = analyzer.SelectTopAlerts(m.alerts, 3)
+
+		// Check for resolved outcomes (positive feedback)
+		if outcomes := m.detector.PopNewOutcomes(); len(outcomes) > 0 {
+			for i := len(outcomes) - 1; i >= 0; i-- {
+				if outcomes[i].Resolved {
+					m.outcome = &outcomes[i]
+					break
+				}
+			}
 		}
 
 		// Auto-compact boundary: reset displayed events to avoid duplicates.
@@ -307,6 +330,10 @@ func updateTasks(ev parser.SessionEvent, tasks *[]TaskState, taskMap map[string]
 				ID:     ev.TaskID,
 				Status: "pending",
 			})
+			// Sync counter to avoid ID collision with future TaskCreate events.
+			if n, err := strconv.Atoi(ev.TaskID); err == nil && n > *counter {
+				*counter = n
+			}
 		}
 		if ev.TaskStatus != "" {
 			(*tasks)[idx].Status = ev.TaskStatus
@@ -347,23 +374,36 @@ func applyModeFlags(ev *parser.SessionEvent, inPlanMode *bool, awaitingAnswer *b
 
 // fixedHeight returns the number of lines consumed by non-message areas.
 func (m Model) fixedHeight() int {
-	// header: 2 lines (title + stats)
-	h := 2
+	// header: 3 lines (title + stats + score)
+	h := 3
 
-	// alerts
-	h += len(m.alerts)
-
-	// tasks
-	for _, t := range m.tasks {
-		if t.Status != "deleted" {
-			h++
-		}
-	}
-
-	// separator before messages: 1
+	// ─── Feedback ─── separator: 1
 	h++
 
-	// separator after messages: 1
+	// alerts: actual rendered line count (each alert = 2+ lines with wrapping)
+	h += m.alertLineCount()
+
+	// outcome line (resolved alert positive feedback)
+	if m.outcome != nil {
+		h++
+	}
+
+	// tasks section
+	taskCount := 0
+	for _, t := range m.tasks {
+		if t.Status != "deleted" {
+			taskCount++
+		}
+	}
+	if taskCount > 0 {
+		h++ // ─── Tasks ─── separator
+		h += taskCount
+	}
+
+	// ─── Monitor ─── separator: 1
+	h++
+
+	// bottom separator: 1
 	h++
 
 	// session ended line (optional): 1
@@ -380,8 +420,8 @@ func (m Model) fixedHeight() int {
 // msgAreaHeight returns the number of lines available for the message area.
 func (m Model) msgAreaHeight() int {
 	h := m.height - m.fixedHeight()
-	if h < 5 {
-		h = 5
+	if h < 3 {
+		h = 3
 	}
 	return h
 }
@@ -469,3 +509,4 @@ func animTickCmd() tea.Cmd {
 		return animTickMsg(t)
 	})
 }
+

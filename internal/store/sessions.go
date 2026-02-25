@@ -138,6 +138,34 @@ func (s *Store) GetSessionChain(sessionID string) ([]SessionRow, error) {
 	return result, nil
 }
 
+// ProjectStats holds aggregate session statistics for a project.
+type ProjectStats struct {
+	TotalSessions      int
+	TotalTurns         int
+	TotalToolUses      int
+	TotalCompacts      int
+	AvgTurnsPerSession float64
+	AvgCompactsPerSess float64
+}
+
+// GetProjectSessionStats returns aggregate session stats for a project.
+func (s *Store) GetProjectSessionStats(projectPath string) (*ProjectStats, error) {
+	row := s.db.QueryRow(`
+		SELECT COUNT(*), COALESCE(SUM(turn_count),0), COALESCE(SUM(tool_use_count),0),
+			COALESCE(SUM(compact_count),0),
+			COALESCE(AVG(turn_count),0),
+			COALESCE(AVG(compact_count),0)
+		FROM sessions WHERE project_path = ?`, projectPath)
+
+	var ps ProjectStats
+	err := row.Scan(&ps.TotalSessions, &ps.TotalTurns, &ps.TotalToolUses,
+		&ps.TotalCompacts, &ps.AvgTurnsPerSession, &ps.AvgCompactsPerSess)
+	if err != nil {
+		return nil, fmt.Errorf("store: get project session stats: %w", err)
+	}
+	return &ps, nil
+}
+
 // UpdateSyncOffset updates the synced_offset and synced_at timestamp.
 func (s *Store) UpdateSyncOffset(sessionID string, offset int64) error {
 	_, err := s.db.Exec(`

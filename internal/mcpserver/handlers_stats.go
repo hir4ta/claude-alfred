@@ -105,11 +105,13 @@ func tipsHandler(claudeHome string, lang locale.Lang) server.ToolHandlerFunc {
 		}
 
 		stats := analyzer.NewStats()
+		det := analyzer.NewDetector(lang.Code)
 		for _, ev := range detail.Events {
 			stats.Update(ev)
+			det.Update(ev)
 		}
 
-		fb, err := coach.GenerateFeedback(ctx, detail.Events, stats, lang, nil)
+		fb, err := coach.GenerateFeedback(ctx, detail.Events, stats, det.ActiveAlerts(), det.SessionHealth(), lang, nil)
 		if err != nil {
 			return mcp.NewToolResultError("AI feedback generation failed: " + err.Error()), nil
 		}

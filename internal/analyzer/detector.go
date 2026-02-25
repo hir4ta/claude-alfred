@@ -2,9 +2,30 @@ package analyzer
 
 import (
 	"hash/fnv"
+	"strings"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/parser"
+)
+
+// FeedbackKind distinguishes proposals (early hints) from full alerts.
+type FeedbackKind int
+
+const (
+	KindAlert    FeedbackKind = iota // standard alert (Warning/Action)
+	KindProposal                     // early hint before pattern escalates
+)
+
+// AlertGroup groups related patterns for deduplication.
+// Within a group, only the highest-priority alert is shown.
+type AlertGroup int
+
+const (
+	GroupSafety      AlertGroup = iota // destructive-cmd
+	GroupRecovery                      // compact-amnesia, rate-limit-stuck
+	GroupExecution                     // retry-loop, test-fail-cycle, apologize-retry
+	GroupExploration                   // excessive-tools, explore-loop, file-read-loop
+	GroupContext                       // context-thrashing
 )
 
 // PatternType represents an anti-pattern detected in a Claude Code session.
@@ -26,6 +47,7 @@ const (
 // Alert represents a detected anti-pattern.
 type Alert struct {
 	Pattern     PatternType
+	Kind        FeedbackKind  // KindAlert (default) or KindProposal
 	Level       FeedbackLevel
 	Situation   string
 	Observation string
@@ -64,6 +86,26 @@ type CompactionTracker struct {
 	compactTimes     []time.Time
 }
 
+// FeatureTracker tracks which Claude Code features have been used in the session.
+type FeatureTracker struct {
+	PlanModeUsed bool
+	CLAUDEMDRead bool
+	SubagentUsed bool
+	SkillUsed    bool
+	RulesRead    bool // .claude/rules/ referenced
+	HooksUsed    bool // hooks-related events detected
+}
+
+// AlertOutcome records what happened after an alert was shown.
+type AlertOutcome struct {
+	Pattern     PatternType
+	Level       FeedbackLevel
+	FiredAt     time.Time
+	ResolvedAt  time.Time
+	Resolved    bool   // true if pattern did not recur
+	Description string // human-readable outcome
+}
+
 // Detector detects anti-patterns in Claude Code sessions.
 type Detector struct {
 	window     []EventFingerprint
@@ -71,10 +113,18 @@ type Detector struct {
 	pos        int
 	count      int
 
+	lang     string // locale code ("en", "ja", etc.)
+	features FeatureTracker
+
 	burst      BurstTracker
 	compaction CompactionTracker
 	cooldowns  map[PatternType]time.Time
 	alerts     []Alert
+	outcomes   []AlertOutcome
+
+	// Pending resolution: alerts waiting for outcome check
+	pendingResolutions []pendingResolution
+	newOutcomeIdx      int // index into outcomes for PopNewOutcomes
 
 	// For apologize-retry detection
 	recentApologies          int
@@ -83,24 +133,34 @@ type Detector struct {
 
 	// For test-fail cycle detection
 	testCycleCount int
-	lastTestFile   string
 	lastEditSeen   bool
+}
+
+type pendingResolution struct {
+	alert       Alert
+	eventsAfter int // events counted since user intervention
 }
 
 const windowCapacity = 50
 
 // Cooldown durations per feedback level.
 const (
-	cooldownInfo    = 3 * time.Minute
-	cooldownWarning = 5 * time.Minute
-	cooldownAction  = 10 * time.Minute
+	cooldownProposal = 2 * time.Minute
+	cooldownInfo     = 3 * time.Minute
+	cooldownWarning  = 5 * time.Minute
+	cooldownAction   = 10 * time.Minute
 )
 
 // NewDetector creates a Detector with initialized state.
-func NewDetector() *Detector {
+// lang is the locale code (e.g. "en", "ja"). Empty defaults to "en".
+func NewDetector(lang string) *Detector {
+	if lang == "" {
+		lang = "en"
+	}
 	return &Detector{
 		window:     make([]EventFingerprint, windowCapacity),
 		windowSize: windowCapacity,
+		lang:       lang,
 		cooldowns:  make(map[PatternType]time.Time),
 		burst: BurstTracker{
 			fileReads:   make(map[string]int),
@@ -120,6 +180,7 @@ func (d *Detector) Update(ev parser.SessionEvent) []Alert {
 
 	// Reset burst tracker on user message
 	if fp.IsUser {
+		d.checkResolutions(fp.Timestamp)
 		d.resetBurst(fp.Timestamp)
 	}
 
@@ -127,6 +188,9 @@ func (d *Detector) Update(ev parser.SessionEvent) []Alert {
 	if fp.IsCompact {
 		d.handleCompact(fp.Timestamp)
 	}
+
+	// Track Claude Code feature usage
+	d.trackFeatures(ev)
 
 	// Update burst tracker for tool events
 	if ev.Type == parser.EventToolUse {
@@ -154,6 +218,11 @@ func (d *Detector) Update(ev parser.SessionEvent) []Alert {
 	// Track pre-compact reads (always, until compact boundary resets)
 	if !d.compaction.inPostCompact && ev.Type == parser.EventToolUse && fp.FilePath != "" && isReadTool(ev.ToolName) {
 		d.compaction.preCompactReads[fp.FilePath] = true
+	}
+
+	// Update pending resolution counters
+	for i := range d.pendingResolutions {
+		d.pendingResolutions[i].eventsAfter++
 	}
 
 	// Run all detectors
@@ -198,8 +267,10 @@ func (d *Detector) Update(ev parser.SessionEvent) []Alert {
 	}
 	for _, a := range newAlerts {
 		if d.isOnCooldown(a.Pattern, now) {
-			// Allow escalation: if new alert is higher severity, bypass cooldown
-			if a.Level <= d.lastAlertLevel(a.Pattern) {
+			// Allow escalation: proposal→alert or higher severity bypasses cooldown
+			lastKind, lastLevel := d.lastAlertKindLevel(a.Pattern)
+			escalation := (a.Kind == KindAlert && lastKind == KindProposal) || a.Level > lastLevel
+			if !escalation {
 				continue
 			}
 		}
@@ -207,6 +278,12 @@ func (d *Detector) Update(ev parser.SessionEvent) []Alert {
 		a.Timestamp = now
 		filtered = append(filtered, a)
 		d.alerts = append(d.alerts, a)
+		d.pendingResolutions = append(d.pendingResolutions, pendingResolution{alert: a})
+	}
+
+	// Trim alerts to prevent unbounded growth
+	if len(d.alerts) > 50 {
+		d.alerts = d.alerts[len(d.alerts)-50:]
 	}
 
 	return filtered
@@ -241,6 +318,120 @@ func (d *Detector) SessionHealth() float64 {
 		health = 0
 	}
 	return health
+}
+
+// Features returns the tracked feature usage state.
+func (d *Detector) Features() FeatureTracker {
+	return d.features
+}
+
+// RecentOutcomes returns alert outcomes from the last 10 resolutions.
+func (d *Detector) RecentOutcomes() []AlertOutcome {
+	if len(d.outcomes) <= 10 {
+		return d.outcomes
+	}
+	return d.outcomes[len(d.outcomes)-10:]
+}
+
+// PopNewOutcomes returns outcomes added since the last call and clears them.
+func (d *Detector) PopNewOutcomes() []AlertOutcome {
+	if d.newOutcomeIdx >= len(d.outcomes) {
+		return nil
+	}
+	out := make([]AlertOutcome, len(d.outcomes)-d.newOutcomeIdx)
+	copy(out, d.outcomes[d.newOutcomeIdx:])
+	d.newOutcomeIdx = len(d.outcomes)
+	return out
+}
+
+// isJa returns true if the detector locale is Japanese.
+func (d *Detector) isJa() bool {
+	return d.lang == "ja"
+}
+
+// trackFeatures detects Claude Code feature usage from events.
+func (d *Detector) trackFeatures(ev parser.SessionEvent) {
+	switch ev.Type {
+	case parser.EventToolUse:
+		switch ev.ToolName {
+		case "EnterPlanMode":
+			d.features.PlanModeUsed = true
+		case "Task":
+			d.features.SubagentUsed = true
+		case "Skill":
+			d.features.SkillUsed = true
+		case "Read":
+			if strings.Contains(ev.ToolInput, "CLAUDE.md") {
+				d.features.CLAUDEMDRead = true
+			}
+			if strings.Contains(ev.ToolInput, ".claude/rules/") {
+				d.features.RulesRead = true
+			}
+			if strings.Contains(ev.ToolInput, ".claude/settings") {
+				d.features.HooksUsed = true
+			}
+		}
+	case parser.EventAgentSpawn:
+		d.features.SubagentUsed = true
+	case parser.EventPlanApproval:
+		d.features.PlanModeUsed = true
+	}
+}
+
+// checkResolutions checks pending alerts for resolution when user intervenes.
+func (d *Detector) checkResolutions(ts time.Time) {
+	if len(d.pendingResolutions) == 0 {
+		return
+	}
+
+	var remaining []pendingResolution
+	for _, pr := range d.pendingResolutions {
+		if pr.eventsAfter < 5 {
+			remaining = append(remaining, pr) // keep for next check
+			continue
+		}
+
+		// Check if the same pattern fired AFTER this alert (recurrence).
+		recurred := false
+		for _, a := range d.alerts {
+			if a.Pattern == pr.alert.Pattern && a.Timestamp.After(pr.alert.Timestamp) {
+				recurred = true
+				break
+			}
+		}
+
+		outcome := AlertOutcome{
+			Pattern:    pr.alert.Pattern,
+			Level:      pr.alert.Level,
+			FiredAt:    pr.alert.Timestamp,
+			ResolvedAt: ts,
+		}
+
+		if recurred {
+			outcome.Resolved = false
+			if d.isJa() {
+				outcome.Description = PatternName(pr.alert.Pattern) + " が継続中"
+			} else {
+				outcome.Description = PatternName(pr.alert.Pattern) + " persisted"
+			}
+		} else {
+			outcome.Resolved = true
+			if d.isJa() {
+				outcome.Description = PatternName(pr.alert.Pattern) + " が解消しました"
+			} else {
+				outcome.Description = PatternName(pr.alert.Pattern) + " resolved"
+			}
+		}
+
+		d.outcomes = append(d.outcomes, outcome)
+	}
+
+	// Keep only last 20 outcomes
+	if len(d.outcomes) > 20 {
+		d.outcomes = d.outcomes[len(d.outcomes)-20:]
+	}
+
+	d.pendingResolutions = remaining
 }
 
 // PatternName returns a human-readable name for a pattern type.
@@ -349,14 +540,14 @@ func (d *Detector) isOnCooldown(p PatternType, now time.Time) bool {
 	return now.Before(expiry)
 }
 
-// lastAlertLevel returns the level of the most recent alert for a pattern, or -1 if none.
-func (d *Detector) lastAlertLevel(p PatternType) FeedbackLevel {
+// lastAlertKindLevel returns the kind and level of the most recent alert for a pattern.
+func (d *Detector) lastAlertKindLevel(p PatternType) (FeedbackKind, FeedbackLevel) {
 	for i := len(d.alerts) - 1; i >= 0; i-- {
 		if d.alerts[i].Pattern == p {
-			return d.alerts[i].Level
+			return d.alerts[i].Kind, d.alerts[i].Level
 		}
 	}
-	return FeedbackLevel(-1)
+	return KindAlert, FeedbackLevel(-1)
 }
 
 func (d *Detector) setCooldown(p PatternType, level FeedbackLevel, now time.Time) {
@@ -369,6 +560,8 @@ func cooldownForLevel(level FeedbackLevel) time.Duration {
 		return cooldownAction
 	case LevelWarning:
 		return cooldownWarning
+	case LevelInfo:
+		return cooldownProposal
 	default:
 		return cooldownInfo
 	}

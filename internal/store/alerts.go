@@ -68,6 +68,38 @@ func (s *Store) GetAlerts(sessionID string, limit int) ([]AlertRow, error) {
 	return result, nil
 }
 
+// PatternFrequency represents how often an anti-pattern occurs in a project.
+type PatternFrequency struct {
+	PatternType string
+	Count       int
+	LastSeen    string
+}
+
+// GetAlertPatternFrequency returns anti-pattern frequency aggregated by project.
+func (s *Store) GetAlertPatternFrequency(projectPath string) ([]PatternFrequency, error) {
+	rows, err := s.db.Query(`
+		SELECT a.pattern_type, COUNT(*) AS cnt, MAX(a.timestamp) AS last_seen
+		FROM alerts a
+		JOIN sessions s ON a.session_id = s.id
+		WHERE s.project_path = ?
+		GROUP BY a.pattern_type
+		ORDER BY cnt DESC`, projectPath)
+	if err != nil {
+		return nil, fmt.Errorf("store: get alert pattern frequency: %w", err)
+	}
+	defer rows.Close()
+
+	var result []PatternFrequency
+	for rows.Next() {
+		var pf PatternFrequency
+		if err := rows.Scan(&pf.PatternType, &pf.Count, &pf.LastSeen); err != nil {
+			continue
+		}
+		result = append(result, pf)
+	}
+	return result, nil
+}
+
 // InsertAlertEvents links alert IDs to event IDs via a junction table.
 func (s *Store) InsertAlertEvents(alertID int64, eventIDs []int64) error {
 	for _, eid := range eventIDs {

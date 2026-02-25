@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -87,6 +88,9 @@ func resumeHandler(st *store.Store) server.ToolHandlerFunc {
 		filesReferencedList := buildFilesReferenced(filesReferenced)
 		parentSummaries := buildParentSessions(st, sess.ID, chain)
 
+		// Generate proactive briefing from project history
+		briefing := buildBriefing(st, sess.ProjectPath)
+
 		result := map[string]any{
 			"session_id":              sess.ID,
 			"project":                sess.ProjectName,
@@ -102,6 +106,7 @@ func resumeHandler(st *store.Store) server.ToolHandlerFunc {
 			"last_user_message":      truncate(lastUser, 300),
 			"last_assistant_message": truncate(lastAssistant, 300),
 			"parent_sessions":        parentSummaries,
+			"briefing":               briefing,
 		}
 
 		data, _ := json.MarshalIndent(result, "", "  ")
@@ -285,4 +290,65 @@ func recallHandler(st *store.Store) server.ToolHandlerFunc {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		return mcp.NewToolResultText(string(data)), nil
 	}
+}
+
+type briefingItem struct {
+	Category string `json:"category"`
+	Message  string `json:"message"`
+	Priority string `json:"priority"`
+}
+
+// buildBriefing generates proactive recommendations from project history.
+// All rules are deterministic (no LLM).
+func buildBriefing(st *store.Store, projectPath string) []briefingItem {
+	if st == nil || projectPath == "" {
+		return nil
+	}
+
+	var items []briefingItem
+
+	// Rule 1: Frequent anti-patterns
+	patternFreqs, err := st.GetAlertPatternFrequency(projectPath)
+	if err == nil {
+		for _, pf := range patternFreqs {
+			if pf.Count < 3 {
+				continue
+			}
+			priority := "medium"
+			if pf.Count >= 5 {
+				priority = "high"
+			}
+			items = append(items, briefingItem{
+				Category: "anti_pattern",
+				Message:  fmt.Sprintf("%s has occurred %d times in this project (last: %s)", pf.PatternType, pf.Count, pf.LastSeen),
+				Priority: priority,
+			})
+		}
+	}
+
+	// Rule 2: High compact rate
+	projectStats, err := st.GetProjectSessionStats(projectPath)
+	if err == nil && projectStats.TotalSessions > 0 {
+		if projectStats.AvgCompactsPerSess > 2.0 {
+			items = append(items, briefingItem{
+				Category: "recommendation",
+				Message:  fmt.Sprintf("Average %.1f compacts per session — consider splitting tasks into smaller sessions", projectStats.AvgCompactsPerSess),
+				Priority: "high",
+			})
+		}
+	}
+
+	// Rule 3: File rework hotspots
+	hotspots, err := st.GetFileReworkHotspots(projectPath, 3)
+	if err == nil {
+		for _, hs := range hotspots {
+			items = append(items, briefingItem{
+				Category: "pain_point",
+				Message:  fmt.Sprintf("%s has been modified across %d sessions — consider adding rules to CLAUDE.md for this file", hs.Path, hs.SessionCount),
+				Priority: "medium",
+			})
+		}
+	}
+
+	return items
 }

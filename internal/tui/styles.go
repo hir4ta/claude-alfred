@@ -65,6 +65,10 @@ var (
 	separatorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#585060"))
 
+	// Labeled section separator (─── Label ──────)
+	sectionSepStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#706878"))
+
 	// Dimmed text
 	dimStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#908890"))
@@ -156,6 +160,23 @@ var (
 			Foreground(lipgloss.Color("#D0D0D0")).
 			Background(lipgloss.Color("#C15F3C")).
 			Bold(true)
+
+	alertProposalStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#C0B8C0")).
+				Background(lipgloss.Color("#484048"))
+
+	alertOutcomeStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#6A9A78"))
+
+	// Usage score
+	scoreGoodStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6A9A78"))
+
+	scoreFairStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#B5A06A"))
+
+	scorePoorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#C15F3C"))
 )
 
 // Nerd Fonts glyphs (Font Awesome set).
