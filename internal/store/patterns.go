@@ -163,10 +163,15 @@ func uniqueStrings(ss []string) []string {
 
 // InsertPattern inserts a pattern and links its tags and files.
 func (s *Store) InsertPattern(p *PatternRow) (int64, error) {
+	// Use NULL for source_event_id when there is no real event (e.g. docs patterns).
+	var sourceEventID any
+	if p.SourceEventID != 0 {
+		sourceEventID = p.SourceEventID
+	}
 	res, err := s.db.Exec(`
 		INSERT INTO patterns (session_id, pattern_type, title, content, embed_text, language, scope, source_event_id, timestamp)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.SessionID, p.PatternType, p.Title, p.Content, p.EmbedText, p.Language, p.Scope, p.SourceEventID, p.Timestamp,
+		p.SessionID, p.PatternType, p.Title, p.Content, p.EmbedText, p.Language, p.Scope, sourceEventID, p.Timestamp,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("store: insert pattern: %w", err)
