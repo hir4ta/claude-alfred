@@ -47,10 +47,24 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 			_ = sdb.SetContext("task_type", string(taskType))
 		}
 		_ = sdb.SetContext("has_test_run", "")
+
+		// Update working set with current intent and task type.
+		_ = sdb.SetWorkingSet("intent", intent)
+		if taskType != TaskUnknown {
+			_ = sdb.SetWorkingSet("task_type", string(taskType))
+		}
+
+		// Track decisions from user prompts.
+		if containsDecisionKeyword(in.Prompt) {
+			_ = sdb.AddWorkingSetDecision(intent)
+		}
 	}
 
 	// Dequeue pending nudges (max 2).
 	nudges, _ := sdb.DequeueNudges(2)
+
+	// Record delivery for effectiveness tracking.
+	recordNudgeDelivery(sdb, in.SessionID, nudges)
 
 	entries := make([]nudgeEntry, 0, len(nudges)+1)
 	for _, n := range nudges {

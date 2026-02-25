@@ -1,6 +1,7 @@
 package sessiondb
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -233,6 +234,125 @@ func TestBurstStartTime(t *testing.T) {
 	}
 	if ts.IsZero() {
 		t.Error("BurstStartTime() returned zero time, want non-zero")
+	}
+}
+
+func TestWorkingSet_CRUD(t *testing.T) {
+	t.Parallel()
+	sdb := openTestDB(t)
+
+	// Initially empty.
+	val, err := sdb.GetWorkingSet("intent")
+	if err != nil {
+		t.Fatalf("GetWorkingSet() = %v", err)
+	}
+	if val != "" {
+		t.Errorf("GetWorkingSet(missing) = %q, want empty", val)
+	}
+
+	// Set and get.
+	if err := sdb.SetWorkingSet("intent", "fix auth bug"); err != nil {
+		t.Fatalf("SetWorkingSet() = %v", err)
+	}
+	val, _ = sdb.GetWorkingSet("intent")
+	if val != "fix auth bug" {
+		t.Errorf("GetWorkingSet(intent) = %q, want 'fix auth bug'", val)
+	}
+
+	// Overwrite.
+	_ = sdb.SetWorkingSet("intent", "refactor middleware")
+	val, _ = sdb.GetWorkingSet("intent")
+	if val != "refactor middleware" {
+		t.Errorf("GetWorkingSet(intent) = %q, want 'refactor middleware'", val)
+	}
+
+	// GetAll.
+	_ = sdb.SetWorkingSet("task_type", "bugfix")
+	ws, err := sdb.GetAllWorkingSet()
+	if err != nil {
+		t.Fatalf("GetAllWorkingSet() = %v", err)
+	}
+	if len(ws) != 2 {
+		t.Errorf("GetAllWorkingSet() len = %d, want 2", len(ws))
+	}
+}
+
+func TestWorkingSet_Files(t *testing.T) {
+	t.Parallel()
+	sdb := openTestDB(t)
+
+	// Initially empty.
+	files, err := sdb.GetWorkingSetFiles()
+	if err != nil {
+		t.Fatalf("GetWorkingSetFiles() = %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("GetWorkingSetFiles() len = %d, want 0", len(files))
+	}
+
+	// Add files.
+	_ = sdb.AddWorkingSetFile("/src/auth.go")
+	_ = sdb.AddWorkingSetFile("/src/middleware.go")
+	files, _ = sdb.GetWorkingSetFiles()
+	if len(files) != 2 {
+		t.Fatalf("GetWorkingSetFiles() len = %d, want 2", len(files))
+	}
+	if files[0] != "/src/auth.go" || files[1] != "/src/middleware.go" {
+		t.Errorf("files = %v, want [/src/auth.go, /src/middleware.go]", files)
+	}
+
+	// Duplicate moves to end.
+	_ = sdb.AddWorkingSetFile("/src/auth.go")
+	files, _ = sdb.GetWorkingSetFiles()
+	if len(files) != 2 {
+		t.Fatalf("after dedup len = %d, want 2", len(files))
+	}
+	if files[1] != "/src/auth.go" {
+		t.Errorf("files[1] = %q, want /src/auth.go (moved to end)", files[1])
+	}
+
+	// Cap at 20.
+	for i := range 25 {
+		_ = sdb.AddWorkingSetFile(fmt.Sprintf("/src/file%d.go", i))
+	}
+	files, _ = sdb.GetWorkingSetFiles()
+	if len(files) != 20 {
+		t.Errorf("after cap len = %d, want 20", len(files))
+	}
+}
+
+func TestWorkingSet_Decisions(t *testing.T) {
+	t.Parallel()
+	sdb := openTestDB(t)
+
+	// Initially empty.
+	decisions, _ := sdb.GetWorkingSetDecisions()
+	if len(decisions) != 0 {
+		t.Errorf("GetWorkingSetDecisions() len = %d, want 0", len(decisions))
+	}
+
+	// Add decisions.
+	_ = sdb.AddWorkingSetDecision("Use JWT for auth")
+	_ = sdb.AddWorkingSetDecision("Go with PostgreSQL")
+	decisions, _ = sdb.GetWorkingSetDecisions()
+	if len(decisions) != 2 {
+		t.Fatalf("decisions len = %d, want 2", len(decisions))
+	}
+
+	// Duplicate ignored.
+	_ = sdb.AddWorkingSetDecision("Use JWT for auth")
+	decisions, _ = sdb.GetWorkingSetDecisions()
+	if len(decisions) != 2 {
+		t.Errorf("after dedup len = %d, want 2", len(decisions))
+	}
+
+	// Cap at 5.
+	for i := range 6 {
+		_ = sdb.AddWorkingSetDecision(fmt.Sprintf("Decision %d", i))
+	}
+	decisions, _ = sdb.GetWorkingSetDecisions()
+	if len(decisions) != 5 {
+		t.Errorf("after cap len = %d, want 5", len(decisions))
 	}
 }
 

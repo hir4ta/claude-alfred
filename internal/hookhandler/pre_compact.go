@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 )
@@ -44,6 +45,52 @@ func handlePreCompact(input []byte) (*HookOutput, error) {
 		}
 	}
 
+	// Serialize working set to nudge outbox for post-compact restoration.
+	serializeWorkingSetForCompact(sdb)
+
 	// PreCompact does not support additionalContext, so return nil.
 	return nil, nil
+}
+
+// serializeWorkingSetForCompact captures the current working context and enqueues
+// it as a nudge so that handlePostCompactResume can restore it after compaction.
+func serializeWorkingSetForCompact(sdb *sessiondb.SessionDB) {
+	ws, err := sdb.GetAllWorkingSet()
+	if err != nil || len(ws) == 0 {
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString("[buddy] Working context preserved across compact:\n")
+
+	if intent, ok := ws["intent"]; ok && intent != "" {
+		fmt.Fprintf(&b, "Current goal: %s\n", intent)
+	}
+	if taskType, ok := ws["task_type"]; ok && taskType != "" {
+		fmt.Fprintf(&b, "Task type: %s\n", taskType)
+	}
+	if branch, ok := ws["git_branch"]; ok && branch != "" {
+		fmt.Fprintf(&b, "Branch: %s\n", branch)
+	}
+
+	files, _ := sdb.GetWorkingSetFiles()
+	if len(files) > 0 {
+		b.WriteString("Files being edited:\n")
+		for _, f := range files {
+			fmt.Fprintf(&b, "  - %s\n", f)
+		}
+	}
+
+	decisions, _ := sdb.GetWorkingSetDecisions()
+	if len(decisions) > 0 {
+		b.WriteString("Key decisions this session:\n")
+		for _, d := range decisions {
+			fmt.Fprintf(&b, "  - %s\n", d)
+		}
+	}
+
+	_ = sdb.EnqueueNudge("compact_context", "info",
+		"Session context preserved for post-compact restoration",
+		b.String(),
+	)
 }

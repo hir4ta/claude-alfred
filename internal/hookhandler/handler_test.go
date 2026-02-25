@@ -2,6 +2,7 @@ package hookhandler
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
@@ -563,6 +564,217 @@ func TestHashInput(t *testing.T) {
 	}
 	if h1 == h3 {
 		t.Error("hashInput() collision for different input")
+	}
+}
+
+func TestSerializeWorkingSetForCompact(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "test-ws-serialize"
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		t.Fatalf("sessiondb.Open() = %v", err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+
+	// Populate working set.
+	_ = sdb.SetWorkingSet("intent", "fix authentication bug")
+	_ = sdb.SetWorkingSet("task_type", "bugfix")
+	_ = sdb.AddWorkingSetFile("/src/auth.go")
+	_ = sdb.AddWorkingSetFile("/src/middleware.go")
+	_ = sdb.AddWorkingSetDecision("Use JWT with refresh tokens")
+
+	serializeWorkingSetForCompact(sdb)
+
+	// Verify nudge was enqueued.
+	nudges, _ := sdb.DequeueNudges(5)
+	if len(nudges) == 0 {
+		t.Fatal("serializeWorkingSetForCompact() enqueued no nudges")
+	}
+
+	found := false
+	for _, n := range nudges {
+		if n.Pattern == "compact_context" {
+			found = true
+			if !strings.Contains(n.Suggestion, "fix authentication bug") {
+				t.Errorf("nudge missing intent, got: %s", n.Suggestion)
+			}
+			if !strings.Contains(n.Suggestion, "/src/auth.go") {
+				t.Errorf("nudge missing file, got: %s", n.Suggestion)
+			}
+			if !strings.Contains(n.Suggestion, "JWT with refresh tokens") {
+				t.Errorf("nudge missing decision, got: %s", n.Suggestion)
+			}
+		}
+	}
+	if !found {
+		t.Error("no compact_context nudge found")
+	}
+}
+
+func TestSerializeWorkingSetForCompact_Empty(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "test-ws-serialize-empty"
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		t.Fatalf("sessiondb.Open() = %v", err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+
+	serializeWorkingSetForCompact(sdb)
+
+	nudges, _ := sdb.DequeueNudges(5)
+	if len(nudges) != 0 {
+		t.Errorf("empty working set should enqueue no nudges, got %d", len(nudges))
+	}
+}
+
+func TestContainsDecisionKeyword(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		text string
+		want bool
+	}{
+		{"Let's go with JWT for auth", true},
+		{"I decided to use PostgreSQL", true},
+		{"Going with the simpler approach", true},
+		{"JWTを採用", true},
+		{"Fix the bug in auth.go", false},
+		{"Read the file first", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.text, func(t *testing.T) {
+			t.Parallel()
+			got := containsDecisionKeyword(tt.text)
+			if got != tt.want {
+				t.Errorf("containsDecisionKeyword(%q) = %v, want %v", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPostCompactResume_WithWorkingSet(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "test-compact-resume-ws"
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		t.Fatalf("sessiondb.Open() = %v", err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+
+	// Simulate pre-compact serialization.
+	_ = sdb.SetWorkingSet("intent", "refactor middleware")
+	_ = sdb.AddWorkingSetFile("/src/middleware.go")
+	serializeWorkingSetForCompact(sdb)
+
+	// Simulate post-compact resume.
+	out, err := handlePostCompactResume(sdb)
+	if err != nil {
+		t.Fatalf("handlePostCompactResume() = %v", err)
+	}
+	if out == nil {
+		t.Fatal("handlePostCompactResume() = nil, want output with context")
+	}
+
+	ctx, _ := out.HookSpecificOutput["additionalContext"].(string)
+	if !strings.Contains(ctx, "refactor middleware") {
+		t.Errorf("context missing intent, got: %s", ctx)
+	}
+	if !strings.Contains(ctx, "/src/middleware.go") {
+		t.Errorf("context missing file, got: %s", ctx)
+	}
+}
+
+func TestPreExistingChangesWarning(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "test-git-dirty-warn"
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		t.Fatalf("sessiondb.Open() = %v", err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+
+	// Set dirty files from git.
+	_ = sdb.SetWorkingSet("git_dirty_files", "internal/auth/handler.go\ninternal/auth/middleware.go")
+	_ = sdb.SetWorkingSet("git_branch", "feature/auth")
+
+	// Editing a dirty file should warn.
+	input := json.RawMessage(`{"file_path":"/project/internal/auth/handler.go"}`)
+	warning := preExistingChangesWarning(sdb, input)
+	if warning == "" {
+		t.Error("preExistingChangesWarning() = empty, want warning for dirty file")
+	}
+	if !strings.Contains(warning, "handler.go") {
+		t.Errorf("warning missing filename, got: %s", warning)
+	}
+	if !strings.Contains(warning, "feature/auth") {
+		t.Errorf("warning missing branch, got: %s", warning)
+	}
+
+	// Editing a clean file should not warn.
+	input = json.RawMessage(`{"file_path":"/project/internal/store/store.go"}`)
+	warning = preExistingChangesWarning(sdb, input)
+	if warning != "" {
+		t.Errorf("preExistingChangesWarning() for clean file = %q, want empty", warning)
+	}
+}
+
+func TestPreExistingChangesWarning_NoDirtyFiles(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "test-git-no-dirty"
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		t.Fatalf("sessiondb.Open() = %v", err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+
+	input := json.RawMessage(`{"file_path":"/project/main.go"}`)
+	warning := preExistingChangesWarning(sdb, input)
+	if warning != "" {
+		t.Errorf("preExistingChangesWarning() with no dirty files = %q, want empty", warning)
+	}
+}
+
+func TestCaptureGitContext(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "test-capture-git"
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		t.Fatalf("sessiondb.Open() = %v", err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+
+	// Use the current repo (claude-buddy) as the test target.
+	captureGitContext(sdb, "/Users/user/Projects/claude-buddy")
+
+	branch, _ := sdb.GetWorkingSet("git_branch")
+	if branch == "" {
+		t.Error("captureGitContext() did not set git_branch")
+	}
+}
+
+func TestCaptureGitContext_NotGitRepo(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "test-capture-git-norepo"
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		t.Fatalf("sessiondb.Open() = %v", err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+
+	// /tmp is not a git repo.
+	captureGitContext(sdb, "/tmp")
+
+	branch, _ := sdb.GetWorkingSet("git_branch")
+	if branch != "" {
+		t.Errorf("captureGitContext(/tmp) set git_branch = %q, want empty", branch)
 	}
 }
 

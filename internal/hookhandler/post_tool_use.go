@@ -42,6 +42,9 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	isWrite := writeTools[in.ToolName]
 	inputHash := hashInput(in.ToolName, in.ToolInput)
 
+	// Check if this action resolves a previously delivered nudge.
+	checkNudgeResolution(sdb, in.SessionID, in.ToolName)
+
 	if err := sdb.RecordEvent(in.ToolName, inputHash, isWrite); err != nil {
 		fmt.Fprintf(os.Stderr, "[buddy] PostToolUse: record event: %v\n", err)
 		return nil, nil
@@ -92,7 +95,7 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 			tc, hasWrite, _, _ := sdb.BurstState()
 			if (taskTypeStr == "bugfix" || taskTypeStr == "refactor") && !hasWrite && tc <= 3 {
 				set, _ := sdb.TrySetCooldown("test_first_ack", 30*time.Minute)
-				if set {
+				if set && !shouldSuppressNudge("test-first") {
 					_ = sdb.EnqueueNudge("test-first", "info",
 						"Good practice: running tests before editing",
 						"Test-first approach established. This gives a baseline to verify changes against.",
@@ -102,10 +105,39 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		}
 	}
 
+	// Track files being edited in working set.
+	if isWrite {
+		var fi struct {
+			FilePath string `json:"file_path"`
+		}
+		if json.Unmarshal(in.ToolInput, &fi) == nil && fi.FilePath != "" {
+			_ = sdb.AddWorkingSetFile(fi.FilePath)
+		}
+	}
+
+	// Code quality heuristics on write operations.
+	if isWrite {
+		var fi2 struct {
+			FilePath string `json:"file_path"`
+		}
+		if json.Unmarshal(in.ToolInput, &fi2) == nil && fi2.FilePath != "" {
+			if hint := runCodeHeuristics(fi2.FilePath, in.ToolInput); hint != "" {
+				cooldownKey := "code_hint:" + filepath.Base(fi2.FilePath)
+				set, _ := sdb.TrySetCooldown(cooldownKey, 5*time.Minute)
+				if set && !shouldSuppressNudge("code-quality") {
+					_ = sdb.EnqueueNudge("code-quality", "info",
+						"Code quality observation", hint)
+				}
+			}
+		}
+	}
+
 	// Workflow order check — enqueue nudge if write doesn't match expected workflow.
 	if isWrite {
 		if nudge := checkWorkflowForCurrentTask(sdb); nudge != "" {
-			_ = sdb.EnqueueNudge("workflow", "info", "Workflow suggestion", nudge)
+			if !shouldSuppressNudge("workflow") {
+				_ = sdb.EnqueueNudge("workflow", "info", "Workflow suggestion", nudge)
+			}
 		}
 	}
 
@@ -119,19 +151,33 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	// Also record the failure for PreToolUse past-failure warning.
 	if in.ToolName == "Bash" && len(in.ToolResponse) > 0 {
 		resp := string(in.ToolResponse)
+		var bi struct {
+			Command string `json:"command"`
+		}
+		_ = json.Unmarshal(in.ToolInput, &bi)
+
 		if containsError(resp) {
-			var bi struct {
-				Command string `json:"command"`
-			}
-			if json.Unmarshal(in.ToolInput, &bi) == nil && bi.Command != "" {
+			if bi.Command != "" {
 				sig := extractCmdSignature(bi.Command)
 				errSummary := extractErrorSignature(resp)
 				if sig != "" {
 					_ = sdb.RecordBashFailure(sig, errSummary)
 				}
 			}
+			matchPastErrorSolutions(sdb, resp)
 		}
-		matchPastErrorSolutions(sdb, resp)
+
+		// Test failure correlation: connect failures to recently edited files.
+		if bi.Command != "" && testCmdPattern.MatchString(bi.Command) && containsError(resp) {
+			failures := extractTestFailures(resp)
+			if correlation := correlateWithRecentEdits(sdb, failures); correlation != "" {
+				set, _ := sdb.TrySetCooldown("test_correlation", 3*time.Minute)
+				if set && !shouldSuppressNudge("test-correlation") {
+					_ = sdb.EnqueueNudge("test-correlation", "info",
+						"Test failure correlated with recent edits", correlation)
+				}
+			}
+		}
 	}
 
 	// File-context knowledge: after Read/Edit/Write, search for related patterns.

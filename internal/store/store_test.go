@@ -213,6 +213,108 @@ func TestGetFileReworkHotspots(t *testing.T) {
 	}
 }
 
+func TestSuggestionOutcome_CRUD(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s, err := Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	id, err := s.InsertSuggestionOutcome("sess-1", "code-quality", "debug print detected")
+	if err != nil {
+		t.Fatalf("InsertSuggestionOutcome() = %v", err)
+	}
+	if id == 0 {
+		t.Fatal("InsertSuggestionOutcome() returned id=0")
+	}
+
+	// Initially unresolved.
+	delivered, resolved, err := s.PatternEffectiveness("code-quality")
+	if err != nil {
+		t.Fatalf("PatternEffectiveness() = %v", err)
+	}
+	if delivered != 1 || resolved != 0 {
+		t.Errorf("PatternEffectiveness() = (%d, %d), want (1, 0)", delivered, resolved)
+	}
+
+	// Resolve it.
+	if err := s.ResolveSuggestion(id); err != nil {
+		t.Fatalf("ResolveSuggestion() = %v", err)
+	}
+
+	delivered, resolved, err = s.PatternEffectiveness("code-quality")
+	if err != nil {
+		t.Fatalf("PatternEffectiveness() after resolve = %v", err)
+	}
+	if delivered != 1 || resolved != 1 {
+		t.Errorf("PatternEffectiveness() = (%d, %d), want (1, 1)", delivered, resolved)
+	}
+
+	// Double resolve is a no-op.
+	if err := s.ResolveSuggestion(id); err != nil {
+		t.Fatalf("ResolveSuggestion() double = %v", err)
+	}
+}
+
+func TestResolveLastSuggestion(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s, err := Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	s.InsertSuggestionOutcome("sess-1", "workflow", "nudge 1")
+	s.InsertSuggestionOutcome("sess-1", "workflow", "nudge 2")
+
+	if err := s.ResolveLastSuggestion("sess-1", "workflow"); err != nil {
+		t.Fatalf("ResolveLastSuggestion() = %v", err)
+	}
+
+	delivered, resolved, _ := s.PatternEffectiveness("workflow")
+	if delivered != 2 || resolved != 1 {
+		t.Errorf("PatternEffectiveness() = (%d, %d), want (2, 1)", delivered, resolved)
+	}
+}
+
+func TestShouldSuppressPattern(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s, err := Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	// Below threshold: should not suppress.
+	for i := 0; i < 19; i++ {
+		s.InsertSuggestionOutcome("sess-1", "noisy", "msg")
+	}
+	if s.ShouldSuppressPattern("noisy") {
+		t.Error("ShouldSuppressPattern(19 delivered) = true, want false")
+	}
+
+	// At threshold with 0% resolution: should suppress.
+	s.InsertSuggestionOutcome("sess-1", "noisy", "msg")
+	if !s.ShouldSuppressPattern("noisy") {
+		t.Error("ShouldSuppressPattern(20 delivered, 0 resolved) = false, want true")
+	}
+
+	// Good pattern should not suppress.
+	for i := 0; i < 20; i++ {
+		id, _ := s.InsertSuggestionOutcome("sess-1", "useful", "msg")
+		if i%2 == 0 {
+			s.ResolveSuggestion(id)
+		}
+	}
+	if s.ShouldSuppressPattern("useful") {
+		t.Error("ShouldSuppressPattern(50% resolved) = true, want false")
+	}
+}
+
 func TestDefaultDBPath(t *testing.T) {
 	p := DefaultDBPath()
 	if filepath.Base(p) != "buddy.db" {

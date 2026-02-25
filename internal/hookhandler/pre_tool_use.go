@@ -57,10 +57,13 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 		}
 	}
 
-	// Edit/Write: stale read check + related decision surfacing.
+	// Edit/Write: stale read check + git dirty warning + related decision surfacing.
 	if in.ToolName == "Edit" || in.ToolName == "Write" {
 		if guidance := staleReadCheck(sdb, in.ToolInput); guidance != "" {
 			return makeOutput("PreToolUse", guidance), nil
+		}
+		if warning := preExistingChangesWarning(sdb, in.ToolInput); warning != "" {
+			return makeOutput("PreToolUse", warning), nil
 		}
 		if decision := relatedDecisionSurfacing(sdb, in.ToolInput); decision != "" {
 			return makeOutput("PreToolUse", decision), nil
@@ -72,6 +75,9 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	if len(nudges) == 0 {
 		return nil, nil
 	}
+
+	// Record delivery for effectiveness tracking.
+	recordNudgeDelivery(sdb, in.SessionID, nudges)
 
 	entries := make([]nudgeEntry, len(nudges))
 	for i, n := range nudges {
@@ -171,6 +177,47 @@ func extractCmdSignature(command string) string {
 		return parts[0] + " " + parts[1]
 	}
 	return parts[0]
+}
+
+// preExistingChangesWarning warns when editing a file that had uncommitted changes
+// at session start, indicating it may have been modified outside this session.
+func preExistingChangesWarning(sdb *sessiondb.SessionDB, toolInput json.RawMessage) string {
+	var ei struct {
+		FilePath string `json:"file_path"`
+	}
+	if json.Unmarshal(toolInput, &ei) != nil || ei.FilePath == "" {
+		return ""
+	}
+
+	key := "git_dirty:" + filepath.Base(ei.FilePath)
+	on, _ := sdb.IsOnCooldown(key)
+	if on {
+		return ""
+	}
+
+	dirtyFiles, _ := sdb.GetWorkingSet("git_dirty_files")
+	if dirtyFiles == "" {
+		return ""
+	}
+
+	// Check if any dirty file path matches the target.
+	target := ei.FilePath
+	for _, dirty := range strings.Split(dirtyFiles, "\n") {
+		if dirty == "" {
+			continue
+		}
+		// Match by full path suffix or exact base name.
+		if strings.HasSuffix(target, dirty) || filepath.Base(target) == filepath.Base(dirty) {
+			_ = sdb.SetCooldown(key, 30*time.Minute)
+			branch, _ := sdb.GetWorkingSet("git_branch")
+			if branch != "" {
+				return fmt.Sprintf("[buddy] %s had uncommitted changes at session start (branch: %s). Consider committing or stashing before further edits.", filepath.Base(ei.FilePath), branch)
+			}
+			return fmt.Sprintf("[buddy] %s had uncommitted changes at session start. Consider committing or stashing before further edits.", filepath.Base(ei.FilePath))
+		}
+	}
+
+	return ""
 }
 
 // relatedDecisionSurfacing checks for past design decisions related to the target file.

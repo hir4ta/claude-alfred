@@ -2,7 +2,7 @@ package store
 
 import "database/sql"
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -186,6 +186,22 @@ DROP TABLE IF EXISTS decisions_fts;
 DROP TABLE IF EXISTS patterns_fts;
 `
 
+const ddlV4 = `
+-- ==========================================================
+-- suggestion_outcomes: tracks whether nudges led to action
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS suggestion_outcomes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id   TEXT NOT NULL,
+    pattern      TEXT NOT NULL,
+    suggestion   TEXT NOT NULL,
+    delivered_at TEXT NOT NULL DEFAULT (datetime('now')),
+    resolved     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_so_pattern ON suggestion_outcomes(pattern);
+CREATE INDEX IF NOT EXISTS idx_so_session ON suggestion_outcomes(session_id);
+`
+
 // Migrate applies all pending schema migrations to the database.
 func Migrate(db *sql.DB) error {
 	var current int
@@ -210,6 +226,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if current < 3 {
 		if _, err := db.Exec(ddlV3); err != nil {
+			return err
+		}
+	}
+	if current < 4 {
+		if _, err := db.Exec(ddlV4); err != nil {
 			return err
 		}
 	}

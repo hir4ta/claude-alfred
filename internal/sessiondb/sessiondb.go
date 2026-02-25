@@ -3,6 +3,7 @@ package sessiondb
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,6 +73,12 @@ CREATE TABLE IF NOT EXISTS bash_failures (
 	cmd_signature TEXT    NOT NULL,
 	error_summary TEXT    NOT NULL DEFAULT '',
 	timestamp     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS working_set (
+	key        TEXT PRIMARY KEY,
+	value      TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `
 
@@ -522,4 +529,128 @@ func (s *SessionDB) FindSimilarFailure(cmdSignature string) (string, error) {
 		return "", fmt.Errorf("sessiondb: find similar failure: %w", err)
 	}
 	return summary, nil
+}
+
+// --- Working Set ---
+
+// SetWorkingSet sets a key-value pair in the working set.
+func (s *SessionDB) SetWorkingSet(key, value string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO working_set (key, value, updated_at) VALUES (?, ?, datetime('now'))
+		 ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')`,
+		key, value, value,
+	)
+	if err != nil {
+		return fmt.Errorf("sessiondb: set working set %s: %w", key, err)
+	}
+	return nil
+}
+
+// GetWorkingSet returns the value for a working set key. Returns "" if not found.
+func (s *SessionDB) GetWorkingSet(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow(`SELECT value FROM working_set WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("sessiondb: get working set %s: %w", key, err)
+	}
+	return value, nil
+}
+
+// GetAllWorkingSet returns all working set key-value pairs.
+func (s *SessionDB) GetAllWorkingSet() (map[string]string, error) {
+	rows, err := s.db.Query(`SELECT key, value FROM working_set`)
+	if err != nil {
+		return nil, fmt.Errorf("sessiondb: get all working set: %w", err)
+	}
+	defer rows.Close()
+
+	ws := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			continue
+		}
+		ws[k] = v
+	}
+	return ws, rows.Err()
+}
+
+// AddWorkingSetFile appends a file path to the working set files list.
+// Keeps the list capped at 20 entries (newest retained).
+func (s *SessionDB) AddWorkingSetFile(path string) error {
+	files, _ := s.GetWorkingSetFiles()
+
+	// Deduplicate: remove existing entry if present.
+	filtered := make([]string, 0, len(files))
+	for _, f := range files {
+		if f != path {
+			filtered = append(filtered, f)
+		}
+	}
+	filtered = append(filtered, path)
+
+	// Cap at 20, keeping newest.
+	if len(filtered) > 20 {
+		filtered = filtered[len(filtered)-20:]
+	}
+
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return fmt.Errorf("sessiondb: marshal working set files: %w", err)
+	}
+	return s.SetWorkingSet("files_editing", string(data))
+}
+
+// GetWorkingSetFiles returns the file paths from the working set.
+func (s *SessionDB) GetWorkingSetFiles() ([]string, error) {
+	raw, err := s.GetWorkingSet("files_editing")
+	if err != nil || raw == "" {
+		return nil, err
+	}
+	var files []string
+	if err := json.Unmarshal([]byte(raw), &files); err != nil {
+		return nil, nil // corrupted data, treat as empty
+	}
+	return files, nil
+}
+
+// AddWorkingSetDecision appends a decision to the working set decisions list.
+// Keeps the list capped at 5 entries (newest retained).
+func (s *SessionDB) AddWorkingSetDecision(text string) error {
+	decisions, _ := s.GetWorkingSetDecisions()
+
+	// Deduplicate: skip if identical text already exists.
+	for _, d := range decisions {
+		if d == text {
+			return nil
+		}
+	}
+	decisions = append(decisions, text)
+
+	// Cap at 5, keeping newest.
+	if len(decisions) > 5 {
+		decisions = decisions[len(decisions)-5:]
+	}
+
+	data, err := json.Marshal(decisions)
+	if err != nil {
+		return fmt.Errorf("sessiondb: marshal working set decisions: %w", err)
+	}
+	return s.SetWorkingSet("decisions", string(data))
+}
+
+// GetWorkingSetDecisions returns the decisions from the working set.
+func (s *SessionDB) GetWorkingSetDecisions() ([]string, error) {
+	raw, err := s.GetWorkingSet("decisions")
+	if err != nil || raw == "" {
+		return nil, err
+	}
+	var decisions []string
+	if err := json.Unmarshal([]byte(raw), &decisions); err != nil {
+		return nil, nil // corrupted data, treat as empty
+	}
+	return decisions, nil
 }

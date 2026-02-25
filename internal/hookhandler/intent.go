@@ -49,6 +49,24 @@ func classifyIntent(intent string) TaskType {
 // testCmdPattern matches common test runner commands.
 var testCmdPattern = regexp.MustCompile(`\b(go\s+test|npm\s+test|npx\s+(jest|vitest)|pytest|cargo\s+test|make\s+test|bundle\s+exec\s+rspec)\b`)
 
+// decisionKeywords detects when a user prompt contains a design decision.
+var decisionKeywords = []string{
+	"decided to", "going with", "opted for", "will use", "instead of",
+	"let's go with", "let's use", "choosing", "approach:",
+	"に決定", "を採用", "にする", "を使う", "ではなく",
+}
+
+// containsDecisionKeyword returns true if the text contains a decision indicator.
+func containsDecisionKeyword(text string) bool {
+	lower := strings.ToLower(text)
+	for _, kw := range decisionKeywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
 // checkWorkflowOrder checks if the current action matches the expected workflow
 // for the given task type. Returns a suggestion string or "".
 func checkWorkflowOrder(taskType TaskType, hasWrite bool, hasTestRun bool, inPlanMode bool) string {

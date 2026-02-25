@@ -1,6 +1,6 @@
 # claude-buddy
 
-A proactive session companion for Claude Code — real-time anti-pattern detection, destructive command blocking, automatic context recovery, and AI-powered usage coaching. Works as both a standalone TUI and a Claude Code plugin with hooks.
+A proactive session companion for Claude Code — real-time anti-pattern detection, destructive command blocking, automatic context recovery, code quality feedback, git awareness, and AI-powered usage coaching. Works as both a standalone TUI and a Claude Code plugin with hooks.
 
 ## Install
 
@@ -148,6 +148,8 @@ claude-buddy serve
 | `buddy_decisions` | Extract design decisions from past sessions |
 | `buddy_alerts` | Real-time anti-pattern detection (retry loops, context thrashing, etc.) |
 | `buddy_patterns` | Cross-project knowledge search with vector semantic search (Ollama) |
+| `buddy_suggest` | Structured recommendations with session health, alerts, and feature utilization |
+| `buddy_current_state` | Real-time session snapshot (stats, burst state, health score, predictions) |
 
 ---
 
@@ -176,11 +178,12 @@ claude-buddy uninstall
 
 | Hook Event | Behavior |
 |---|---|
-| **SessionStart** | Auto-restores previous session context (project, decisions, modified files) |
-| **PreToolUse** | Blocks destructive Bash commands (`rm -rf`, `git push --force`, `git reset --hard`, etc.) |
-| **PostToolUse** | Tracks tool usage patterns, detects anti-patterns in the background |
-| **UserPromptSubmit** | Injects proactive warnings as `additionalContext` |
-| **PreCompact** | Detects context thrashing (rapid compaction cycles) |
+| **SessionStart** | Auto-restores session context (working set, decisions, git branch), captures git state |
+| **PreToolUse** | Blocks destructive commands; warns on stale reads, git-dirty files, past failures; surfaces related decisions |
+| **PostToolUse** | Tracks tool/file patterns, code quality heuristics, test failure correlation, suggestion effectiveness |
+| **UserPromptSubmit** | Classifies intent/task type, injects relevant past knowledge, delivers queued nudges |
+| **PreCompact** | Serializes working set (files, intent, decisions, git branch) for automatic restoration |
+| **Stop** | Detects incomplete work (TODO/FIXME, unresolved failures), warns about uncommitted git changes |
 | **SessionEnd** | Cleans up ephemeral session state |
 
 **Anti-pattern detectors** (hook-based, real-time):
@@ -190,6 +193,24 @@ claude-buddy uninstall
 - **FileReadLoop**: Same file read 5+ times with no edits
 - **ExploreLoop**: 10+ tools, no writes, 5+ minutes elapsed
 - **Destructive commands**: `rm -rf`, `git push --force`, `git reset --hard`, `git checkout -- .`, `chmod 777`, etc.
+
+**Proactive advisor signals** (context-injected via `additionalContext`):
+
+- **Stale read warning**: File not re-read before editing, or last Read was 8+ tool calls ago
+- **Past failure warning**: Similar Bash command failed earlier in the session
+- **Git dirty file warning**: Editing a file with pre-existing uncommitted changes
+- **Code quality heuristics**: Detects unchecked Go errors, debug prints, bare Python excepts, hardcoded secrets, TODO without ticket numbers, console.log in production JS/TS
+- **Test failure correlation**: Connects test failures to recently edited files
+- **Workflow guidance**: Suggests test-first approach for bugfix/refactor tasks
+- **Past knowledge surfacing**: Surfaces related decisions and error solutions from previous sessions
+
+**Automatic context recovery** (survives compaction):
+
+Working set (currently edited files, intent, task type, key decisions, git branch) is automatically serialized before compaction and restored afterward. No manual intervention required.
+
+**Suggestion effectiveness tracking**:
+
+Nudge delivery and resolution are tracked across sessions. Patterns delivered 20+ times with <10% resolution rate are automatically suppressed to reduce noise.
 
 **Skills** (invocable via `/health`, `/review`, `/patterns`):
 
@@ -209,12 +230,12 @@ claude-buddy/
 │   ├── watcher/               # File watching (fsnotify + tail)
 │   ├── analyzer/              # Live stats + Feedback type + anti-pattern detector
 │   ├── coach/                 # AI feedback generation via claude -p
-│   ├── hookhandler/           # Claude Code hook event handlers (stdin/stdout JSON)
-│   ├── sessiondb/             # Ephemeral per-session SQLite (hook state sharing)
+│   ├── hookhandler/           # Hook handlers (advisor signals, code heuristics, test correlation)
+│   ├── sessiondb/             # Ephemeral per-session SQLite (working set, burst state, nudges)
 │   ├── embedder/              # Ollama integration for semantic search
 │   ├── locale/                # System locale detection (18 languages)
 │   ├── tui/                   # Bubble Tea TUI (watch / browse / select)
-│   ├── mcpserver/             # MCP server (stdio, 8 tools)
+│   ├── mcpserver/             # MCP server (stdio, 10 tools)
 │   ├── store/                 # SQLite persistence (vector search + LIKE search + incremental sync)
 │   └── install/               # Hook registration + MCP registration + initial sync
 ├── go.mod

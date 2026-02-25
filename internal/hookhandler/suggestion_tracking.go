@@ -1,0 +1,111 @@
+package hookhandler
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+
+	"github.com/hir4ta/claude-buddy/internal/sessiondb"
+	"github.com/hir4ta/claude-buddy/internal/store"
+)
+
+// recordNudgeDelivery records delivered nudges in the persistent store for effectiveness tracking.
+// It saves the last outcome ID in session context for resolution detection.
+func recordNudgeDelivery(sdb *sessiondb.SessionDB, sessionID string, nudges []sessiondb.Nudge) {
+	if len(nudges) == 0 {
+		return
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	var lastID int64
+	var lastPattern string
+	for _, n := range nudges {
+		id, err := st.InsertSuggestionOutcome(sessionID, n.Pattern, n.Suggestion)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[buddy] record nudge delivery: %v\n", err)
+			continue
+		}
+		lastID = id
+		lastPattern = n.Pattern
+	}
+
+	if lastID > 0 {
+		_ = sdb.SetContext("last_nudge_outcome_id", strconv.FormatInt(lastID, 10))
+		_ = sdb.SetContext("last_nudge_pattern", lastPattern)
+	}
+}
+
+// checkNudgeResolution checks if the current tool action resolves a previously delivered nudge.
+// Resolution heuristics by pattern:
+//   - code-quality: next Edit/Write on any file → resolved
+//   - retry-loop: tool name differs from last repeated tool → resolved
+//   - workflow: test command executed → resolved
+//   - stale-read: Read tool used → resolved
+//   - test-correlation: test re-run → resolved
+func checkNudgeResolution(sdb *sessiondb.SessionDB, sessionID, toolName string) {
+	pattern, _ := sdb.GetContext("last_nudge_pattern")
+	if pattern == "" {
+		return
+	}
+	outcomeIDStr, _ := sdb.GetContext("last_nudge_outcome_id")
+	if outcomeIDStr == "" {
+		return
+	}
+
+	resolved := false
+	switch pattern {
+	case "code-quality":
+		resolved = toolName == "Edit" || toolName == "Write"
+	case "retry-loop":
+		resolved = toolName != "Bash"
+	case "workflow":
+		if toolName == "Bash" {
+			resolved = true // approximate: any Bash after workflow nudge
+		}
+	case "stale-read":
+		resolved = toolName == "Read"
+	case "test-correlation":
+		resolved = toolName == "Edit" || toolName == "Write"
+	case "file-knowledge", "past-solution":
+		// Informational nudges — resolved if any action follows.
+		resolved = true
+	}
+
+	if !resolved {
+		return
+	}
+
+	// Clear context to avoid double-resolution.
+	_ = sdb.SetContext("last_nudge_pattern", "")
+	_ = sdb.SetContext("last_nudge_outcome_id", "")
+
+	outcomeID, err := strconv.ParseInt(outcomeIDStr, 10, 64)
+	if err != nil {
+		return
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	_ = st.ResolveSuggestion(outcomeID)
+}
+
+// shouldSuppressNudge checks if a nudge pattern has poor effectiveness
+// and should be suppressed to reduce noise.
+func shouldSuppressNudge(pattern string) bool {
+	st, err := store.OpenDefault()
+	if err != nil {
+		return false
+	}
+	defer st.Close()
+
+	return st.ShouldSuppressPattern(pattern)
+}

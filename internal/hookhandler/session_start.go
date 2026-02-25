@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/embedder"
@@ -32,8 +35,14 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Store CWD for later hooks (PostCompactResume, git context, etc.).
+	_ = sdb.SetContext("cwd", in.CWD)
+
 	// Cache Ollama availability for fast embedding in later hooks.
 	cacheOllamaStatus(sdb)
+
+	// Capture git context (branch, dirty files) for later hooks.
+	captureGitContext(sdb, in.CWD)
 
 	switch in.Source {
 	case "startup", "resume":
@@ -85,19 +94,138 @@ func cacheOllamaStatus(sdb *sessiondb.SessionDB) {
 }
 
 func handlePostCompactResume(sdb *sessiondb.SessionDB) (*HookOutput, error) {
-	nudges, _ := sdb.DequeueNudges(2)
-	if len(nudges) == 0 {
+	var parts []string
+
+	// 1. Dequeue nudges queued before compaction (includes compact_context from PreCompact).
+	nudges, _ := sdb.DequeueNudges(5)
+	for _, n := range nudges {
+		if n.Pattern == "compact_context" {
+			// The compact_context nudge contains the serialized working set.
+			parts = append(parts, n.Suggestion)
+		} else {
+			parts = append(parts, fmt.Sprintf("[buddy] %s (%s): %s\n→ %s",
+				n.Pattern, n.Level, n.Observation, n.Suggestion))
+		}
+	}
+
+	// 2. Supplement with persistent store decisions if working set had none.
+	if !hasCompactContext(parts) {
+		if extra := supplementFromStore(sdb); extra != "" {
+			parts = append(parts, extra)
+		}
+	}
+
+	if len(parts) == 0 {
 		return nil, nil
 	}
 
-	entries := make([]nudgeEntry, len(nudges))
-	for i, n := range nudges {
-		entries[i] = nudgeEntry{
-			Pattern:     n.Pattern,
-			Level:       n.Level,
-			Observation: n.Observation,
-			Suggestion:  n.Suggestion,
+	return makeOutput("SessionStart", strings.Join(parts, "\n")), nil
+}
+
+// hasCompactContext checks if any part contains the working context header.
+func hasCompactContext(parts []string) bool {
+	for _, p := range parts {
+		if strings.Contains(p, "Working context preserved") {
+			return true
 		}
 	}
-	return makeOutput("SessionStart", formatNudges(entries)), nil
+	return false
+}
+
+// supplementFromStore fetches recent decisions from the persistent store
+// as a fallback when no working set was serialized before compaction.
+func supplementFromStore(sdb *sessiondb.SessionDB) string {
+	cwd, _ := sdb.GetContext("cwd")
+	if cwd == "" {
+		return ""
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+
+	data, err := BuildResumeData(st, "", cwd)
+	if err != nil || data == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	if len(data.Decisions) > 0 {
+		b.WriteString("[buddy] Recent design decisions:\n")
+		limit := min(3, len(data.Decisions))
+		for i := range limit {
+			text := data.Decisions[i].DecisionText
+			if len([]rune(text)) > 100 {
+				text = string([]rune(text)[:100]) + "..."
+			}
+			fmt.Fprintf(&b, "  - %s\n", text)
+		}
+	}
+
+	if len(data.Files) > 0 {
+		b.WriteString("Recently modified files:\n")
+		limit := min(5, len(data.Files))
+		for i := range limit {
+			fmt.Fprintf(&b, "  - %s (%s)\n", data.Files[i].Path, data.Files[i].Action)
+		}
+	}
+
+	return b.String()
+}
+
+// captureGitContext captures git state at session start and stores it in the working set.
+// Gracefully no-ops if not in a git repo or git is unavailable.
+func captureGitContext(sdb *sessiondb.SessionDB, cwd string) {
+	if cwd == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	branch, err := execGit(ctx, cwd, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return // not a git repo or git not available
+	}
+	branch = strings.TrimSpace(branch)
+	_ = sdb.SetWorkingSet("git_branch", branch)
+
+	status, err := execGit(ctx, cwd, "status", "--porcelain")
+	if err != nil {
+		return
+	}
+	status = strings.TrimSpace(status)
+	if status == "" {
+		return // clean working tree
+	}
+
+	lines := strings.Split(status, "\n")
+	_ = sdb.SetWorkingSet("git_uncommitted_count", strconv.Itoa(len(lines)))
+
+	// Store dirty file names (basename only) for PreToolUse warnings.
+	var dirtyFiles []string
+	for _, line := range lines {
+		if len(line) < 4 {
+			continue
+		}
+		// porcelain format: "XY filename" or "XY old -> new"
+		name := strings.TrimSpace(line[3:])
+		if idx := strings.Index(name, " -> "); idx >= 0 {
+			name = name[idx+4:]
+		}
+		dirtyFiles = append(dirtyFiles, name)
+	}
+	_ = sdb.SetWorkingSet("git_dirty_files", strings.Join(dirtyFiles, "\n"))
+}
+
+func execGit(ctx context.Context, cwd string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = cwd
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }

@@ -112,26 +112,31 @@ func (m Model) renderScoreLine() string {
 
 	line := style.Render(text)
 
-	// Breakdown: show only non-zero components
+	// Breakdown: show only non-zero components with descriptive labels
 	bd := score.Components
 	var parts []string
 	type comp struct {
-		label string
-		value int
+		posLabel string // label when value > 0
+		negLabel string // label when value < 0
+		value    int
 	}
 	for _, c := range []comp{
-		{"Alerts", bd.AlertPenalty},
-		{"Tools", bd.ToolEfficiency},
-		{"Plan", bd.PlanMode},
-		{"CLAUDE.md", bd.CLAUDEMD},
-		{"Subagent", bd.Subagent},
-		{"Context", bd.ContextMgmt},
-		{"Instructions", bd.InstructionQual},
+		{"", "Anti-patterns detected", bd.AlertPenalty},
+		{"", "Excessive tools", bd.ToolEfficiency},
+		{"Planned approach", "No plan (5+ files)", bd.PlanMode},
+		{"Read CLAUDE.md", "", bd.CLAUDEMD},
+		{"Used subagents", "", bd.Subagent},
+		{"", "Context compactions", bd.ContextMgmt},
+		{"Detailed prompts", "", bd.InstructionQual},
 	} {
 		if c.value == 0 {
 			continue
 		}
-		label := fmt.Sprintf("%+d %s", c.value, c.label)
+		descr := c.posLabel
+		if c.value < 0 {
+			descr = c.negLabel
+		}
+		label := fmt.Sprintf("%+d %s", c.value, descr)
 		if c.value > 0 {
 			parts = append(parts, scoreBonusStyle.Render(label))
 		} else {
