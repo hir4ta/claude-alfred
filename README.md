@@ -18,11 +18,22 @@ go build -o claude-buddy .
 
 ## Setup
 
+[Ollama](https://ollama.com) is required for knowledge search features. Start it before running install:
+
 ```bash
+# Install and start Ollama
+brew install ollama
+ollama serve &
+
+# Pull embedding model (choose one)
+ollama pull kun432/cl-nagoya-ruri-large    # Japanese
+ollama pull nomic-embed-text               # English / other languages
+
+# Register hooks, sync sessions, generate embeddings
 claude-buddy install
 ```
 
-This registers the MCP server, writes hooks to `~/.claude/settings.json`, and syncs all existing sessions to the local SQLite database (`~/.claude-buddy/buddy.db`). No additional configuration needed — hooks are active the next time you start Claude Code.
+This registers the MCP server, writes hooks to `~/.claude/settings.json`, syncs all existing sessions to the local SQLite database (`~/.claude-buddy/buddy.db`), and generates embeddings for knowledge search. Hooks are active the next time you start Claude Code.
 
 ## Upgrade
 
@@ -220,23 +231,8 @@ claude-buddy/
 | [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) | MCP server SDK |
 | [ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3) | SQLite driver (pure Go, WASM-based) |
 
-## Ollama (Required for Knowledge Search)
+## Ollama
 
-`buddy_patterns` and hook-based knowledge injection use [Ollama](https://ollama.com) for vector semantic search. Ollama must be running for these features to work.
-
-```bash
-# Install Ollama (macOS)
-brew install ollama
-ollama serve &
-
-# Pull embedding model
-ollama pull kun432/cl-nagoya-ruri-large    # Japanese (recommended for JA locale)
-ollama pull nomic-embed-text               # English / multilingual
-
-# Run setup to generate embeddings
-claude-buddy install
-```
-
-The model is auto-selected based on your system locale: `kun432/cl-nagoya-ruri-large` (1024d) for Japanese, `nomic-embed-text` (768d) for other languages.
+Ollama powers `buddy_patterns` and hook-based knowledge injection via vector semantic search. The embedding model is auto-selected based on your system locale: `kun432/cl-nagoya-ruri-large` (1024d) for Japanese, `nomic-embed-text` (768d) for other languages.
 
 Ollama availability is checked once at session start and cached — subsequent hook calls use a single HTTP round-trip for embedding.
