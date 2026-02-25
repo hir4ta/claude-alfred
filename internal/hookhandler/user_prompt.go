@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
+	"github.com/hir4ta/claude-buddy/internal/store"
 )
 
 type userPromptInput struct {
@@ -31,13 +34,19 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	_ = sdb.ResetBurst()
 	_ = sdb.SetContext("subagent_active", "")
 
-	// Record user intent for context-aware detection.
+	// Record user intent and classify task type for workflow guidance.
 	if in.Prompt != "" {
 		intent := in.Prompt
 		if len([]rune(intent)) > 100 {
 			intent = string([]rune(intent)[:100])
 		}
 		_ = sdb.SetContext("last_user_intent", intent)
+
+		taskType := classifyIntent(in.Prompt)
+		if taskType != TaskUnknown {
+			_ = sdb.SetContext("task_type", string(taskType))
+		}
+		_ = sdb.SetContext("has_test_run", "")
 	}
 
 	// Dequeue pending nudges (max 2).
@@ -69,24 +78,112 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	return makeOutput("UserPromptSubmit", formatNudges(entries)), nil
 }
 
+// knowledgeType pairs a pattern type with its cooldown key.
+type knowledgeType struct {
+	name     string
+	cooldown string
+}
+
+var knowledgeTypes = []knowledgeType{
+	{"error_solution", "knowledge_error"},
+	{"architecture", "knowledge_arch"},
+	{"decision", "knowledge_decision"},
+}
+
 // matchRelevantKnowledge searches past patterns matching the user's prompt.
+// Uses split cooldowns per knowledge type and falls back to file-path keywords
+// when the prompt is short.
 func matchRelevantKnowledge(sdb *sessiondb.SessionDB, prompt string) string {
-	if len([]rune(prompt)) < 30 {
-		return ""
-	}
-
-	// Cooldown to avoid repeated knowledge injection.
-	on, _ := sdb.IsOnCooldown("knowledge_inject")
-	if on {
-		return ""
-	}
-
+	// Build search terms: keywords from prompt + recent file paths as fallback.
 	keywords := extractKeywords(prompt, 3)
-	knowledge := searchRelevantKnowledge(sdb, keywords)
-	if knowledge == "" {
+	if len(keywords) == 0 {
+		keywords = recentFileKeywords(sdb)
+	}
+	if len(keywords) == 0 {
 		return ""
 	}
 
-	_ = sdb.SetCooldown("knowledge_inject", 5*time.Minute)
-	return knowledge
+	// Check at least one knowledge type is off cooldown.
+	var activeTypes []string
+	for _, t := range knowledgeTypes {
+		on, _ := sdb.IsOnCooldown(t.cooldown)
+		if !on {
+			activeTypes = append(activeTypes, t.name)
+		}
+	}
+	if len(activeTypes) == 0 {
+		return ""
+	}
+
+	query := strings.Join(keywords, " ")
+	vec := embedQuery(sdb, query, 1*time.Second)
+	if vec == nil {
+		return ""
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+
+	var allResults []store.PatternRow
+	for _, patType := range activeTypes {
+		patterns, _ := st.SearchPatternsByVector(vec, patType, 2)
+		allResults = append(allResults, patterns...)
+	}
+	if len(allResults) == 0 {
+		return ""
+	}
+
+	// Set cooldowns for matched types.
+	matchedTypes := make(map[string]bool)
+	for _, p := range allResults {
+		matchedTypes[p.PatternType] = true
+	}
+	for _, t := range knowledgeTypes {
+		if matchedTypes[t.name] {
+			_ = sdb.SetCooldown(t.cooldown, 3*time.Minute)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("Relevant past knowledge:\n")
+	limit := 3
+	if len(allResults) < limit {
+		limit = len(allResults)
+	}
+	for i := 0; i < limit; i++ {
+		p := allResults[i]
+		content := p.Content
+		if len([]rune(content)) > 120 {
+			content = string([]rune(content)[:120]) + "..."
+		}
+		fmt.Fprintf(&b, "  - [%s] %s\n", p.PatternType, content)
+	}
+	return b.String()
+}
+
+// recentFileKeywords extracts searchable keywords from recent file paths
+// in the current burst, used as a fallback when the user prompt is short.
+func recentFileKeywords(sdb *sessiondb.SessionDB) []string {
+	_, _, fileReads, err := sdb.BurstState()
+	if err != nil || len(fileReads) == 0 {
+		return nil
+	}
+
+	var keywords []string
+	seen := make(map[string]bool)
+	for path := range fileReads {
+		base := filepath.Base(path)
+		name := strings.TrimSuffix(base, filepath.Ext(base))
+		if len(name) >= 3 && !seen[name] {
+			seen[name] = true
+			keywords = append(keywords, name)
+		}
+		if len(keywords) >= 3 {
+			break
+		}
+	}
+	return keywords
 }

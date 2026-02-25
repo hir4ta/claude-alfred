@@ -14,23 +14,6 @@ import (
 	"github.com/hir4ta/claude-buddy/internal/store"
 )
 
-const jarvisStopPrompt = `You are evaluating whether Claude Code should stop working. [buddy]
-
-Context: $ARGUMENTS
-
-IMPORTANT: If stop_hook_active is true in the context, respond {"ok": true} immediately.
-
-Check:
-1. Were all user-requested tasks completed?
-2. Are there unresolved errors or failing tests?
-3. Was any placeholder code or TODO left behind?
-4. If the user asked for a build/test, was it run and did it pass?
-
-If work is complete: {"ok": true}
-If work is incomplete: {"ok": false, "reason": "Specific description of what remains"}
-
-Be strict on completeness, lenient on style.`
-
 // settingsPathFunc returns the path to ~/.claude/settings.json.
 // Package-level variable for test overrides.
 var settingsPathFunc = defaultSettingsPath
@@ -135,23 +118,7 @@ func buddyHookEntries(binPath string) map[string]any {
 		"SessionEnd":       makeEntry("SessionEnd", 5, true, ""),
 	}
 
-	// Stop: hybrid (command + prompt run in parallel).
-	entries["Stop"] = []any{
-		map[string]any{
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": binPath + " hook-handler Stop",
-					"timeout": 5,
-				},
-				map[string]any{
-					"type":    "prompt",
-					"prompt":  jarvisStopPrompt,
-					"timeout": 30,
-				},
-			},
-		},
-	}
+	entries["Stop"] = makeEntry("Stop", 5, false, "")
 
 	return entries
 }

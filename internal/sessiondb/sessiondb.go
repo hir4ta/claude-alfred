@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS session_context (
 	key   TEXT PRIMARY KEY,
 	value TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS file_last_read (
+	path      TEXT    PRIMARY KEY,
+	event_seq INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bash_failures (
+	id            INTEGER PRIMARY KEY AUTOINCREMENT,
+	cmd_signature TEXT    NOT NULL,
+	error_summary TEXT    NOT NULL DEFAULT '',
+	timestamp     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 `
 
 // HookEvent is a recorded tool event.
@@ -444,4 +456,70 @@ func (s *SessionDB) GetContext(key string) (string, error) {
 		return "", fmt.Errorf("sessiondb: get context %s: %w", key, err)
 	}
 	return value, nil
+}
+
+// RecordFileLastRead records the event sequence number for the last Read of a file.
+func (s *SessionDB) RecordFileLastRead(path string, eventSeq int64) error {
+	_, err := s.db.Exec(
+		`INSERT INTO file_last_read (path, event_seq) VALUES (?, ?)
+		 ON CONFLICT(path) DO UPDATE SET event_seq = ?`,
+		path, eventSeq, eventSeq,
+	)
+	if err != nil {
+		return fmt.Errorf("sessiondb: record file last read: %w", err)
+	}
+	return nil
+}
+
+// FileLastReadSeq returns the event sequence for the last Read of a file, or 0 if never read.
+func (s *SessionDB) FileLastReadSeq(path string) (int64, error) {
+	var seq int64
+	err := s.db.QueryRow(`SELECT event_seq FROM file_last_read WHERE path = ?`, path).Scan(&seq)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("sessiondb: file last read seq: %w", err)
+	}
+	return seq, nil
+}
+
+// CurrentEventSeq returns the current maximum event ID (used as sequence counter).
+func (s *SessionDB) CurrentEventSeq() (int64, error) {
+	var seq int64
+	err := s.db.QueryRow(`SELECT COALESCE(MAX(id), 0) FROM hook_events`).Scan(&seq)
+	if err != nil {
+		return 0, fmt.Errorf("sessiondb: current event seq: %w", err)
+	}
+	return seq, nil
+}
+
+// RecordBashFailure records a failed Bash command signature and error summary.
+func (s *SessionDB) RecordBashFailure(cmdSignature, errorSummary string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO bash_failures (cmd_signature, error_summary) VALUES (?, ?)`,
+		cmdSignature, errorSummary,
+	)
+	if err != nil {
+		return fmt.Errorf("sessiondb: record bash failure: %w", err)
+	}
+	return nil
+}
+
+// FindSimilarFailure checks if a command signature matches a recent failure.
+// Returns the error summary if found, or "" if no match.
+func (s *SessionDB) FindSimilarFailure(cmdSignature string) (string, error) {
+	var summary string
+	err := s.db.QueryRow(
+		`SELECT error_summary FROM bash_failures
+		 WHERE cmd_signature = ?
+		 ORDER BY id DESC LIMIT 1`, cmdSignature,
+	).Scan(&summary)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("sessiondb: find similar failure: %w", err)
+	}
+	return summary, nil
 }

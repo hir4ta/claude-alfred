@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -218,6 +219,38 @@ func (s *Store) SearchDecisions(query string, sessionID string, limit int) ([]De
 		}
 		if filePaths != nil {
 			r.FilePaths = *filePaths
+		}
+		rows = append(rows, r)
+	}
+	return rows, dbRows.Err()
+}
+
+// SearchDecisionsByFile returns decisions whose file_paths JSON contains the given file path.
+func (s *Store) SearchDecisionsByFile(filePath string, limit int) ([]DecisionRow, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	base := filepath.Base(filePath)
+	pat := "%" + base + "%"
+
+	dbRows, err := s.db.Query(`
+		SELECT d.id, d.session_id, COALESCE(d.event_id,0), d.timestamp, d.topic,
+			   d.decision_text, COALESCE(d.reasoning,''), COALESCE(d.file_paths,'[]'), d.compact_segment
+		FROM decisions d
+		WHERE d.file_paths LIKE ?
+		ORDER BY d.timestamp DESC
+		LIMIT ?`, pat, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: search decisions by file: %w", err)
+	}
+	defer dbRows.Close()
+
+	var rows []DecisionRow
+	for dbRows.Next() {
+		var r DecisionRow
+		if err := dbRows.Scan(&r.ID, &r.SessionID, &r.EventID, &r.Timestamp, &r.Topic,
+			&r.DecisionText, &r.Reasoning, &r.FilePaths, &r.CompactSegment); err != nil {
+			continue
 		}
 		rows = append(rows, r)
 	}

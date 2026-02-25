@@ -435,7 +435,7 @@ func TestHandleStop_AllowsErrorExplanation(t *testing.T) {
 	input := stopInput{
 		CommonInput:          CommonInput{SessionID: "test-stop-error"},
 		StopHookActive:       false,
-		LastAssistantMessage: "I encountered an error: build failed when running go build",
+		LastAssistantMessage: "I analyzed the issue and the root cause is a missing import in the module",
 	}
 	data, _ := json.Marshal(input)
 
@@ -499,8 +499,8 @@ func TestCheckCompleteness(t *testing.T) {
 	}{
 		{name: "empty", msg: "", wantIssue: false},
 		{name: "clean", msg: "All done, tests pass.", wantIssue: false},
-		{name: "error explanation", msg: "I got error: cannot find module", wantIssue: false},
-		{name: "build failed", msg: "The build failed with 3 errors", wantIssue: false},
+		{name: "error explanation", msg: "I got an unexpected result from the API call", wantIssue: false},
+		{name: "build failed", msg: "The build failed with 3 errors", wantIssue: true},
 		{name: "todo marker", msg: "Added a TODO: fix this later", wantIssue: true},
 		{name: "incomplete ja", msg: "まだ完了していませんが、ここまで進めました", wantIssue: true},
 		{name: "placeholder", msg: "I left a placeholder for the auth logic", wantIssue: true},

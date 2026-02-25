@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
+	"github.com/hir4ta/claude-buddy/internal/store"
 )
 
 type postToolUseInput struct {
@@ -46,6 +48,7 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	}
 
 	// Track file reads for Read, Grep, Glob.
+	// Also record file last read sequence for stale-read detection.
 	switch in.ToolName {
 	case "Read":
 		var ri struct {
@@ -53,6 +56,9 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		}
 		if json.Unmarshal(in.ToolInput, &ri) == nil && ri.FilePath != "" {
 			_ = sdb.IncrementFileRead(ri.FilePath)
+			if seq, err := sdb.CurrentEventSeq(); err == nil {
+				_ = sdb.RecordFileLastRead(ri.FilePath, seq)
+			}
 		}
 	case "Grep":
 		var gi struct {
@@ -73,6 +79,36 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		_ = sdb.SetContext("subagent_active", "true")
 	}
 
+	// Track test command execution for workflow guidance.
+	if in.ToolName == "Bash" {
+		var bi struct {
+			Command string `json:"command"`
+		}
+		if json.Unmarshal(in.ToolInput, &bi) == nil && testCmdPattern.MatchString(bi.Command) {
+			_ = sdb.SetContext("has_test_run", "true")
+
+			// Positive signal: test-first recognition for bugfix/refactor.
+			taskTypeStr, _ := sdb.GetContext("task_type")
+			tc, hasWrite, _, _ := sdb.BurstState()
+			if (taskTypeStr == "bugfix" || taskTypeStr == "refactor") && !hasWrite && tc <= 3 {
+				set, _ := sdb.TrySetCooldown("test_first_ack", 30*time.Minute)
+				if set {
+					_ = sdb.EnqueueNudge("test-first", "info",
+						"Good practice: running tests before editing",
+						"Test-first approach established. This gives a baseline to verify changes against.",
+					)
+				}
+			}
+		}
+	}
+
+	// Workflow order check — enqueue nudge if write doesn't match expected workflow.
+	if isWrite {
+		if nudge := checkWorkflowForCurrentTask(sdb); nudge != "" {
+			_ = sdb.EnqueueNudge("workflow", "info", "Workflow suggestion", nudge)
+		}
+	}
+
 	// Run lightweight signal detection → deliver via additionalContext.
 	det := &HookDetector{sdb: sdb}
 	if signal := det.Detect(); signal != "" {
@@ -80,11 +116,100 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	}
 
 	// Search for past error solutions when Bash fails.
+	// Also record the failure for PreToolUse past-failure warning.
 	if in.ToolName == "Bash" && len(in.ToolResponse) > 0 {
-		matchPastErrorSolutions(sdb, string(in.ToolResponse))
+		resp := string(in.ToolResponse)
+		if containsError(resp) {
+			var bi struct {
+				Command string `json:"command"`
+			}
+			if json.Unmarshal(in.ToolInput, &bi) == nil && bi.Command != "" {
+				sig := extractCmdSignature(bi.Command)
+				errSummary := extractErrorSignature(resp)
+				if sig != "" {
+					_ = sdb.RecordBashFailure(sig, errSummary)
+				}
+			}
+		}
+		matchPastErrorSolutions(sdb, resp)
+	}
+
+	// File-context knowledge: after Read/Edit/Write, search for related patterns.
+	if in.ToolName == "Read" || isWrite {
+		var fi struct {
+			FilePath string `json:"file_path"`
+		}
+		if json.Unmarshal(in.ToolInput, &fi) == nil && fi.FilePath != "" {
+			matchFileContextKnowledge(sdb, fi.FilePath)
+		}
 	}
 
 	return nil, nil
+}
+
+// checkWorkflowForCurrentTask checks workflow order based on stored task type.
+func checkWorkflowForCurrentTask(sdb *sessiondb.SessionDB) string {
+	taskTypeStr, _ := sdb.GetContext("task_type")
+	if taskTypeStr == "" {
+		return ""
+	}
+
+	on, _ := sdb.IsOnCooldown("workflow_nudge")
+	if on {
+		return ""
+	}
+
+	_, hasWrite, _, _ := sdb.BurstState()
+	hasTestRun, _ := sdb.GetContext("has_test_run")
+	planMode, _ := sdb.GetContext("plan_mode")
+
+	suggestion := checkWorkflowOrder(
+		TaskType(taskTypeStr), hasWrite,
+		hasTestRun == "true",
+		planMode == "active",
+	)
+	if suggestion == "" {
+		return ""
+	}
+
+	_ = sdb.SetCooldown("workflow_nudge", 10*time.Minute)
+	return suggestion
+}
+
+// matchFileContextKnowledge searches for patterns related to a file path.
+func matchFileContextKnowledge(sdb *sessiondb.SessionDB, filePath string) {
+	key := "file_knowledge:" + filepath.Base(filePath)
+	on, _ := sdb.IsOnCooldown(key)
+	if on {
+		return
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	patterns, _ := st.SearchPatternsByFile(filePath, 2)
+	if len(patterns) == 0 {
+		return
+	}
+
+	_ = sdb.SetCooldown(key, 10*time.Minute)
+
+	msg := "Related knowledge for this file:"
+	for _, p := range patterns {
+		content := p.Content
+		if len([]rune(content)) > 100 {
+			content = string([]rune(content)[:100]) + "..."
+		}
+		msg += fmt.Sprintf("\n  [%s] %s", p.PatternType, content)
+	}
+
+	_ = sdb.EnqueueNudge("file-knowledge", "info",
+		fmt.Sprintf("Past knowledge found for %s", filepath.Base(filePath)),
+		msg,
+	)
 }
 
 // matchPastErrorSolutions checks Bash output for errors and searches past solutions.

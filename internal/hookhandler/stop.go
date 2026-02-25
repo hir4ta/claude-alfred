@@ -62,5 +62,27 @@ func checkCompleteness(msg string) []string {
 		}
 	}
 
+	// Test failures mentioned without resolution.
+	for _, p := range []string{
+		"test fail", "tests fail", "test failed", "tests failed", "failing test",
+		"テストが失敗", "テスト失敗",
+	} {
+		if strings.Contains(lower, p) {
+			issues = append(issues, "Unresolved test failure mentioned in last response")
+			break
+		}
+	}
+
+	// Build failures mentioned without resolution.
+	for _, p := range []string{
+		"build failed", "compilation error", "compile error", "does not compile",
+		"ビルド失敗", "コンパイルエラー",
+	} {
+		if strings.Contains(lower, p) {
+			issues = append(issues, "Unresolved build failure mentioned in last response")
+			break
+		}
+	}
+
 	return issues
 }

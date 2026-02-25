@@ -2,7 +2,6 @@ package hookhandler
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -113,42 +112,6 @@ func searchErrorSolutions(sdb *sessiondb.SessionDB, sig string) []store.PatternR
 
 	patterns, _ := st.SearchPatternsByVector(vec, "error_solution", 3)
 	return patterns
-}
-
-// searchRelevantKnowledge searches past patterns matching the given keywords
-// using vector search. Returns a formatted string for injection, or "" if nothing found.
-func searchRelevantKnowledge(sdb *sessiondb.SessionDB, keywords []string) string {
-	if len(keywords) == 0 {
-		return ""
-	}
-
-	query := strings.Join(keywords, " ")
-	vec := embedQuery(sdb, query, 1*time.Second)
-	if vec == nil {
-		return ""
-	}
-
-	st, err := store.OpenDefault()
-	if err != nil {
-		return ""
-	}
-	defer st.Close()
-
-	patterns, _ := st.SearchPatternsByVector(vec, "", 3)
-	if len(patterns) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("Relevant past knowledge:\n")
-	for _, p := range patterns {
-		content := p.Content
-		if len([]rune(content)) > 120 {
-			content = string([]rune(content)[:120]) + "..."
-		}
-		fmt.Fprintf(&b, "  - [%s] %s\n", p.PatternType, content)
-	}
-	return b.String()
 }
 
 // extractKeywords extracts up to n meaningful keywords from text.

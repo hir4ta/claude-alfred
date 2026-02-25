@@ -263,6 +263,39 @@ func (s *Store) SearchPatternsByTag(tag string, limit int) ([]PatternRow, error)
 	return result, rows.Err()
 }
 
+// SearchPatternsByFile returns patterns linked to a file path via pattern_files.
+func (s *Store) SearchPatternsByFile(filePath string, limit int) ([]PatternRow, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	base := filepath.Base(filePath)
+	rows, err := s.db.Query(`
+		SELECT DISTINCT p.id, p.session_id, p.pattern_type, p.title, p.content, p.embed_text,
+			COALESCE(p.language,''), p.scope, COALESCE(p.source_event_id,0), p.timestamp
+		FROM patterns p
+		JOIN pattern_files pf ON p.id = pf.pattern_id
+		WHERE pf.file_path LIKE ?
+		ORDER BY p.timestamp DESC
+		LIMIT ?`, "%"+base+"%", limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: search patterns by file: %w", err)
+	}
+	defer rows.Close()
+
+	var result []PatternRow
+	for rows.Next() {
+		var p PatternRow
+		if err := rows.Scan(&p.ID, &p.SessionID, &p.PatternType, &p.Title, &p.Content, &p.EmbedText,
+			&p.Language, &p.Scope, &p.SourceEventID, &p.Timestamp); err != nil {
+			continue
+		}
+		p.Tags = s.getPatternTags(p.ID)
+		p.Files = s.getPatternFiles(p.ID)
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
 // CountPatterns returns the total number of patterns in the store.
 func (s *Store) CountPatterns() (int, error) {
 	var count int
