@@ -1,6 +1,6 @@
 # claude-buddy
 
-A proactive session companion for Claude Code — real-time anti-pattern detection, destructive command blocking, automatic context recovery, code quality feedback, git awareness, and AI-powered usage coaching. Works as both a standalone TUI and a Claude Code plugin with hooks.
+A proactive session companion for Claude Code — real-time anti-pattern detection, destructive command blocking, automatic context recovery, code quality feedback, git awareness, and AI-powered usage coaching. Works as a Claude Code plugin with hooks, MCP tools, skills, and agents.
 
 ## Install
 
@@ -18,22 +18,35 @@ go build -o claude-buddy .
 
 ## Setup
 
-[Ollama](https://ollama.com) is required for knowledge search features. Start it before running install:
+### 1. Install the plugin (inside Claude Code)
+
+```
+/plugin marketplace add hir4ta/claude-buddy
+/plugin install claude-buddy@claude-buddy
+```
+
+This registers hooks, MCP server, skills, and the buddy agent via the plugin system. Skills are available as `/claude-buddy:buddy-*` commands.
+
+### 2. Sync sessions and embeddings
 
 ```bash
-# Install and start Ollama
+claude-buddy install
+```
+
+When the plugin is active, this only syncs sessions to the local SQLite database (`~/.claude-buddy/buddy.db`) and generates embeddings. Hook/skill/agent registration is skipped (managed by the plugin).
+
+### 3. Optional: Ollama for semantic search
+
+[Ollama](https://ollama.com) powers vector-based knowledge search across sessions. Without it, search falls back to FTS5 BM25 / LIKE.
+
+```bash
 brew install ollama
 ollama serve &
 
 # Pull embedding model (choose one)
 ollama pull kun432/cl-nagoya-ruri-large    # Japanese
 ollama pull nomic-embed-text               # English / other languages
-
-# Register hooks, sync sessions, generate embeddings
-claude-buddy install
 ```
-
-This registers the MCP server, writes hooks to `~/.claude/settings.json`, syncs all existing sessions to the local SQLite database (`~/.claude-buddy/buddy.db`), and generates embeddings for knowledge search. Hooks are active the next time you start Claude Code.
 
 ## Upgrade
 
@@ -41,11 +54,13 @@ This registers the MCP server, writes hooks to `~/.claude/settings.json`, syncs 
 brew update && brew upgrade claude-buddy
 ```
 
-After upgrading, re-run install to update hook paths:
+After upgrading, re-sync sessions:
 
 ```bash
 claude-buddy install
 ```
+
+Plugin updates are picked up automatically via `/plugin marketplace update`.
 
 ## Language
 
@@ -120,7 +135,7 @@ claude-buddy browse
 
 ### `claude-buddy install`
 
-One-time setup: registers the MCP server, writes hooks to `~/.claude/settings.json`, syncs sessions, and generates embeddings (if Ollama available).
+Sync sessions to the local database and generate embeddings. When the plugin is active, hook/skill/agent registration is automatically skipped and any legacy `~/.claude/` files are cleaned up.
 
 ```bash
 claude-buddy install
@@ -175,9 +190,41 @@ Remove hooks and MCP server registration:
 claude-buddy uninstall
 ```
 
+### `claude-buddy plugin-bundle [output_dir]`
+
+Generate the plugin directory from Go source definitions. Used for development and CI verification.
+
+```bash
+claude-buddy plugin-bundle ./plugin
+```
+
+## Plugin
+
+claude-buddy is distributed as a Claude Code plugin. The plugin provides:
+
+- **14 hooks**: SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, PreCompact, SessionEnd, Stop (command + prompt), SubagentStart, SubagentStop, Notification, TeammateIdle, TaskCompleted, PermissionRequest
+- **10 skills**: buddy-unstuck, buddy-checkpoint, buddy-before-commit, buddy-impact, buddy-review, buddy-estimate, buddy-error-recovery, buddy-context-recovery, buddy-test-guidance, buddy-predict
+- **1 agent**: buddy (persistent memory, session advisor)
+- **MCP server**: 13 tools for session analysis and knowledge search
+
+### Skills
+
+| Skill | Invocation | Description |
+|---|---|---|
+| buddy-unstuck | auto | Escape retry loops and suggest alternative approaches |
+| buddy-checkpoint | auto | Session health check with active anti-pattern summary |
+| buddy-before-commit | auto | Pre-commit quality verification |
+| buddy-impact | `/claude-buddy:buddy-impact` | Blast radius analysis for planned file changes |
+| buddy-review | `/claude-buddy:buddy-review` | Review recent changes against pattern DB knowledge |
+| buddy-estimate | `/claude-buddy:buddy-estimate` | Task complexity estimation from historical data |
+| buddy-predict | `/claude-buddy:buddy-predict` | Prediction dashboard (next tool, cascade risk, health trend) |
+| buddy-error-recovery | auto | Past resolution diffs for tool failures |
+| buddy-context-recovery | auto | Restore working context after compaction |
+| buddy-test-guidance | auto | Test failure debugging strategies |
+
 ## Hooks
 
-`claude-buddy install` writes hooks directly to `~/.claude/settings.json`. These hooks actively monitor your session through Claude Code's lifecycle events:
+Hooks actively monitor your session through Claude Code's lifecycle events:
 
 | Hook Event | Behavior |
 |---|---|
@@ -218,23 +265,18 @@ Working set (currently edited files, intent, task type, key decisions, git branc
 
 Nudge delivery and resolution are tracked across sessions. Patterns delivered 20+ times with <10% resolution rate are automatically suppressed to reduce noise.
 
-**Skills** (invocable via slash commands):
-
-| Skill | Description |
-|---|---|
-| `/buddy-unstuck` | Escape retry loops and suggest alternative approaches |
-| `/buddy-checkpoint` | Session health check with active anti-pattern summary |
-| `/buddy-before-commit` | Pre-commit quality verification |
-| `/buddy-impact` | Blast radius analysis for planned file changes |
-| `/buddy-review` | Review recent changes against pattern DB knowledge |
-| `/buddy-estimate` | Task complexity estimation from historical data |
-| `/buddy-predict` | Prediction dashboard (next tool, cascade risk, health trend) |
-
 ## Architecture
 
 ```
 claude-buddy/
 ├── main.go                    # Entry point + subcommand routing
+├── plugin/                    # Claude Code plugin (generated by plugin-bundle)
+│   ├── .claude-plugin/        # Plugin manifest
+│   ├── hooks/                 # Hook definitions (14 events)
+│   ├── skills/                # 10 buddy skills
+│   ├── agents/                # Buddy agent
+│   └── .mcp.json              # MCP server config
+├── .claude-plugin/            # Marketplace manifest
 ├── internal/
 │   ├── parser/                # JSONL parser (type definitions + parsing)
 │   ├── watcher/               # File watching (fsnotify + tail)
@@ -247,7 +289,7 @@ claude-buddy/
 │   ├── tui/                   # Bubble Tea TUI (watch / browse / select)
 │   ├── mcpserver/             # MCP server (stdio, 13 tools)
 │   ├── store/                 # SQLite persistence (vector search + LIKE search + incremental sync)
-│   └── install/               # Hook registration + MCP registration + initial sync
+│   └── install/               # Plugin bundle + hook registration + initial sync
 ├── go.mod
 └── go.sum
 ```
@@ -267,3 +309,5 @@ claude-buddy/
 Ollama powers `buddy_patterns` and hook-based knowledge injection via vector semantic search. The embedding model is auto-selected based on your system locale: `kun432/cl-nagoya-ruri-large` (1024d) for Japanese, `nomic-embed-text` (768d) for other languages.
 
 Ollama availability is checked once at session start and cached — subsequent hook calls use a single HTTP round-trip for embedding.
+
+Without Ollama, knowledge search falls back to FTS5 BM25 / LIKE — all features work, just without semantic matching.

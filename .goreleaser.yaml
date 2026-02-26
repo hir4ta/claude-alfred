@@ -26,11 +26,16 @@ brews:
     install: |
       bin.install "claude-buddy"
     caveats: |
-      Plugin mode (recommended):
-        claude plugin add --path /path/to/claude-buddy/plugin
+      Setup (run inside Claude Code):
+        /plugin marketplace add hir4ta/claude-buddy
+        /plugin install claude-buddy@claude-buddy
 
-      Legacy mode:
+      Then sync sessions and embeddings:
         claude-buddy install
+
+      Optional (for semantic search):
+        brew install ollama && ollama serve &
+        ollama pull nomic-embed-text
 
       AI feedback language is auto-detected from your system locale (LANG).
       To override: LANG=ja_JP.UTF-8 claude-buddy

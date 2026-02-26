@@ -1,11 +1,5 @@
 package install
 
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-)
-
 const buddyAgentContent = `---
 name: buddy
 description: >
@@ -62,21 +56,3 @@ Keep it concise:
 - Confidence: high/medium/low
 `
 
-func installBuddyAgent() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
-	}
-	agentDir := filepath.Join(home, ".claude", "agents")
-	agentPath := filepath.Join(agentDir, "buddy.md")
-
-	if err := os.MkdirAll(agentDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir agents: %w", err)
-	}
-
-	if err := os.WriteFile(agentPath, []byte(buddyAgentContent), 0o644); err != nil {
-		return fmt.Errorf("write buddy agent: %w", err)
-	}
-	fmt.Println("✓ Buddy agent installed/updated at ~/.claude/agents/buddy.md")
-	return nil
-}

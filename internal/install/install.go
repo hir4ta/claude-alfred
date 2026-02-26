@@ -27,32 +27,12 @@ func defaultSettingsPath() string {
 }
 
 // Run executes the install command. All steps are idempotent.
+// Hooks, skills, agent, and MCP are managed by the plugin — this only
+// syncs sessions/docs and generates embeddings.
 func Run() error {
-	if isPluginActive() {
-		fmt.Println("Plugin mode detected — skipping hook/skill/agent registration")
-		// Clean up legacy files that conflict with plugin-provided ones.
-		cleanupLegacyInstall()
-	} else {
-		// Step 1: MCP registration.
-		registerMCP()
+	// Clean up legacy files from pre-plugin installs (silent if nothing to clean).
+	cleanupLegacyInstall()
 
-		// Step 2: Write hooks to settings.json.
-		if err := registerHooks(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: hook registration failed: %v\n", err)
-		}
-
-		// Step 3: Install buddy agent.
-		if err := installBuddyAgent(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: buddy agent install failed: %v\n", err)
-		}
-
-		// Step 3b: Install buddy skills.
-		if err := installSkills(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skills install failed: %v\n", err)
-		}
-	}
-
-	// Always run: DB sync, docs, embeddings.
 	if err := initialSync(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: initial sync failed: %v\n", err)
 	}
@@ -63,18 +43,60 @@ func Run() error {
 
 	generateEmbeddings()
 
-	if isPluginActive() {
-		fmt.Println("\n✓ Installation complete! (plugin mode — hooks/skills managed by plugin)")
-	} else {
-		printInstructions()
-	}
+	fmt.Println("\n✓ Installation complete!")
+	fmt.Println("\nIf you haven't set up the plugin yet:")
+	fmt.Println("  /plugin marketplace add hir4ta/claude-buddy")
+	fmt.Println("  /plugin install claude-buddy@claude-buddy")
 
 	return nil
 }
 
-// isPluginActive checks if claude-buddy is registered as a plugin
-// by looking for "claude-buddy" in enabledPlugins of settings.json.
-func isPluginActive() bool {
+// cleanupLegacyInstall removes skills, agent, hooks, and MCP registration
+// that were installed directly by the pre-plugin install flow.
+// Silent if nothing to clean up.
+func cleanupLegacyInstall() {
+	var cleaned bool
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	// Remove legacy skills.
+	for _, skill := range buddySkills {
+		skillDir := filepath.Join(home, ".claude", "skills", skill.Dir)
+		if _, err := os.Stat(skillDir); err == nil {
+			cleaned = true
+			break
+		}
+	}
+	if cleaned {
+		removeSkills()
+	}
+
+	// Remove legacy agent.
+	agentPath := filepath.Join(home, ".claude", "agents", "buddy.md")
+	if _, err := os.Stat(agentPath); err == nil {
+		_ = os.Remove(agentPath)
+		cleaned = true
+	}
+
+	// Remove legacy hooks from settings.json.
+	if hasLegacyHooks() {
+		_ = RemoveHooks()
+		cleaned = true
+	}
+
+	// Remove legacy MCP registration.
+	removeLegacyMCP()
+
+	if cleaned {
+		fmt.Println("✓ Cleaned up legacy skills/agent/hooks from ~/.claude/")
+	}
+}
+
+// hasLegacyHooks checks if settings.json contains claude-buddy hooks.
+func hasLegacyHooks() bool {
 	data, err := os.ReadFile(settingsPathFunc())
 	if err != nil {
 		return false
@@ -83,45 +105,28 @@ func isPluginActive() bool {
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return false
 	}
-	plugins, ok := settings["enabledPlugins"].([]any)
+	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
 		return false
 	}
-	for _, p := range plugins {
-		s, ok := p.(string)
-		if ok && strings.Contains(s, "claude-buddy") {
-			return true
+	for _, event := range []string{"SessionStart", "PreToolUse", "PostToolUse"} {
+		entries, ok := hooks[event].([]any)
+		if !ok {
+			continue
+		}
+		for _, entry := range entries {
+			if isBuddyHookEntry(entry) {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// cleanupLegacyInstall removes skills, agent, and hooks that were installed
-// directly to ~/.claude/ by the legacy install flow. When the plugin is active,
-// these files are provided by the plugin cache and the legacy copies are redundant.
-func cleanupLegacyInstall() {
-	removeSkills()
-	if home, err := os.UserHomeDir(); err == nil {
-		agentPath := filepath.Join(home, ".claude", "agents", "buddy.md")
-		_ = os.Remove(agentPath)
-	}
-	_ = RemoveHooks()
-	fmt.Println("✓ Cleaned up legacy skills/agent/hooks from ~/.claude/")
-}
-
-func registerMCP() {
-	binPath, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not determine binary path: %v\n", err)
-		return
-	}
-
-	cmd := exec.Command("claude", "mcp", "add", "-s", "user", "claude-buddy", "--", binPath, "serve")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		fmt.Printf("Warning: MCP registration: %v (%s)\n", err, strings.TrimSpace(string(output)))
-	} else {
-		fmt.Println("✓ MCP server registered")
-	}
+// removeLegacyMCP silently removes the MCP server registered via `claude mcp add`.
+func removeLegacyMCP() {
+	cmd := exec.Command("claude", "mcp", "remove", "-s", "user", "claude-buddy")
+	_ = cmd.Run()
 }
 
 // resolveBinPath returns the resolved absolute path of the current binary.
@@ -430,17 +435,6 @@ func generateEmbeddings() {
 	} else {
 		fmt.Printf("✓ Embeddings up to date (model: %s)\n", model)
 	}
-}
-
-func printInstructions() {
-	fmt.Println(`
-✓ Installation complete!
-
-Next time you start Claude Code, hooks will be active automatically.
-No additional configuration needed.
-
-To uninstall:
-  claude-buddy uninstall`)
 }
 
 func renderProgress(prefix string, done, total int) {

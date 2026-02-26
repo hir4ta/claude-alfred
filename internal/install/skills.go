@@ -1,7 +1,6 @@
 package install
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -312,36 +311,6 @@ Present a prediction dashboard:
 Keep it under 8 lines. Use the data to provide actionable insight.
 `,
 	},
-}
-
-// installSkills writes buddy skills to ~/.claude/skills/.
-func installSkills() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
-	}
-
-	installed := 0
-	for _, skill := range buddySkills {
-		skillDir := filepath.Join(home, ".claude", "skills", skill.Dir)
-		skillPath := filepath.Join(skillDir, "SKILL.md")
-
-		if err := os.MkdirAll(skillDir, 0o755); err != nil {
-			return fmt.Errorf("mkdir skill %s: %w", skill.Dir, err)
-		}
-
-		if err := os.WriteFile(skillPath, []byte(skill.Content), 0o644); err != nil {
-			return fmt.Errorf("write skill %s: %w", skill.Dir, err)
-		}
-		installed++
-	}
-
-	if installed > 0 {
-		fmt.Printf("✓ Installed %d skills in ~/.claude/skills/\n", installed)
-	} else {
-		fmt.Println("✓ Skills already installed")
-	}
-	return nil
 }
 
 // removeSkills removes buddy skills from ~/.claude/skills/.

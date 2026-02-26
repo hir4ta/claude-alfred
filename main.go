@@ -228,7 +228,7 @@ Commands:
   browse        Browse past session history
   serve         Run as MCP server (stdio) for Claude Code integration
   hook-handler  Handle Claude Code hook events (stdin/stdout JSON)
-  install       Register MCP server, hooks, and sync sessions
+  install       Sync sessions and generate embeddings
   uninstall     Remove hooks and MCP server registration
   analyze       Session analysis report (structured, no LLM call)
   plugin-bundle Generate plugin directory from Go sources

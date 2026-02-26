@@ -241,7 +241,7 @@ func TestRemoveHooks_PreservesOtherHooks(t *testing.T) {
 	}
 }
 
-func TestIsPluginActive(t *testing.T) {
+func TestHasLegacyHooks(t *testing.T) {
 	// Cannot use t.Parallel() — subtests mutate package-level settingsPathFunc.
 
 	t.Run("no settings file", func(t *testing.T) {
@@ -250,41 +250,52 @@ func TestIsPluginActive(t *testing.T) {
 		settingsPathFunc = func() string { return path }
 		t.Cleanup(func() { settingsPathFunc = orig })
 
-		if isPluginActive() {
-			t.Error("isPluginActive() = true, want false (no file)")
+		if hasLegacyHooks() {
+			t.Error("hasLegacyHooks() = true, want false (no file)")
 		}
 	})
 
-	t.Run("no enabledPlugins key", func(t *testing.T) {
+	t.Run("no hooks", func(t *testing.T) {
 		path := tempSettings(t, `{"hooks": {}}`)
 		orig := settingsPathFunc
 		settingsPathFunc = func() string { return path }
 		t.Cleanup(func() { settingsPathFunc = orig })
 
-		if isPluginActive() {
-			t.Error("isPluginActive() = true, want false (no enabledPlugins)")
+		if hasLegacyHooks() {
+			t.Error("hasLegacyHooks() = true, want false (no buddy hooks)")
 		}
 	})
 
-	t.Run("plugin present", func(t *testing.T) {
-		path := tempSettings(t, `{"enabledPlugins": ["claude-buddy@0.15.0"]}`)
+	t.Run("buddy hooks present", func(t *testing.T) {
+		path := tempSettings(t, "")
 		orig := settingsPathFunc
 		settingsPathFunc = func() string { return path }
 		t.Cleanup(func() { settingsPathFunc = orig })
 
-		if !isPluginActive() {
-			t.Error("isPluginActive() = false, want true")
+		// Register hooks to create them.
+		if err := registerHooks(); err != nil {
+			t.Fatalf("registerHooks() = %v", err)
+		}
+
+		if !hasLegacyHooks() {
+			t.Error("hasLegacyHooks() = false, want true")
 		}
 	})
 
-	t.Run("other plugin only", func(t *testing.T) {
-		path := tempSettings(t, `{"enabledPlugins": ["some-other-plugin@1.0"]}`)
+	t.Run("other hooks only", func(t *testing.T) {
+		path := tempSettings(t, `{
+  "hooks": {
+    "PreToolUse": [
+      {"hooks": [{"type": "command", "command": "other-tool check"}]}
+    ]
+  }
+}`)
 		orig := settingsPathFunc
 		settingsPathFunc = func() string { return path }
 		t.Cleanup(func() { settingsPathFunc = orig })
 
-		if isPluginActive() {
-			t.Error("isPluginActive() = true, want false (other plugin)")
+		if hasLegacyHooks() {
+			t.Error("hasLegacyHooks() = true, want false (other tool only)")
 		}
 	})
 }
