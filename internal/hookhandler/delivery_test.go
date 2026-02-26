@@ -206,18 +206,21 @@ func TestContextualPatternKey(t *testing.T) {
 		name     string
 		taskType string
 		velState string
+		cluster  string
 		pattern  string
 		want     string
 	}{
-		{"no context", "", "", "workflow", "workflow"},
-		{"task only", "bugfix", "", "workflow", "workflow:bugfix:normal"},
-		{"velocity only", "", "fast", "workflow", "workflow:unknown:fast"},
-		{"full context", "feature", "slow", "checkpoint", "checkpoint:feature:slow"},
+		{"no context", "", "", "", "workflow", "workflow"},
+		{"task only", "bugfix", "", "", "workflow", "workflow:bugfix:normal:balanced"},
+		{"velocity only", "", "fast", "", "workflow", "workflow:unknown:fast:balanced"},
+		{"full context", "feature", "slow", "", "checkpoint", "checkpoint:feature:slow:balanced"},
+		{"with cluster", "bugfix", "fast", "conservative", "workflow", "workflow:bugfix:fast:conservative"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctxTaskType = tt.taskType
 			ctxVelocityState = tt.velState
+			ctxUserCluster = tt.cluster
 			got := contextualPatternKey(tt.pattern)
 			if got != tt.want {
 				t.Errorf("contextualPatternKey(%q) = %q, want %q", tt.pattern, got, tt.want)

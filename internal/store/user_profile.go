@@ -41,6 +41,47 @@ func (s *Store) UpdateUserProfile(metricName string, value float64) error {
 	return nil
 }
 
+// UserCluster classifies the user's coding style based on profile metrics.
+// Returns one of: "conservative", "balanced", "aggressive".
+// - conservative: high read_write_ratio (>3), high test_frequency (>0.7)
+// - aggressive: low read_write_ratio (<1.5), low test_frequency (<0.3)
+// - balanced: everything else
+func (s *Store) UserCluster() string {
+	rw, rwCount, _ := s.GetUserProfile("read_write_ratio")
+	tf, tfCount, _ := s.GetUserProfile("test_frequency")
+
+	// Need minimum data to classify.
+	if rwCount < 3 && tfCount < 3 {
+		return "balanced"
+	}
+
+	conservative := 0
+	aggressive := 0
+
+	if rwCount >= 3 {
+		if rw > 3.0 {
+			conservative++
+		} else if rw < 1.5 {
+			aggressive++
+		}
+	}
+	if tfCount >= 3 {
+		if tf > 0.7 {
+			conservative++
+		} else if tf < 0.3 {
+			aggressive++
+		}
+	}
+
+	if conservative >= 2 {
+		return "conservative"
+	}
+	if aggressive >= 2 {
+		return "aggressive"
+	}
+	return "balanced"
+}
+
 // AllUserProfile returns all user profile metrics.
 func (s *Store) AllUserProfile() ([]UserProfileMetric, error) {
 	rows, err := s.db.Query(

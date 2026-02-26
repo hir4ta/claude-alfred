@@ -206,6 +206,50 @@ func persistUserProfile(sdb *sessiondb.SessionDB) {
 		duration := time.Since(startTime).Minutes()
 		_ = st.UpdateUserProfile("avg_session_duration", duration)
 	}
+
+	// reads_before_write: average number of read tools before the first write.
+	if err == nil && len(events) > 0 {
+		readsBeforeFirstWrite := 0
+		foundWrite := false
+		// Events are newest-first; iterate in reverse for chronological order.
+		for i := len(events) - 1; i >= 0; i-- {
+			if events[i].IsWrite {
+				foundWrite = true
+				break
+			}
+			readsBeforeFirstWrite++
+		}
+		if foundWrite {
+			_ = st.UpdateUserProfile("reads_before_write", float64(readsBeforeFirstWrite))
+		}
+	}
+
+	// test_before_edit: did user run tests before editing? (1.0=yes, 0.0=no)
+	if err == nil && len(events) > 0 {
+		sawTest := false
+		sawWrite := false
+		for i := len(events) - 1; i >= 0; i-- {
+			name := events[i].ToolName
+			if name == "Bash" && !events[i].IsWrite {
+				// Approximate: Bash non-write is often a test run.
+				sawTest = true
+			}
+			if events[i].IsWrite && !sawWrite {
+				sawWrite = true
+				if sawTest {
+					_ = st.UpdateUserProfile("test_before_edit", 1.0)
+				} else {
+					_ = st.UpdateUserProfile("test_before_edit", 0.0)
+				}
+			}
+		}
+	}
+
+	// suggestion_follow_rate: fraction of helpful feedback (from feedbacks table).
+	if stats, ferr := st.AllFeedbackStats(); ferr == nil && stats.TotalCount > 0 {
+		followRate := float64(stats.Helpful) / float64(stats.TotalCount)
+		_ = st.UpdateUserProfile("suggestion_follow_rate", followRate)
+	}
 }
 
 // persistCoChanges records file co-change pairs from the working set.

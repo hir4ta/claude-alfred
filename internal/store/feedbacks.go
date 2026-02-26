@@ -92,6 +92,52 @@ func (s *Store) PatternFeedbackStats(pattern string) (*FeedbackStats, error) {
 	return stats, nil
 }
 
+// AllFeedbackStats returns aggregated feedback stats across all patterns.
+func (s *Store) AllFeedbackStats() (*FeedbackStats, error) {
+	rows, err := s.db.Query(
+		`SELECT rating, COUNT(*) FROM feedbacks
+		 WHERE created_at > datetime('now', '-90 days')
+		 GROUP BY rating`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("store: all feedback stats: %w", err)
+	}
+	defer rows.Close()
+
+	stats := &FeedbackStats{}
+	for rows.Next() {
+		var rating string
+		var count int
+		if err := rows.Scan(&rating, &count); err != nil {
+			continue
+		}
+		switch FeedbackRating(rating) {
+		case RatingHelpful:
+			stats.Helpful = count
+		case RatingPartiallyHelpful:
+			stats.Partial = count
+		case RatingNotHelpful:
+			stats.NotHelpful = count
+		case RatingMisleading:
+			stats.Misleading = count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: all feedback stats rows: %w", err)
+	}
+
+	stats.TotalCount = stats.Helpful + stats.Partial + stats.NotHelpful + stats.Misleading
+	if stats.TotalCount > 0 {
+		weighted := float64(stats.Helpful)*0.8 +
+			float64(stats.Partial)*0.3 +
+			float64(stats.NotHelpful)*(-0.4) +
+			float64(stats.Misleading)*(-0.8)
+		stats.WeightedScore = weighted / float64(stats.TotalCount)
+	}
+
+	return stats, nil
+}
+
 // RecentFeedbacks returns the most recent feedbacks, optionally filtered by pattern.
 func (s *Store) RecentFeedbacks(pattern string, limit int) ([]map[string]any, error) {
 	if limit < 1 {

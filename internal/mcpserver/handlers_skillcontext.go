@@ -29,6 +29,13 @@ type SkillContext struct {
 	Context       map[string]string `json:"context,omitempty"`
 	Alerts        []string          `json:"alerts,omitempty"`
 	Suggestions   []string          `json:"suggestions,omitempty"`
+	UserProfile   *UserProfileInfo  `json:"user_profile,omitempty"`
+}
+
+// UserProfileInfo exposes user behavior metrics to skills.
+type UserProfileInfo struct {
+	Cluster   string             `json:"cluster"`
+	Metrics   map[string]float64 `json:"metrics,omitempty"`
 }
 
 func skillContextHandler(claudeHome string) server.ToolHandlerFunc {
@@ -85,6 +92,9 @@ func skillContextHandler(claudeHome string) server.ToolHandlerFunc {
 		sc.Branch, _ = sdb.GetWorkingSet("git_branch")
 		sc.ModifiedFiles, _ = sdb.GetWorkingSetFiles()
 		sc.HealthScore = computeHealthScore(sdb)
+
+		// User profile.
+		sc.UserProfile = buildUserProfile()
 
 		// Skill-specific enrichment.
 		switch skillName {
@@ -298,5 +308,28 @@ func enrichForCheckpoint(sdb *sessiondb.SessionDB) (map[string]string, []string,
 	}
 
 	return ctx, alerts, suggestions
+}
+
+// buildUserProfile loads user profile metrics from the persistent store.
+func buildUserProfile() *UserProfileInfo {
+	st, err := store.OpenDefault()
+	if err != nil {
+		return nil
+	}
+	defer st.Close()
+
+	info := &UserProfileInfo{
+		Cluster: st.UserCluster(),
+		Metrics: make(map[string]float64),
+	}
+
+	all, err := st.AllUserProfile()
+	if err != nil {
+		return info
+	}
+	for _, m := range all {
+		info.Metrics[m.MetricName] = m.EWMAValue
+	}
+	return info
 }
 

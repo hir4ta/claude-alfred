@@ -160,9 +160,25 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 		return adjustFromEstimate(sample, base)
 	}
 
-	// Draw from Beta posterior for exploration-exploitation balance.
+	// Posterior from contextual data.
 	alpha := resolved + 1
 	beta := delivered - resolved + 1
+
+	// KL regularization: penalize posterior that drifts too far from global prior.
+	// This prevents overfitting to sparse contextual data.
+	globalDel, globalRes, gerr := st.DecayedPatternEffectiveness(pattern)
+	if gerr == nil && globalDel >= 3.0 {
+		globalAlpha := globalRes + 1
+		globalBeta := globalDel - globalRes + 1
+		klPenalty := klDivBeta(alpha, beta, globalAlpha, globalBeta)
+		// Blend posterior toward prior proportional to KL divergence (lambda=0.1).
+		if klPenalty > 0.1 {
+			blend := math.Min(klPenalty*0.1, 0.5) // cap at 50% blend
+			alpha = alpha*(1-blend) + globalAlpha*blend
+			beta = beta*(1-blend) + globalBeta*blend
+		}
+	}
+
 	sample := betaSample(rng, alpha, beta)
 	return adjustFromEstimate(sample, base)
 }
@@ -198,6 +214,24 @@ func adjustFromEstimate(estimate float64, base SuggestionPriority) SuggestionPri
 	}
 }
 
+// klDivBeta computes the KL divergence KL(Beta(a1,b1) || Beta(a2,b2)).
+// Uses the closed-form: KL = ln(B(a2,b2)/B(a1,b1)) + (a1-a2)*psi(a1) + (b1-b2)*psi(b1) + (a2-b2+b2-a1+a1-b1)*psi(a1+b1)
+// Simplified approximation using digamma ≈ ln(x) - 1/(2x) for large x.
+func klDivBeta(a1, b1, a2, b2 float64) float64 {
+	// Ensure valid parameters.
+	if a1 <= 0 || b1 <= 0 || a2 <= 0 || b2 <= 0 {
+		return 0
+	}
+	// Approximate KL using the mean-based shortcut:
+	// KL ≈ (mean_diff^2 * concentration) / 2
+	// This is cheaper and numerically stable for our use case.
+	mean1 := a1 / (a1 + b1)
+	mean2 := a2 / (a2 + b2)
+	conc := a1 + b1 // concentration of posterior
+	diff := mean1 - mean2
+	return diff * diff * conc / 2
+}
+
 // betaExpectation returns the mean of a Beta(alpha, beta) distribution.
 // This is the deterministic analog of Thompson Sampling — it produces the same
 // priority ordering as random sampling in expectation, without adding randomness
@@ -230,13 +264,14 @@ func Deliver(sdb *sessiondb.SessionDB, pattern, level, observation, suggestion s
 	return ""
 }
 
-// contextualPatternKey builds a contextual key from (pattern, task_type, velocity_state).
+// contextualPatternKey builds a contextual key from (pattern, task_type, velocity_state, user_cluster).
 // This allows Thompson Sampling to learn that e.g. "workflow" suggestions are effective
-// during bugfix+slow but not during feature+fast. Returns "pattern:task_type:velocity_state".
+// during bugfix+slow+conservative but not during feature+fast+aggressive.
 func contextualPatternKey(pattern string) string {
 	taskType := currentTaskType()
 	velState := currentVelocityState()
-	if taskType == "" && velState == "" {
+	cluster := currentUserCluster()
+	if taskType == "" && velState == "" && cluster == "" {
 		return pattern
 	}
 	if taskType == "" {
@@ -245,7 +280,10 @@ func contextualPatternKey(pattern string) string {
 	if velState == "" {
 		velState = "normal"
 	}
-	return pattern + ":" + taskType + ":" + velState
+	if cluster == "" {
+		cluster = "balanced"
+	}
+	return pattern + ":" + taskType + ":" + velState + ":" + cluster
 }
 
 // currentTaskType reads the task_type from the current sessiondb.
@@ -260,7 +298,7 @@ func currentVelocityState() string {
 	return ctxVelocityState
 }
 
-// SetDeliveryContext caches task_type and velocity for contextual Thompson Sampling.
+// SetDeliveryContext caches task_type, velocity, and user cluster for contextual Thompson Sampling.
 // Called once per hook invocation before any Deliver calls.
 func SetDeliveryContext(sdb *sessiondb.SessionDB) {
 	ctxTaskType, _ = sdb.GetContext("task_type")
@@ -273,12 +311,24 @@ func SetDeliveryContext(sdb *sessiondb.SessionDB) {
 	default:
 		ctxVelocityState = "normal"
 	}
+
+	// Cache user cluster from persistent store.
+	if st, err := store.OpenDefault(); err == nil {
+		ctxUserCluster = st.UserCluster()
+		st.Close()
+	}
+}
+
+// currentUserCluster returns the cached user cluster.
+func currentUserCluster() string {
+	return ctxUserCluster
 }
 
 // Process-level cache for contextual delivery (set once per hook invocation).
 var (
 	ctxTaskType      string
 	ctxVelocityState string
+	ctxUserCluster   string
 )
 
 func getBurstSuggestionCount(sdb *sessiondb.SessionDB) int {
