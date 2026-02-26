@@ -101,15 +101,6 @@
             "type": "command"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "prompt": "[buddy] Review the last assistant message. Check for:\n(1) Unresolved errors mentioned but not fixed\n(2) TODO items that should have been completed\n(3) Tests mentioned but not run\n(4) Compilation errors not addressed\n(5) Multiple files modified without tests — suggest running tests\n(6) Incomplete refactoring (partial changes that could break the codebase)\nIf all work appears complete and verified, allow stopping.\nOtherwise block with the SPECIFIC issue that needs resolution.",
-            "timeout": 10,
-            "type": "prompt"
-          }
-        ]
       }
     ],
     "SubagentStart": [

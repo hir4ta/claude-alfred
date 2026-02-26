@@ -25,6 +25,7 @@ const serverInstructions = `claude-buddy is a real-time session advisor for Clau
 - buddy_feedback: Provide feedback on suggestion quality. Call when a suggestion was helpful, not helpful, or misleading.
 - buddy_estimate: Estimate task complexity based on historical workflow data.
 - buddy_next_step: Get recommended next actions based on session context. Call when unsure what to do next or after encountering errors.
+- buddy_cross_project: Search cross-project knowledge patterns. Find reusable solutions from other projects.
 
 ## Usage Guidelines
 
@@ -286,6 +287,27 @@ func New(claudeHome string, lang locale.Lang, st *store.Store, emb *embedder.Emb
 				),
 			),
 			Handler: skillContextHandler(claudeHome),
+		},
+		server.ServerTool{
+			Tool: mcp.NewTool("buddy_cross_project",
+				mcp.WithDescription("Search cross-project knowledge patterns. Finds reusable solutions, architecture decisions, and error fixes from other projects. Use when encountering a problem that may have been solved elsewhere."),
+				mcp.WithTitleAnnotation("Cross-Project Search"),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithIdempotentHintAnnotation(true),
+				mcp.WithOpenWorldHintAnnotation(false),
+				mcp.WithString("query",
+					mcp.Required(),
+					mcp.Description("Search query (keywords)"),
+				),
+				mcp.WithString("pattern_type",
+					mcp.Description("Filter by type: error_solution, architecture, decision (optional)"),
+				),
+				mcp.WithNumber("limit",
+					mcp.Description("Maximum results (default: 5)"),
+				),
+			),
+			Handler: crossProjectHandler(),
 		},
 	)
 

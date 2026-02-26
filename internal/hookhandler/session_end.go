@@ -32,6 +32,7 @@ func handleSessionEnd(input []byte) (*HookOutput, error) {
 	persistUserProfile(sdb)
 	persistCoChanges(sdb)
 	mergeToolSequencesToStore(sdb)
+	syncToGlobalDB(sdb, in.CWD)
 
 	_ = sdb.Destroy()
 	return nil, nil
@@ -285,5 +286,49 @@ func mergeToolSequencesToStore(sdb *sessiondb.SessionDB) {
 	trigrams, err := sdb.AllToolTrigrams()
 	if err == nil && len(trigrams) > 0 {
 		_ = st.MergeToolTrigrams(trigrams)
+	}
+}
+
+// syncToGlobalDB syncs patterns and decisions from the project store
+// to the global cross-project database, and updates the project fingerprint.
+func syncToGlobalDB(sdb *sessiondb.SessionDB, cwd string) {
+	if cwd == "" {
+		cwd, _ = sdb.GetContext("cwd")
+	}
+	if cwd == "" {
+		return
+	}
+
+	gs, err := store.OpenGlobal()
+	if err != nil {
+		return
+	}
+	defer gs.Close()
+
+	// Update project fingerprint.
+	fp := store.GenerateFingerprint(cwd)
+	_ = gs.UpsertFingerprint(fp)
+
+	// Sync recent decisions from the project store.
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	decisions, err := st.GetDecisions("", fp.ProjectName, 5)
+	if err != nil || len(decisions) == 0 {
+		return
+	}
+
+	for _, d := range decisions {
+		title := d.Topic
+		if title == "" {
+			title = d.DecisionText
+			if len([]rune(title)) > 80 {
+				title = string([]rune(title)[:80])
+			}
+		}
+		_ = gs.InsertPattern(fp.ProjectName, "decision", title, d.DecisionText, fp.Languages)
 	}
 }

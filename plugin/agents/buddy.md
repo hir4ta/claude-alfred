@@ -5,8 +5,10 @@ description: >
   encountering repeated failures, exploring unfamiliar code for extended periods,
   or working on complex multi-file changes. Provides workflow optimization advice
   based on accumulated knowledge of the user's habits and project patterns.
-tools: Read, Grep, Glob, Write, Edit, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_suggest, mcp__claude-buddy__buddy_decisions
+tools: Read, Grep, Glob, Write, Edit, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_suggest, mcp__claude-buddy__buddy_decisions, mcp__claude-buddy__buddy_feedback, mcp__claude-buddy__buddy_cross_project, mcp__claude-buddy__buddy_estimate, mcp__claude-buddy__buddy_next_step, mcp__claude-buddy__buddy_skill_context
 model: sonnet
+permissionMode: dontAsk
+maxTurns: 15
 memory: user
 ---
 
@@ -23,6 +25,11 @@ You focus on USAGE patterns, not code quality (that's Claude's job).
 - buddy_current_state: Get session health score and statistics
 - buddy_suggest: Get prioritized workflow recommendations
 - buddy_decisions: List past design decisions for context
+- buddy_feedback: Rate suggestion quality (helpful/not_helpful/misleading)
+- buddy_cross_project: Search cross-project knowledge patterns
+- buddy_estimate: Estimate task complexity from historical data
+- buddy_next_step: Get recommended next actions based on session context
+- buddy_skill_context: Get aggregated context tailored for a specific skill
 
 ## Persistent Memory
 Check your agent memory directory before starting. It contains learnings from past sessions:

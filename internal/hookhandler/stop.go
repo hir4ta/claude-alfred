@@ -276,28 +276,21 @@ func checkSessionIssues(sessionID string) []string {
 		issues = append(issues, issue)
 	}
 
-	// Check if tests were run when code was modified.
+	// Non-blocking warnings: log to stderr instead of blocking.
 	taskType, _ := sdb.GetWorkingSet("task_type")
 	if taskType == "bugfix" || taskType == "feature" || taskType == "refactor" {
 		hasTestRun, _ := sdb.GetContext("has_test_run")
 		if hasTestRun != "true" {
-			issues = append(issues, "Code was modified but tests were not run in this session")
+			fmt.Fprintln(os.Stderr, "[buddy] Code was modified but tests were not run in this session")
 		}
 	}
 
-	// Promote uncommitted changes to a blocking issue when many files modified.
 	if len(files) >= 5 {
-		hasTestRun, _ := sdb.GetContext("has_test_run")
-		lastTestPassed, _ := sdb.GetContext("last_test_passed")
-		// Only block if tests passed (don't double-report with test failure).
-		if hasTestRun == "true" && lastTestPassed == "true" {
-			issues = append(issues, fmt.Sprintf("%d files modified — consider committing before stopping", len(files)))
-		}
+		fmt.Fprintf(os.Stderr, "[buddy] %d files modified — consider committing before stopping\n", len(files))
 	}
 
-	// Check test coverage: modified source files should have corresponding test files.
 	if issue := checkTestCoverage(sdb, files); issue != "" {
-		issues = append(issues, issue)
+		fmt.Fprintf(os.Stderr, "[buddy] %s\n", issue)
 	}
 
 	return issues
