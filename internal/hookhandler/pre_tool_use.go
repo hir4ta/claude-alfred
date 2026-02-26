@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -60,6 +61,11 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Silent auto-correction: improve tool inputs before execution.
+	if out := autoCorrectTool(sdb, in.ToolName, in.ToolInput, in.CWD); out != nil {
+		return out, nil
+	}
+
 	// --- JARVIS advisor: present alternatives before action ---
 	var signals []string
 	if safetyWarning != "" {
@@ -68,6 +74,17 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 
 	if alts := presentAlternatives(sdb, in.ToolName, in.ToolInput); alts != "" {
 		signals = append(signals, alts)
+	}
+
+	// Suggest dedicated tools when CLI equivalents used in Bash.
+	if in.ToolName == "Bash" {
+		on, _ := sdb.IsOnCooldown("cli_tool_hint")
+		if !on {
+			if hint := suggestDedicatedTool(in.ToolInput); hint != "" {
+				_ = sdb.SetCooldown("cli_tool_hint", 30*time.Minute)
+				signals = append(signals, hint)
+			}
+		}
 	}
 
 	// High-failure-rate gate: ask user for confirmation on Edit/Write when
@@ -119,6 +136,13 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 					signals = append(signals, hint)
 				}
 			}
+		}
+	}
+
+	// Proactive solution lookup: surface past resolution playbooks before action.
+	if in.ToolName == "Edit" || in.ToolName == "Write" || in.ToolName == "Bash" {
+		if hint := proactiveSolutionLookup(sdb, in.ToolName, in.ToolInput); hint != "" {
+			signals = append(signals, hint)
 		}
 	}
 
@@ -247,3 +271,190 @@ func searchContextualPatterns(query string) string {
 	return b.String()
 }
 
+// --- Auto-correction (JARVIS mode) ---
+
+// autoCorrectTool silently improves tool inputs before execution.
+func autoCorrectTool(sdb *sessiondb.SessionDB, toolName string, toolInput json.RawMessage, cwd string) *HookOutput {
+	if toolName != "Bash" {
+		return nil
+	}
+
+	var bi struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(toolInput, &bi); err != nil || bi.Command == "" {
+		return nil
+	}
+
+	// go test ./... → narrowed to changed packages.
+	if corrected, ctx := narrowTestScope(sdb, bi.Command, cwd); corrected != "" {
+		updated, _ := json.Marshal(map[string]string{"command": corrected})
+		return makeUpdatedInputOutput(updated, ctx)
+	}
+
+	// git add . → scoped to working set files.
+	if corrected, ctx := scopeGitAdd(sdb, bi.Command, cwd); corrected != "" {
+		updated, _ := json.Marshal(map[string]string{"command": corrected})
+		return makeUpdatedInputOutput(updated, ctx)
+	}
+
+	return nil
+}
+
+// narrowTestScope replaces go test ./... with specific changed packages.
+func narrowTestScope(sdb *sessiondb.SessionDB, cmd, cwd string) (string, string) {
+	if !strings.Contains(cmd, "./...") || !strings.Contains(cmd, "go test") {
+		return "", ""
+	}
+
+	files, _ := sdb.GetWorkingSetFiles()
+	if len(files) == 0 {
+		return "", ""
+	}
+
+	pkgSet := make(map[string]bool)
+	for _, f := range files {
+		if !strings.HasSuffix(f, ".go") {
+			continue
+		}
+		dir := filepath.Dir(f)
+		rel, err := filepath.Rel(cwd, dir)
+		if err != nil {
+			continue
+		}
+		if rel == "." {
+			pkgSet["."] = true
+		} else {
+			pkgSet["./"+rel+"/..."] = true
+		}
+	}
+
+	if len(pkgSet) == 0 || len(pkgSet) > 5 {
+		return "", ""
+	}
+
+	pkgs := make([]string, 0, len(pkgSet))
+	for p := range pkgSet {
+		pkgs = append(pkgs, p)
+	}
+	sort.Strings(pkgs)
+
+	narrowed := strings.Replace(cmd, "./...", strings.Join(pkgs, " "), 1)
+	return narrowed, "[buddy] Narrowed test scope to changed packages: " + strings.Join(pkgs, ", ")
+}
+
+// scopeGitAdd replaces git add . with specific working set files.
+func scopeGitAdd(sdb *sessiondb.SessionDB, cmd, cwd string) (string, string) {
+	trimmed := strings.TrimSpace(cmd)
+
+	var prefix string
+	var rest string
+	for _, pattern := range []string{"git add --all", "git add -A", "git add ."} {
+		if strings.HasPrefix(trimmed, pattern) {
+			prefix = pattern
+			rest = trimmed[len(pattern):]
+			break
+		}
+	}
+	if prefix == "" {
+		return "", ""
+	}
+
+	// Ensure the pattern is followed by end-of-string or a command separator.
+	if rest != "" && rest[0] != ' ' && rest[0] != '&' && rest[0] != ';' && rest[0] != '|' {
+		return "", ""
+	}
+
+	files, _ := sdb.GetWorkingSetFiles()
+	if len(files) == 0 || len(files) > 20 {
+		return "", ""
+	}
+
+	relFiles := make([]string, 0, len(files))
+	for _, f := range files {
+		rel, err := filepath.Rel(cwd, f)
+		if err != nil {
+			rel = f
+		}
+		if strings.ContainsAny(rel, " '\"") {
+			rel = fmt.Sprintf("%q", rel)
+		}
+		relFiles = append(relFiles, rel)
+	}
+
+	narrowed := "git add " + strings.Join(relFiles, " ") + rest
+	return narrowed, fmt.Sprintf("[buddy] Scoped git add to %d tracked working set files", len(relFiles))
+}
+
+var cliToolPattern = regexp.MustCompile(`\b(grep|rg|find)\s`)
+
+// suggestDedicatedTool hints when Bash is used for operations with dedicated tools.
+func suggestDedicatedTool(toolInput json.RawMessage) string {
+	var bi struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal(toolInput, &bi) != nil || bi.Command == "" {
+		return ""
+	}
+	if !cliToolPattern.MatchString(bi.Command) {
+		return ""
+	}
+	return "[buddy] Consider using dedicated Grep/Glob tools instead of CLI grep/rg/find for better integration"
+}
+
+// proactiveSolutionLookup searches past failure resolutions for the target file
+// and surfaces them as context before the action is taken.
+func proactiveSolutionLookup(sdb *sessiondb.SessionDB, _ string, toolInput json.RawMessage) string {
+	filePath := extractFilePath(toolInput)
+	if filePath == "" {
+		return ""
+	}
+
+	cooldownKey := "solution_lookup:" + filepath.Base(filePath)
+	on, _ := sdb.IsOnCooldown(cooldownKey)
+	if on {
+		return ""
+	}
+
+	// Check if this file has an unresolved failure in the current session.
+	unresolved, failureType, errorSig, _ := sdb.UnresolvedFailureDetail(filePath)
+	if !unresolved {
+		return ""
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+
+	// Search for past solutions with resolution diffs (most actionable).
+	solutions, _ := st.SearchFailureSolutionsWithDiff(failureType, errorSig, 1)
+	if len(solutions) == 0 {
+		// Fall back to file-specific solutions.
+		solutions, _ = st.SearchFailureSolutionsByFile(filePath, 1)
+	}
+	if len(solutions) == 0 {
+		return ""
+	}
+
+	_ = sdb.SetCooldown(cooldownKey, 10*time.Minute)
+
+	sol := solutions[0]
+	var b strings.Builder
+	fmt.Fprintf(&b, "[buddy] Past resolution for %s (%s)", filepath.Base(filePath), failureType)
+	if sol.ResolutionDiff != "" {
+		b.WriteString(" [has diff]")
+	}
+	b.WriteString("\n→ ")
+	text := sol.SolutionText
+	if len([]rune(text)) > 150 {
+		text = string([]rune(text)[:150]) + "..."
+	}
+	b.WriteString(text)
+
+	// Track surfaced solution for effectiveness measurement.
+	_ = sdb.SetContext("last_surfaced_solution_id", fmt.Sprintf("%d", sol.ID))
+
+	return b.String()
+}

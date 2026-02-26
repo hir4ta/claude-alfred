@@ -176,6 +176,11 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		}
 	}
 
+	// Surface co-changed files after writes.
+	if isWrite && filePath != "" {
+		surfaceCoChanges(sdb, filePath)
+	}
+
 	// Failure→solution pipeline: record fix when Edit/Write succeeds after a failure.
 	if isWrite && filePath != "" {
 		recordFailureSolution(sdb, in.SessionID, filePath, in.ToolInput)
@@ -655,4 +660,53 @@ func hashInput(toolName string, toolInput json.RawMessage) uint64 {
 		h.Write(toolInput)
 	}
 	return h.Sum64()
+}
+
+// surfaceCoChanges delivers a co-change hint after a successful write,
+// listing files that are frequently edited together but not yet modified.
+func surfaceCoChanges(sdb *sessiondb.SessionDB, filePath string) {
+	cooldownKey := "cochange_post:" + filepath.Base(filePath)
+	on, _ := sdb.IsOnCooldown(cooldownKey)
+	if on {
+		return
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	coFiles, err := st.CoChangedFiles(filePath, 3)
+	if err != nil || len(coFiles) == 0 {
+		return
+	}
+
+	// Filter out files already in the working set.
+	wsFiles, _ := sdb.GetWorkingSetFiles()
+	wsSet := make(map[string]bool, len(wsFiles))
+	for _, f := range wsFiles {
+		wsSet[f] = true
+	}
+
+	var missing []string
+	for _, co := range coFiles {
+		peer := co.FileA
+		if peer == filePath {
+			peer = co.FileB
+		}
+		if !wsSet[peer] {
+			missing = append(missing, filepath.Base(peer))
+		}
+	}
+
+	if len(missing) == 0 {
+		return
+	}
+
+	_ = sdb.SetCooldown(cooldownKey, 15*time.Minute)
+	Deliver(sdb, "co-change", "info",
+		fmt.Sprintf("%s is often changed with: %s", filepath.Base(filePath), strings.Join(missing, ", ")),
+		"Consider reviewing these files for related changes.",
+		PriorityMedium)
 }

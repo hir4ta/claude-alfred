@@ -176,31 +176,8 @@ func buddyHookEntries(binPath string) map[string]any {
 		"Notification":        makeEntry("Notification", 2, false, ""),
 		"TeammateIdle":        makeEntry("TeammateIdle", 3, true, ""),
 		"TaskCompleted":       makeEntry("TaskCompleted", 3, false, ""),
-		"PermissionRequest":   makeEntry("PermissionRequest", 1, false, "buddy_*"),
+		"PermissionRequest":   makeEntry("PermissionRequest", 1, false, ""),
 	}
-
-	// Stop: command hook (deterministic checks) + prompt hook (LLM verification).
-	stopCommandEntry := makeEntry("Stop", 5, false, "")
-	stopPromptEntry := []any{
-		map[string]any{
-			"hooks": []any{
-				map[string]any{
-					"type": "prompt",
-					"prompt": "[buddy] Review the last assistant message. Check for:\n" +
-						"(1) Unresolved errors mentioned but not fixed\n" +
-						"(2) TODO items that should have been completed\n" +
-						"(3) Tests mentioned but not run\n" +
-						"(4) Compilation errors not addressed\n" +
-						"(5) Multiple files modified without tests — suggest running tests\n" +
-						"(6) Incomplete refactoring (partial changes that could break the codebase)\n" +
-						"If all work appears complete and verified, allow stopping.\n" +
-						"Otherwise block with the SPECIFIC issue that needs resolution.",
-					"timeout": 10,
-				},
-			},
-		},
-	}
-	entries["Stop"] = append(stopCommandEntry, stopPromptEntry...)
 
 	return entries
 }

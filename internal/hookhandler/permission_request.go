@@ -27,5 +27,11 @@ func handlePermissionRequest(input []byte) (*HookOutput, error) {
 		return makeAllowOutput("[buddy] Auto-allowing buddy MCP tool"), nil
 	}
 
+	// Safe read-only tools: auto-allow without user interruption.
+	switch in.ToolName {
+	case "Read", "Glob", "Grep", "WebSearch", "WebFetch":
+		return makeAllowOutput("[buddy] Auto-allowing read-only tool"), nil
+	}
+
 	return nil, nil
 }

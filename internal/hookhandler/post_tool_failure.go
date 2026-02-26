@@ -76,6 +76,13 @@ func handlePostToolUseFailure(input []byte) (*HookOutput, error) {
 	// Build context-aware fix suggestion.
 	suggestion := buildFixSuggestion(sdb, in.SessionID, failureType, filePath, in.Error, in.ToolInput)
 
+	// Cross-project fallback: search global DB when local solutions are empty.
+	if suggestion == "" {
+		if hint := searchCrossProjectSolutions(errSig); hint != "" {
+			suggestion = hint
+		}
+	}
+
 	// Failure cascade prediction: warn if next likely tools also have high failure rates.
 	cascade := predictFailureCascade(sdb, in.ToolName)
 	if cascade != "" {
@@ -497,5 +504,30 @@ func recordFailureSequence(sdb *sessiondb.SessionDB, toolName string) {
 	// Advance sequence pointers (same as success path in post_tool_use.go).
 	_ = sdb.SetContext("prev_prev_tool", prevTool)
 	_ = sdb.SetContext("prev_tool", toolName)
+}
+
+// searchCrossProjectSolutions searches the global DB for error solutions from other projects.
+func searchCrossProjectSolutions(errorSig string) string {
+	if errorSig == "" {
+		return ""
+	}
+
+	gs, err := store.OpenGlobal()
+	if err != nil {
+		return ""
+	}
+	defer gs.Close()
+
+	patterns, err := gs.SearchPatterns(errorSig, "error_solution", 1)
+	if err != nil || len(patterns) == 0 {
+		return ""
+	}
+
+	p := patterns[0]
+	text := p.Content
+	if len([]rune(text)) > 150 {
+		text = string([]rune(text)[:150]) + "..."
+	}
+	return fmt.Sprintf("[buddy] Cross-project solution (from %s):\n→ %s", p.SourceProject, text)
 }
 

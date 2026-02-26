@@ -33,7 +33,7 @@ func TestBundle(t *testing.T) {
 		}
 	})
 
-	// Verify hooks.json has all 14 events + Stop's prompt hook.
+	// Verify hooks.json has all 13 events (Stop removed by design).
 	t.Run("hooks.json", func(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(outputDir, "hooks", "hooks.json"))
 		if err != nil {
@@ -50,7 +50,7 @@ func TestBundle(t *testing.T) {
 
 		expectedEvents := []string{
 			"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure",
-			"UserPromptSubmit", "PreCompact", "SessionEnd", "Stop",
+			"UserPromptSubmit", "PreCompact", "SessionEnd",
 			"SubagentStart", "SubagentStop", "Notification",
 			"TeammateIdle", "TaskCompleted", "PermissionRequest",
 		}
@@ -60,13 +60,9 @@ func TestBundle(t *testing.T) {
 			}
 		}
 
-		// Stop should have 2 entries (command + prompt).
-		stopEntries, ok := hooks["Stop"].([]any)
-		if !ok {
-			t.Fatal("Stop is not an array")
-		}
-		if len(stopEntries) != 2 {
-			t.Errorf("Stop entries = %d, want 2", len(stopEntries))
+		// Stop hook should NOT be registered (removed by design).
+		if _, ok := hooks["Stop"]; ok {
+			t.Error("Stop hook should not be registered")
 		}
 	})
 

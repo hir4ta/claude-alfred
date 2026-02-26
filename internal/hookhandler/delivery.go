@@ -70,7 +70,12 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 	rng := getSessionRNG(sdb)
 	adjusted := adjustPriority(rng, pattern, priority)
 	if adjusted >= PrioritySuppressed {
-		return DeliveryDecision{Channel: ChannelSuppress, Priority: adjusted}
+		// Never suppress High-priority suggestions — deliver as nudge instead.
+		if priority <= PriorityHigh {
+			adjusted = PriorityMedium
+		} else {
+			return DeliveryDecision{Channel: ChannelSuppress, Priority: adjusted}
+		}
 	}
 
 	// Check burst suggestion count to prevent fatigue.
@@ -144,7 +149,8 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 	}
 
 	// Hard suppression safety net for truly dead patterns.
-	if st.ShouldSuppressPattern(pattern) {
+	// Critical/High bypass: never permanently suppress important signals.
+	if base > PriorityHigh && st.ShouldSuppressPattern(pattern) {
 		return PrioritySuppressed
 	}
 
@@ -249,6 +255,9 @@ func Deliver(sdb *sessiondb.SessionDB, pattern, level, observation, suggestion s
 	if shouldGateForPhase(sdb, pattern) {
 		return ""
 	}
+
+	// Enrichment: if this pattern was previously unresolved, add richer context.
+	suggestion = enrichIfRepeated(sdb, pattern, suggestion)
 
 	decision := RouteDelivery(sdb, pattern, priority)
 
@@ -376,6 +385,33 @@ func betaSample(rng *rand.Rand, alpha, beta float64) float64 {
 		return 0.5
 	}
 	return x / (x + y)
+}
+
+// enrichIfRepeated adds richer context when a pattern fires again after being unresolved.
+// Instead of nagging with the same message, it appends past solution data or effectiveness stats.
+func enrichIfRepeated(sdb *sessiondb.SessionDB, pattern, suggestion string) string {
+	lastUnresolved, _ := sdb.GetContext("last_unresolved_pattern")
+	if lastUnresolved != pattern {
+		return suggestion
+	}
+
+	// Clear to avoid double-enrichment.
+	_ = sdb.SetContext("last_unresolved_pattern", "")
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return suggestion
+	}
+	defer st.Close()
+
+	// Try to find past solutions for this pattern.
+	if stats, serr := st.PatternFeedbackStats(pattern); serr == nil && stats.TotalCount > 0 {
+		helpful := stats.Helpful
+		total := stats.TotalCount
+		suggestion += fmt.Sprintf(" (Previously: %d/%d found helpful)", helpful, total)
+	}
+
+	return suggestion
 }
 
 // gammaSample draws from Gamma(shape, 1) using Marsaglia and Tsang's method.

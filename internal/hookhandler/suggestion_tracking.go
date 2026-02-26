@@ -199,6 +199,9 @@ func recordUnresolvedFeedback(sdb *sessiondb.SessionDB) {
 	_ = sdb.SetContext("last_nudge_pattern", "")
 	_ = sdb.SetContext("last_nudge_outcome_id", "")
 
+	// Track unresolved pattern for enrichment on next encounter.
+	_ = sdb.SetContext("last_unresolved_pattern", pattern)
+
 	st, err := store.OpenDefault()
 	if err != nil {
 		return

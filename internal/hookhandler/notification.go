@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
+	"github.com/hir4ta/claude-buddy/internal/store"
 )
 
 type notificationInput struct {
@@ -74,7 +75,13 @@ func generateIdleNextStep(sdb *sessiondb.SessionDB) string {
 
 	var suggestion string
 
-	if progress != nil {
+	// Priority 1: Surface unresolved failures with past solutions.
+	if hint := unresolvedFailureHint(sdb); hint != "" {
+		suggestion = hint
+	}
+
+	// Priority 2: Phase-aware next step.
+	if suggestion == "" && progress != nil {
 		suggestion = phaseAwareNextStep(progress, sdb)
 	}
 
@@ -150,6 +157,53 @@ func nextStepForPhase(phase Phase, _ TaskType, sdb *sessiondb.SessionDB) string 
 
 	case PhaseRefine:
 		return "Refine: review the changes for edge cases, error handling, and code quality."
+	}
+
+	return ""
+}
+
+// unresolvedFailureHint checks for recent unresolved failures and searches
+// past solutions to provide concrete fix suggestions during idle time.
+func unresolvedFailureHint(sdb *sessiondb.SessionDB) string {
+	on, _ := sdb.IsOnCooldown("idle_failure_hint")
+	if on {
+		return ""
+	}
+
+	failures, _ := sdb.RecentFailures(3)
+	if len(failures) == 0 {
+		return ""
+	}
+
+	// Find the most recent unresolved failure.
+	for _, f := range failures {
+		if f.FilePath == "" {
+			continue
+		}
+		unresolved, _, _ := sdb.HasUnresolvedFailure(f.FilePath)
+		if !unresolved {
+			continue
+		}
+
+		_ = sdb.SetCooldown("idle_failure_hint", 10*time.Minute)
+
+		// Search for past solutions.
+		st, err := store.OpenDefault()
+		if err != nil {
+			return fmt.Sprintf("Unresolved %s in %s — consider fixing before continuing.", f.FailureType, f.FilePath)
+		}
+		solutions, _ := st.SearchFailureSolutionsByFile(f.FilePath, 1)
+		st.Close()
+
+		if len(solutions) > 0 {
+			text := solutions[0].SolutionText
+			if len([]rune(text)) > 120 {
+				text = string([]rune(text)[:120]) + "..."
+			}
+			return fmt.Sprintf("Unresolved %s in %s. Past fix: %s", f.FailureType, f.FilePath, text)
+		}
+
+		return fmt.Sprintf("Unresolved %s in %s — consider fixing before continuing.", f.FailureType, f.FilePath)
 	}
 
 	return ""

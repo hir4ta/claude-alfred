@@ -813,6 +813,26 @@ func (s *SessionDB) HasUnresolvedFailure(filePath string) (bool, string, error) 
 	return true, failureType, nil
 }
 
+// UnresolvedFailureDetail is like HasUnresolvedFailure but also returns the error_signature.
+func (s *SessionDB) UnresolvedFailureDetail(filePath string) (unresolved bool, failureType, errorSig string, err error) {
+	err = s.db.QueryRow(
+		`SELECT failure_type, error_signature FROM failure_log
+		 WHERE file_path = ? AND timestamp > COALESCE(
+		   (SELECT MAX(he.timestamp) FROM hook_events he
+		    WHERE he.tool_name IN ('Edit','Write') AND he.is_write = 1),
+		   '2000-01-01'
+		 )
+		 ORDER BY id DESC LIMIT 1`, filePath,
+	).Scan(&failureType, &errorSig)
+	if err == sql.ErrNoRows {
+		return false, "", "", nil
+	}
+	if err != nil {
+		return false, "", "", fmt.Errorf("sessiondb: unresolved failure detail: %w", err)
+	}
+	return true, failureType, errorSig, nil
+}
+
 // --- Tool Outcomes ---
 
 // RecordToolOutcome records a success or failure for a tool+file combination.
