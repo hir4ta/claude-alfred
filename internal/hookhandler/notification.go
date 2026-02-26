@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 )
@@ -15,9 +16,8 @@ type notificationInput struct {
 	Message          string `json:"message,omitempty"`
 }
 
-// handleNotification dequeues nudges during idle notifications.
-// When Claude is idle (e.g., waiting for user input), this is a good time
-// to deliver pending advice without interrupting active work.
+// handleNotification dequeues nudges during idle notifications and generates
+// phase-aware next step suggestions when no nudges are pending.
 func handleNotification(input []byte) (*HookOutput, error) {
 	var in notificationInput
 	if err := json.Unmarshal(input, &in); err != nil {
@@ -33,9 +33,6 @@ func handleNotification(input []byte) (*HookOutput, error) {
 
 	// Dequeue up to 2 nudges during idle time.
 	nudges, _ := sdb.DequeueNudges(2)
-	if len(nudges) == 0 {
-		return nil, nil
-	}
 
 	recordNudgeDelivery(sdb, in.SessionID, nudges)
 
@@ -45,5 +42,115 @@ func handleNotification(input []byte) (*HookOutput, error) {
 			n.Pattern, n.Level, n.Observation, n.Suggestion))
 	}
 
+	// When no pending nudges, generate a phase-aware next step suggestion.
+	if len(nudges) == 0 {
+		if nextStep := generateIdleNextStep(sdb); nextStep != "" {
+			parts = append(parts, nextStep)
+		}
+	}
+
+	if len(parts) == 0 {
+		return nil, nil
+	}
+
 	return makeOutput("Notification", strings.Join(parts, "\n")), nil
+}
+
+// generateIdleNextStep produces a context-aware next step suggestion
+// based on the current task type, workflow phase, and session state.
+func generateIdleNextStep(sdb *sessiondb.SessionDB) string {
+	on, _ := sdb.IsOnCooldown("idle_next_step")
+	if on {
+		return ""
+	}
+
+	progress := GetPhaseProgress(sdb)
+	intent, _ := sdb.GetWorkingSet("intent")
+
+	// Need at least some context to make a useful suggestion.
+	if progress == nil && intent == "" {
+		return ""
+	}
+
+	var suggestion string
+
+	if progress != nil {
+		suggestion = phaseAwareNextStep(progress, sdb)
+	}
+
+	if suggestion == "" {
+		return ""
+	}
+
+	_ = sdb.SetCooldown("idle_next_step", 5*time.Minute)
+
+	var b strings.Builder
+	b.WriteString("[buddy] next-step (info): Session idle — suggested next action")
+	b.WriteString("\n→ ")
+	b.WriteString(suggestion)
+	return b.String()
+}
+
+// phaseAwareNextStep generates a suggestion based on current phase progress.
+func phaseAwareNextStep(progress *PhaseProgress, sdb *sessiondb.SessionDB) string {
+	// Suggest based on expected next phase.
+	if progress.ExpectedPhase != PhaseUnknown && progress.ExpectedPhase != progress.CurrentPhase {
+		return nextStepForPhase(progress.ExpectedPhase, progress.TaskType, sdb)
+	}
+
+	// If no clear next phase, suggest based on current phase completion.
+	return nextStepForPhase(progress.CurrentPhase, progress.TaskType, sdb)
+}
+
+// nextStepForPhase returns a concrete suggestion for the given phase.
+func nextStepForPhase(phase Phase, _ TaskType, sdb *sessiondb.SessionDB) string {
+	hasTestRun, _ := sdb.GetContext("has_test_run")
+	lastTestPassed, _ := sdb.GetContext("last_test_passed")
+	files, _ := sdb.GetWorkingSetFiles()
+
+	switch phase {
+	case PhaseExplore:
+		if len(files) > 0 {
+			return "Exploration phase: Read related files and understand the current code before making changes."
+		}
+		return "Start by reading the relevant source files to understand the current implementation."
+
+	case PhaseReproduce:
+		return "Reproduce the issue: run the failing test or trigger the bug to confirm the problem."
+
+	case PhaseDiagnose:
+		return "Diagnose the root cause: add debug output or trace the execution path."
+
+	case PhaseDesign:
+		return "Design phase: consider using Plan Mode to outline the approach before implementing."
+
+	case PhasePlan:
+		return "Plan the implementation: identify which files need changes and in what order."
+
+	case PhaseImplement:
+		if lastTestPassed == "false" {
+			return "Tests are currently failing. Fix the failing tests before adding new changes."
+		}
+		return "Implement the changes. Focus on one file at a time."
+
+	case PhaseTest:
+		if hasTestRun != "true" && len(files) > 0 {
+			return fmt.Sprintf("Run tests to verify your changes (%d file(s) modified).", len(files))
+		}
+		return "Write or update tests for the new functionality."
+
+	case PhaseVerify:
+		if hasTestRun != "true" {
+			return "Verify: run the full test suite to confirm nothing is broken."
+		}
+		if lastTestPassed == "false" {
+			return "Tests are failing. Review the output and fix the issues."
+		}
+		return "Tests passing. Consider running the build and doing a final review before committing."
+
+	case PhaseRefine:
+		return "Refine: review the changes for edge cases, error handling, and code quality."
+	}
+
+	return ""
 }

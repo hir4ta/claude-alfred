@@ -22,6 +22,7 @@ const serverInstructions = `claude-buddy is a real-time session advisor for Clau
 - buddy_alerts: Detect active anti-patterns and get session health score.
 - buddy_decisions: List past design decisions. Use before making related changes to check architectural history.
 - buddy_patterns: Search knowledge patterns (error solutions, architecture, decisions) from past sessions.
+- buddy_feedback: Provide feedback on suggestion quality. Call when a suggestion was helpful, not helpful, or misleading.
 - buddy_estimate: Estimate task complexity based on historical workflow data.
 - buddy_next_step: Get recommended next actions based on session context. Call when unsure what to do next or after encountering errors.
 
@@ -32,6 +33,7 @@ const serverInstructions = `claude-buddy is a real-time session advisor for Clau
 - Call buddy_patterns when encountering errors to find past solutions.
 - Call buddy_decisions before architectural changes.
 - Call buddy_recall after context compaction to recover lost details.
+- Call buddy_feedback after receiving a suggestion to rate its quality.
 - Call buddy_estimate before starting complex tasks to set expectations.
 `
 
@@ -241,6 +243,31 @@ func New(claudeHome string, lang locale.Lang, st *store.Store, emb *embedder.Emb
 				),
 			),
 			Handler: nextStepHandler(claudeHome),
+		},
+		server.ServerTool{
+			Tool: mcp.NewTool("buddy_feedback",
+				mcp.WithDescription("Provide feedback on suggestion quality. Call when a buddy suggestion was helpful, not helpful, or misleading. This helps improve future suggestion relevance."),
+				mcp.WithTitleAnnotation("Suggestion Feedback"),
+				mcp.WithReadOnlyHintAnnotation(false),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithIdempotentHintAnnotation(false),
+				mcp.WithOpenWorldHintAnnotation(false),
+				mcp.WithString("pattern",
+					mcp.Required(),
+					mcp.Description("The suggestion pattern name (e.g., code-quality, retry-loop, workflow)"),
+				),
+				mcp.WithString("rating",
+					mcp.Required(),
+					mcp.Description("Rating: helpful, partially_helpful, not_helpful, or misleading"),
+				),
+				mcp.WithNumber("suggestion_id",
+					mcp.Description("Specific suggestion outcome ID (optional)"),
+				),
+				mcp.WithString("comment",
+					mcp.Description("Additional feedback details (optional)"),
+				),
+			),
+			Handler: feedbackHandler(st),
 		},
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_skill_context",

@@ -30,6 +30,9 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Record unresolved nudge feedback before resetting burst state.
+	recordUnresolvedFeedback(sdb)
+
 	// User turn boundary: reset burst counters and context.
 	_ = sdb.ResetBurst()
 	_ = sdb.SetContext("subagent_active", "")
@@ -53,6 +56,14 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 		if taskType != TaskUnknown {
 			_ = sdb.SetWorkingSet("task_type", string(taskType))
 		}
+
+		// Deep intent analysis: domain, workflow phase, risk profile.
+		di := AnalyzeDeepIntent(sdb, in.Prompt, taskType)
+		_ = sdb.SetWorkingSet("domain", di.Domain)
+		if di.WorkflowPhase != PhaseUnknown {
+			_ = sdb.SetWorkingSet("workflow_phase", string(di.WorkflowPhase))
+		}
+		_ = sdb.SetWorkingSet("risk_profile", di.RiskProfile)
 
 		// Track decisions from user prompts.
 		if containsDecisionKeyword(in.Prompt) {

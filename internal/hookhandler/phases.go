@@ -30,6 +30,10 @@ var taskPhaseSequences = map[TaskType][]Phase{
 	TaskFeature:  {PhaseExplore, PhaseDesign, PhaseImplement, PhaseTest, PhaseRefine},
 	TaskRefactor: {PhaseExplore, PhasePlan, PhaseImplement, PhaseVerify},
 	TaskTest:     {PhaseExplore, PhaseImplement, PhaseVerify},
+	TaskExplore:  {PhaseExplore, PhaseDiagnose},
+	TaskDebug:    {PhaseExplore, PhaseReproduce, PhaseDiagnose, PhaseImplement, PhaseVerify},
+	TaskReview:   {PhaseExplore, PhaseDiagnose, PhaseRefine},
+	TaskDocs:     {PhaseExplore, PhaseImplement, PhaseVerify},
 }
 
 // phaseToolMap maps tool names to their likely phase.

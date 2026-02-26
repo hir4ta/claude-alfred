@@ -2,7 +2,7 @@ package store
 
 import "database/sql"
 
-const schemaVersion = 9
+const schemaVersion = 10
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -372,6 +372,25 @@ CREATE TABLE IF NOT EXISTS file_co_changes (
 CREATE INDEX IF NOT EXISTS idx_cochange_a ON file_co_changes(file_a);
 `
 
+const ddlV10 = `
+-- ==========================================================
+-- feedbacks: explicit feedback from Claude on suggestion quality
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS feedbacks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      TEXT NOT NULL,
+    pattern         TEXT NOT NULL,
+    rating          TEXT NOT NULL,
+    suggestion_id   INTEGER,
+    comment         TEXT,
+    source          TEXT NOT NULL DEFAULT 'explicit',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+CREATE INDEX IF NOT EXISTS idx_feedbacks_pattern ON feedbacks(pattern);
+CREATE INDEX IF NOT EXISTS idx_feedbacks_session ON feedbacks(session_id);
+`
+
 // Migrate applies all pending schema migrations to the database.
 func Migrate(db *sql.DB) error {
 	var current int
@@ -426,6 +445,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if current < 9 {
 		if _, err := db.Exec(ddlV9); err != nil {
+			return err
+		}
+	}
+	if current < 10 {
+		if _, err := db.Exec(ddlV10); err != nil {
 			return err
 		}
 	}

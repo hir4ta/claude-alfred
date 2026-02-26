@@ -20,6 +20,10 @@ const (
 	TaskFeature  TaskType = "feature"
 	TaskRefactor TaskType = "refactor"
 	TaskTest     TaskType = "test"
+	TaskExplore  TaskType = "explore"
+	TaskDebug    TaskType = "debug"
+	TaskReview   TaskType = "review"
+	TaskDocs     TaskType = "docs"
 	TaskUnknown  TaskType = ""
 )
 
@@ -60,7 +64,8 @@ func classifyIntentLLM(sdb *sessiondb.SessionDB, prompt string) TaskType {
 // validateTaskType checks if a string is a known TaskType, returning TaskUnknown if not.
 func validateTaskType(s string) TaskType {
 	switch TaskType(s) {
-	case TaskBugfix, TaskFeature, TaskRefactor, TaskTest:
+	case TaskBugfix, TaskFeature, TaskRefactor, TaskTest,
+		TaskExplore, TaskDebug, TaskReview, TaskDocs:
 		return TaskType(s)
 	default:
 		return TaskUnknown
@@ -91,6 +96,26 @@ func classifyIntent(intent string) TaskType {
 	for _, kw := range []string{"add", "implement", "create", "build", "new", "追加", "実装", "作成"} {
 		if strings.Contains(lower, kw) {
 			return TaskFeature
+		}
+	}
+	for _, kw := range []string{"explore", "investigate", "understand", "how does", "what is", "where is", "調査", "理解", "探索"} {
+		if strings.Contains(lower, kw) {
+			return TaskExplore
+		}
+	}
+	for _, kw := range []string{"debug", "trace", "breakpoint", "inspect", "デバッグ", "追跡"} {
+		if strings.Contains(lower, kw) {
+			return TaskDebug
+		}
+	}
+	for _, kw := range []string{"review", "check", "audit", "レビュー", "確認", "監査"} {
+		if strings.Contains(lower, kw) {
+			return TaskReview
+		}
+	}
+	for _, kw := range []string{"document", "readme", "comment", "jsdoc", "godoc", "ドキュメント", "説明"} {
+		if strings.Contains(lower, kw) {
+			return TaskDocs
 		}
 	}
 

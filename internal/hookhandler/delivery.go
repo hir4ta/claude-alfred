@@ -124,7 +124,16 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 	// Build contextual key for finer-grained Thompson Sampling.
 	ctxKey := contextualPatternKey(pattern)
 
-	// Check contextual UserPref first, then fall back to base pattern.
+	// Step 1: Explicit feedback has highest priority — if sufficient data exists,
+	// use the weighted score directly (deterministic, no randomness needed).
+	if stats, serr := st.PatternFeedbackStats(ctxKey); serr == nil && stats.TotalCount >= 3 {
+		return adjustFromEstimate(normalizeFeedbackScore(stats.WeightedScore), base)
+	}
+	if stats, serr := st.PatternFeedbackStats(pattern); serr == nil && stats.TotalCount >= 3 {
+		return adjustFromEstimate(normalizeFeedbackScore(stats.WeightedScore), base)
+	}
+
+	// Step 2: Check contextual UserPref, then fall back to base pattern.
 	pref, err := st.UserPreference(ctxKey)
 	if err == nil && pref != nil {
 		return adjustFromUserPref(pref, base)
@@ -161,6 +170,12 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 // adjustFromUserPref uses the weighted effectiveness score from UserPref.
 func adjustFromUserPref(pref *store.UserPref, base SuggestionPriority) SuggestionPriority {
 	return adjustFromEstimate(pref.EffectivenessScore, base)
+}
+
+// normalizeFeedbackScore maps WeightedScore [-1, 1] to the [0, 1] range
+// expected by adjustFromEstimate.
+func normalizeFeedbackScore(score float64) float64 {
+	return (score + 1) / 2
 }
 
 // adjustFromEstimate maps an effectiveness estimate [0,1] to a priority adjustment.

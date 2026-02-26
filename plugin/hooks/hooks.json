@@ -89,7 +89,7 @@
             "type": "command"
           }
         ],
-        "matcher": "startup|resume|compact"
+        "matcher": "startup|resume|compact|clear"
       }
     ],
     "Stop": [

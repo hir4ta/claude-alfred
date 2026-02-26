@@ -90,10 +90,14 @@ func checkNudgeResolution(sdb *sessiondb.SessionDB, toolName string) {
 	_ = sdb.SetContext("last_nudge_pattern", "")
 	_ = sdb.SetContext("last_nudge_outcome_id", "")
 
-	// Update user preference with resolution signal.
 	// Estimate tools since delivery from burst state.
 	tc, _, _, _ := sdb.BurstState()
+
+	// Update user preference with resolution signal.
 	updatePreferenceOnResolution(pattern, tc)
+
+	// Record auto-inferred feedback to the feedbacks table.
+	recordAutoFeedback(sdb, pattern, tc)
 
 	outcomeID, err := strconv.ParseInt(outcomeIDStr, 10, 64)
 	if err != nil {
@@ -148,4 +152,64 @@ func updatePreferenceOnResolution(pattern string, toolsSinceDelivery int) {
 	// Compute response time proxy from tool count (approximate seconds).
 	responseTimeSec := float64(toolsSinceDelivery) * 3.0
 	_ = st.UpsertUserPreference(pattern, true, responseTimeSec)
+}
+
+// inferFeedbackRating estimates a feedback rating from the number of tools
+// between delivery and resolution. Faster resolution implies higher quality.
+func inferFeedbackRating(toolsSinceDelivery int) store.FeedbackRating {
+	switch {
+	case toolsSinceDelivery <= 1:
+		return store.RatingHelpful
+	case toolsSinceDelivery <= 3:
+		return store.RatingPartiallyHelpful
+	default:
+		return store.RatingNotHelpful
+	}
+}
+
+// recordAutoFeedback records an auto-inferred feedback entry when a nudge is resolved.
+func recordAutoFeedback(sdb *sessiondb.SessionDB, pattern string, toolsSinceDelivery int) {
+	rating := inferFeedbackRating(toolsSinceDelivery)
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	sessionID, _ := sdb.GetContext("session_id")
+	if sessionID == "" {
+		sessionID = "unknown"
+	}
+
+	if err := st.InsertFeedback(sessionID, pattern, rating, "", 0); err != nil {
+		fmt.Fprintf(os.Stderr, "[buddy] record auto feedback: %v\n", err)
+	}
+}
+
+// recordUnresolvedFeedback records a not_helpful feedback when a burst ends
+// without resolving the pending nudge. Called from burst reset.
+func recordUnresolvedFeedback(sdb *sessiondb.SessionDB) {
+	pattern, _ := sdb.GetContext("last_nudge_pattern")
+	if pattern == "" {
+		return
+	}
+
+	// Clear the pending nudge to prevent double-recording.
+	_ = sdb.SetContext("last_nudge_pattern", "")
+	_ = sdb.SetContext("last_nudge_outcome_id", "")
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	sessionID, _ := sdb.GetContext("session_id")
+	if sessionID == "" {
+		sessionID = "unknown"
+	}
+
+	_ = st.InsertFeedback(sessionID, pattern, store.RatingNotHelpful, "", 0)
+	_ = st.UpsertUserPreference(pattern, false, 0)
 }
