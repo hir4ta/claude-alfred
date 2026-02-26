@@ -150,6 +150,9 @@ claude-buddy serve
 | `buddy_patterns` | Cross-project knowledge search with vector semantic search (Ollama) |
 | `buddy_suggest` | Structured recommendations with session health, alerts, and feature utilization |
 | `buddy_current_state` | Real-time session snapshot (stats, burst state, health score, predictions) |
+| `buddy_estimate` | Task complexity estimation based on historical workflow data |
+| `buddy_next_step` | Recommended next actions based on session context and recent tool history |
+| `buddy_skill_context` | Aggregated session context tailored for a specific skill |
 
 ---
 
@@ -184,7 +187,10 @@ claude-buddy uninstall
 | **UserPromptSubmit** | Classifies intent/task type, injects relevant past knowledge, delivers queued nudges |
 | **PreCompact** | Serializes working set (files, intent, decisions, git branch) for automatic restoration |
 | **Stop** | Detects incomplete work (TODO/FIXME, unresolved failures), warns about uncommitted git changes |
-| **SessionEnd** | Cleans up ephemeral session state |
+| **PostToolUseFailure** | Tracks failure cascades, searches past solutions, starts resolution chains |
+| **SubagentStart** | Injects session context into subagent launches |
+| **SubagentStop** | Records subagent outcomes and delivery context |
+| **SessionEnd** | Persists user profile, co-change data, workflow sequences; cleans up session state |
 
 **Anti-pattern detectors** (hook-based, real-time):
 
@@ -212,13 +218,17 @@ Working set (currently edited files, intent, task type, key decisions, git branc
 
 Nudge delivery and resolution are tracked across sessions. Patterns delivered 20+ times with <10% resolution rate are automatically suppressed to reduce noise.
 
-**Skills** (invocable via `/health`, `/review`, `/patterns`):
+**Skills** (invocable via slash commands):
 
 | Skill | Description |
 |---|---|
-| `/health` | Session health score + active alerts |
-| `/review` | End-of-session usage review with stats and tips |
-| `/patterns` | Search past error solutions, architecture decisions |
+| `/buddy-unstuck` | Escape retry loops and suggest alternative approaches |
+| `/buddy-checkpoint` | Session health check with active anti-pattern summary |
+| `/buddy-before-commit` | Pre-commit quality verification |
+| `/buddy-impact` | Blast radius analysis for planned file changes |
+| `/buddy-review` | Review recent changes against pattern DB knowledge |
+| `/buddy-estimate` | Task complexity estimation from historical data |
+| `/buddy-predict` | Prediction dashboard (next tool, cascade risk, health trend) |
 
 ## Architecture
 
@@ -235,7 +245,7 @@ claude-buddy/
 │   ├── embedder/              # Ollama integration for semantic search
 │   ├── locale/                # System locale detection (18 languages)
 │   ├── tui/                   # Bubble Tea TUI (watch / browse / select)
-│   ├── mcpserver/             # MCP server (stdio, 10 tools)
+│   ├── mcpserver/             # MCP server (stdio, 13 tools)
 │   ├── store/                 # SQLite persistence (vector search + LIKE search + incremental sync)
 │   └── install/               # Hook registration + MCP registration + initial sync
 ├── go.mod

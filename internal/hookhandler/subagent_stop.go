@@ -44,6 +44,8 @@ func handleSubagentStop(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	SetDeliveryContext(sdb)
+
 	var issues []string
 	lower := strings.ToLower(in.LastAssistantMessage)
 	for _, p := range placeholderPatterns {

@@ -25,9 +25,12 @@ func handleSessionEnd(input []byte) (*HookOutput, error) {
 		return nil, nil
 	}
 
-	// Persist workflow sequence, session metrics, and tool sequences before destroying session DB.
+	// Persist workflow sequence, session metrics, tool sequences, and user profile
+	// before destroying session DB.
 	persistWorkflowSequence(sdb, in.SessionID)
 	persistSessionMetrics(sdb)
+	persistUserProfile(sdb)
+	persistCoChanges(sdb)
 	mergeToolSequencesToStore(sdb)
 
 	_ = sdb.Destroy()
@@ -151,6 +154,74 @@ func persistSessionMetrics(sdb *sessiondb.SessionDB) {
 			countTransitions(phases, "write", "test")
 		_ = st.UpdateBaseline("debug_edit_cycles", float64(editBashCount))
 	}
+}
+
+// persistUserProfile extracts session-level coding style metrics
+// and updates the persistent user profile with EWMA smoothing.
+func persistUserProfile(sdb *sessiondb.SessionDB) {
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	tc, hasWrite, _, _ := sdb.BurstState()
+	if tc == 0 {
+		return
+	}
+
+	// tools_per_burst: total tools in this session burst.
+	_ = st.UpdateUserProfile("tools_per_burst", float64(tc))
+
+	// read_write_ratio: proportion of read vs write tools.
+	events, err := sdb.RecentEvents(50)
+	if err == nil && len(events) > 0 {
+		reads, writes := 0, 0
+		for _, ev := range events {
+			if ev.IsWrite {
+				writes++
+			} else {
+				reads++
+			}
+		}
+		if writes > 0 {
+			_ = st.UpdateUserProfile("read_write_ratio", float64(reads)/float64(writes))
+		}
+	}
+
+	// test_frequency: did the user run tests? (1.0 = yes, 0.0 = no)
+	hasTestRun, _ := sdb.GetContext("has_test_run")
+	if hasTestRun == "true" {
+		_ = st.UpdateUserProfile("test_frequency", 1.0)
+	} else if hasWrite {
+		_ = st.UpdateUserProfile("test_frequency", 0.0)
+	}
+
+	// compact_frequency: number of compactions in this session.
+	compacts, _ := sdb.CompactsInWindow(525600) // 1 year — effectively all time in session
+	_ = st.UpdateUserProfile("compact_frequency", float64(compacts))
+
+	// avg_session_duration: session length in minutes.
+	if startTime, err := sdb.BurstStartTime(); err == nil && !startTime.IsZero() {
+		duration := time.Since(startTime).Minutes()
+		_ = st.UpdateUserProfile("avg_session_duration", duration)
+	}
+}
+
+// persistCoChanges records file co-change pairs from the working set.
+func persistCoChanges(sdb *sessiondb.SessionDB) {
+	files, err := sdb.GetWorkingSetFiles()
+	if err != nil || len(files) < 2 {
+		return
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	_ = st.RecordCoChanges(files)
 }
 
 // mergeToolSequencesToStore merges session-local tool bigrams and trigrams

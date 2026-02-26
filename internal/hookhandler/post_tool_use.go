@@ -40,6 +40,9 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Cache task_type and velocity for contextual Thompson Sampling.
+	SetDeliveryContext(sdb)
+
 	isWrite := writeTools[in.ToolName]
 	inputHash := hashInput(in.ToolName, in.ToolInput)
 
@@ -130,6 +133,9 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	// Update EWMA flow metrics (velocity, error rate).
 	updateFlowMetrics(sdb, false)
 
+	// Record health snapshot every 10 tool calls for trend prediction.
+	recordHealthSnapshot(sdb)
+
 	// Wall detection: velocity dropped sharply — deliver intervention.
 	if IsWallDetected(sdb) {
 		ClearWallDetected(sdb)
@@ -174,6 +180,9 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	if isWrite && filePath != "" {
 		recordFailureSolution(sdb, in.SessionID, filePath, in.ToolInput)
 	}
+
+	// Solution chain tracking: append tool to chain sequence and finalize on success.
+	trackSolutionChain(sdb, in.SessionID, in.ToolName, isWrite && filePath != "")
 
 	// File change tracking for oscillation/revert detection.
 	if isWrite && filePath != "" {
@@ -347,6 +356,17 @@ func checkPeriodicHealth(sdb *sessiondb.SessionDB) {
 	if alert := checkAnomaly(sdb); alert != "" {
 		Deliver(sdb, "anomaly", "warning", "Behavioral pattern detected", alert, PriorityHigh)
 	}
+
+	// Health trend prediction: warn if declining toward threshold.
+	if trend := PredictHealthTrend(sdb); trend != nil && trend.Trend == "declining" && trend.ToolsToThreshold > 0 {
+		set, _ := sdb.TrySetCooldown("health_trend_warn", 15*time.Minute)
+		if set {
+			Deliver(sdb, "health-trend", "warning",
+				fmt.Sprintf("Session health declining (%.0f%%)", trend.CurrentHealth*100),
+				fmt.Sprintf("At current pace, health will drop below 50%% in ~%d tool calls. Consider taking a step back, running tests, or breaking the task into smaller steps.", trend.ToolsToThreshold),
+				PriorityHigh)
+		}
+	}
 }
 
 // checkWorkflowForCurrentTask checks workflow order based on stored task type.
@@ -450,6 +470,7 @@ func recordFailureSolution(sdb *sessiondb.SessionDB, sessionID, filePath string,
 
 	// Build solution description from the successful edit.
 	var solution string
+	var resolutionDiff string
 	var edit struct {
 		OldString string `json:"old_string"`
 		NewString string `json:"new_string"`
@@ -458,6 +479,13 @@ func recordFailureSolution(sdb *sessiondb.SessionDB, sessionID, filePath string,
 		solution = fmt.Sprintf("Fixed %s by editing %s", f.FailureType, filepath.Base(filePath))
 		if len([]rune(edit.NewString)) <= 200 {
 			solution += fmt.Sprintf(": %s", edit.NewString)
+		}
+		// Store the exact resolution diff for future replay.
+		if len([]rune(edit.OldString)) <= 500 && len([]rune(edit.NewString)) <= 500 {
+			diffJSON, _ := json.Marshal(map[string]string{
+				"old": edit.OldString, "new": edit.NewString,
+			})
+			resolutionDiff = string(diffJSON)
 		}
 	} else {
 		solution = fmt.Sprintf("Fixed %s by rewriting %s", f.FailureType, filepath.Base(filePath))
@@ -469,7 +497,11 @@ func recordFailureSolution(sdb *sessiondb.SessionDB, sessionID, filePath string,
 	}
 	defer st.Close()
 
-	_ = st.InsertFailureSolution(sessionID, f.FailureType, f.ErrorSig, filePath, solution)
+	if resolutionDiff != "" {
+		_ = st.InsertFailureSolutionWithDiff(sessionID, f.FailureType, f.ErrorSig, filePath, solution, resolutionDiff, "")
+	} else {
+		_ = st.InsertFailureSolution(sessionID, f.FailureType, f.ErrorSig, filePath, solution)
+	}
 
 	// If a past solution was surfaced before this fix, mark it as effective.
 	if idStr, _ := sdb.GetContext("last_surfaced_solution_id"); idStr != "" {
@@ -482,6 +514,7 @@ func recordFailureSolution(sdb *sessiondb.SessionDB, sessionID, filePath string,
 }
 
 // recordPhase maps a tool call to a workflow phase and records it in sessiondb.
+// It also detects phase transitions and sets the at_workflow_boundary flag.
 func recordPhase(sdb *sessiondb.SessionDB, toolName string, toolInput json.RawMessage) {
 	var phase string
 	switch toolName {
@@ -501,10 +534,74 @@ func recordPhase(sdb *sessiondb.SessionDB, toolName string, toolInput json.RawMe
 			} else if isCompileCommand(bi.Command) {
 				phase = "compile"
 			}
+			// git commit is a workflow boundary (task completion signal).
+			if isGitCommitCommand(bi.Command) {
+				_ = sdb.SetContext("at_workflow_boundary", "true")
+			}
 		}
+	case "TaskCreate", "TaskUpdate":
+		// Task lifecycle events are workflow boundaries.
+		_ = sdb.SetContext("at_workflow_boundary", "true")
 	}
-	if phase != "" {
-		_ = sdb.RecordPhase(phase, toolName)
+	if phase == "" {
+		return
+	}
+
+	// Detect phase transition: compare with previous recorded phase.
+	prevPhase, _ := sdb.GetContext("prev_phase")
+	if prevPhase != "" && prevPhase != phase {
+		_ = sdb.SetContext("at_workflow_boundary", "true")
+	}
+	_ = sdb.SetContext("prev_phase", phase)
+
+	_ = sdb.RecordPhase(phase, toolName)
+}
+
+// isGitCommitCommand detects git commit commands in Bash input.
+func isGitCommitCommand(cmd string) bool {
+	return strings.Contains(cmd, "git commit") || strings.Contains(cmd, "git merge")
+}
+
+// trackSolutionChain appends the current tool to the active chain sequence.
+// When a write succeeds (potential fix), the chain is finalized and persisted.
+func trackSolutionChain(sdb *sessiondb.SessionDB, sessionID, toolName string, isSuccessfulWrite bool) {
+	chainSig, _ := sdb.GetContext("chain_failure_sig")
+	if chainSig == "" {
+		return
+	}
+
+	// Append tool to sequence.
+	seq, _ := sdb.GetContext("chain_tool_seq")
+	if seq != "" {
+		seq += "," + toolName
+	} else {
+		seq = toolName
+	}
+	_ = sdb.SetContext("chain_tool_seq", seq)
+
+	stepStr, _ := sdb.GetContext("chain_step_count")
+	step := 0
+	if stepStr != "" {
+		fmt.Sscanf(stepStr, "%d", &step)
+	}
+	step++
+	_ = sdb.SetContext("chain_step_count", fmt.Sprintf("%d", step))
+
+	// Finalize chain when a write succeeds (likely fix) or after 20 steps (abandon).
+	if isSuccessfulWrite || step >= 20 {
+		if step >= 2 && step < 20 {
+			// Persist to store as a reusable playbook.
+			toolSeqJSON, _ := json.Marshal(strings.Split(seq, ","))
+			st, err := store.OpenDefault()
+			if err == nil {
+				_ = st.InsertSolutionChain(sessionID, chainSig, string(toolSeqJSON), step)
+				st.Close()
+			}
+		}
+		// Clear chain state.
+		_ = sdb.SetContext("chain_failure_sig", "")
+		_ = sdb.SetContext("chain_tool_seq", "")
+		_ = sdb.SetContext("chain_step_count", "")
 	}
 }
 

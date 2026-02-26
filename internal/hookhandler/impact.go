@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
+	"github.com/hir4ta/claude-buddy/internal/store"
 )
 
 // ImpactInfo holds the results of an impact analysis for a file.
@@ -335,6 +336,39 @@ func formatImpact(info *ImpactInfo) string {
 		parts = append(parts, fmt.Sprintf("Blast radius: %d/100 (%s)", info.BlastScore, info.Risk))
 	}
 	return strings.Join(parts, "; ")
+}
+
+// coChangeHint checks the persistent store for files frequently co-changed
+// with the given file and returns a hint if strong associations exist.
+func coChangeHint(filePath string) string {
+	st, err := store.OpenDefault()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+
+	coChanges, err := st.CoChangedFiles(filePath, 3)
+	if err != nil || len(coChanges) == 0 {
+		return ""
+	}
+
+	// Only suggest files with 3+ co-change sessions (strong signal).
+	var suggestions []string
+	for _, cc := range coChanges {
+		if cc.SessionCount < 3 {
+			continue
+		}
+		other := cc.FileB
+		if other == filePath {
+			other = cc.FileA
+		}
+		suggestions = append(suggestions, fmt.Sprintf("%s (%dx)", filepath.Base(other), cc.SessionCount))
+	}
+	if len(suggestions) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("[buddy] Frequently co-changed: %s", strings.Join(suggestions, ", "))
 }
 
 // GoExportedSymbols extracts exported symbol names from a Go file.

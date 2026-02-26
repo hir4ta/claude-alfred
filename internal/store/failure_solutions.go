@@ -9,15 +9,18 @@ import (
 
 // FailureSolution represents a recorded fix for a specific failure type.
 type FailureSolution struct {
-	ID             int
-	SessionID      string
-	FailureType    string
-	ErrorSignature string
-	FilePath       string
-	SolutionText   string
-	TimesSurfaced  int
-	TimesEffective int
-	Timestamp      time.Time
+	ID                   int
+	SessionID            string
+	FailureType          string
+	ErrorSignature       string
+	FilePath             string
+	SolutionText         string
+	ResolutionDiff       string  // JSON: {"old":"...", "new":"..."} for Edit fixes
+	ToolSequence         string  // JSON array of tool names used to resolve
+	TransferabilityScore float64 // how well this solution transfers to other contexts
+	TimesSurfaced        int
+	TimesEffective       int
+	Timestamp            time.Time
 }
 
 // InsertFailureSolution records a failure→fix resolution.
@@ -31,6 +34,64 @@ func (s *Store) InsertFailureSolution(sessionID, failureType, errorSig, filePath
 		return fmt.Errorf("store: insert failure solution: %w", err)
 	}
 	return nil
+}
+
+// InsertFailureSolutionWithDiff records a failure→fix resolution with the exact diff.
+func (s *Store) InsertFailureSolutionWithDiff(sessionID, failureType, errorSig, filePath, solutionText, resolutionDiff, toolSequence string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO failure_solutions (session_id, failure_type, error_signature, file_path, solution_text, resolution_diff, tool_sequence)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		sessionID, failureType, errorSig, filePath, solutionText, resolutionDiff, toolSequence,
+	)
+	if err != nil {
+		return fmt.Errorf("store: insert failure solution with diff: %w", err)
+	}
+	return nil
+}
+
+// SearchFailureSolutionsWithDiff finds solutions matching a failure type and error signature,
+// preferring solutions that have a non-empty resolution_diff.
+func (s *Store) SearchFailureSolutionsWithDiff(failureType, errorSig string, limit int) ([]FailureSolution, error) {
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(errorSig)
+	query := `SELECT id, session_id, failure_type, error_signature, file_path, solution_text,
+		        resolution_diff, tool_sequence, transferability_score,
+		        times_surfaced, times_effective, timestamp
+		 FROM failure_solutions
+		 WHERE error_signature LIKE '%' || ? || '%' ESCAPE '\'`
+	args := []any{escaped}
+
+	if failureType != "" {
+		query += ` AND failure_type = ?`
+		args = append(args, failureType)
+	}
+
+	// Prefer solutions with diffs, then by effectiveness.
+	query += ` ORDER BY
+		   CASE WHEN resolution_diff != '' THEN 1 ELSE 0 END DESC,
+		   CASE WHEN times_surfaced > 0 THEN CAST(times_effective AS REAL) / times_surfaced ELSE 0.5 END DESC,
+		   timestamp DESC
+		 LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: search failure solutions with diff: %w", err)
+	}
+	defer rows.Close()
+
+	var results []FailureSolution
+	for rows.Next() {
+		var fs FailureSolution
+		var ts string
+		if err := rows.Scan(&fs.ID, &fs.SessionID, &fs.FailureType, &fs.ErrorSignature,
+			&fs.FilePath, &fs.SolutionText, &fs.ResolutionDiff, &fs.ToolSequence,
+			&fs.TransferabilityScore, &fs.TimesSurfaced, &fs.TimesEffective, &ts); err != nil {
+			continue
+		}
+		fs.Timestamp, _ = time.Parse("2006-01-02 15:04:05", ts)
+		results = append(results, fs)
+	}
+	return results, rows.Err()
 }
 
 // SearchFailureSolutions finds solutions matching a failure type and error signature.

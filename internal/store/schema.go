@@ -2,7 +2,7 @@ package store
 
 import "database/sql"
 
-const schemaVersion = 8
+const schemaVersion = 9
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -325,6 +325,53 @@ CREATE INDEX IF NOT EXISTS idx_gts_from ON global_tool_sequences(from_tool);
 CREATE INDEX IF NOT EXISTS idx_gtt_t1t2 ON global_tool_trigrams(tool1, tool2);
 `
 
+const ddlV9 = `
+-- ==========================================================
+-- failure_solutions: add resolution diff and tool sequence columns
+-- ==========================================================
+ALTER TABLE failure_solutions ADD COLUMN resolution_diff TEXT NOT NULL DEFAULT '';
+ALTER TABLE failure_solutions ADD COLUMN tool_sequence TEXT NOT NULL DEFAULT '';
+ALTER TABLE failure_solutions ADD COLUMN transferability_score REAL NOT NULL DEFAULT 0.5;
+
+-- ==========================================================
+-- user_profile: per-user coding style metrics (EWMA)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS user_profile (
+    metric_name  TEXT PRIMARY KEY,
+    ewma_value   REAL NOT NULL DEFAULT 0.0,
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ==========================================================
+-- solution_chains: multi-step failure→resolution playbooks
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS solution_chains (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      TEXT NOT NULL,
+    failure_sig     TEXT NOT NULL,
+    tool_sequence   TEXT NOT NULL,
+    outcome         TEXT NOT NULL DEFAULT 'resolved',
+    step_count      INTEGER NOT NULL DEFAULT 0,
+    times_replayed  INTEGER NOT NULL DEFAULT 0,
+    timestamp       TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+CREATE INDEX IF NOT EXISTS idx_sc_sig ON solution_chains(failure_sig);
+
+-- ==========================================================
+-- file_co_changes: cross-session file co-change coupling
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS file_co_changes (
+    file_a        TEXT NOT NULL,
+    file_b        TEXT NOT NULL,
+    session_count INTEGER NOT NULL DEFAULT 1,
+    last_seen     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (file_a, file_b)
+);
+CREATE INDEX IF NOT EXISTS idx_cochange_a ON file_co_changes(file_a);
+`
+
 // Migrate applies all pending schema migrations to the database.
 func Migrate(db *sql.DB) error {
 	var current int
@@ -374,6 +421,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if current < 8 {
 		if _, err := db.Exec(ddlV8); err != nil {
+			return err
+		}
+	}
+	if current < 9 {
+		if _, err := db.Exec(ddlV9); err != nil {
 			return err
 		}
 	}

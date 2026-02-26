@@ -105,6 +105,23 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 		}
 	}
 
+	// Co-change hint: suggest frequently co-changed files when editing.
+	if in.ToolName == "Edit" || in.ToolName == "Write" {
+		var ci struct {
+			FilePath string `json:"file_path"`
+		}
+		if json.Unmarshal(in.ToolInput, &ci) == nil && ci.FilePath != "" {
+			coKey := "cochange:" + filepath.Base(ci.FilePath)
+			on, _ := sdb.IsOnCooldown(coKey)
+			if !on {
+				if hint := coChangeHint(ci.FilePath); hint != "" {
+					_ = sdb.SetCooldown(coKey, 15*time.Minute)
+					signals = append(signals, hint)
+				}
+			}
+		}
+	}
+
 	// Pattern-based contextual guidance: search for relevant patterns
 	// using FTS5 when intent + tool context are available.
 	if sig := buildContextQuery(sdb, in.ToolName, in.ToolInput); sig != "" {

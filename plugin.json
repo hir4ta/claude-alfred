@@ -37,10 +37,17 @@
       "SessionStart",
       "PreToolUse",
       "PostToolUse",
+      "PostToolUseFailure",
       "UserPromptSubmit",
       "PreCompact",
       "Stop",
-      "SessionEnd"
+      "SessionEnd",
+      "SubagentStart",
+      "SubagentStop",
+      "Notification",
+      "TeammateIdle",
+      "TaskCompleted",
+      "PermissionRequest"
     ]
   },
   "capabilities": {
@@ -64,7 +71,11 @@
       "buddy-before-commit",
       "buddy-impact",
       "buddy-review",
-      "buddy-estimate"
+      "buddy-estimate",
+      "buddy-error-recovery",
+      "buddy-context-recovery",
+      "buddy-test-guidance",
+      "buddy-predict"
     ]
   }
 }

@@ -37,6 +37,9 @@ func handlePostToolUseFailure(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Cache task_type and velocity for contextual Thompson Sampling.
+	SetDeliveryContext(sdb)
+
 	// Classify the failure type.
 	filePath := extractFilePath(in.ToolInput)
 	failureType := classifyFailure(in.ToolName, in.Error)
@@ -47,6 +50,16 @@ func handlePostToolUseFailure(input []byte) (*HookOutput, error) {
 	// Record failure for prediction (Phase 1B / 4A).
 	_ = sdb.RecordFailure(in.ToolName, failureType, extractErrorSignature(in.Error), filePath)
 	_ = sdb.RecordToolOutcome(in.ToolName, filePath, false)
+
+	// Start solution chain tracking: record the failure signature so subsequent
+	// tool calls are captured as the resolution sequence.
+	errSig := extractErrorSignature(in.Error)
+	chainSig := failureType + ":" + errSig
+	if existing, _ := sdb.GetContext("chain_failure_sig"); existing == "" {
+		_ = sdb.SetContext("chain_failure_sig", chainSig)
+		_ = sdb.SetContext("chain_tool_seq", "")
+		_ = sdb.SetContext("chain_step_count", "0")
+	}
 
 	// Track test/build failure status for Stop hook quality gate.
 	if failureType == failTestFailure {
@@ -62,6 +75,17 @@ func handlePostToolUseFailure(input []byte) (*HookOutput, error) {
 
 	// Build context-aware fix suggestion.
 	suggestion := buildFixSuggestion(sdb, in.SessionID, failureType, filePath, in.Error, in.ToolInput)
+
+	// Failure cascade prediction: warn if next likely tools also have high failure rates.
+	cascade := predictFailureCascade(sdb, in.ToolName)
+	if cascade != "" {
+		if suggestion != "" {
+			suggestion += "\n" + cascade
+		} else {
+			suggestion = cascade
+		}
+	}
+
 	if suggestion == "" {
 		return nil, nil
 	}
@@ -365,20 +389,34 @@ func extractCompileLocation(errorMsg string) string {
 func searchPastSolutions(sdb *sessiondb.SessionDB, failureType, errorMsg string) string {
 	errSig := extractErrorSignature(errorMsg)
 
-	// Try persistent failure_solutions first (cross-session knowledge).
+	// Try persistent failure_solutions first, preferring those with exact diffs.
 	st, err := store.OpenDefault()
 	if err == nil {
 		defer st.Close()
-		solutions, _ := st.SearchFailureSolutions(failureType, errSig, 1)
+		solutions, _ := st.SearchFailureSolutionsWithDiff(failureType, errSig, 1)
 		if len(solutions) > 0 {
 			_ = st.IncrementTimesSurfaced(solutions[0].ID)
-			// Store surfaced solution ID for effectiveness tracking.
 			_ = sdb.SetContext("last_surfaced_solution_id", fmt.Sprintf("%d", solutions[0].ID))
+
+			// If a resolution diff is available, present the exact fix.
+			if solutions[0].ResolutionDiff != "" {
+				return formatResolutionDiff(solutions[0])
+			}
+
 			text := solutions[0].SolutionText
 			if len([]rune(text)) > 150 {
 				text = string([]rune(text)[:150]) + "..."
 			}
 			return text
+		}
+	}
+
+	// Check for solution chains (multi-step playbooks).
+	if err == nil {
+		chains, _ := st.SearchSolutionChains(failureType+":"+errSig, 1)
+		if len(chains) > 0 {
+			_ = st.IncrementChainReplayed(chains[0].ID)
+			return fmt.Sprintf("Past resolution playbook (%d steps): %s", chains[0].StepCount, chains[0].ToolSequence)
 		}
 	}
 
@@ -390,12 +428,59 @@ func searchPastSolutions(sdb *sessiondb.SessionDB, failureType, errorMsg string)
 	return formatSolution(solutions[0])
 }
 
+// formatResolutionDiff formats a failure solution with an exact diff for display.
+func formatResolutionDiff(fs store.FailureSolution) string {
+	var diff struct {
+		Old string `json:"old"`
+		New string `json:"new"`
+	}
+	if json.Unmarshal([]byte(fs.ResolutionDiff), &diff) != nil {
+		return fs.SolutionText
+	}
+
+	old := diff.Old
+	new := diff.New
+	if len([]rune(old)) > 80 {
+		old = string([]rune(old)[:80]) + "..."
+	}
+	if len([]rune(new)) > 80 {
+		new = string([]rune(new)[:80]) + "..."
+	}
+	return fmt.Sprintf("Past fix for %s in %s: change `%s` to `%s`",
+		fs.FailureType, filepath.Base(fs.FilePath), old, new)
+}
+
 // computeLLMCacheKey builds a FNV-1a hash key for LLM response caching.
 func computeLLMCacheKey(failureType, filePath, errorSig string) string {
 	h := fmt.Sprintf("%s:%s:%s", failureType, filePath, errorSig)
 	fnvHash := fnv.New64a()
 	fnvHash.Write([]byte(h))
 	return fmt.Sprintf("%016x", fnvHash.Sum64())
+}
+
+// predictFailureCascade checks if the next likely tools (based on session bigrams)
+// also have high failure rates. If so, warns the user to try a different approach.
+func predictFailureCascade(sdb *sessiondb.SessionDB, currentTool string) string {
+	predictions, err := sdb.PredictNextTools(currentTool, 3)
+	if err != nil || len(predictions) == 0 {
+		return ""
+	}
+
+	var atRisk []string
+	for _, p := range predictions {
+		if p.Count < 3 {
+			continue // insufficient data to predict reliably
+		}
+		if p.SuccessRate < 0.5 {
+			atRisk = append(atRisk, fmt.Sprintf("%s (%.0f%% fail rate)", p.Tool, (1-p.SuccessRate)*100))
+		}
+	}
+	if len(atRisk) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("[buddy] cascade-risk: Next likely tools also have high failure rates: %s. Consider a different approach instead of retrying.",
+		strings.Join(atRisk, ", "))
 }
 
 // recordFailureSequence records a tool sequence ending in failure (bigram + trigram)

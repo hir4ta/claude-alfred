@@ -160,13 +160,12 @@ func TestHandlePostToolUse_RecordsEvent(t *testing.T) {
 	}
 	data, _ := json.Marshal(input)
 
-	out, err := handlePostToolUse(data)
+	_, err := handlePostToolUse(data)
 	if err != nil {
 		t.Fatalf("handlePostToolUse() = %v", err)
 	}
-	if out != nil {
-		t.Error("handlePostToolUse() should return nil (async)")
-	}
+	// Note: out may be non-nil if advisor signals fire (e.g., file context knowledge).
+	// The important assertion is that the event was recorded correctly.
 
 	// Verify event was recorded.
 	sdb, err := sessiondb.Open(sessionID)

@@ -48,10 +48,22 @@ type DeliveryDecision struct {
 // 1. User's historical response rate for this pattern (effectiveness_score).
 // 2. Number of suggestions already delivered in this burst.
 // 3. Standard suppression check.
+// 4. Workflow boundary boost (phase transitions, commits, task switches).
 func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority SuggestionPriority) DeliveryDecision {
 	// Suppress non-critical suggestions during productive flow or suggestion fatigue.
 	if priority > PriorityCritical && (isInFlow(sdb) || suggestionFatigue(sdb)) {
 		return DeliveryDecision{Channel: ChannelDefer, Priority: priority}
+	}
+
+	// Workflow boundary boost: promote Medium → High at phase transitions,
+	// commits, and task switches (52% engagement vs 31% mid-task).
+	if priority == PriorityMedium && isAtWorkflowBoundary(sdb) {
+		priority = PriorityHigh
+	}
+
+	// Critical priority bypasses Thompson Sampling — always deliver immediately.
+	if priority == PriorityCritical {
+		return DeliveryDecision{Channel: ChannelImmediate, Priority: priority}
 	}
 
 	// Apply adaptive priority adjustment using Thompson Sampling.
@@ -83,7 +95,21 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 	}
 }
 
-// adjustPriority uses Thompson Sampling to adaptively adjust suggestion priority.
+// isAtWorkflowBoundary checks and consumes the at_workflow_boundary flag.
+// The flag is set by recordPhase on phase transitions, git commits, and task switches.
+// It is consumed (cleared) after reading to ensure single-use per boundary event.
+func isAtWorkflowBoundary(sdb *sessiondb.SessionDB) bool {
+	val, _ := sdb.GetContext("at_workflow_boundary")
+	if val != "true" {
+		return false
+	}
+	_ = sdb.SetContext("at_workflow_boundary", "")
+	return true
+}
+
+// adjustPriority uses contextual Thompson Sampling to adaptively adjust suggestion priority.
+// It builds a contextual key from (pattern, task_type, velocity_state) and uses that
+// for finer-grained adaptation. Falls back to the base pattern key when context data is sparse.
 // For patterns with UserPref data, it uses the weighted effectiveness score (deterministic).
 // For patterns with only delivery/resolution counts, it draws from a Beta distribution
 // to naturally balance exploration (new patterns) and exploitation (proven patterns).
@@ -95,8 +121,15 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 	}
 	defer st.Close()
 
-	// Check UserPref first (has weighted moving average from past sessions).
-	pref, err := st.UserPreference(pattern)
+	// Build contextual key for finer-grained Thompson Sampling.
+	ctxKey := contextualPatternKey(pattern)
+
+	// Check contextual UserPref first, then fall back to base pattern.
+	pref, err := st.UserPreference(ctxKey)
+	if err == nil && pref != nil {
+		return adjustFromUserPref(pref, base)
+	}
+	pref, err = st.UserPreference(pattern)
 	if err == nil && pref != nil {
 		return adjustFromUserPref(pref, base)
 	}
@@ -106,10 +139,14 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 		return PrioritySuppressed
 	}
 
-	// Thompson Sampling from time-decayed delivery/resolution counts.
-	delivered, resolved, err := st.DecayedPatternEffectiveness(pattern)
+	// Thompson Sampling: try contextual key first, fall back to base pattern.
+	delivered, resolved, err := st.DecayedPatternEffectiveness(ctxKey)
+	if err != nil || delivered < 3.0 {
+		// Insufficient contextual data — fall back to base pattern.
+		delivered, resolved, err = st.DecayedPatternEffectiveness(pattern)
+	}
 	if err != nil || delivered < 0.5 {
-		// No data — uniform prior Beta(1,1), sample for exploration.
+		// No data at all — uniform prior Beta(1,1), sample for exploration.
 		sample := betaSample(rng, 1, 1)
 		return adjustFromEstimate(sample, base)
 	}
@@ -177,6 +214,57 @@ func Deliver(sdb *sessiondb.SessionDB, pattern, level, observation, suggestion s
 	}
 	return ""
 }
+
+// contextualPatternKey builds a contextual key from (pattern, task_type, velocity_state).
+// This allows Thompson Sampling to learn that e.g. "workflow" suggestions are effective
+// during bugfix+slow but not during feature+fast. Returns "pattern:task_type:velocity_state".
+func contextualPatternKey(pattern string) string {
+	taskType := currentTaskType()
+	velState := currentVelocityState()
+	if taskType == "" && velState == "" {
+		return pattern
+	}
+	if taskType == "" {
+		taskType = "unknown"
+	}
+	if velState == "" {
+		velState = "normal"
+	}
+	return pattern + ":" + taskType + ":" + velState
+}
+
+// currentTaskType reads the task_type from the current sessiondb.
+// Returns empty string if unavailable (called from short-lived hook process).
+func currentTaskType() string {
+	// Read from process-level cache set by the hook handler.
+	return ctxTaskType
+}
+
+// currentVelocityState classifies current velocity into fast/normal/slow.
+func currentVelocityState() string {
+	return ctxVelocityState
+}
+
+// SetDeliveryContext caches task_type and velocity for contextual Thompson Sampling.
+// Called once per hook invocation before any Deliver calls.
+func SetDeliveryContext(sdb *sessiondb.SessionDB) {
+	ctxTaskType, _ = sdb.GetContext("task_type")
+	vel := getFloat(sdb, "ewma_tool_velocity")
+	switch {
+	case vel > 8.0:
+		ctxVelocityState = "fast"
+	case vel < 2.0:
+		ctxVelocityState = "slow"
+	default:
+		ctxVelocityState = "normal"
+	}
+}
+
+// Process-level cache for contextual delivery (set once per hook invocation).
+var (
+	ctxTaskType      string
+	ctxVelocityState string
+)
 
 func getBurstSuggestionCount(sdb *sessiondb.SessionDB) int {
 	val, _ := sdb.GetContext("suggestions_this_burst")

@@ -187,6 +187,131 @@ Estimate the complexity of a task using historical data.
 Keep it concise — 5-8 lines max.
 `,
 	},
+	{
+		Dir: "buddy-error-recovery",
+		Content: `---
+name: buddy-error-recovery
+description: >
+  Use automatically after a tool failure to retrieve past resolution diffs
+  and solution chains for the same error signature. Provides concrete fix
+  suggestions based on cross-session failure→fix knowledge.
+user-invocable: false
+allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
+---
+
+Automatic error recovery advisor. Triggered after tool failures.
+
+## Steps
+
+1. Call buddy_skill_context with skill_name="buddy-error-recovery" to get failure context, recent errors, and related solutions
+2. If a past solution with resolution diff exists, present the exact fix
+3. If no direct match, call buddy_patterns with the error message to find similar past solutions
+
+## Output
+
+- If an exact past fix exists: "Past fix found: change X to Y in file Z"
+- If a similar pattern exists: "Similar error was resolved by: [approach]"
+- If no past knowledge: "No past solutions found. Suggested approach: [one sentence]"
+
+Keep it under 4 lines. Include file paths and concrete changes when available.
+`,
+	},
+	{
+		Dir: "buddy-context-recovery",
+		Content: `---
+name: buddy-context-recovery
+description: >
+  Use automatically after context compaction to restore working context.
+  Recovers the current task intent, working set files, recent decisions,
+  and git branch state from session memory.
+user-invocable: false
+allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_decisions
+---
+
+Automatic context recovery after compaction.
+
+## Steps
+
+1. Call buddy_skill_context with skill_name="buddy-context-recovery" to get working set, decisions, and session state
+2. If key details are missing, call buddy_recall with specific queries for:
+   - Current task/goal
+   - Files being actively edited
+   - Recent decisions made
+3. Call buddy_decisions to restore architectural context if working on a complex task
+
+## Output
+
+Provide a compact recovery summary:
+- Current goal: [one sentence]
+- Active files: [list of files being edited]
+- Recent decisions: [key decisions, max 3]
+- Branch: [git branch if available]
+
+Keep it under 8 lines. Focus on what's needed to continue work immediately.
+`,
+	},
+	{
+		Dir: "buddy-test-guidance",
+		Content: `---
+name: buddy-test-guidance
+description: >
+  Use automatically when tests have failed 2+ times consecutively.
+  Analyzes failure patterns and suggests targeted debugging strategies
+  based on test output correlation and past failure solutions.
+user-invocable: false
+allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
+---
+
+Test failure debugging advisor.
+
+## Steps
+
+1. Call buddy_skill_context with skill_name="buddy-test-guidance" to get test status, recent failures, and correlated files
+2. Call buddy_patterns with the failing test name or error message
+3. If the failure involves a specific file, call buddy_recall to find past fixes for that file
+
+## Output
+
+Provide a targeted debugging strategy:
+- Root cause hypothesis (one sentence based on error pattern)
+- Specific debugging step to try next (one actionable instruction)
+- If a past similar failure exists, reference the resolution
+
+Keep it under 5 lines. Be specific about which file/function to investigate.
+`,
+	},
+	{
+		Dir: "buddy-predict",
+		Content: `---
+name: buddy-predict
+description: >
+  Prediction dashboard showing next-tool predictions, cascade risk assessment,
+  health trend trajectory, and workflow phase progress. Useful for understanding
+  session dynamics and anticipating issues.
+user-invocable: true
+allowed-tools: mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_alerts
+---
+
+Session prediction and forecasting dashboard.
+
+## Steps
+
+1. Call buddy_current_state to get real-time session snapshot including predictions
+2. Call buddy_skill_context with skill_name="buddy-checkpoint" for health and phase data
+3. If health < 0.7, call buddy_alerts for detailed anti-pattern information
+
+## Output
+
+Present a prediction dashboard:
+- Health: [score] [trend: improving/stable/declining]
+- Next likely tools: [predicted tools with confidence]
+- Cascade risk: [low/medium/high based on recent failure patterns]
+- Phase: [current phase] → [expected next phase]
+- Forecast: [one sentence about session trajectory]
+
+Keep it under 8 lines. Use the data to provide actionable insight.
+`,
+	},
 }
 
 // installSkills writes buddy skills to ~/.claude/skills/.

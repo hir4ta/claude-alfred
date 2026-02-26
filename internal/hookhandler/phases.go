@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
+	"github.com/hir4ta/claude-buddy/internal/store"
 )
 
 // Phase represents a recognized development phase within a session.
@@ -166,11 +167,17 @@ func mapRawToPhase(raw string) Phase {
 	}
 }
 
-// shouldGateForPhase returns true if a suggestion is inappropriate for the current phase.
+// shouldGateForPhase returns true if a suggestion is inappropriate for the current phase
+// or the user's profile indicates the suggestion is unnecessary.
 func shouldGateForPhase(sdb *sessiondb.SessionDB, pattern string) bool {
 	progress := GetPhaseProgress(sdb)
 	if progress == nil || progress.CurrentPhase == PhaseUnknown {
 		return false
+	}
+
+	// Profile-aware gating: suppress suggestions the user already habitually does.
+	if shouldGateForProfile(pattern) {
+		return true
 	}
 
 	switch pattern {
@@ -180,6 +187,32 @@ func shouldGateForPhase(sdb *sessiondb.SessionDB, pattern string) bool {
 		return progress.CurrentPhase != PhaseImplement && progress.CurrentPhase != PhaseVerify
 	case "file-knowledge":
 		return progress.CurrentPhase == PhaseVerify
+	}
+	return false
+}
+
+// shouldGateForProfile suppresses suggestions the user already follows habitually.
+// Uses the persistent user profile to avoid nagging about established practices.
+func shouldGateForProfile(pattern string) bool {
+	st, err := store.OpenDefault()
+	if err != nil {
+		return false
+	}
+	defer st.Close()
+
+	switch pattern {
+	case "checkpoint":
+		// Suppress "run tests" if user has high test frequency (>0.7 EWMA).
+		val, count, err := st.GetUserProfile("test_frequency")
+		if err == nil && count >= 5 && val > 0.7 {
+			return true
+		}
+	case "workflow":
+		// Suppress workflow nudges if user's read_write_ratio is balanced (1.5-4.0).
+		val, count, err := st.GetUserProfile("read_write_ratio")
+		if err == nil && count >= 5 && val >= 1.5 && val <= 4.0 {
+			return true
+		}
 	}
 	return false
 }

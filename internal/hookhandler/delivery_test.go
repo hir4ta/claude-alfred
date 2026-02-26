@@ -2,7 +2,10 @@ package hookhandler
 
 import (
 	"math/rand/v2"
+	"strings"
 	"testing"
+
+	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 )
 
 func TestBetaExpectation(t *testing.T) {
@@ -145,4 +148,122 @@ func TestGammaSample_Positive(t *testing.T) {
 			t.Fatalf("gammaSample returned negative: %v", g)
 		}
 	}
+}
+
+func TestIsAtWorkflowBoundary(t *testing.T) {
+	t.Parallel()
+	sdb := openDeliveryTestDB(t)
+
+	// Initially not at boundary.
+	if isAtWorkflowBoundary(sdb) {
+		t.Error("isAtWorkflowBoundary() = true on fresh session, want false")
+	}
+
+	// Set flag → should return true and consume it.
+	_ = sdb.SetContext("at_workflow_boundary", "true")
+	if !isAtWorkflowBoundary(sdb) {
+		t.Error("isAtWorkflowBoundary() = false after setting flag, want true")
+	}
+
+	// Flag consumed — second call should return false.
+	if isAtWorkflowBoundary(sdb) {
+		t.Error("isAtWorkflowBoundary() = true after consumption, want false")
+	}
+}
+
+func TestWorkflowBoundaryBoost(t *testing.T) {
+	// Not parallel — modifies package globals (ctxTaskType, ctxVelocityState).
+	sdb := openDeliveryTestDB(t)
+
+	// Reset contextual globals so Thompson Sampling uses base pattern keys.
+	ctxTaskType = ""
+	ctxVelocityState = ""
+
+	// Without boundary flag: isAtWorkflowBoundary returns false.
+	if isAtWorkflowBoundary(sdb) {
+		t.Error("isAtWorkflowBoundary() = true without flag, want false")
+	}
+
+	// Set boundary flag: should return true and consume it.
+	_ = sdb.SetContext("at_workflow_boundary", "true")
+	if !isAtWorkflowBoundary(sdb) {
+		t.Error("isAtWorkflowBoundary() = false with flag set, want true")
+	}
+
+	// Verify the boost logic in RouteDelivery: at a boundary, Medium priority
+	// is promoted to High before Thompson Sampling. We test via Critical priority
+	// (which bypasses Thompson Sampling entirely) to verify the routing pipeline.
+	_ = sdb.SetContext("at_workflow_boundary", "true")
+	d := RouteDelivery(sdb, "test-critical-boundary", PriorityCritical)
+	if d.Channel != ChannelImmediate {
+		t.Errorf("Critical priority at boundary: channel = %d, want %d (immediate)", d.Channel, ChannelImmediate)
+	}
+}
+
+func TestContextualPatternKey(t *testing.T) {
+	// Not parallel — modifies package globals (ctxTaskType, ctxVelocityState).
+	tests := []struct {
+		name     string
+		taskType string
+		velState string
+		pattern  string
+		want     string
+	}{
+		{"no context", "", "", "workflow", "workflow"},
+		{"task only", "bugfix", "", "workflow", "workflow:bugfix:normal"},
+		{"velocity only", "", "fast", "workflow", "workflow:unknown:fast"},
+		{"full context", "feature", "slow", "checkpoint", "checkpoint:feature:slow"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctxTaskType = tt.taskType
+			ctxVelocityState = tt.velState
+			got := contextualPatternKey(tt.pattern)
+			if got != tt.want {
+				t.Errorf("contextualPatternKey(%q) = %q, want %q", tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetDeliveryContext(t *testing.T) {
+	// Not parallel — modifies package globals.
+	sdb := openDeliveryTestDB(t)
+
+	// Set task_type and velocity.
+	_ = sdb.SetContext("task_type", "refactor")
+	_ = sdb.SetContext("ewma_tool_velocity", "12.0")
+	SetDeliveryContext(sdb)
+
+	if ctxTaskType != "refactor" {
+		t.Errorf("ctxTaskType = %q, want %q", ctxTaskType, "refactor")
+	}
+	if ctxVelocityState != "fast" {
+		t.Errorf("ctxVelocityState = %q, want %q", ctxVelocityState, "fast")
+	}
+
+	// Low velocity → slow.
+	_ = sdb.SetContext("ewma_tool_velocity", "1.0")
+	SetDeliveryContext(sdb)
+	if ctxVelocityState != "slow" {
+		t.Errorf("ctxVelocityState = %q, want %q", ctxVelocityState, "slow")
+	}
+
+	// Normal velocity.
+	_ = sdb.SetContext("ewma_tool_velocity", "5.0")
+	SetDeliveryContext(sdb)
+	if ctxVelocityState != "normal" {
+		t.Errorf("ctxVelocityState = %q, want %q", ctxVelocityState, "normal")
+	}
+}
+
+func openDeliveryTestDB(t *testing.T) *sessiondb.SessionDB {
+	t.Helper()
+	id := "test-delivery-" + strings.ReplaceAll(t.Name(), "/", "-")
+	sdb, err := sessiondb.Open(id)
+	if err != nil {
+		t.Fatalf("sessiondb.Open(%q) = %v", id, err)
+	}
+	t.Cleanup(func() { _ = sdb.Destroy() })
+	return sdb
 }

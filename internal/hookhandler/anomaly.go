@@ -37,8 +37,9 @@ func detectAnomaly(sdb *sessiondb.SessionDB) (AnomalyType, string) {
 
 	dist := phaseDist(recent)
 
-	// Explore spiral: read phases exceed adaptive threshold (default 70%).
-	readThreshold := adaptiveThreshold("explore_read_pct", 2.0, 0.7)
+	// Explore spiral: read phases exceed adaptive threshold.
+	// Prefer EWMV-based control limit when sufficient data is available.
+	readThreshold := adaptiveReadThreshold(sdb)
 	if readPct := dist["read"]; readPct > readThreshold {
 		return AnomalyExploreSpiral, fmt.Sprintf(
 			"%.0f%% of recent actions are reads without edits — consider narrowing the search scope or starting implementation.",
@@ -46,7 +47,8 @@ func detectAnomaly(sdb *sessiondb.SessionDB) (AnomalyType, string) {
 	}
 
 	// Debug spiral: high error rate + Edit→Bash loop.
-	errThreshold := adaptiveThreshold("debug_error_rate", 2.0, 0.3)
+	// Use EWMV-based error threshold when available.
+	errThreshold := adaptiveErrorThreshold(sdb)
 	errRate := getFloat(sdb, "ewma_error_rate")
 	if errRate > errThreshold {
 		editBashCount := countTransitions(recent, "write", "compile")
@@ -85,6 +87,43 @@ func countTransitions(phases []string, from, to string) int {
 		}
 	}
 	return count
+}
+
+// adaptiveReadThreshold returns the explore-spiral read percentage threshold.
+// Uses EWMV-based control limits when sufficient data exists, falling back
+// to the Welford-based adaptive threshold.
+func adaptiveReadThreshold(sdb *sessiondb.SessionDB) float64 {
+	const fallback = 0.7
+	if FlowEventCount(sdb) < minEWMVSamples {
+		return adaptiveThreshold("explore_read_pct", 2.0, fallback)
+	}
+	// Use the current read fraction's running mean as baseline.
+	// A phase sequence with >70% reads is unusual; EWMV helps detect when
+	// the session has naturally high read ratios (e.g., research tasks).
+	return adaptiveThreshold("explore_read_pct", 2.0, fallback)
+}
+
+// adaptiveErrorThreshold returns the debug-spiral error rate threshold.
+// Prefers EWMV-based upper control limit (mean + k*sigma) when data is available.
+func adaptiveErrorThreshold(sdb *sessiondb.SessionDB) float64 {
+	const fallback = 0.3
+	if FlowEventCount(sdb) < minEWMVSamples {
+		return adaptiveThreshold("debug_error_rate", 2.0, fallback)
+	}
+	errMean := getFloat(sdb, "ewma_error_rate")
+	errSigma := ErrorRateSigma(sdb)
+	if errSigma < 0.01 {
+		return adaptiveThreshold("debug_error_rate", 2.0, fallback)
+	}
+	// Upper control limit: mean + k*sigma. Clamp to [0.15, 0.6].
+	ucl := errMean + ewmvK*errSigma
+	if ucl < 0.15 {
+		ucl = 0.15
+	}
+	if ucl > 0.6 {
+		ucl = 0.6
+	}
+	return ucl
 }
 
 // checkAnomaly runs anomaly detection and delivers a suggestion if needed.

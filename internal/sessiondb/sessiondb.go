@@ -137,6 +137,15 @@ CREATE TABLE IF NOT EXISTS llm_cache (
 	model       TEXT NOT NULL DEFAULT '',
 	created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS health_snapshots (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	tool_count INTEGER NOT NULL,
+	health     REAL    NOT NULL,
+	velocity   REAL    NOT NULL DEFAULT 0,
+	error_rate REAL    NOT NULL DEFAULT 0,
+	timestamp  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 `
 
 // HookEvent is a recorded tool event.
@@ -1351,4 +1360,50 @@ func (s *SessionDB) AllToolTrigrams() ([]TrigramEntry, error) {
 		})
 	}
 	return entries, nil
+}
+
+// HealthSnapshot represents a point-in-time health measurement.
+type HealthSnapshot struct {
+	ToolCount int
+	Health    float64
+	Velocity  float64
+	ErrorRate float64
+	Timestamp time.Time
+}
+
+// RecordHealthSnapshot stores a health measurement at the current tool count.
+func (s *SessionDB) RecordHealthSnapshot(toolCount int, health, velocity, errorRate float64) error {
+	_, err := s.db.Exec(
+		`INSERT INTO health_snapshots (tool_count, health, velocity, error_rate) VALUES (?, ?, ?, ?)`,
+		toolCount, health, velocity, errorRate,
+	)
+	if err != nil {
+		return fmt.Errorf("sessiondb: record health snapshot: %w", err)
+	}
+	return nil
+}
+
+// RecentHealthSnapshots returns the most recent health snapshots, ordered oldest to newest.
+func (s *SessionDB) RecentHealthSnapshots(limit int) ([]HealthSnapshot, error) {
+	rows, err := s.db.Query(
+		`SELECT tool_count, health, velocity, error_rate, timestamp
+		 FROM (SELECT * FROM health_snapshots ORDER BY id DESC LIMIT ?)
+		 ORDER BY id ASC`, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("sessiondb: recent health snapshots: %w", err)
+	}
+	defer rows.Close()
+
+	var snapshots []HealthSnapshot
+	for rows.Next() {
+		var hs HealthSnapshot
+		var ts string
+		if err := rows.Scan(&hs.ToolCount, &hs.Health, &hs.Velocity, &hs.ErrorRate, &ts); err != nil {
+			continue
+		}
+		hs.Timestamp, _ = time.Parse("2006-01-02 15:04:05", ts)
+		snapshots = append(snapshots, hs)
+	}
+	return snapshots, rows.Err()
 }
