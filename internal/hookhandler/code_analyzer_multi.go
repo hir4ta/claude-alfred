@@ -13,25 +13,33 @@ type multiAnalyzer struct {
 }
 
 // NewMultiAnalyzer creates a CodeAnalyzer that delegates to per-language analyzers.
+// Go uses go/ast; Python, JS/TS, and Rust use gotreesitter (pure Go tree-sitter).
 func NewMultiAnalyzer() CodeAnalyzer {
-	js := &jsAnalyzer{}
+	ts := NewTreeSitterAnalyzer()
 	return &multiAnalyzer{
 		analyzers: map[string]CodeAnalyzer{
 			"go":  NewGoAnalyzer(),
-			"py":  &pyAnalyzer{},
-			"js":  js,
-			"ts":  js, // TypeScript shares JS analyzer with extra checks
-			"tsx": js,
-			"jsx": js,
-			"rs":  &rsAnalyzer{},
+			"py":  ts,
+			"js":  ts,
+			"ts":  ts,
+			"tsx": ts,
+			"jsx": ts,
+			"rs":  ts,
 		},
 	}
 }
 
 func (m *multiAnalyzer) Analyze(filePath string, content []byte) []Finding {
-	ext := fileExtFromPath(filePath)
+	ext := rawFileExt(filePath)
 	if a, ok := m.analyzers[ext]; ok {
 		return a.Analyze(filePath, content)
+	}
+	// Fallback: try normalized extension (e.g. "rust" → "rs").
+	norm := fileExtFromPath(filePath)
+	if norm != ext {
+		if a, ok := m.analyzers[norm]; ok {
+			return a.Analyze(filePath, content)
+		}
 	}
 	return nil
 }

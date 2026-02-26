@@ -33,7 +33,7 @@ func TestMultiAnalyzer_Python(t *testing.T) {
 	}{
 		{"bare except", "try:\n  pass\nexcept:\n  pass", "py-bare-except"},
 		{"mutable default list", "def foo(x=[]):\n  pass", "py-mutable-default"},
-		{"mutable default dict", "def foo(x={}):\n  pass", "py-mutable-default-dict"},
+		{"mutable default dict", "def foo(x={}):\n  pass", "py-mutable-default"},
 		{"star import", "from os import *", "py-star-import"},
 	}
 
@@ -68,7 +68,7 @@ func TestMultiAnalyzer_JS(t *testing.T) {
 		{"console.log in source", "app.js", `console.log("debug")`, "js-console-log", true},
 		{"console.log in test", "app.test.js", `console.log("debug")`, "js-console-log", false},
 		{"loose equality", "app.ts", `if (x == 1) {}`, "js-loose-equality", true},
-		{"unused import", "app.tsx", `import { Foo, Bar } from 'lib'\nconst x = Foo()`, "js-unused-import", true},
+		{"unused import", "app.tsx", "import { Foo, Bar } from 'lib'\nconst x = Foo()", "js-unused-import", true},
 	}
 
 	for _, tt := range tests {

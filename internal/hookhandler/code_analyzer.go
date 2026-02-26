@@ -13,8 +13,7 @@ type Finding struct {
 }
 
 // CodeAnalyzer is the interface for language-aware code analysis.
-// Currently implemented by Go AST checks. Designed for future tree-sitter
-// integration (e.g. via malivnan/tree-sitter wazero-based, CGO-free).
+// Go uses go/ast; Python, JS/TS, and Rust use gotreesitter (pure Go tree-sitter).
 type CodeAnalyzer interface {
 	// Analyze runs analysis on a file and returns findings.
 	Analyze(filePath string, content []byte) []Finding
