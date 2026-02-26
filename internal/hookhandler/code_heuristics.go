@@ -54,6 +54,10 @@ func runCodeHeuristics(filePath string, toolInput json.RawMessage) string {
 	// Multi-language CodeAnalyzer: try full-file analysis first.
 	if isFullFileContent(toolInput) {
 		if findings := sharedMultiAnalyzer.Analyze(filePath, []byte(content)); len(findings) > 0 {
+			// Try to generate a concrete fix patch.
+			if fixMsg := TryFix(findings[0], []byte(content)); fixMsg != "" {
+				return findings[0].Message + "\n  Suggested fix: " + fixMsg
+			}
 			return findings[0].Message
 		}
 	}

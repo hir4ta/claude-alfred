@@ -25,6 +25,7 @@ type ImpactInfo struct {
 	ExportedN            int      // number of exported symbols (Go only)
 	BlastScore           int      // composite risk score (0-100)
 	Risk                 string   // "low", "medium", "high"
+	SuggestedTestCmd     string   // specific go test -run command from coverage map
 }
 
 // analyzeImpact runs a lightweight impact analysis for a file being edited.
@@ -55,6 +56,14 @@ func analyzeImpact(sdb *sessiondb.SessionDB, filePath, cwd string) *ImpactInfo {
 
 	findTestFiles(info, filePath, cwd)
 	findCoChanges(info, filePath, cwd)
+
+	// Coverage map: generate specific test command for Go files.
+	if sdb != nil && filepath.Ext(filePath) == ".go" {
+		if cm := LoadCoverageMap(sdb); cm != nil {
+			info.SuggestedTestCmd = SuggestTestCommand(cm, filePath, nil, cwd)
+		}
+	}
+
 	info.BlastScore = computeBlastScore(info)
 	info.Risk = assessRisk(info)
 	return info
@@ -331,6 +340,9 @@ func formatImpact(info *ImpactInfo) string {
 	}
 	if len(info.CoChanges) > 0 {
 		parts = append(parts, fmt.Sprintf("Co-changes: %s", strings.Join(info.CoChanges, ", ")))
+	}
+	if info.SuggestedTestCmd != "" {
+		parts = append(parts, fmt.Sprintf("Run: %s", info.SuggestedTestCmd))
 	}
 	if info.BlastScore > 0 {
 		parts = append(parts, fmt.Sprintf("Blast radius: %d/100 (%s)", info.BlastScore, info.Risk))

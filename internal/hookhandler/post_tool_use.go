@@ -206,6 +206,11 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		}
 	}
 
+	// Suggest specific test command after editing Go files.
+	if isWrite && filePath != "" && filepath.Ext(filePath) == ".go" && !strings.HasSuffix(filePath, "_test.go") {
+		suggestTestForEdit(sdb, filePath, in.ToolInput, in.CWD)
+	}
+
 	// Workflow order check — enqueue nudge if write doesn't match expected workflow.
 	if isWrite {
 		if nudge := checkWorkflowForCurrentTask(sdb); nudge != "" {
@@ -603,6 +608,40 @@ func trackSolutionChain(sdb *sessiondb.SessionDB, sessionID, toolName string, is
 		_ = sdb.SetContext("chain_tool_seq", "")
 		_ = sdb.SetContext("chain_step_count", "")
 	}
+}
+
+// suggestTestForEdit uses the coverage map and function change detection
+// to suggest a specific `go test -run` command after editing a Go file.
+func suggestTestForEdit(sdb *sessiondb.SessionDB, filePath string, toolInput json.RawMessage, cwd string) {
+	cooldownKey := "test_suggest:" + filepath.Base(filePath)
+	on, _ := sdb.IsOnCooldown(cooldownKey)
+	if on {
+		return
+	}
+
+	// Detect which functions were changed.
+	editSnippet := extractWriteContent(toolInput)
+	var fullContent []byte
+	if data, err := os.ReadFile(filePath); err == nil {
+		fullContent = data
+	}
+	changedFuncs := DetectChangedGoFunctions(filePath, fullContent, editSnippet)
+	if len(changedFuncs) == 0 {
+		return
+	}
+
+	// Try coverage map for specific test command.
+	cm := LoadCoverageMap(sdb)
+	cmd := SuggestTestCommand(cm, filePath, changedFuncs, cwd)
+	if cmd == "" {
+		return
+	}
+
+	_ = sdb.SetCooldown(cooldownKey, 10*time.Minute)
+	Deliver(sdb, "test-suggest", "info",
+		fmt.Sprintf("Changed functions: %s", strings.Join(changedFuncs, ", ")),
+		fmt.Sprintf("Run: %s", cmd),
+		PriorityMedium)
 }
 
 func hashInput(toolName string, toolInput json.RawMessage) uint64 {

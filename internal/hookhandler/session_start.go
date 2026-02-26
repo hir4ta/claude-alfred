@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -49,6 +50,20 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 
 	// Detect available external linters for PostToolUse checks.
 	detectAvailableLinters(sdb)
+
+	// Generate test coverage map in background (Go projects only).
+	if isGoProject(in.CWD) {
+		go func() {
+			cm := GenerateCoverageMap(in.CWD)
+			if cm != nil && len(cm.FuncToTests) > 0 {
+				// Re-open sessiondb in the goroutine (short-lived hook process).
+				if db, err := sessiondb.Open(in.SessionID); err == nil {
+					SaveCoverageMap(db, cm)
+					db.Close()
+				}
+			}
+		}()
+	}
 
 	switch in.Source {
 	case "startup", "resume":
@@ -369,6 +384,12 @@ func captureGitContext(sdb *sessiondb.SessionDB, cwd string) {
 		dirtyFiles = append(dirtyFiles, name)
 	}
 	_ = sdb.SetWorkingSet("git_dirty_files", strings.Join(dirtyFiles, "\n"))
+}
+
+// isGoProject checks if the directory has a go.mod file.
+func isGoProject(cwd string) bool {
+	_, err := os.Stat(filepath.Join(cwd, "go.mod"))
+	return err == nil
 }
 
 func execGit(ctx context.Context, cwd string, args ...string) (string, error) {
