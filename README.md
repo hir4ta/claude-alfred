@@ -51,16 +51,20 @@ ollama pull nomic-embed-text               # English / other languages
 ## Upgrade
 
 ```bash
+# 1. Update the binary
 brew update && brew upgrade claude-buddy
-```
 
-After upgrading, re-sync sessions:
-
-```bash
+# 2. Re-sync sessions and embeddings
 claude-buddy install
 ```
 
-Plugin updates are picked up automatically via `/plugin marketplace update`.
+Then update the plugin inside Claude Code:
+
+```
+/plugin marketplace update
+```
+
+Both steps are needed — `brew upgrade` updates the binary (hook handler, MCP server), while `/plugin marketplace update` updates the plugin configuration (hooks, skills, agents).
 
 ## Language
 
