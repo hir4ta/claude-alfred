@@ -50,6 +50,12 @@ func run() error {
 		return install.Uninstall()
 	case "analyze":
 		return runAnalyze()
+	case "plugin-bundle":
+		outputDir := "./plugin"
+		if len(os.Args) > 2 {
+			outputDir = os.Args[2]
+		}
+		return install.Bundle(outputDir, version)
 	case "hook-handler":
 		if len(os.Args) < 3 {
 			return fmt.Errorf("usage: claude-buddy hook-handler <EventName>")
@@ -225,6 +231,7 @@ Commands:
   install       Register MCP server, hooks, and sync sessions
   uninstall     Remove hooks and MCP server registration
   analyze       Session analysis report (structured, no LLM call)
+  plugin-bundle Generate plugin directory from Go sources
   help          Show this help
 
 Language:

@@ -1,0 +1,172 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler Notification",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler PermissionRequest",
+            "timeout": 1,
+            "type": "command"
+          }
+        ],
+        "matcher": "buddy_*"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "claude-buddy hook-handler PostToolUse",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler PostToolUseFailure",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler PreCompact",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler PreToolUse",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "claude-buddy hook-handler SessionEnd",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler SessionStart",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|compact"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler Stop",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "prompt": "[buddy] Review the last assistant message. Check for:\n(1) Unresolved errors mentioned but not fixed\n(2) TODO items that should have been completed\n(3) Tests mentioned but not run\n(4) Compilation errors not addressed\n(5) Multiple files modified without tests — suggest running tests\n(6) Incomplete refactoring (partial changes that could break the codebase)\nIf all work appears complete and verified, allow stopping.\nOtherwise block with the SPECIFIC issue that needs resolution.",
+            "timeout": 10,
+            "type": "prompt"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler SubagentStart",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler SubagentStop",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler TaskCompleted",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "claude-buddy hook-handler TeammateIdle",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "claude-buddy hook-handler UserPromptSubmit",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

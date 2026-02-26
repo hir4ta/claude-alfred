@@ -26,7 +26,11 @@ brews:
     install: |
       bin.install "claude-buddy"
     caveats: |
-      Run 'claude-buddy install' to register hooks and MCP server.
+      Plugin mode (recommended):
+        claude plugin add --path /path/to/claude-buddy/plugin
+
+      Legacy mode:
+        claude-buddy install
 
       AI feedback language is auto-detected from your system locale (LANG).
       To override: LANG=ja_JP.UTF-8 claude-buddy

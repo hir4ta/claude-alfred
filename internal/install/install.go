@@ -28,41 +28,70 @@ func defaultSettingsPath() string {
 
 // Run executes the install command. All steps are idempotent.
 func Run() error {
-	// Step 1: MCP registration.
-	registerMCP()
+	if isPluginActive() {
+		fmt.Println("Plugin mode detected — skipping hook/skill/agent registration")
+	} else {
+		// Step 1: MCP registration.
+		registerMCP()
 
-	// Step 2: Write hooks to settings.json.
-	if err := registerHooks(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: hook registration failed: %v\n", err)
+		// Step 2: Write hooks to settings.json.
+		if err := registerHooks(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: hook registration failed: %v\n", err)
+		}
+
+		// Step 3: Install buddy agent.
+		if err := installBuddyAgent(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: buddy agent install failed: %v\n", err)
+		}
+
+		// Step 3b: Install buddy skills.
+		if err := installSkills(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: skills install failed: %v\n", err)
+		}
 	}
 
-	// Step 3: Install buddy agent.
-	if err := installBuddyAgent(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: buddy agent install failed: %v\n", err)
-	}
-
-	// Step 3b: Install buddy skills.
-	if err := installSkills(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: skills install failed: %v\n", err)
-	}
-
-	// Step 4: Initial sync.
+	// Always run: DB sync, docs, embeddings.
 	if err := initialSync(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: initial sync failed: %v\n", err)
 	}
 
-	// Step 5: Sync documentation knowledge.
 	if err := syncDocsToStore(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: docs knowledge sync failed: %v\n", err)
 	}
 
-	// Step 6: Generate embeddings (if Ollama available).
 	generateEmbeddings()
 
-	// Step 7: Print completion message.
-	printInstructions()
+	if isPluginActive() {
+		fmt.Println("\n✓ Installation complete! (plugin mode — hooks/skills managed by plugin)")
+	} else {
+		printInstructions()
+	}
 
 	return nil
+}
+
+// isPluginActive checks if claude-buddy is registered as a plugin
+// by looking for "claude-buddy" in enabledPlugins of settings.json.
+func isPluginActive() bool {
+	data, err := os.ReadFile(settingsPathFunc())
+	if err != nil {
+		return false
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return false
+	}
+	plugins, ok := settings["enabledPlugins"].([]any)
+	if !ok {
+		return false
+	}
+	for _, p := range plugins {
+		s, ok := p.(string)
+		if ok && strings.Contains(s, "claude-buddy") {
+			return true
+		}
+	}
+	return false
 }
 
 func registerMCP() {

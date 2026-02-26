@@ -20,6 +20,12 @@ jobs:
         with:
           go-version: "1.24"
 
+      - name: Verify plugin bundle is up to date
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          go run -ldflags "-X main.version=$VERSION" . plugin-bundle ./plugin
+          git diff --exit-code ./plugin || (echo "plugin/ is out of date — run 'go run . plugin-bundle ./plugin' and commit" && exit 1)
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"

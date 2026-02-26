@@ -241,6 +241,54 @@ func TestRemoveHooks_PreservesOtherHooks(t *testing.T) {
 	}
 }
 
+func TestIsPluginActive(t *testing.T) {
+	// Cannot use t.Parallel() — subtests mutate package-level settingsPathFunc.
+
+	t.Run("no settings file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "settings.json")
+		orig := settingsPathFunc
+		settingsPathFunc = func() string { return path }
+		t.Cleanup(func() { settingsPathFunc = orig })
+
+		if isPluginActive() {
+			t.Error("isPluginActive() = true, want false (no file)")
+		}
+	})
+
+	t.Run("no enabledPlugins key", func(t *testing.T) {
+		path := tempSettings(t, `{"hooks": {}}`)
+		orig := settingsPathFunc
+		settingsPathFunc = func() string { return path }
+		t.Cleanup(func() { settingsPathFunc = orig })
+
+		if isPluginActive() {
+			t.Error("isPluginActive() = true, want false (no enabledPlugins)")
+		}
+	})
+
+	t.Run("plugin present", func(t *testing.T) {
+		path := tempSettings(t, `{"enabledPlugins": ["claude-buddy@0.15.0"]}`)
+		orig := settingsPathFunc
+		settingsPathFunc = func() string { return path }
+		t.Cleanup(func() { settingsPathFunc = orig })
+
+		if !isPluginActive() {
+			t.Error("isPluginActive() = false, want true")
+		}
+	})
+
+	t.Run("other plugin only", func(t *testing.T) {
+		path := tempSettings(t, `{"enabledPlugins": ["some-other-plugin@1.0"]}`)
+		orig := settingsPathFunc
+		settingsPathFunc = func() string { return path }
+		t.Cleanup(func() { settingsPathFunc = orig })
+
+		if isPluginActive() {
+			t.Error("isPluginActive() = true, want false (other plugin)")
+		}
+	})
+}
+
 func TestBuddyHookEntries(t *testing.T) {
 	t.Parallel()
 
