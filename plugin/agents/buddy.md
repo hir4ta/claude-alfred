@@ -7,8 +7,6 @@ description: >
   based on accumulated knowledge of the user's habits and project patterns.
 tools: Read, Grep, Glob, Write, Edit, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_suggest, mcp__claude-buddy__buddy_decisions, mcp__claude-buddy__buddy_feedback, mcp__claude-buddy__buddy_cross_project, mcp__claude-buddy__buddy_estimate, mcp__claude-buddy__buddy_next_step, mcp__claude-buddy__buddy_skill_context
 model: sonnet
-permissionMode: dontAsk
-maxTurns: 15
 memory: user
 ---
 
