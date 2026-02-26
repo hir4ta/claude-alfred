@@ -1,6 +1,6 @@
 # claude-buddy
 
-A proactive session companion for Claude Code — real-time anti-pattern detection, destructive command blocking, automatic context recovery, code quality feedback, git awareness, and AI-powered usage coaching. Works as a Claude Code plugin with hooks, MCP tools, skills, and agents.
+A proactive session companion for Claude Code — real-time anti-pattern detection, destructive command blocking, automatic context recovery, AST-based code quality analysis, git awareness, cross-project knowledge sharing, and AI-powered usage coaching. Works as a Claude Code plugin with hooks, MCP tools, skills, and agents.
 
 ## Install
 
@@ -160,18 +160,19 @@ claude-buddy serve
 | Tool | Description |
 |------|-------------|
 | `buddy_stats` | Session statistics (turns, tool frequency, duration) |
-| `buddy_tips` | AI-powered feedback and improvement suggestions |
+| `buddy_suggest` | Structured recommendations with session health, alerts, and feature utilization |
+| `buddy_current_state` | Real-time session snapshot (stats, burst state, health score, predictions) |
 | `buddy_sessions` | List recent sessions with metadata |
 | `buddy_resume` | Restore previous session context (goal, intent, compaction history, files changed/referenced, decisions) |
 | `buddy_recall` | Search across past session history |
-| `buddy_decisions` | Extract design decisions from past sessions |
 | `buddy_alerts` | Real-time anti-pattern detection (retry loops, context thrashing, etc.) |
+| `buddy_decisions` | Extract design decisions from past sessions |
 | `buddy_patterns` | Cross-project knowledge search with vector semantic search (Ollama) |
-| `buddy_suggest` | Structured recommendations with session health, alerts, and feature utilization |
-| `buddy_current_state` | Real-time session snapshot (stats, burst state, health score, predictions) |
 | `buddy_estimate` | Task complexity estimation based on historical workflow data |
 | `buddy_next_step` | Recommended next actions based on session context and recent tool history |
+| `buddy_feedback` | Explicit feedback channel for suggestion effectiveness (helpful/not_helpful/misleading) |
 | `buddy_skill_context` | Aggregated session context tailored for a specific skill |
+| `buddy_cross_project` | Cross-project pattern search from global knowledge base |
 
 ---
 
@@ -209,7 +210,7 @@ claude-buddy is distributed as a Claude Code plugin. The plugin provides:
 - **14 hooks**: SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, PreCompact, SessionEnd, Stop (command + prompt), SubagentStart, SubagentStop, Notification, TeammateIdle, TaskCompleted, PermissionRequest
 - **10 skills**: buddy-unstuck, buddy-checkpoint, buddy-before-commit, buddy-impact, buddy-review, buddy-estimate, buddy-error-recovery, buddy-context-recovery, buddy-test-guidance, buddy-predict
 - **1 agent**: buddy (persistent memory, session advisor)
-- **MCP server**: 13 tools for session analysis and knowledge search
+- **MCP server**: 14 tools for session analysis, feedback, and cross-project knowledge search
 
 ### Skills
 
@@ -256,10 +257,12 @@ Hooks actively monitor your session through Claude Code's lifecycle events:
 - **Stale read warning**: File not re-read before editing, or last Read was 8+ tool calls ago
 - **Past failure warning**: Similar Bash command failed earlier in the session
 - **Git dirty file warning**: Editing a file with pre-existing uncommitted changes
-- **Code quality heuristics**: Detects unchecked Go errors, debug prints, bare Python excepts, hardcoded secrets, TODO without ticket numbers, console.log in production JS/TS
+- **Code quality analysis**: Go via `go/ast`, Python/JS/TS/Rust via tree-sitter AST — detects unchecked errors, debug prints, bare excepts, mutable defaults, loose equality, hardcoded secrets, TODO without ticket numbers, and more. Includes concrete fix patch generation via CodeFixer
+- **Test coverage mapping**: AST-based function→test mapping generates specific `go test -run TestName ./pkg/` suggestions instead of generic "run tests"
 - **Test failure correlation**: Connects test failures to recently edited files
 - **Workflow guidance**: Suggests test-first approach for bugfix/refactor tasks
 - **Past knowledge surfacing**: Surfaces related decisions and error solutions from previous sessions
+- **Cross-project learning**: Patterns and decisions are synced to a global DB (`~/.claude-buddy/global.db`) for reuse across projects
 
 **Automatic context recovery** (survives compaction):
 
@@ -267,7 +270,15 @@ Working set (currently edited files, intent, task type, key decisions, git branc
 
 **Suggestion effectiveness tracking**:
 
-Nudge delivery and resolution are tracked across sessions. Patterns delivered 20+ times with <10% resolution rate are automatically suppressed to reduce noise.
+Nudge delivery and resolution are tracked across sessions. Patterns delivered 20+ times with <10% resolution rate are automatically suppressed to reduce noise. Explicit feedback via `buddy_feedback` MCP tool is integrated into Thompson Sampling with KL regularization for priority adjustment.
+
+**Deep intent model**:
+
+4-layer understanding of the user's task: TaskType (bugfix/feature/refactor/test/explore/debug/review/docs), Domain (auth/database/ui/api/config/infra), WorkflowPhase (explore/design/implement/test/integrate), and RiskProfile (conservative/balanced/aggressive). Used for phase-aware suggestion gating and personalized advice.
+
+**User profiling and personalization**:
+
+Behavioral clustering (conservative/balanced/aggressive) based on read-write ratio, test frequency, and session velocity. Profile influences suggestion priority and delivery timing via phase-aware gating.
 
 ## Architecture
 
@@ -291,8 +302,8 @@ claude-buddy/
 │   ├── embedder/              # Ollama integration for semantic search
 │   ├── locale/                # System locale detection (18 languages)
 │   ├── tui/                   # Bubble Tea TUI (watch / browse / select)
-│   ├── mcpserver/             # MCP server (stdio, 13 tools)
-│   ├── store/                 # SQLite persistence (vector search + LIKE search + incremental sync)
+│   ├── mcpserver/             # MCP server (stdio, 14 tools)
+│   ├── store/                 # SQLite persistence (vector search + LIKE search + incremental sync + global DB)
 │   └── install/               # Plugin bundle + hook registration + initial sync
 ├── go.mod
 └── go.sum
@@ -307,6 +318,7 @@ claude-buddy/
 | [fsnotify/fsnotify](https://github.com/fsnotify/fsnotify) | File change watching |
 | [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) | MCP server SDK |
 | [ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3) | SQLite driver (pure Go, WASM-based) |
+| [odvcencio/gotreesitter](https://github.com/odvcencio/gotreesitter) | Pure Go tree-sitter runtime for multi-language AST analysis |
 
 ## Ollama
 

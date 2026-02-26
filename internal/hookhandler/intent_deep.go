@@ -84,9 +84,11 @@ func detectDomain(prompt string) string {
 }
 
 // inferRiskProfile determines the user's risk profile from behavioral data.
-// conservative: many reads before writes, high test frequency
-// aggressive: few reads, low test frequency, fast velocity
+// Thresholds are aligned with store.UserCluster() for consistency:
+// conservative: read_write_ratio > 3.0, test_frequency > 0.7
+// aggressive: read_write_ratio < 1.5, test_frequency < 0.3
 // balanced: everything else
+// Additionally uses session velocity as a third signal.
 func inferRiskProfile(sdb *sessiondb.SessionDB) string {
 	st, err := store.OpenDefault()
 	if err != nil {
@@ -105,18 +107,19 @@ func inferRiskProfile(sdb *sessiondb.SessionDB) string {
 	conservative := 0
 	aggressive := 0
 
+	// Thresholds match store.UserCluster() for consistency.
 	if rwCount >= 3 {
 		if readWriteRatio > 3.0 {
 			conservative++
-		} else if readWriteRatio < 1.0 {
+		} else if readWriteRatio < 1.5 {
 			aggressive++
 		}
 	}
 
 	if tfCount >= 3 {
-		if testFreq > 0.5 {
+		if testFreq > 0.7 {
 			conservative++
-		} else if testFreq < 0.15 {
+		} else if testFreq < 0.3 {
 			aggressive++
 		}
 	}

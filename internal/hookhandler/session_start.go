@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/advice"
@@ -52,8 +53,12 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 	detectAvailableLinters(sdb)
 
 	// Generate test coverage map in background (Go projects only).
+	// Use WaitGroup to ensure the goroutine completes before the process exits.
+	var coverageWG sync.WaitGroup
 	if isGoProject(in.CWD) {
+		coverageWG.Add(1)
 		go func() {
+			defer coverageWG.Done()
 			cm := GenerateCoverageMap(in.CWD)
 			if cm != nil && len(cm.FuncToTests) > 0 {
 				// Re-open sessiondb in the goroutine (short-lived hook process).
@@ -65,16 +70,21 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 		}()
 	}
 
+	var result *HookOutput
+	var resultErr error
 	switch in.Source {
 	case "startup", "resume":
-		return handleStartupResume(in, sdb)
+		result, resultErr = handleStartupResume(in, sdb)
 	case "compact":
 		// Record compact in session DB.
 		_ = sdb.RecordCompact()
-		return handlePostCompactResume(sdb)
-	default:
-		return nil, nil
+		result, resultErr = handlePostCompactResume(sdb)
 	}
+
+	// Wait for background coverage map generation to complete before exiting.
+	coverageWG.Wait()
+
+	return result, resultErr
 }
 
 func handleStartupResume(in sessionStartInput, sdb *sessiondb.SessionDB) (*HookOutput, error) {
