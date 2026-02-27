@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
@@ -106,7 +107,7 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 
 	// Check burst suggestion count to prevent fatigue.
 	burstCount := getBurstSuggestionCount(sdb)
-	if adjusted <= PriorityHigh && burstCount >= 3 {
+	if adjusted <= PriorityHigh && burstCount >= burstCapForCluster() {
 		// Too many suggestions this burst — downgrade to nudge.
 		if adjusted == PriorityHigh {
 			adjusted = PriorityMedium
@@ -176,23 +177,17 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 
 	// Hard suppression safety net for truly dead patterns.
 	// Critical/High bypass: never permanently suppress important signals.
-	if base > PriorityHigh && st.ShouldSuppressPattern(pattern) {
+	if base > PriorityHigh && shouldSuppressForCluster(st, pattern) {
 		return PrioritySuppressed
 	}
 
-	// Thompson Sampling: 3-tier fallback for data density.
-	// 1. Full contextual key (pattern:taskType:cluster:domain)
-	// 2. Base contextual key without domain (pattern:taskType:cluster)
-	// 3. Base pattern only
-	delivered, resolved, err := st.DecayedPatternEffectiveness(ctxKey)
+	// Thompson Sampling: 2-tier fallback for data density.
+	// 1. Contextual key (pattern:taskType:cluster)
+	// 2. Base pattern only
+	hl := patternDecayHalfLife(pattern)
+	delivered, resolved, err := st.DecayedPatternEffectiveness(ctxKey, hl)
 	if err != nil || delivered < 3.0 {
-		baseCtxKey := baseContextualPatternKey(pattern)
-		if baseCtxKey != ctxKey {
-			delivered, resolved, err = st.DecayedPatternEffectiveness(baseCtxKey)
-		}
-		if err != nil || delivered < 3.0 {
-			delivered, resolved, err = st.DecayedPatternEffectiveness(pattern)
-		}
+		delivered, resolved, err = st.DecayedPatternEffectiveness(pattern, hl)
 	}
 	if err != nil || delivered < 0.5 {
 		// No data at all — uniform prior Beta(1,1), sample for exploration.
@@ -321,33 +316,13 @@ func Deliver(sdb *sessiondb.SessionDB, pattern, level, observation, suggestion s
 	return ""
 }
 
-// contextualPatternKey builds a contextual key from (pattern, task_type, user_cluster, domain).
+// contextualPatternKey builds a contextual key from (pattern, task_type, user_cluster).
 // This allows Thompson Sampling to learn that e.g. "workflow" suggestions are effective
-// during bugfix+conservative+auth but not during feature+aggressive+ui.
-// Velocity state is intentionally excluded to increase data density per context.
-// Domain is included only when non-empty and non-"general" to avoid sparse keys.
+// during bugfix+conservative but not during feature+aggressive.
+// Velocity state and domain are intentionally excluded to increase data density per context.
+// Domain was previously included but caused sparse data — most patterns never accumulated
+// enough deliveries per (pattern, taskType, cluster, domain) tuple to learn effectively.
 func contextualPatternKey(pattern string) string {
-	taskType := currentTaskType()
-	cluster := currentUserCluster()
-	domain := currentDomain()
-	if taskType == "" && cluster == "" {
-		return pattern
-	}
-	if taskType == "" {
-		taskType = "unknown"
-	}
-	if cluster == "" {
-		cluster = "balanced"
-	}
-	key := pattern + ":" + taskType + ":" + cluster
-	if domain != "" && domain != "general" {
-		key += ":" + domain
-	}
-	return key
-}
-
-// baseContextualPatternKey builds a key without domain for the middle-tier fallback.
-func baseContextualPatternKey(pattern string) string {
 	taskType := currentTaskType()
 	cluster := currentUserCluster()
 	if taskType == "" && cluster == "" {
@@ -398,17 +373,12 @@ func currentUserCluster() string {
 	return ctxUserCluster
 }
 
-// currentDomain returns the cached domain classification.
-func currentDomain() string {
-	return ctxDomain
-}
-
 // Process-level cache for contextual delivery (set once per hook invocation).
 var (
 	ctxTaskType      string
 	ctxVelocityState string
 	ctxUserCluster   string
-	ctxDomain        string
+	ctxDomain        string // used by SetDeliveryContext for domain-aware features outside TS
 )
 
 func getBurstSuggestionCount(sdb *sessiondb.SessionDB) int {
@@ -554,5 +524,61 @@ func gammaSample(rng *rand.Rand, shape float64) float64 {
 		if math.Log(u) < 0.5*x*x+d*(1.0-v+math.Log(v)) {
 			return d * v
 		}
+	}
+}
+
+// patternDecayHalfLife returns the decay half-life based on pattern type.
+// Tactical patterns (code-quality, retry-loop) decay faster (14 days),
+// strategic patterns (knowledge, coaching) persist longer (60 days).
+func patternDecayHalfLife(pattern string) time.Duration {
+	base := pattern
+	if idx := strings.Index(pattern, ":"); idx > 0 {
+		base = pattern[:idx]
+	}
+	switch base {
+	case "code-quality", "retry-loop", "stale-read":
+		return 14 * 24 * time.Hour
+	case "knowledge", "strategic", "coaching", "playbook":
+		return 60 * 24 * time.Hour
+	default:
+		return 30 * 24 * time.Hour
+	}
+}
+
+// burstCapForCluster returns the max suggestions per burst based on user cluster.
+// Conservative users accept more guidance (5), aggressive users prefer less (1).
+func burstCapForCluster() int {
+	switch ctxUserCluster {
+	case "conservative":
+		return 5
+	case "aggressive":
+		return 1
+	default:
+		return 3
+	}
+}
+
+// shouldSuppressForCluster applies cluster-adapted suppression thresholds.
+func shouldSuppressForCluster(st *store.Store, pattern string) bool {
+	delivered, resolved, err := st.DecayedPatternEffectiveness(pattern)
+	if err != nil {
+		return false
+	}
+	minDel, maxRate := suppressThresholdsForCluster()
+	if delivered < float64(minDel) {
+		return false
+	}
+	rate := resolved / delivered
+	return rate < maxRate
+}
+
+func suppressThresholdsForCluster() (int, float64) {
+	switch ctxUserCluster {
+	case "conservative":
+		return 20, 0.03
+	case "aggressive":
+		return 10, 0.08
+	default:
+		return 15, 0.05
 	}
 }

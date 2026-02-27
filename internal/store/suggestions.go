@@ -74,7 +74,7 @@ func (s *Store) ShouldSuppressPattern(pattern string) bool {
 // DecayedPatternEffectiveness returns time-weighted delivery and resolution counts.
 // Recent outcomes (last 30 days) count fully; older outcomes are exponentially
 // decayed with a half-life of 30 days. Returns float64 counts to preserve decay precision.
-func (s *Store) DecayedPatternEffectiveness(pattern string) (delivered, resolved float64, err error) {
+func (s *Store) DecayedPatternEffectiveness(pattern string, halfLifeOverride ...time.Duration) (delivered, resolved float64, err error) {
 	rows, err := s.db.Query(
 		`SELECT resolved, delivered_at FROM suggestion_outcomes WHERE pattern = ?`,
 		pattern,
@@ -86,6 +86,9 @@ func (s *Store) DecayedPatternEffectiveness(pattern string) (delivered, resolved
 
 	now := time.Now()
 	halfLife := 30 * 24 * time.Hour
+	if len(halfLifeOverride) > 0 && halfLifeOverride[0] > 0 {
+		halfLife = halfLifeOverride[0]
+	}
 	lambda := math.Ln2 / halfLife.Seconds()
 
 	for rows.Next() {

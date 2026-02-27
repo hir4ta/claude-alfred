@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,6 +48,14 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 
 		taskType := classifyIntentLLM(sdb, in.Prompt)
 		if taskType != TaskUnknown {
+			// Detect intent transition: track when task_type changes mid-session.
+			prevTaskType, _ := sdb.GetContext("task_type")
+			if prevTaskType != "" && prevTaskType != string(taskType) {
+				transition := prevTaskType + " → " + string(taskType)
+				_ = sdb.SetWorkingSet("intent_transition", transition)
+				_ = sdb.SetContext("intent_transition_count",
+					incrementContextInt(sdb, "intent_transition_count"))
+			}
 			_ = sdb.SetContext("task_type", string(taskType))
 		}
 		_ = sdb.SetContext("has_test_run", "")
@@ -307,10 +316,7 @@ func matchRelevantKnowledge(sdb *sessiondb.SessionDB, prompt string) string {
 
 	var b strings.Builder
 	b.WriteString("Relevant past knowledge:\n")
-	limit := 3
-	if len(allResults) < limit {
-		limit = len(allResults)
-	}
+	limit := min(3, len(allResults))
 	for i := 0; i < limit; i++ {
 		p := allResults[i]
 		content := p.Content
@@ -347,6 +353,13 @@ func prioritizeKnowledgeTypes(taskType TaskType) []knowledgeType {
 	default:
 		return knowledgeTypes
 	}
+}
+
+// incrementContextInt reads an integer context value, increments it, and returns the new string.
+func incrementContextInt(sdb *sessiondb.SessionDB, key string) string {
+	v, _ := sdb.GetContext(key)
+	n, _ := strconv.Atoi(v)
+	return strconv.Itoa(n + 1)
 }
 
 // recentFileKeywords extracts searchable keywords from recent file paths

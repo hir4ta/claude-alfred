@@ -248,15 +248,34 @@ func updatePreferenceOnResolution(pattern string, toolsSinceDelivery int) {
 }
 
 // inferFeedbackRating estimates a feedback rating from the number of tools
-// between delivery and resolution. Faster resolution implies higher quality.
+// between delivery and resolution. Thresholds are adapted per task type:
+// feature/refactor tasks naturally take more tools, so the "helpful" window is wider.
 func inferFeedbackRating(toolsSinceDelivery int) store.FeedbackRating {
+	helpfulMax, partialMax := feedbackThresholds()
 	switch {
-	case toolsSinceDelivery <= 1:
+	case toolsSinceDelivery <= helpfulMax:
 		return store.RatingHelpful
-	case toolsSinceDelivery <= 3:
+	case toolsSinceDelivery <= partialMax:
 		return store.RatingPartiallyHelpful
 	default:
 		return store.RatingNotHelpful
+	}
+}
+
+// feedbackThresholds returns (helpfulMax, partialMax) tool counts for auto-feedback.
+// Adapted by task type: bugfix resolves fast, feature/refactor take more steps.
+func feedbackThresholds() (int, int) {
+	switch TaskType(ctxTaskType) {
+	case TaskBugfix, TaskDebug:
+		return 2, 4
+	case TaskFeature, TaskDocs:
+		return 5, 8
+	case TaskRefactor:
+		return 4, 7
+	case TaskTest:
+		return 3, 5
+	default:
+		return 2, 4
 	}
 }
 

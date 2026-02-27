@@ -94,6 +94,12 @@ func generatePlaybook(sdb *sessiondb.SessionDB, taskType TaskType, projectPath s
 		phases, count, _ := st.MostCommonWorkflow(projectPath, string(taskType), 3)
 		if len(phases) > 0 {
 			_ = sdb.SetCooldown(key, 30*time.Minute)
+			progress := GetPhaseProgress(sdb)
+			step := 0
+			if progress != nil {
+				step = progress.ProgressPct * len(phases) / 100
+			}
+			savePlaybookMilestone(sdb, step, len(phases))
 			return formatLearnedPlaybook(sdb, taskType, phases, count)
 		}
 	}
@@ -106,6 +112,7 @@ func generatePlaybook(sdb *sessiondb.SessionDB, taskType TaskType, projectPath s
 
 	_ = sdb.SetCooldown(key, 30*time.Minute)
 	currentStep := updatePlaybookProgress(sdb, taskType)
+	savePlaybookMilestone(sdb, currentStep, len(steps))
 	return formatDefaultPlaybook(taskType, steps, currentStep)
 }
 
@@ -217,4 +224,9 @@ func toolHintToPhase(hint string) Phase {
 	default:
 		return PhaseUnknown
 	}
+}
+
+// savePlaybookMilestone records current playbook progress for session context display.
+func savePlaybookMilestone(sdb *sessiondb.SessionDB, currentStep, totalSteps int) {
+	_ = sdb.SetWorkingSet("playbook_milestone", fmt.Sprintf("%d/%d", currentStep+1, totalSteps))
 }

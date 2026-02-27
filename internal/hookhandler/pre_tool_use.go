@@ -215,7 +215,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 			n.Pattern, n.Level, n.Observation, n.Suggestion))
 	}
 
-	return makeOutput("PreToolUse", strings.Join(parts, "\n")), nil
+	return makeOutput("PreToolUse", budgetJoin(parts, 2000)), nil
 }
 
 // extractCmdSignature extracts the base command pattern from a Bash command.
@@ -672,4 +672,24 @@ func containsAny(s string, subs ...string) bool {
 		}
 	}
 	return false
+}
+
+// budgetJoin joins parts with newline separator, respecting a character budget.
+// Earlier entries have higher priority (signals are ordered by importance).
+func budgetJoin(parts []string, budget int) string {
+	var b strings.Builder
+	for i, p := range parts {
+		needed := len(p)
+		if i > 0 {
+			needed++ // newline separator
+		}
+		if b.Len()+needed > budget {
+			break
+		}
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(p)
+	}
+	return b.String()
 }

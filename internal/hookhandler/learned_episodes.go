@@ -43,19 +43,29 @@ func (d *HookDetector) detectLearnedEpisodes() string {
 		matched := matchSubsequence(currentSeq, ep.ToolSequence)
 		confidence := float64(matched) / float64(ep.TotalSteps)
 
-		if confidence < 0.6 {
-			continue
+		if confidence >= 0.6 {
+			set, _ := d.sdb.TrySetCooldown("learned_episode:"+ep.Name, 15*time.Minute)
+			if !set {
+				continue
+			}
+			return fmt.Sprintf(
+				"[buddy] learned-pattern (%s): Current tool sequence matches a failure pattern seen %d times before (%.0f%% match). Consider a different approach.",
+				ep.Name, ep.Occurrences, confidence*100,
+			)
 		}
 
-		set, _ := d.sdb.TrySetCooldown("learned_episode:"+ep.Name, 15*time.Minute)
-		if !set {
-			continue
+		// Fuzzy match: catch variant episodes via Levenshtein distance.
+		similarity := sequenceSimilarity(currentSeq, ep.ToolSequence)
+		if similarity >= 0.65 {
+			set, _ := d.sdb.TrySetCooldown("learned_episode:"+ep.Name, 15*time.Minute)
+			if !set {
+				continue
+			}
+			return fmt.Sprintf(
+				"[buddy] variant-pattern (%s): Current tool sequence is %.0f%% similar to a known failure pattern (seen %d times). Consider a different approach.",
+				ep.Name, similarity*100, ep.Occurrences,
+			)
 		}
-
-		return fmt.Sprintf(
-			"[buddy] learned-pattern (%s): Current tool sequence matches a failure pattern seen %d times before (%.0f%% match). Consider a different approach.",
-			ep.Name, ep.Occurrences, confidence*100,
-		)
 	}
 	return ""
 }
@@ -227,4 +237,45 @@ func extractFailureSequence(events []sessiondb.HookEvent) []string {
 		seq = seq[:6]
 	}
 	return seq
+}
+
+// levenshteinDistance computes the edit distance between two string slices.
+// Uses two-row optimization for O(min(la,lb)) space.
+func levenshteinDistance(a, b []string) int {
+	la, lb := len(a), len(b)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+	for j := range prev {
+		prev[j] = j
+	}
+
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if strings.EqualFold(a[i-1], b[j-1]) {
+				cost = 0
+			}
+			curr[j] = min(prev[j]+1, curr[j-1]+1, prev[j-1]+cost)
+		}
+		prev, curr = curr, prev
+	}
+	return prev[lb]
+}
+
+// sequenceSimilarity returns the normalized similarity (0-1) between two tool sequences.
+func sequenceSimilarity(a, b []string) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return 1.0
+	}
+	maxLen := max(len(a), len(b))
+	dist := levenshteinDistance(a, b)
+	return 1.0 - float64(dist)/float64(maxLen)
 }

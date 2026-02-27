@@ -439,7 +439,15 @@ func (s *SessionDB) DequeueNudges(maxN int) ([]Nudge, error) {
 		`SELECT id, pattern, level, observation, suggestion, created_at
 		 FROM nudge_outbox
 		 WHERE delivered_at IS NULL
-		 ORDER BY id ASC
+		 ORDER BY
+		   CASE level
+		     WHEN 'action' THEN 1
+		     WHEN 'warning' THEN 2
+		     WHEN 'insight' THEN 3
+		     WHEN 'info' THEN 4
+		     ELSE 5
+		   END ASC,
+		   created_at ASC
 		 LIMIT ?`, maxN,
 	)
 	if err != nil {

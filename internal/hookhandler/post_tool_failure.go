@@ -211,7 +211,9 @@ func buildFixSuggestion(sdb *sessiondb.SessionDB, sessionID, failureType, filePa
 	case failCompileError:
 		b.WriteString("[buddy] Compilation error detected.\n")
 		b.WriteString("  WHY: Recent edits likely introduced a syntax or type error.\n")
-		if goFix := matchGoCompileError(errorMsg); goFix != "" {
+		if grouped := groupCompileErrors(errorMsg); grouped != "" {
+			fmt.Fprintf(&b, "→ %s", grouped)
+		} else if goFix := matchGoCompileError(errorMsg); goFix != "" {
 			fmt.Fprintf(&b, "→ %s", goFix)
 		} else if loc := extractCompileLocation(errorMsg); loc != "" {
 			fmt.Fprintf(&b, "→ Error location: %s — Read that file to see the context.", loc)
@@ -568,6 +570,96 @@ func recordFailureSequence(sdb *sessiondb.SessionDB, toolName string) {
 	// Advance sequence pointers (same as success path in post_tool_use.go).
 	_ = sdb.SetContext("prev_prev_tool", prevTool)
 	_ = sdb.SetContext("prev_tool", toolName)
+}
+
+// Root cause identification patterns for compile error grouping.
+var (
+	goErrLineRe             = regexp.MustCompile(`(\S+\.go):(\d+):(?:\d+:)?\s*(.+)`)
+	rootCauseUndefinedRe    = regexp.MustCompile(`undefined: (\w+)`)
+	rootCauseUnusedImportRe = regexp.MustCompile(`"([^"]+)" imported and not used`)
+	rootCauseTypeMismatchRe = regexp.MustCompile(`cannot use .+ as (?:type )?(\S+)`)
+)
+
+// groupCompileErrors identifies common root causes in multi-error compile output.
+// Groups related errors (e.g., multiple "undefined: X") to surface the primary root cause,
+// so the user fixes the root cause first instead of chasing cascading errors.
+func groupCompileErrors(errorMsg string) string {
+	lines := strings.Split(errorMsg, "\n")
+
+	type parsedErr struct {
+		file string
+		msg  string
+	}
+
+	var errs []parsedErr
+	for _, line := range lines {
+		m := goErrLineRe.FindStringSubmatch(strings.TrimSpace(line))
+		if m != nil {
+			errs = append(errs, parsedErr{file: filepath.Base(m[1]), msg: m[3]})
+		}
+	}
+
+	if len(errs) < 2 {
+		return ""
+	}
+
+	// Extract root cause identifiers and track affected files.
+	type causeInfo struct {
+		label string
+		count int
+		files map[string]bool
+	}
+	causes := make(map[string]*causeInfo)
+
+	addCause := func(key, label, file string) {
+		if c, ok := causes[key]; ok {
+			c.count++
+			c.files[file] = true
+		} else {
+			causes[key] = &causeInfo{label: label, count: 1, files: map[string]bool{file: true}}
+		}
+	}
+
+	for _, e := range errs {
+		if m := rootCauseUndefinedRe.FindStringSubmatch(e.msg); m != nil {
+			addCause("undefined:"+m[1], "`"+m[1]+"` is undefined", e.file)
+		} else if m := rootCauseUnusedImportRe.FindStringSubmatch(e.msg); m != nil {
+			addCause("import:"+m[1], "unused import `"+m[1]+"`", e.file)
+		} else if m := rootCauseTypeMismatchRe.FindStringSubmatch(e.msg); m != nil {
+			addCause("type:"+m[1], "type mismatch with `"+m[1]+"`", e.file)
+		}
+	}
+
+	// Collect root causes with 2+ occurrences.
+	var groups []string
+	for _, c := range causes {
+		if c.count < 2 {
+			continue
+		}
+		files := make([]string, 0, len(c.files))
+		for f := range c.files {
+			files = append(files, f)
+		}
+		groups = append(groups, fmt.Sprintf("%s (%d errors in %s)", c.label, c.count, strings.Join(files, ", ")))
+	}
+
+	if len(groups) == 0 {
+		if len(errs) >= 3 {
+			return fmt.Sprintf("%d compile errors. Fix the first error — later errors often cascade.", len(errs))
+		}
+		return ""
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d compile errors, %d root cause(s):", len(errs), len(groups))
+	for i, g := range groups {
+		if i >= 3 {
+			break
+		}
+		fmt.Fprintf(&b, "\n  → %s", g)
+	}
+	b.WriteString("\nFix root cause(s) first — cascading errors resolve automatically.")
+	return b.String()
 }
 
 // searchCrossProjectSolutions searches the global DB for error solutions from other projects.
