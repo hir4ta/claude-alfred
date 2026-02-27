@@ -242,21 +242,13 @@ func (s *Store) SyncSession(jsonlPath string) error {
 }
 
 // extractAndStorePatterns extracts patterns from assistant events and stores them.
+// Re-extraction replaces existing patterns to pick up classification improvements.
 func (s *Store) extractAndStorePatterns(sessionID string) {
-	// Get all assistant events for this session.
 	events, err := s.getAssistantEvents(sessionID)
 	if err != nil || len(events) == 0 {
 		return
 	}
 
-	// Check how many patterns already exist for this session to avoid duplicates.
-	var existingCount int
-	s.db.QueryRow(`SELECT count(*) FROM patterns WHERE session_id = ?`, sessionID).Scan(&existingCount)
-	if existingCount > 0 {
-		return // Already extracted
-	}
-
-	// Detect language from project name heuristic.
 	lang := ""
 	sess, err := s.GetSession(sessionID)
 	if err == nil {
@@ -264,6 +256,13 @@ func (s *Store) extractAndStorePatterns(sessionID string) {
 	}
 
 	patterns := ExtractPatterns(events, sessionID, lang)
+	if len(patterns) == 0 {
+		return
+	}
+
+	// Replace existing patterns to pick up fixes (e.g. classification bug fixes).
+	_ = s.DeletePatternsBySession(sessionID)
+
 	for i := range patterns {
 		s.InsertPattern(&patterns[i])
 	}

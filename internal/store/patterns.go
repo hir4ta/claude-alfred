@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/hir4ta/claude-buddy/internal/parser"
 )
 
 // PatternRow represents a row in the patterns table.
@@ -44,10 +46,10 @@ func ExtractPatterns(events []EventRow, sessionID string, lang string) []Pattern
 	// Gather last user message for context.
 	var lastUserText string
 	for _, ev := range events {
-		if ev.EventType == 0 && ev.UserText != "" { // EventUserMessage
+		if ev.EventType == int(parser.EventUserMessage) && ev.UserText != "" {
 			lastUserText = ev.UserText
 		}
-		if ev.EventType != 2 || ev.AssistantText == "" { // EventAssistantText
+		if ev.EventType != int(parser.EventAssistantText) || ev.AssistantText == "" {
 			continue
 		}
 

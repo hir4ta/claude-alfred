@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"os"
 	"sort"
 )
 
@@ -155,10 +156,12 @@ func (s *Store) EmbedPending(embedFunc func(text string) ([]float32, error), mod
 
 		vec, err := embedFunc(text)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: embed pattern %d: %v\n", id, err)
 			continue
 		}
 
 		if err := s.InsertEmbedding("patterns", id, model, vec); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: store embedding %d: %v\n", id, err)
 			continue
 		}
 		count++
