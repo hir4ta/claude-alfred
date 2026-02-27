@@ -183,18 +183,18 @@ func buddyHookEntries(binPath string) map[string]any {
 	cmd := binPath + " hook-handler Stop"
 	entries["Stop"] = []any{
 		map[string]any{
-			"hooks": []any{map[string]any{
-				"type":    "command",
-				"command": cmd,
-				"timeout": 8,
-			}},
-		},
-		map[string]any{
-			"hooks": []any{map[string]any{
-				"type":    "prompt",
-				"prompt":  "[buddy] Check if the task is complete. Evaluate: (1) Were all requested changes implemented? (2) Were tests run if the project has tests? (3) Are there uncommitted changes that should be committed? If incomplete, state what remains in one sentence. If complete, confirm completion.",
-				"timeout": 15,
-			}},
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": cmd,
+					"timeout": 8,
+				},
+				map[string]any{
+					"type":    "prompt",
+					"prompt":  "[buddy] Check if the task is complete. Evaluate: (1) Were all requested changes implemented? (2) Were tests run if the project has tests? (3) Are there uncommitted changes that should be committed? If incomplete, state what remains in one sentence. If complete, confirm completion.",
+					"timeout": 15,
+				},
+			},
 		},
 	}
 
