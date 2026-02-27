@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -64,6 +65,16 @@ func TestBundle(t *testing.T) {
 		if _, ok := hooks["Stop"]; ok {
 			t.Error("Stop hook should not be registered")
 		}
+
+		// All hook commands should use ${CLAUDE_PLUGIN_ROOT}.
+		raw, _ := os.ReadFile(filepath.Join(outputDir, "hooks", "hooks.json"))
+		content := string(raw)
+		if !strings.Contains(content, "${CLAUDE_PLUGIN_ROOT}") {
+			t.Error("hook commands should use ${CLAUDE_PLUGIN_ROOT}")
+		}
+		if strings.Contains(content, "$HOME/.claude/plugins") {
+			t.Error("hook commands should not use hardcoded $HOME path")
+		}
 	})
 
 	// Verify .mcp.json.
@@ -85,7 +96,7 @@ func TestBundle(t *testing.T) {
 		}
 	})
 
-	// Verify all skills exist.
+	// Verify all skills exist, including init.
 	t.Run("skills", func(t *testing.T) {
 		for _, skill := range buddySkills {
 			p := filepath.Join(outputDir, "skills", skill.Dir, "SKILL.md")
@@ -97,6 +108,15 @@ func TestBundle(t *testing.T) {
 			if len(data) == 0 {
 				t.Errorf("skill %s: empty file", skill.Dir)
 			}
+		}
+
+		// init skill must be user-invocable.
+		initData, err := os.ReadFile(filepath.Join(outputDir, "skills", "init", "SKILL.md"))
+		if err != nil {
+			t.Fatalf("init skill missing: %v", err)
+		}
+		if !strings.Contains(string(initData), "user-invocable: true") {
+			t.Error("init skill should be user-invocable")
 		}
 	})
 

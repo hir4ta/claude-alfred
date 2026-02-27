@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 )
 
-// wrapperCmd is the shell command that invokes the auto-download wrapper script.
-// Hooks and MCP use this instead of a bare "claude-buddy" binary.
-const wrapperCmd = `/bin/sh "$HOME/.claude/plugins/claude-buddy/bin/run.sh"`
+// runCmd is the shell command that invokes the guard/setup wrapper script.
+// ${CLAUDE_PLUGIN_ROOT} is expanded by Claude Code at plugin install time.
+const runCmd = `"${CLAUDE_PLUGIN_ROOT}/bin/run.sh"`
 
 // Bundle generates the plugin directory structure from Go source definitions.
 // The outputDir will contain .claude-plugin/, hooks/, bin/, skills/, agents/, and .mcp.json.
@@ -45,9 +45,9 @@ func Bundle(outputDir, version string) error {
 		return fmt.Errorf("write plugin.json: %w", err)
 	}
 
-	// 3. Write hooks.json — commands invoke the wrapper script.
+	// 3. Write hooks.json — commands invoke the guard/setup wrapper.
 	hooksJSON := map[string]any{
-		"hooks": buddyHookEntries(wrapperCmd),
+		"hooks": buddyHookEntries(runCmd),
 	}
 	if err := writeJSON(filepath.Join(outputDir, "hooks", "hooks.json"), hooksJSON); err != nil {
 		return fmt.Errorf("write hooks.json: %w", err)
@@ -57,8 +57,8 @@ func Bundle(outputDir, version string) error {
 	mcpJSON := map[string]any{
 		"mcpServers": map[string]any{
 			"claude-buddy": map[string]any{
-				"command": "/bin/sh",
-				"args":    []string{"-c", `"$HOME/.claude/plugins/claude-buddy/bin/run.sh" serve`},
+				"command": "${CLAUDE_PLUGIN_ROOT}/bin/run.sh",
+				"args":    []string{"serve"},
 			},
 		},
 	}
@@ -66,7 +66,7 @@ func Bundle(outputDir, version string) error {
 		return fmt.Errorf("write .mcp.json: %w", err)
 	}
 
-	// 5. Write bin/run.sh — auto-download wrapper.
+	// 5. Write bin/run.sh — guard + setup wrapper.
 	runScript := generateRunScript(version)
 	runPath := filepath.Join(outputDir, "bin", "run.sh")
 	if err := os.WriteFile(runPath, []byte(runScript), 0o755); err != nil {
@@ -87,43 +87,59 @@ func Bundle(outputDir, version string) error {
 		return fmt.Errorf("write buddy agent: %w", err)
 	}
 
-	hookCount := len(buddyHookEntries(wrapperCmd))
+	hookCount := len(buddyHookEntries(runCmd))
 
 	fmt.Printf("✓ Plugin bundle generated at %s\n", outputDir)
 	fmt.Printf("  - plugin.json (v%s)\n", version)
 	fmt.Printf("  - hooks.json (%d events)\n", hookCount)
 	fmt.Printf("  - .mcp.json\n")
-	fmt.Printf("  - bin/run.sh (auto-download wrapper)\n")
+	fmt.Printf("  - bin/run.sh (guard + setup wrapper)\n")
 	fmt.Printf("  - %d skills\n", len(buddySkills))
 	fmt.Printf("  - 1 agent (buddy)\n")
 	return nil
 }
 
-// generateRunScript creates the wrapper shell script that auto-downloads the binary
-// from GitHub Releases on first run or version mismatch.
+// generateRunScript creates the guard/setup wrapper script.
+// In guard mode (default), it checks for the binary and either execs it or
+// outputs an init message. In setup mode ("setup" arg), it downloads the
+// binary from GitHub Releases and runs initial DB sync.
 func generateRunScript(version string) string {
 	return `#!/bin/sh
-set -e
-
 BUDDY_VERSION="` + version + `"
-BUDDY_DIR="${HOME}/.claude-buddy"
-BUDDY_BIN="${BUDDY_DIR}/bin/claude-buddy"
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUDDY_BIN="${BIN_DIR}/claude-buddy"
 
-# Download binary if missing or version mismatch.
-if [ ! -f "$BUDDY_BIN" ] || [ "$("$BUDDY_BIN" version 2>/dev/null)" != "claude-buddy ${BUDDY_VERSION}" ]; then
-  OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-  ARCH=$(uname -m)
-  case "$ARCH" in
-    x86_64)  ARCH="amd64" ;;
-    aarch64) ARCH="arm64" ;;
-  esac
-  URL="https://github.com/hir4ta/claude-buddy/releases/download/v${BUDDY_VERSION}/claude-buddy_${OS}_${ARCH}.tar.gz"
-  mkdir -p "${BUDDY_DIR}/bin"
-  curl -fsSL "$URL" | tar -xz -C "${BUDDY_DIR}/bin" claude-buddy
-  chmod +x "$BUDDY_BIN"
-fi
-
-exec "$BUDDY_BIN" "$@"
+case "$1" in
+  setup)
+    set -e
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64)  ARCH="amd64" ;;
+      aarch64) ARCH="arm64" ;;
+    esac
+    URL="https://github.com/hir4ta/claude-buddy/releases/download/v${BUDDY_VERSION}/claude-buddy_${OS}_${ARCH}.tar.gz"
+    curl -fsSL "$URL" | tar -xz -C "${BIN_DIR}" claude-buddy
+    chmod +x "$BUDDY_BIN"
+    echo "claude-buddy ${BUDDY_VERSION} installed"
+    exec "$BUDDY_BIN" install
+    ;;
+  *)
+    if [ ! -f "$BUDDY_BIN" ]; then
+      case "$1" in
+        hook-handler)
+          echo '{"additionalContext":"[claude-buddy] Not initialized. Run /claude-buddy:init to set up."}'
+          exit 0
+          ;;
+        *)
+          echo "claude-buddy not initialized. Run /claude-buddy:init to set up." >&2
+          exit 1
+          ;;
+      esac
+    fi
+    exec "$BUDDY_BIN" "$@"
+    ;;
+esac
 `
 }
 

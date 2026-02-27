@@ -2,10 +2,9 @@
   "mcpServers": {
     "claude-buddy": {
       "args": [
-        "-c",
-        "\"$HOME/.claude/plugins/claude-buddy/bin/run.sh\" serve"
+        "serve"
       ],
-      "command": "/bin/sh"
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/run.sh"
     }
   }
 }
