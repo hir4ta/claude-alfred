@@ -11,22 +11,17 @@ Install the plugin inside Claude Code:
 /plugin install claude-buddy@claude-buddy
 ```
 
-The binary is automatically downloaded from GitHub Releases on first hook invocation. No manual binary installation required.
-
-### Sync sessions and embeddings
-
-```bash
-claude-buddy install
-```
-
-Syncs past sessions to the local SQLite database (`~/.claude-buddy/buddy.db`) and generates embeddings. Hook/skill/agent registration is managed by the plugin.
+The binary is automatically downloaded from GitHub Releases on first hook invocation. No manual binary installation required. Session data is synced automatically.
 
 ### Optional: Voyage AI for semantic search
 
 Set `VOYAGE_API_KEY` to enable vector-based knowledge search across sessions. Without it, search falls back to FTS5 BM25 / LIKE.
 
+Add to your shell profile so hooks can access it:
+
 ```bash
-export VOYAGE_API_KEY=your-api-key
+echo 'export VOYAGE_API_KEY=your-api-key' >> ~/.$(basename "$SHELL")rc
+source ~/.$(basename "$SHELL")rc
 ```
 
 Uses `voyage-4-large` (2048 dimensions) for maximum retrieval accuracy.
@@ -47,11 +42,7 @@ Update the plugin inside Claude Code:
 /plugin marketplace update
 ```
 
-The wrapper script automatically downloads the new binary version on next hook invocation. Then re-sync sessions:
-
-```bash
-claude-buddy install
-```
+The wrapper script automatically downloads the new binary version on next hook invocation.
 
 ## Commands
 
@@ -99,16 +90,6 @@ Browse past session history with the same expand/collapse interface.
 
 ```bash
 claude-buddy browse
-```
-
----
-
-### `claude-buddy install`
-
-Sync sessions to the local database and generate embeddings. When the plugin is active, hook/skill/agent registration is automatically skipped and any legacy `~/.claude/` files are cleaned up.
-
-```bash
-claude-buddy install
 ```
 
 ---

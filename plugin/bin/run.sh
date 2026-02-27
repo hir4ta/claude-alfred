@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-BUDDY_VERSION="0.12.0"
+BUDDY_VERSION="0.12.1"
 BUDDY_DIR="${HOME}/.claude-buddy"
 BUDDY_BIN="${BUDDY_DIR}/bin/claude-buddy"
 
