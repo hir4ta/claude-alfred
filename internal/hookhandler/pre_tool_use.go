@@ -97,20 +97,20 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	}
 
 	// --- JARVIS advisor: present alternatives before action ---
-	var signals []string
+	var signals []prioritizedSignal
 	if safetyWarning != "" {
-		signals = append(signals, safetyWarning)
+		signals = append(signals, prioritizedSignal{priCritical, safetyWarning})
 	}
 
 	if alts := presentAlternatives(sdb, in.ToolName, in.ToolInput); alts != "" {
-		signals = append(signals, alts)
+		signals = append(signals, prioritizedSignal{priHigh, alts})
 	}
 
 	// Pre-action coaching: risk-aware guidance before specific tool invocations.
 	var inputMap map[string]any
 	_ = json.Unmarshal(in.ToolInput, &inputMap)
 	if coaching := preActionCoaching(sdb, in.ToolName, inputMap); coaching != "" {
-		signals = append(signals, coaching)
+		signals = append(signals, prioritizedSignal{priMedium, coaching})
 	}
 
 	// Suggest dedicated tools when CLI equivalents used in Bash.
@@ -119,7 +119,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 		if !on {
 			if hint := suggestDedicatedTool(in.ToolInput); hint != "" {
 				_ = sdb.SetCooldown("cli_tool_hint", 30*time.Minute)
-				signals = append(signals, hint)
+				signals = append(signals, prioritizedSignal{priLow, hint})
 			}
 		}
 	}
@@ -152,7 +152,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 				if info := analyzeImpact(sdb, ei.FilePath, in.CWD); info != nil {
 					if text := formatImpact(info); text != "" {
 						_ = sdb.SetCooldown(impactKey, 15*time.Minute)
-						signals = append(signals, fmt.Sprintf("[buddy] Impact: %s", text))
+						signals = append(signals, prioritizedSignal{priMedium, fmt.Sprintf("[buddy] Impact: %s", text)})
 					}
 				}
 			}
@@ -170,7 +170,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 			if !on {
 				if hint := coChangeHint(ci.FilePath); hint != "" {
 					_ = sdb.SetCooldown(coKey, 15*time.Minute)
-					signals = append(signals, hint)
+					signals = append(signals, prioritizedSignal{priLow, hint})
 				}
 			}
 		}
@@ -179,7 +179,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	// Proactive solution lookup: surface past resolution playbooks before action.
 	if in.ToolName == "Edit" || in.ToolName == "Write" || in.ToolName == "Bash" {
 		if hint := proactiveSolutionLookup(sdb, in.ToolName, in.ToolInput); hint != "" {
-			signals = append(signals, hint)
+			signals = append(signals, prioritizedSignal{priHigh, hint})
 		}
 	}
 
@@ -191,7 +191,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 		if !on {
 			if ctx := searchContextualPatterns(sig); ctx != "" {
 				_ = sdb.SetCooldown(ctxKey, 10*time.Minute)
-				signals = append(signals, ctx)
+				signals = append(signals, prioritizedSignal{priMedium, ctx})
 			}
 		}
 	}
@@ -199,7 +199,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	// Domain-aware risk warnings for high-risk operations.
 	if domain, _ := sdb.GetWorkingSet("domain"); domain != "" && domain != "general" {
 		if risk := domainRiskCheck(sdb, domain, in.ToolName, in.ToolInput); risk != "" {
-			signals = append(signals, risk)
+			signals = append(signals, prioritizedSignal{priMedium, risk})
 		}
 	}
 
@@ -212,16 +212,14 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	// Record delivery for effectiveness tracking.
 	recordNudgeDelivery(sdb, in.SessionID, nudges)
 
-	// Combine advisor signals and nudges into a single context string.
-	var parts []string
-	parts = append(parts, signals...)
-
+	// Format nudges as extra parts (already prioritized by Thompson Sampling).
+	var nudgeParts []string
 	for _, n := range nudges {
-		parts = append(parts, fmt.Sprintf("[buddy] %s (%s): %s\n→ %s",
+		nudgeParts = append(nudgeParts, fmt.Sprintf("[buddy] %s (%s): %s\n→ %s",
 			n.Pattern, n.Level, n.Observation, n.Suggestion))
 	}
 
-	return makeOutput("PreToolUse", budgetJoin(parts, 2000)), nil
+	return makeOutput("PreToolUse", budgetJoinPrioritized(signals, nudgeParts, 2000)), nil
 }
 
 // extractCmdSignature extracts the base command pattern from a Bash command.
@@ -698,14 +696,35 @@ func containsAny(s string, subs ...string) bool {
 	return false
 }
 
-// budgetJoin joins parts with newline separator, respecting a character budget.
-// Earlier entries have higher priority (signals are ordered by importance).
-func budgetJoin(parts []string, budget int) string {
+// signalPriority controls the order in which advisor signals consume the budget.
+type signalPriority int
+
+const (
+	priCritical signalPriority = iota + 1
+	priHigh
+	priMedium
+	priLow
+)
+
+// prioritizedSignal pairs an advisor message with its priority level.
+type prioritizedSignal struct {
+	Priority signalPriority
+	Content  string
+}
+
+// budgetJoinPrioritized sorts signals by priority (critical first), then joins
+// them within the character budget. Stable sort preserves insertion order within
+// the same priority level.
+func budgetJoinPrioritized(signals []prioritizedSignal, extra []string, budget int) string {
+	sort.SliceStable(signals, func(i, j int) bool {
+		return signals[i].Priority < signals[j].Priority
+	})
+
 	var b strings.Builder
-	for i, p := range parts {
-		needed := len(p)
+	for i, s := range signals {
+		needed := len(s.Content)
 		if i > 0 {
-			needed++ // newline separator
+			needed++
 		}
 		if b.Len()+needed > budget {
 			break
@@ -713,7 +732,22 @@ func budgetJoin(parts []string, budget int) string {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
+		b.WriteString(s.Content)
+	}
+	// Append extra parts (nudges) after prioritized signals.
+	for _, p := range extra {
+		needed := len(p)
+		if b.Len() > 0 {
+			needed++
+		}
+		if b.Len()+needed > budget {
+			break
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
 		b.WriteString(p)
 	}
 	return b.String()
 }
+

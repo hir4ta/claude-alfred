@@ -56,208 +56,131 @@ Initialize claude-buddy for this system.
 `,
 	},
 	{
-		Dir: "buddy-unstuck",
+		Dir: "buddy-recover",
 		Content: `---
-name: buddy-unstuck
+name: buddy-recover
 description: >
-  CRITICAL: Invoke immediately when 2+ consecutive tool failures occur on the
-  same file, when an Edit fails with 'old_string not found', or when the same
-  Bash command fails twice. Do NOT retry the failing approach — invoke this
-  skill first. Analyzes root cause and suggests alternative approaches based
-  on past session knowledge.
+  Invoke on 2+ consecutive tool failures, Edit 'old_string not found', test
+  FAIL after a fix attempt, or any compilation/import error. Do NOT retry —
+  invoke this skill first for root cause analysis and past resolution diffs.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_alerts
 ---
 
-You are a debugging advisor. The user (Claude Code) is stuck in a failure loop.
+Failure recovery advisor. Covers stuck loops, error recovery, and test failure debugging.
 
 ## Steps
 
-1. Call buddy_skill_context with skill_name="buddy-unstuck" to get session health, recent failures, and past solutions in one call
-2. If more detail needed, call buddy_patterns with a query describing the current error
-3. If the pattern involves a specific file, call buddy_recall to find what worked before
+1. Call buddy_skill_context with skill_name="buddy-recover" to get session health, recent failures, past solutions, and test correlations
+2. If a past resolution diff exists, present the exact fix
+3. If more detail needed, call buddy_patterns with the error message or failing test name
+4. If the failure involves a specific file, call buddy_recall to find what worked before
 
 ## Output
 
-Provide exactly ONE alternative approach:
-- What's likely causing the repeated failure (one sentence)
-- A specific different approach to try (one sentence)
-- If a past solution exists, reference it
+- Root cause hypothesis (one sentence)
+- ONE specific alternative approach or past fix to try
+- If past resolution diff exists, show the exact change
 
 Keep it under 5 lines. Be direct and actionable.
 `,
 	},
 	{
-		Dir: "buddy-checkpoint",
+		Dir: "buddy-gate",
 		Content: `---
-name: buddy-checkpoint
+name: buddy-gate
 description: >
-  Invoke after every 15 tool calls, before any git operation, and whenever
-  switching between files or tasks. Quick health check that catches problems
-  early. Especially important before git commits or when working on complex
-  multi-file changes.
-user-invocable: false
-allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_alerts
----
-
-Quick session health check.
-
-## Steps
-
-1. Call buddy_skill_context with skill_name="buddy-checkpoint" to get session snapshot, health score, and alerts in one call
-2. Only call buddy_alerts separately if health score < 0.7 and you need more detail
-
-## Output
-
-- If health >= 0.7 and no alerts: respond "Session healthy" and continue
-- If health < 0.7: state the top issue in one sentence
-- If active alerts: mention the most severe one with its suggestion
-- Never output more than 3 lines
-`,
-	},
-	{
-		Dir: "buddy-before-commit",
-		Content: `---
-name: buddy-before-commit
-description: >
-  Invoke before every git commit without exception. Checks for unrun tests,
-  active anti-patterns, and code quality issues. A 5-second check that
-  prevents bad commits. Do NOT skip this even for small changes.
+  Invoke every 15 tool calls, before git commits, and when switching files
+  or tasks. Quick health + quality gate that catches problems early and
+  prevents bad commits. Do NOT skip before git operations.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_current_state, Bash, Read
 ---
 
-Pre-commit quality gate.
+Session health check and pre-commit quality gate.
 
 ## Steps
 
-1. Call buddy_skill_context with skill_name="buddy-before-commit" to get test/build status, unresolved failures, and quality summary in one call
-2. If alerts are present, investigate and suggest fixes
-3. If tests were not run and the project has tests, suggest running them
+1. Call buddy_skill_context with skill_name="buddy-gate" to get health score, test/build status, unresolved failures, and alerts
+2. If this is a pre-commit check, verify tests have been run and no active alerts exist
+3. Only call buddy_alerts separately if health < 0.7 and you need more detail
 
 ## Output
 
-- If blocking issues found: list them (max 3) and suggest fixes
-- If clean: respond "Pre-commit check passed" and proceed with the commit
-- Never block the commit yourself — just advise
+- If health >= 0.7, no alerts, tests passing: "Gate passed" and continue
+- If blocking issues: list them (max 3) with suggested fixes
+- Never block operations yourself — advise only
+- Max 3 lines
 `,
 	},
 	{
-		Dir: "buddy-impact",
+		Dir: "buddy-analyze",
 		Content: `---
-name: buddy-impact
+name: buddy-analyze
 description: >
-  Analyze the blast radius of planned changes before editing. Shows importers,
-  test coverage, and co-change history for a file.
+  Analyze blast radius of planned changes and review recent modifications.
+  Shows importers, test coverage, co-change history, anti-patterns, and
+  architectural alignment.
 user-invocable: true
-allowed-tools: mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_decisions, Read, Grep, Glob, Bash
+allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_decisions, mcp__claude-buddy__buddy_alerts, Read, Grep, Glob, Bash
+context: fork
+agent: Explore
 ---
 
-Analyze the impact of changing a specific file or module.
+Impact analysis and change review.
 
 ## Steps
 
-1. Identify the target file from the user's request
-2. Call buddy_patterns to find related past changes and issues
-3. Call buddy_decisions to check for architectural constraints
-4. Use Grep to find importers/references to this file
-5. Use Glob to find related test files
+1. Identify target files from the user's request or recent git diff
+2. Call buddy_skill_context with skill_name="buddy-analyze" for modified files, test status, and patterns
+3. Use Grep to find importers/references, Glob for related test files
+4. Call buddy_decisions to check architectural constraints
+5. Call buddy_patterns for known issues with these files
 
 ## Output
 
-- Blast radius: number of files that reference this module
-- Test coverage: which test files exist for this code
-- Past issues: any known problems from pattern DB
-- Recommendations: suggested approach for the change
+- Blast radius: files referencing the target module
+- Test coverage: existing test files for this code
+- Past issues: known problems from pattern DB
+- Alignment: whether changes match past architectural decisions
+- Recommendations: suggested approach
 
-Keep output under 10 lines. Be specific about file paths.
+Keep under 10 lines. Be specific about file paths.
 `,
 	},
 	{
-		Dir: "buddy-review",
+		Dir: "buddy-forecast",
 		Content: `---
-name: buddy-review
+name: buddy-forecast
 description: >
-  Review recent changes against pattern DB knowledge. Checks for known
-  anti-patterns, past failures with similar code, and architectural decisions.
+  Estimate task complexity from historical data and predict session trajectory.
+  Shows expected tool count, success rate, workflow recommendation, health
+  trend, and cascade risk.
 user-invocable: true
-allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_decisions, Bash, Read
+allowed-tools: mcp__claude-buddy__buddy_estimate, mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_alerts
+context: fork
+agent: Explore
 ---
 
-Review recent code changes using pattern database knowledge.
+Task estimation and session prediction dashboard.
 
 ## Steps
 
-1. Call buddy_skill_context with skill_name="buddy-review" to get modified files, test status, and related patterns in one call
-2. Run 'git diff --stat' to see detailed changes
-3. Call buddy_patterns for specific files if more detail needed
-4. Call buddy_decisions to check if changes align with past architectural choices
+1. Determine task type from the user's description (bugfix, feature, refactor, research, review)
+2. Call buddy_estimate with the task type for historical data
+3. Call buddy_current_state for real-time session snapshot including predictions
+4. Call buddy_skill_context with skill_name="buddy-forecast" for health and phase data
+5. If health < 0.7, call buddy_alerts for anti-pattern details
 
 ## Output
 
-- List specific issues found (max 5)
-- Reference past patterns or decisions that are relevant
-- Suggest concrete fixes if issues found
-- If clean, say "No issues found" and summarize what was reviewed
-`,
-	},
-	{
-		Dir: "buddy-estimate",
-		Content: `---
-name: buddy-estimate
-description: >
-  Estimate task complexity based on historical workflow data. Shows expected
-  tool count, success rate, and recommended workflow.
-user-invocable: true
-allowed-tools: mcp__claude-buddy__buddy_estimate, mcp__claude-buddy__buddy_patterns
----
-
-Estimate the complexity of a task using historical data.
-
-## Steps
-
-1. Determine the task type from the user's description (bugfix, feature, refactor, research, review)
-2. Call buddy_estimate with the task type
-3. Call buddy_patterns to find similar past tasks if available
-
-## Output
-
-- Task type classification
-- Expected tool count (median from past sessions)
-- Success rate for this type of task
+- Task type + expected tool count (median) + success rate
+- Health: [score] [trend] | Phase: [current] → [next]
+- Cascade risk: [low/medium/high]
 - Recommended workflow steps
-- Any relevant patterns from past sessions
+- One-sentence forecast
 
-Keep it concise — 5-8 lines max.
-`,
-	},
-	{
-		Dir: "buddy-error-recovery",
-		Content: `---
-name: buddy-error-recovery
-description: >
-  Invoke after any tool returns an error, especially compilation errors,
-  import failures, or permission denied. Searches cross-session knowledge
-  for exact resolution diffs. Invoke BEFORE attempting a manual fix.
-user-invocable: false
-allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
----
-
-Automatic error recovery advisor. Triggered after tool failures.
-
-## Steps
-
-1. Call buddy_skill_context with skill_name="buddy-error-recovery" to get failure context, recent errors, and related solutions
-2. If a past solution with resolution diff exists, present the exact fix
-3. If no direct match, call buddy_patterns with the error message to find similar past solutions
-
-## Output
-
-- If an exact past fix exists: "Past fix found: change X to Y in file Z"
-- If a similar pattern exists: "Similar error was resolved by: [approach]"
-- If no past knowledge: "No past solutions found. Suggested approach: [one sentence]"
-
-Keep it under 4 lines. Include file paths and concrete changes when available.
+Keep it concise — max 8 lines.
 `,
 	},
 	{
@@ -295,79 +218,34 @@ Provide a compact recovery summary:
 Keep it under 8 lines. Focus on what's needed to continue work immediately.
 `,
 	},
-	{
-		Dir: "buddy-test-guidance",
-		Content: `---
-name: buddy-test-guidance
-description: >
-  CRITICAL: Invoke immediately when test output shows FAIL and a previous
-  fix attempt did not resolve it. Do NOT edit code again before invoking
-  this skill. Analyzes failure patterns and provides root cause analysis
-  with targeted fix strategy based on past failure solutions.
-user-invocable: false
-allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
----
-
-Test failure debugging advisor.
-
-## Steps
-
-1. Call buddy_skill_context with skill_name="buddy-test-guidance" to get test status, recent failures, and correlated files
-2. Call buddy_patterns with the failing test name or error message
-3. If the failure involves a specific file, call buddy_recall to find past fixes for that file
-
-## Output
-
-Provide a targeted debugging strategy:
-- Root cause hypothesis (one sentence based on error pattern)
-- Specific debugging step to try next (one actionable instruction)
-- If a past similar failure exists, reference the resolution
-
-Keep it under 5 lines. Be specific about which file/function to investigate.
-`,
-	},
-	{
-		Dir: "buddy-predict",
-		Content: `---
-name: buddy-predict
-description: >
-  Prediction dashboard showing next-tool predictions, cascade risk assessment,
-  health trend trajectory, and workflow phase progress. Useful for understanding
-  session dynamics and anticipating issues.
-user-invocable: true
-allowed-tools: mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_alerts
----
-
-Session prediction and forecasting dashboard.
-
-## Steps
-
-1. Call buddy_current_state to get real-time session snapshot including predictions
-2. Call buddy_skill_context with skill_name="buddy-checkpoint" for health and phase data
-3. If health < 0.7, call buddy_alerts for detailed anti-pattern information
-
-## Output
-
-Present a prediction dashboard:
-- Health: [score] [trend: improving/stable/declining]
-- Next likely tools: [predicted tools with confidence]
-- Cascade risk: [low/medium/high based on recent failure patterns]
-- Phase: [current phase] → [expected next phase]
-- Forecast: [one sentence about session trajectory]
-
-Keep it under 8 lines. Use the data to provide actionable insight.
-`,
-	},
 }
 
-// removeSkills removes buddy skills from ~/.claude/skills/.
+// deprecatedSkillDirs lists skill directories from previous versions that
+// should be cleaned up during install/uninstall.
+var deprecatedSkillDirs = []string{
+	"buddy-unstuck",
+	"buddy-checkpoint",
+	"buddy-before-commit",
+	"buddy-impact",
+	"buddy-review",
+	"buddy-estimate",
+	"buddy-error-recovery",
+	"buddy-test-guidance",
+	"buddy-predict",
+}
+
+// removeSkills removes buddy skills from ~/.claude/skills/, including
+// deprecated skill directories from previous versions.
 func removeSkills() {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
+	skillsBase := filepath.Join(home, ".claude", "skills")
 	for _, skill := range buddySkills {
-		skillDir := filepath.Join(home, ".claude", "skills", skill.Dir)
-		_ = os.RemoveAll(skillDir)
+		_ = os.RemoveAll(filepath.Join(skillsBase, skill.Dir))
+	}
+	for _, dir := range deprecatedSkillDirs {
+		_ = os.RemoveAll(filepath.Join(skillsBase, dir))
 	}
 }

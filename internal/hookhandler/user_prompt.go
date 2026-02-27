@@ -39,6 +39,7 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	_ = sdb.SetContext("subagent_active", "")
 
 	// Record user intent and classify task type for workflow guidance.
+	var taskBriefing string
 	if in.Prompt != "" {
 		intent := in.Prompt
 		if len([]rune(intent)) > 100 {
@@ -50,13 +51,21 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 		if taskType != TaskUnknown {
 			// Detect intent transition: track when task_type changes mid-session.
 			prevTaskType, _ := sdb.GetContext("task_type")
-			if prevTaskType != "" && prevTaskType != string(taskType) {
+			isTransition := prevTaskType != "" && prevTaskType != string(taskType)
+			isFirstClassification := prevTaskType == ""
+
+			if isTransition {
 				transition := prevTaskType + " → " + string(taskType)
 				_ = sdb.SetWorkingSet("intent_transition", transition)
 				_ = sdb.SetContext("intent_transition_count",
 					incrementContextInt(sdb, "intent_transition_count"))
 			}
 			_ = sdb.SetContext("task_type", string(taskType))
+
+			// Generate briefing on task transition or first classification.
+			if isTransition || isFirstClassification {
+				taskBriefing = generateTaskTransitionBriefing(sdb, prevTaskType, string(taskType), in.CWD)
+			}
 		}
 		_ = sdb.SetContext("has_test_run", "")
 
@@ -153,6 +162,16 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	// Inject coaching at the top of entries (high visibility, but doesn't block nudges).
 	if coachingEntry != nil {
 		entries = append([]nudgeEntry{*coachingEntry}, entries...)
+	}
+
+	// Inject task transition/classification briefing (after coaching, before session-context).
+	if taskBriefing != "" {
+		entries = append([]nudgeEntry{{
+			Pattern:     "task-briefing",
+			Level:       "info",
+			Observation: "Task brief",
+			Suggestion:  taskBriefing,
+		}}, entries...)
 	}
 
 	// Inject session context summary for rich situational awareness.

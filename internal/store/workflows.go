@@ -81,6 +81,50 @@ func (s *Store) GetSuccessfulWorkflows(projectPath, taskType string, limit int) 
 	return results, rows.Err()
 }
 
+// GetWorkflows returns all workflow sequences (both successful and failed) for a
+// task type. Filters by project path via session join when projectPath is non-empty.
+func (s *Store) GetWorkflows(projectPath, taskType string, limit int) ([]WorkflowSequence, error) {
+	var query string
+	var args []any
+	if projectPath != "" {
+		query = `SELECT ws.id, ws.session_id, ws.task_type, ws.phase_sequence, ws.success, ws.tool_count, ws.duration_sec
+			 FROM workflow_sequences ws
+			 JOIN sessions s ON ws.session_id = s.id
+			 WHERE s.project_path = ? AND ws.task_type = ?
+			 ORDER BY ws.timestamp DESC
+			 LIMIT ?`
+		args = []any{projectPath, taskType, limit}
+	} else {
+		query = `SELECT ws.id, ws.session_id, ws.task_type, ws.phase_sequence, ws.success, ws.tool_count, ws.duration_sec
+			 FROM workflow_sequences ws
+			 WHERE ws.task_type = ?
+			 ORDER BY ws.timestamp DESC
+			 LIMIT ?`
+		args = []any{taskType, limit}
+	}
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: get workflows: %w", err)
+	}
+	defer rows.Close()
+
+	var results []WorkflowSequence
+	for rows.Next() {
+		var ws WorkflowSequence
+		var phasesJSON string
+		var succ int
+		if err := rows.Scan(&ws.ID, &ws.SessionID, &ws.TaskType, &phasesJSON, &succ, &ws.ToolCount, &ws.DurationSec); err != nil {
+			continue
+		}
+		ws.Success = succ == 1
+		if err := json.Unmarshal([]byte(phasesJSON), &ws.PhaseSequence); err != nil {
+			continue
+		}
+		results = append(results, ws)
+	}
+	return results, rows.Err()
+}
+
 // GetFailedWorkflows returns failed workflow sequences for a task type.
 func (s *Store) GetFailedWorkflows(taskType string, limit int) ([]WorkflowSequence, error) {
 	rows, err := s.db.Query(`

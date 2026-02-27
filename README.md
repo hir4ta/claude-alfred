@@ -161,7 +161,7 @@ claude-buddy plugin-bundle ./plugin
 claude-buddy is distributed as a Claude Code plugin. The plugin provides:
 
 - **14 hooks**: SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, PreCompact, SessionEnd, Stop (command + prompt), SubagentStart, SubagentStop, Notification, TeammateIdle, TaskCompleted, PermissionRequest
-- **11 skills**: init, buddy-unstuck, buddy-checkpoint, buddy-before-commit, buddy-impact, buddy-review, buddy-estimate, buddy-error-recovery, buddy-context-recovery, buddy-test-guidance, buddy-predict
+- **6 skills**: init, buddy-recover, buddy-gate, buddy-analyze, buddy-forecast, buddy-context-recovery
 - **1 agent**: buddy (persistent memory, session advisor)
 - **MCP server**: 14 tools for session analysis, feedback, and cross-project knowledge search
 
@@ -170,16 +170,11 @@ claude-buddy is distributed as a Claude Code plugin. The plugin provides:
 | Skill | Invocation | Description |
 |---|---|---|
 | init | `/claude-buddy:init` | Download binary, sync sessions, configure semantic search |
-| buddy-unstuck | auto | Escape retry loops and suggest alternative approaches |
-| buddy-checkpoint | auto | Session health check with active anti-pattern summary |
-| buddy-before-commit | auto | Pre-commit quality verification |
-| buddy-impact | `/claude-buddy:buddy-impact` | Blast radius analysis for planned file changes |
-| buddy-review | `/claude-buddy:buddy-review` | Review recent changes against pattern DB knowledge |
-| buddy-estimate | `/claude-buddy:buddy-estimate` | Task complexity estimation from historical data |
-| buddy-predict | `/claude-buddy:buddy-predict` | Prediction dashboard (next tool, cascade risk, health trend) |
-| buddy-error-recovery | auto | Past resolution diffs for tool failures |
+| buddy-recover | auto | Failure recovery: stuck loops, error resolution diffs, test debugging |
+| buddy-gate | auto | Session health check + pre-commit quality gate |
+| buddy-analyze | `/claude-buddy:buddy-analyze` | Blast radius analysis and change review (runs in forked context) |
+| buddy-forecast | `/claude-buddy:buddy-forecast` | Task estimation and session prediction dashboard (runs in forked context) |
 | buddy-context-recovery | auto | Restore working context after compaction |
-| buddy-test-guidance | auto | Test failure debugging strategies |
 
 ## Hooks
 

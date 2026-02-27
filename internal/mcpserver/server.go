@@ -315,7 +315,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("skill_name",
 					mcp.Required(),
-					mcp.Description("Name of the skill requesting context (e.g., buddy-review, buddy-before-commit, buddy-unstuck, buddy-checkpoint)"),
+					mcp.Description("Name of the skill requesting context (e.g., buddy-analyze, buddy-gate, buddy-recover, buddy-forecast)"),
 				),
 				mcp.WithString("session_id",
 					mcp.Description("Session ID (optional, defaults to latest)"),

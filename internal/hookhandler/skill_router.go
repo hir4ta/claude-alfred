@@ -7,18 +7,18 @@ package hookhandler
 func SkillHintForPattern(pattern string) string {
 	switch pattern {
 	case "retry-loop", "code-quality":
-		return skillHint("claude-buddy:buddy-unstuck",
+		return skillHint("claude-buddy:buddy-recover",
 			"break out of this failure loop")
 	case "test-correlation":
-		return skillHint("claude-buddy:buddy-test-guidance",
+		return skillHint("claude-buddy:buddy-recover",
 			"get targeted debugging strategy for failing tests")
 	case "stale-read":
 		return "" // simple re-read, no skill needed
 	case "past-solution", "file-knowledge":
-		return skillHint("claude-buddy:buddy-error-recovery",
+		return skillHint("claude-buddy:buddy-recover",
 			"retrieve past resolution diffs for this error")
 	case "workflow":
-		return skillHint("claude-buddy:buddy-checkpoint",
+		return skillHint("claude-buddy:buddy-gate",
 			"check session health and workflow alignment")
 	case "strategic", "playbook":
 		return "" // coaching-level, not actionable via skill
@@ -33,19 +33,19 @@ func SkillHintForPattern(pattern string) string {
 func SkillHintForEpisode(episodeName string) string {
 	switch episodeName {
 	case "retry_cascade", "edit_fail_spiral":
-		return skillDenyHint("claude-buddy:buddy-unstuck",
+		return skillDenyHint("claude-buddy:buddy-recover",
 			"analyze this failure before retrying")
 	case "test_fail_fixup":
-		return skillDenyHint("claude-buddy:buddy-test-guidance",
+		return skillDenyHint("claude-buddy:buddy-recover",
 			"analyze test failures before another fix attempt")
 	case "explore_to_stuck":
-		return skillHint("claude-buddy:buddy-checkpoint",
+		return skillHint("claude-buddy:buddy-gate",
 			"assess progress and consider narrowing scope")
 	case "context_overload":
 		return skillDenyHint("claude-buddy:buddy-context-recovery",
 			"preserve working context before the next compaction")
 	case "learned_episode", "trajectory_match":
-		return skillHint("claude-buddy:buddy-error-recovery",
+		return skillHint("claude-buddy:buddy-recover",
 			"check past session knowledge for this failure pattern")
 	default:
 		return ""
@@ -57,13 +57,13 @@ func SkillHintForEpisode(episodeName string) string {
 func SkillHintForPhase(phase string) string {
 	switch phase {
 	case "explore", "read":
-		return skillHint("claude-buddy:buddy-estimate",
+		return skillHint("claude-buddy:buddy-forecast",
 			"estimate task complexity before diving in")
 	case "implement", "write":
-		return skillHint("claude-buddy:buddy-impact",
+		return skillHint("claude-buddy:buddy-analyze",
 			"analyze blast radius of planned changes")
 	case "test", "verify", "compile":
-		return skillHint("claude-buddy:buddy-before-commit",
+		return skillHint("claude-buddy:buddy-gate",
 			"verify code quality before running tests")
 	default:
 		return ""

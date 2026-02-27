@@ -95,16 +95,21 @@ func skillContextHandler(claudeHome string) server.ToolHandlerFunc {
 		// User profile.
 		sc.UserProfile = buildUserProfile()
 
-		// Skill-specific enrichment.
+		// Skill-specific enrichment (supports both current and legacy skill names).
 		switch skillName {
-		case "buddy-review":
+		case "buddy-analyze", "buddy-review", "buddy-impact":
 			sc.Context, sc.Alerts, sc.Suggestions = enrichForReview(sdb)
+		case "buddy-gate":
+			// Merged skill: commit gate + health checkpoint.
+			sc.Context, sc.Alerts, sc.Suggestions = enrichForCommit(sdb)
+			_, extraAlerts, _ := enrichForCheckpoint(sdb)
+			sc.Alerts = append(sc.Alerts, extraAlerts...)
 		case "buddy-before-commit":
 			sc.Context, sc.Alerts, sc.Suggestions = enrichForCommit(sdb)
-		case "buddy-unstuck":
-			sc.Context, sc.Alerts, sc.Suggestions = enrichForUnstuck(sdb)
 		case "buddy-checkpoint":
 			sc.Context, sc.Alerts, sc.Suggestions = enrichForCheckpoint(sdb)
+		case "buddy-recover", "buddy-unstuck", "buddy-error-recovery", "buddy-test-guidance":
+			sc.Context, sc.Alerts, sc.Suggestions = enrichForUnstuck(sdb)
 		default:
 			sc.Context = map[string]string{"note": "generic context"}
 		}
