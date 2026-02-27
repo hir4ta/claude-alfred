@@ -34,7 +34,7 @@ func TestBundle(t *testing.T) {
 		}
 	})
 
-	// Verify hooks.json has all 13 events (Stop removed by design).
+	// Verify hooks.json has all 14 events.
 	t.Run("hooks.json", func(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(outputDir, "hooks", "hooks.json"))
 		if err != nil {
@@ -54,16 +54,12 @@ func TestBundle(t *testing.T) {
 			"UserPromptSubmit", "PreCompact", "SessionEnd",
 			"SubagentStart", "SubagentStop", "Notification",
 			"TeammateIdle", "TaskCompleted", "PermissionRequest",
+			"Stop",
 		}
 		for _, event := range expectedEvents {
 			if _, ok := hooks[event]; !ok {
 				t.Errorf("missing event: %s", event)
 			}
-		}
-
-		// Stop hook should NOT be registered (removed by design).
-		if _, ok := hooks["Stop"]; ok {
-			t.Error("Stop hook should not be registered")
 		}
 
 		// All hook commands should use ${CLAUDE_PLUGIN_ROOT}.

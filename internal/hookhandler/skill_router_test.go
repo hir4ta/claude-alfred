@@ -1,0 +1,135 @@
+package hookhandler
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestSkillHintForPattern(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		pattern    string
+		wantSkill  string
+		wantEmpty  bool
+		wantDeny   bool
+	}{
+		{pattern: "retry-loop", wantSkill: "buddy-unstuck"},
+		{pattern: "code-quality", wantSkill: "buddy-unstuck"},
+		{pattern: "test-correlation", wantSkill: "buddy-test-guidance"},
+		{pattern: "stale-read", wantEmpty: true},
+		{pattern: "past-solution", wantSkill: "buddy-error-recovery"},
+		{pattern: "file-knowledge", wantSkill: "buddy-error-recovery"},
+		{pattern: "workflow", wantSkill: "buddy-checkpoint"},
+		{pattern: "strategic", wantEmpty: true},
+		{pattern: "playbook", wantEmpty: true},
+		{pattern: "unknown-pattern", wantEmpty: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pattern, func(t *testing.T) {
+			t.Parallel()
+			got := SkillHintForPattern(tt.pattern)
+			if tt.wantEmpty {
+				if got != "" {
+					t.Errorf("SkillHintForPattern(%q) = %q, want empty", tt.pattern, got)
+				}
+				return
+			}
+			if !strings.Contains(got, tt.wantSkill) {
+				t.Errorf("SkillHintForPattern(%q) = %q, want skill %q", tt.pattern, got, tt.wantSkill)
+			}
+			if !strings.Contains(got, "IMPORTANT: Use the Skill tool") {
+				t.Errorf("SkillHintForPattern(%q) missing standard hint prefix", tt.pattern)
+			}
+		})
+	}
+}
+
+func TestSkillHintForEpisode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		episode   string
+		wantSkill string
+		wantEmpty bool
+		wantDeny  bool
+	}{
+		{episode: "retry_cascade", wantSkill: "buddy-unstuck", wantDeny: true},
+		{episode: "edit_fail_spiral", wantSkill: "buddy-unstuck", wantDeny: true},
+		{episode: "test_fail_fixup", wantSkill: "buddy-test-guidance", wantDeny: true},
+		{episode: "explore_to_stuck", wantSkill: "buddy-checkpoint"},
+		{episode: "context_overload", wantSkill: "buddy-context-recovery", wantDeny: true},
+		{episode: "learned_episode", wantSkill: "buddy-error-recovery"},
+		{episode: "trajectory_match", wantSkill: "buddy-error-recovery"},
+		{episode: "unknown_episode", wantEmpty: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.episode, func(t *testing.T) {
+			t.Parallel()
+			got := SkillHintForEpisode(tt.episode)
+			if tt.wantEmpty {
+				if got != "" {
+					t.Errorf("SkillHintForEpisode(%q) = %q, want empty", tt.episode, got)
+				}
+				return
+			}
+			if !strings.Contains(got, tt.wantSkill) {
+				t.Errorf("SkillHintForEpisode(%q) = %q, want skill %q", tt.episode, got, tt.wantSkill)
+			}
+			if tt.wantDeny {
+				if !strings.Contains(got, "STOP") {
+					t.Errorf("SkillHintForEpisode(%q) should use deny hint (STOP), got %q", tt.episode, got)
+				}
+				if !strings.Contains(got, "Do NOT retry") {
+					t.Errorf("SkillHintForEpisode(%q) should contain 'Do NOT retry'", tt.episode)
+				}
+			} else {
+				if !strings.Contains(got, "IMPORTANT") {
+					t.Errorf("SkillHintForEpisode(%q) should use standard hint (IMPORTANT), got %q", tt.episode, got)
+				}
+			}
+		})
+	}
+}
+
+func TestSkillHintForPhase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		phase     string
+		wantSkill string
+		wantEmpty bool
+	}{
+		{phase: "explore", wantSkill: "buddy-estimate"},
+		{phase: "read", wantSkill: "buddy-estimate"},
+		{phase: "implement", wantSkill: "buddy-impact"},
+		{phase: "write", wantSkill: "buddy-impact"},
+		{phase: "test", wantSkill: "buddy-before-commit"},
+		{phase: "verify", wantSkill: "buddy-before-commit"},
+		{phase: "compile", wantSkill: "buddy-before-commit"},
+		{phase: "unknown", wantEmpty: true},
+		{phase: "", wantEmpty: true},
+	}
+
+	for _, tt := range tests {
+		name := tt.phase
+		if name == "" {
+			name = "empty"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := SkillHintForPhase(tt.phase)
+			if tt.wantEmpty {
+				if got != "" {
+					t.Errorf("SkillHintForPhase(%q) = %q, want empty", tt.phase, got)
+				}
+				return
+			}
+			if !strings.Contains(got, tt.wantSkill) {
+				t.Errorf("SkillHintForPhase(%q) = %q, want skill %q", tt.phase, got, tt.wantSkill)
+			}
+		})
+	}
+}

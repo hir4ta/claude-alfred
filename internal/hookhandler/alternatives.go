@@ -92,14 +92,28 @@ func editAlternatives(sdb *sessiondb.SessionDB, toolInput json.RawMessage) strin
 
 		solutions, _ := st.SearchFailureSolutionsByFile(ei.FilePath, 2)
 		for _, sol := range solutions {
-			text := sol.SolutionText
-			if len([]rune(text)) > 100 {
-				text = string([]rune(text)[:100]) + "..."
+			rationale := sol.SolutionText
+			priority := 70
+			if sol.ResolutionDiff != "" {
+				var diff struct {
+					Old string `json:"old"`
+					New string `json:"new"`
+				}
+				if json.Unmarshal([]byte(sol.ResolutionDiff), &diff) == nil && diff.Old != "" {
+					old := truncate(diff.Old, 40)
+					new_ := truncate(diff.New, 40)
+					rationale = fmt.Sprintf("`%s` → `%s`", old, new_)
+					priority = 95 // concrete diffs get highest priority
+				}
+			}
+			if len([]rune(rationale)) > 100 {
+				rationale = string([]rune(rationale)[:100]) + "..."
 			}
 			alts = append(alts, Alternative{
 				Label:     "Past fix available",
-				Rationale: text,
-				Priority:  70,
+				Rationale: rationale,
+				Why:       "This fix resolved the same error in a past session." + SkillHintForPattern("past-solution"),
+				Priority:  priority,
 			})
 		}
 

@@ -1,9 +1,10 @@
 ---
 name: buddy-context-recovery
 description: >
-  Use automatically after context compaction to restore working context.
-  Recovers the current task intent, working set files, recent decisions,
-  and git branch state from session memory.
+  CRITICAL: Invoke immediately when you notice missing context, when you
+  cannot recall recent decisions, or when conversation history seems
+  truncated. Recovers the current task intent, working set files, recent
+  decisions, and git branch state from session memory.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_decisions
 ---

@@ -1,9 +1,9 @@
 ---
 name: buddy-before-commit
 description: >
-  Use automatically before any git commit to verify code quality and test
-  status. Checks for active anti-patterns, unrun tests, and ensures no
-  obvious issues will be committed.
+  Invoke before every git commit without exception. Checks for unrun tests,
+  active anti-patterns, and code quality issues. A 5-second check that
+  prevents bad commits. Do NOT skip this even for small changes.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_current_state, Bash, Read
 ---

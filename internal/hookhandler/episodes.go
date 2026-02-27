@@ -81,9 +81,9 @@ func (d *HookDetector) episodeRetryCascade(events []sessiondb.HookEvent) *episod
 			Total:      3,
 			Confidence: 0.67,
 			Message: fmt.Sprintf(
-				"[buddy] early-warning (retry_cascade): %s called twice with identical input. A 3rd retry is unlikely to succeed — consider a different approach.",
+				"[buddy] early-warning (retry_cascade): %s called twice with identical input. A 3rd retry is unlikely to succeed.",
 				events[0].ToolName,
-			),
+			) + SkillHintForEpisode("retry_cascade"),
 		}
 	}
 	return nil
@@ -117,7 +117,7 @@ func (d *HookDetector) episodeExploreToStuck(events []sessiondb.HookEvent) *epis
 			Message: fmt.Sprintf(
 				"[buddy] early-warning (explore_to_stuck): %d consecutive read operations without any writes. Consider narrowing scope or starting implementation.",
 				readCount,
-			),
+			) + SkillHintForEpisode("explore_to_stuck"),
 		}
 	}
 	return nil
@@ -152,7 +152,7 @@ func (d *HookDetector) episodeEditFailSpiral(events []sessiondb.HookEvent) *epis
 					Message: fmt.Sprintf(
 						"[buddy] early-warning (edit_fail_spiral): Edit has failed %d times on %s. Read the file first to verify exact content before the next edit attempt.",
 						count, shortPath(file),
-					),
+					) + SkillHintForEpisode("edit_fail_spiral"),
 				}
 			}
 		}
@@ -201,7 +201,7 @@ func (d *HookDetector) episodeTestFailFixup(events []sessiondb.HookEvent) *episo
 		Message: fmt.Sprintf(
 			"[buddy] early-warning (test_fail_fixup): Tests have failed %d times with edit attempts between runs. Consider reading the test output carefully or trying a fundamentally different approach.",
 			testFailCount,
-		),
+		) + SkillHintForEpisode("test_fail_fixup"),
 	}
 }
 
@@ -228,7 +228,7 @@ func (d *HookDetector) episodeContextOverload(events []sessiondb.HookEvent) *epi
 			Message: fmt.Sprintf(
 				"[buddy] early-warning (context_overload): 1 compaction already occurred and current burst has %d tools. Consider summarizing key decisions now to preserve context before the next compaction.",
 				tc,
-			),
+			) + SkillHintForEpisode("context_overload"),
 		}
 	}
 	return nil

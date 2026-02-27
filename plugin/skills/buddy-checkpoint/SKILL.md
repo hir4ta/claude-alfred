@@ -1,10 +1,10 @@
 ---
 name: buddy-checkpoint
 description: >
-  Use proactively every 15-20 tool calls or before committing changes to
-  check session health, verify no anti-patterns are active, and get a quick
-  status on progress. Especially important before git commits or when
-  working on complex multi-file changes.
+  Invoke after every 15 tool calls, before any git operation, and whenever
+  switching between files or tasks. Quick health check that catches problems
+  early. Especially important before git commits or when working on complex
+  multi-file changes.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_alerts
 ---

@@ -1,10 +1,11 @@
 ---
 name: buddy-unstuck
 description: >
-  Use proactively when experiencing repeated failures (3+ consecutive errors
-  on the same file or tool), when stuck in a retry loop, or when the same
-  approach keeps failing. Analyzes root cause and suggests alternative
-  approaches based on past session knowledge.
+  CRITICAL: Invoke immediately when 2+ consecutive tool failures occur on the
+  same file, when an Edit fails with 'old_string not found', or when the same
+  Bash command fails twice. Do NOT retry the failing approach — invoke this
+  skill first. Analyzes root cause and suggests alternative approaches based
+  on past session knowledge.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_alerts
 ---

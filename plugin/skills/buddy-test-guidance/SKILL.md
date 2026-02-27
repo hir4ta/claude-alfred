@@ -1,9 +1,10 @@
 ---
 name: buddy-test-guidance
 description: >
-  Use automatically when tests have failed 2+ times consecutively.
-  Analyzes failure patterns and suggests targeted debugging strategies
-  based on test output correlation and past failure solutions.
+  CRITICAL: Invoke immediately when test output shows FAIL and a previous
+  fix attempt did not resolve it. Do NOT edit code again before invoking
+  this skill. Analyzes failure patterns and provides root cause analysis
+  with targeted fix strategy based on past failure solutions.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
 ---

@@ -152,6 +152,12 @@ func formatLearnedPlaybook(sdb *sessiondb.SessionDB, taskType TaskType, phases [
 			}
 		}
 	}
+
+	// Add skill hint for the current workflow phase.
+	if progress := GetPhaseProgress(sdb); progress != nil {
+		b.WriteString(SkillHintForPhase(string(progress.CurrentPhase)))
+	}
+
 	return b.String()
 }
 

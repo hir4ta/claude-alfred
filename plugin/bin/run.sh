@@ -1,5 +1,5 @@
 #!/bin/sh
-BUDDY_VERSION="0.13.0"
+BUDDY_VERSION="0.13.1"
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUDDY_BIN="${BIN_DIR}/claude-buddy"
 

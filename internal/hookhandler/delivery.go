@@ -1,6 +1,7 @@
 package hookhandler
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -302,6 +303,7 @@ func Deliver(sdb *sessiondb.SessionDB, pattern, level, observation, suggestion s
 		if why != "" {
 			msg += "\n  WHY: " + why
 		}
+		msg += SkillHintForPattern(pattern)
 		return msg
 	case ChannelNudge:
 		nudgeSuggestion := suggestion
@@ -450,6 +452,23 @@ func enrichIfRepeated(sdb *sessiondb.SessionDB, pattern, suggestion string) stri
 		helpful := stats.Helpful
 		total := stats.TotalCount
 		suggestion += fmt.Sprintf(" (Previously: %d/%d found helpful)", helpful, total)
+	}
+
+	// Search for past resolution diffs from recent failures.
+	failures, _ := sdb.RecentFailures(1)
+	if len(failures) > 0 && failures[0].FilePath != "" {
+		solutions, _ := st.SearchFailureSolutionsByFile(failures[0].FilePath, 1)
+		if len(solutions) > 0 && solutions[0].ResolutionDiff != "" {
+			var diff struct {
+				Old string `json:"old"`
+				New string `json:"new"`
+			}
+			if json.Unmarshal([]byte(solutions[0].ResolutionDiff), &diff) == nil && diff.Old != "" {
+				old := truncate(diff.Old, 50)
+				new_ := truncate(diff.New, 50)
+				suggestion += fmt.Sprintf("\n  Past fix: `%s` → `%s`", old, new_)
+			}
+		}
 	}
 
 	return suggestion

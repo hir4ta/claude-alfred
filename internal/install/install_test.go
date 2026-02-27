@@ -305,14 +305,23 @@ func TestBuddyHookEntries(t *testing.T) {
 
 	entries := buddyHookEntries("/usr/local/bin/claude-buddy")
 
-	events := []string{"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact", "SessionEnd"}
+	events := []string{
+		"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure",
+		"UserPromptSubmit", "PreCompact", "SessionEnd",
+		"SubagentStart", "SubagentStop", "Notification",
+		"TeammateIdle", "TaskCompleted", "PermissionRequest",
+		"Stop",
+	}
 	for _, ev := range events {
 		if _, ok := entries[ev]; !ok {
 			t.Errorf("event %s missing from buddyHookEntries", ev)
 		}
 	}
+	if len(entries) != len(events) {
+		t.Errorf("buddyHookEntries() has %d events, want %d", len(entries), len(events))
+	}
 
-	// Verify commands contain the binary path.
+	// Verify commands contain the binary path (skip prompt-type hooks).
 	for event, entry := range entries {
 		list, ok := entry.([]any)
 		if !ok || len(list) == 0 {
@@ -322,6 +331,15 @@ func TestBuddyHookEntries(t *testing.T) {
 		m := list[0].(map[string]any)
 		hooks := m["hooks"].([]any)
 		hook := hooks[0].(map[string]any)
+		hookType, _ := hook["type"].(string)
+		if hookType == "prompt" {
+			// Prompt hooks don't have a command field; verify they have a prompt.
+			prompt, _ := hook["prompt"].(string)
+			if prompt == "" {
+				t.Errorf("%s: prompt hook has empty prompt", event)
+			}
+			continue
+		}
 		cmd := hook["command"].(string)
 		if cmd != "/usr/local/bin/claude-buddy hook-handler "+event {
 			t.Errorf("%s: command = %s", event, cmd)

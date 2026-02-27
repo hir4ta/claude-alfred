@@ -270,7 +270,7 @@ func generateCoaching(sdb *sessiondb.SessionDB) string {
 			if taskMap, ok := domainMap[taskType]; ok {
 				if entry, ok := taskMap[phase]; ok {
 					entry = adaptToneForRiskProfile(entry, riskProfile)
-					return formatCoaching(entry)
+					return formatCoaching(entry) + SkillHintForPhase(phaseStr)
 				}
 			}
 		}
@@ -286,7 +286,7 @@ func generateCoaching(sdb *sessiondb.SessionDB) string {
 			// Enrich with personal history from cross-session data.
 			entry = personalizeCoaching(sdb, entry, taskType)
 			entry = adaptToneForRiskProfile(entry, riskProfile)
-			return formatCoaching(entry)
+			return formatCoaching(entry) + SkillHintForPhase(phaseStr)
 		}
 	}
 

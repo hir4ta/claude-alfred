@@ -629,7 +629,7 @@ func proactiveSolutionLookup(sdb *sessiondb.SessionDB, _ string, toolInput json.
 	// Track surfaced solution for effectiveness measurement.
 	_ = sdb.SetContext("last_surfaced_solution_id", fmt.Sprintf("%d", sol.ID))
 
-	return b.String()
+	return b.String() + SkillHintForPattern("past-solution")
 }
 
 // domainRiskCheck returns a domain-specific risk warning for high-risk operations.

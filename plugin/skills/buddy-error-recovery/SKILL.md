@@ -1,9 +1,9 @@
 ---
 name: buddy-error-recovery
 description: >
-  Use automatically after a tool failure to retrieve past resolution diffs
-  and solution chains for the same error signature. Provides concrete fix
-  suggestions based on cross-session failure→fix knowledge.
+  Invoke after any tool returns an error, especially compilation errors,
+  import failures, or permission denied. Searches cross-session knowledge
+  for exact resolution diffs. Invoke BEFORE attempting a manual fix.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
 ---

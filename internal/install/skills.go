@@ -60,10 +60,11 @@ Initialize claude-buddy for this system.
 		Content: `---
 name: buddy-unstuck
 description: >
-  Use proactively when experiencing repeated failures (3+ consecutive errors
-  on the same file or tool), when stuck in a retry loop, or when the same
-  approach keeps failing. Analyzes root cause and suggests alternative
-  approaches based on past session knowledge.
+  CRITICAL: Invoke immediately when 2+ consecutive tool failures occur on the
+  same file, when an Edit fails with 'old_string not found', or when the same
+  Bash command fails twice. Do NOT retry the failing approach — invoke this
+  skill first. Analyzes root cause and suggests alternative approaches based
+  on past session knowledge.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_alerts
 ---
@@ -91,10 +92,10 @@ Keep it under 5 lines. Be direct and actionable.
 		Content: `---
 name: buddy-checkpoint
 description: >
-  Use proactively every 15-20 tool calls or before committing changes to
-  check session health, verify no anti-patterns are active, and get a quick
-  status on progress. Especially important before git commits or when
-  working on complex multi-file changes.
+  Invoke after every 15 tool calls, before any git operation, and whenever
+  switching between files or tasks. Quick health check that catches problems
+  early. Especially important before git commits or when working on complex
+  multi-file changes.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_current_state, mcp__claude-buddy__buddy_alerts
 ---
@@ -119,9 +120,9 @@ Quick session health check.
 		Content: `---
 name: buddy-before-commit
 description: >
-  Use automatically before any git commit to verify code quality and test
-  status. Checks for active anti-patterns, unrun tests, and ensures no
-  obvious issues will be committed.
+  Invoke before every git commit without exception. Checks for unrun tests,
+  active anti-patterns, and code quality issues. A 5-second check that
+  prevents bad commits. Do NOT skip this even for small changes.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_current_state, Bash, Read
 ---
@@ -235,9 +236,9 @@ Keep it concise — 5-8 lines max.
 		Content: `---
 name: buddy-error-recovery
 description: >
-  Use automatically after a tool failure to retrieve past resolution diffs
-  and solution chains for the same error signature. Provides concrete fix
-  suggestions based on cross-session failure→fix knowledge.
+  Invoke after any tool returns an error, especially compilation errors,
+  import failures, or permission denied. Searches cross-session knowledge
+  for exact resolution diffs. Invoke BEFORE attempting a manual fix.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
 ---
@@ -264,9 +265,10 @@ Keep it under 4 lines. Include file paths and concrete changes when available.
 		Content: `---
 name: buddy-context-recovery
 description: >
-  Use automatically after context compaction to restore working context.
-  Recovers the current task intent, working set files, recent decisions,
-  and git branch state from session memory.
+  CRITICAL: Invoke immediately when you notice missing context, when you
+  cannot recall recent decisions, or when conversation history seems
+  truncated. Recovers the current task intent, working set files, recent
+  decisions, and git branch state from session memory.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_decisions
 ---
@@ -298,9 +300,10 @@ Keep it under 8 lines. Focus on what's needed to continue work immediately.
 		Content: `---
 name: buddy-test-guidance
 description: >
-  Use automatically when tests have failed 2+ times consecutively.
-  Analyzes failure patterns and suggests targeted debugging strategies
-  based on test output correlation and past failure solutions.
+  CRITICAL: Invoke immediately when test output shows FAIL and a previous
+  fix attempt did not resolve it. Do NOT edit code again before invoking
+  this skill. Analyzes failure patterns and provides root cause analysis
+  with targeted fix strategy based on past failure solutions.
 user-invocable: false
 allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_patterns, mcp__claude-buddy__buddy_recall
 ---

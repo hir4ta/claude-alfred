@@ -51,7 +51,7 @@ func (d *HookDetector) detectLearnedEpisodes() string {
 			return fmt.Sprintf(
 				"[buddy] learned-pattern (%s): Current tool sequence matches a failure pattern seen %d times before (%.0f%% match). Consider a different approach.",
 				ep.Name, ep.Occurrences, confidence*100,
-			)
+			) + SkillHintForEpisode("learned_episode")
 		}
 
 		// Fuzzy match: catch variant episodes via Levenshtein distance.
@@ -64,7 +64,7 @@ func (d *HookDetector) detectLearnedEpisodes() string {
 			return fmt.Sprintf(
 				"[buddy] variant-pattern (%s): Current tool sequence is %.0f%% similar to a known failure pattern (seen %d times). Consider a different approach.",
 				ep.Name, similarity*100, ep.Occurrences,
-			)
+			) + SkillHintForEpisode("learned_episode")
 		}
 	}
 	return ""
@@ -103,7 +103,7 @@ func (d *HookDetector) detectTrajectoryMatch() string {
 	return fmt.Sprintf(
 		"[buddy] trajectory-warning: Your session pattern (%.0f%% similar to past failed session %s) suggests you may be heading toward a known failure mode. Consider pausing to reassess your approach.",
 		similarity*100, sessionID[:8],
-	)
+	) + SkillHintForEpisode("trajectory_match")
 }
 
 // matchSubsequence counts how many elements of target appear in sequence
