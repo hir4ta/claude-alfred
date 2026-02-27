@@ -62,15 +62,22 @@ const serverInstructions = `claude-buddy is a real-time session advisor for Clau
 - buddy_strategic_plan: Generate optimal workflow plan for a task type based on historical data and user style.
 - buddy_pending_nudges: Get pending and recently delivered nudges from hook system. Bridges proactive hooks and on-demand MCP.
 
-## Usage Guidelines
+## How Briefings Work
 
-- Call buddy_current_state at session start for a health baseline.
-- Call buddy_alerts when health score drops below 0.7.
-- Call buddy_patterns when encountering errors to find past solutions.
-- Call buddy_decisions before architectural changes.
-- Call buddy_recall after context compaction to recover lost details.
-- Call buddy_feedback after receiving a suggestion to rate its quality.
-- Call buddy_estimate before starting complex tasks to set expectations.
+Session briefings are delivered automatically via hooks on every turn.
+When a briefing mentions past solutions or patterns, call buddy_patterns for full details.
+When a briefing mentions health concerns, call buddy_alerts for the complete picture.
+When a briefing mentions co-change files, call buddy_current_state for working set context.
+
+## Deep Dive Tools (call when you need more detail)
+
+- buddy_patterns: Expand on past solutions or architecture patterns mentioned in briefings.
+- buddy_alerts: Full anti-pattern analysis when briefing flags health decline.
+- buddy_diagnose: Root cause analysis when briefing flags repeated failures.
+- buddy_decisions: Check architectural history before making related changes.
+- buddy_recall: Recover lost context after compaction.
+- buddy_feedback: Rate suggestion quality (helps buddy learn your preferences).
+- buddy_estimate: Complexity estimate for planning before complex tasks.
 `
 
 // New creates a new MCP server with all tools registered.

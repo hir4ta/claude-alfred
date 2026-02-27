@@ -138,6 +138,14 @@ CREATE TABLE IF NOT EXISTS llm_cache (
 	created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS detections (
+	id        INTEGER PRIMARY KEY AUTOINCREMENT,
+	pattern   TEXT NOT NULL,
+	level     TEXT NOT NULL,
+	detail    TEXT NOT NULL DEFAULT '',
+	timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS health_snapshots (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
 	tool_count INTEGER NOT NULL,
@@ -175,6 +183,16 @@ type Nudge struct {
 	Suggestion  string
 	CreatedAt   time.Time
 	Delivered   bool // true if already delivered via hook
+}
+
+// Detection is a recorded signal from the HookDetector, written for
+// downstream consumption by the JARVIS briefing engine and TUI.
+type Detection struct {
+	ID        int64
+	Pattern   string
+	Level     string // "info", "warning", "action"
+	Detail    string
+	Timestamp time.Time
 }
 
 // SessionDB wraps an ephemeral per-session SQLite database for hook state.
@@ -1467,4 +1485,57 @@ func (s *SessionDB) RecentHealthSnapshots(limit int) ([]HealthSnapshot, error) {
 		snapshots = append(snapshots, hs)
 	}
 	return snapshots, rows.Err()
+}
+
+// InsertDetection records a detection signal from the HookDetector.
+func (s *SessionDB) InsertDetection(pattern, level, detail string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO detections (pattern, level, detail) VALUES (?, ?, ?)`,
+		pattern, level, detail,
+	)
+	return err
+}
+
+// LatestDetection returns the most recent detection at the given level,
+// or nil if none exists.
+func (s *SessionDB) LatestDetection(level string) (*Detection, error) {
+	row := s.db.QueryRow(
+		`SELECT id, pattern, level, detail, timestamp FROM detections
+		 WHERE level = ? ORDER BY id DESC LIMIT 1`, level,
+	)
+	var d Detection
+	var ts string
+	err := row.Scan(&d.ID, &d.Pattern, &d.Level, &d.Detail, &ts)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	d.Timestamp, _ = time.Parse("2006-01-02 15:04:05", ts)
+	return &d, nil
+}
+
+// RecentDetections returns up to limit detections, most recent first.
+func (s *SessionDB) RecentDetections(limit int) ([]Detection, error) {
+	rows, err := s.db.Query(
+		`SELECT id, pattern, level, detail, timestamp FROM detections
+		 ORDER BY id DESC LIMIT ?`, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dets []Detection
+	for rows.Next() {
+		var d Detection
+		var ts string
+		if err := rows.Scan(&d.ID, &d.Pattern, &d.Level, &d.Detail, &ts); err != nil {
+			continue
+		}
+		d.Timestamp, _ = time.Parse("2006-01-02 15:04:05", ts)
+		dets = append(dets, d)
+	}
+	return dets, rows.Err()
 }

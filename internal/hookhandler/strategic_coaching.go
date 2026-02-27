@@ -19,25 +19,29 @@ type strategicInsight struct {
 	priority int // lower = higher priority
 }
 
-// generateStrategicInsight produces personalized strategic guidance
+// findStrategicSignal produces a P5 Signal with personalized strategic guidance
 // from cross-session behavioral data. This is the "JARVIS upper body":
 // personal, proactive, strategic — using data the user can't see themselves.
-func generateStrategicInsight(sdb *sessiondb.SessionDB, projectPath string) string {
-	on, _ := sdb.IsOnCooldown("strategic_insight")
+func findStrategicSignal(sdb *sessiondb.SessionDB, projectPath string) *Signal {
+	if projectPath == "" {
+		return nil
+	}
+
+	on, _ := sdb.IsOnCooldown("briefing_strategic")
 	if on {
-		return ""
+		return nil
 	}
 
 	st, err := store.OpenDefault()
 	if err != nil {
-		return ""
+		return nil
 	}
 	defer st.Close()
 
 	// Need sufficient history for meaningful insights.
 	stats, err := st.GetProjectSessionStats(projectPath)
 	if err != nil || stats.TotalSessions < 3 {
-		return ""
+		return nil
 	}
 
 	taskTypeStr, _ := sdb.GetContext("task_type")
@@ -62,17 +66,16 @@ func generateStrategicInsight(sdb *sessiondb.SessionDB, projectPath string) stri
 	}
 
 	if len(insights) == 0 {
-		return ""
+		return nil
 	}
 
 	sort.Slice(insights, func(i, j int) bool {
 		return insights[i].priority < insights[j].priority
 	})
 
-	_ = sdb.SetCooldown("strategic_insight", 15*time.Minute)
+	_ = sdb.SetCooldown("briefing_strategic", 15*time.Minute)
 
-	// Deliver the single most impactful insight.
-	return insights[0].message
+	return &Signal{Priority: 5, Kind: "strategic", Detail: insights[0].message}
 }
 
 // behavioralTrend detects actionable patterns in the user's coding behavior

@@ -75,16 +75,12 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 			_ = sdb.SetWorkingSet("task_type", string(taskType))
 		}
 
-		// Deep intent analysis: domain, workflow phase, risk profile, implicit goal.
-		di := AnalyzeDeepIntent(sdb, in.Prompt, taskType)
-		_ = sdb.SetWorkingSet("domain", di.Domain)
-		if di.WorkflowPhase != PhaseUnknown {
-			_ = sdb.SetWorkingSet("workflow_phase", string(di.WorkflowPhase))
+		// Domain classification from prompt + file context fallback.
+		domain := detectDomain(in.Prompt)
+		if domain == "general" {
+			domain = inferDomainFromFiles(sdb)
 		}
-		_ = sdb.SetWorkingSet("risk_profile", di.RiskProfile)
-		if di.ImplicitGoal != nil {
-			_ = sdb.SetWorkingSet("implicit_goal", di.ImplicitGoal.Goal)
-		}
+		_ = sdb.SetWorkingSet("domain", domain)
 
 		// Track decisions from user prompts.
 		if containsDecisionKeyword(in.Prompt) {
@@ -92,39 +88,28 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 		}
 	}
 
-	// Phase-transition coaching: inject as high-priority entry (not early return,
-	// so queued nudges are still delivered alongside coaching).
-	var coachingEntry *nudgeEntry
-	if coaching := generateCoaching(sdb); coaching != "" {
-		coachingEntry = &nudgeEntry{
-			Pattern:     "coaching",
-			Level:       "info",
-			Observation: "Phase transition coaching",
-			Suggestion:  coaching,
-		}
-	}
-
-	// Dequeue pending nudges (max 2).
+	// Dequeue pending nudges to prevent pile-up and record delivery.
 	nudges, _ := sdb.DequeueNudges(2)
-
-	// Record delivery for effectiveness tracking.
 	recordNudgeDelivery(sdb, in.SessionID, nudges)
 
-	entries := make([]nudgeEntry, 0, len(nudges)+2)
+	// Track implicit feedback: if Claude hasn't called buddy MCP tools recently,
+	// record as a signal that current suggestions may not be valuable enough.
+	trackImplicitFeedback(sdb, in.SessionID)
 
-	// Generate task playbook if we have a task type.
-	taskTypeStr, _ := sdb.GetContext("task_type")
-	if taskTypeStr != "" {
-		if playbook := generatePlaybook(sdb, TaskType(taskTypeStr), in.CWD); playbook != "" {
-			entries = append(entries, nudgeEntry{
-				Pattern:     "playbook",
-				Level:       "info",
-				Observation: "Task workflow recommendation",
-				Suggestion:  playbook,
-			})
-		}
+	// --- JARVIS briefing: select the single most important signal ---
+	var entries []nudgeEntry
+
+	// 1. JARVIS briefing signal (max 1, priority-based).
+	if briefing := formatBriefing(selectTopSignal(sdb, in.Prompt, in.CWD)); briefing != "" {
+		entries = append(entries, nudgeEntry{
+			Pattern:     "briefing",
+			Level:       "insight",
+			Observation: "JARVIS briefing",
+			Suggestion:  briefing,
+		})
 	}
 
+	// 2. Queued nudges from other hooks (PostToolUse etc.).
 	for _, n := range nudges {
 		entries = append(entries, nudgeEntry{
 			Pattern:     n.Pattern,
@@ -134,37 +119,7 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 		})
 	}
 
-	// Search for relevant past knowledge based on user's prompt.
-	if knowledge := matchRelevantKnowledge(sdb, in.Prompt); knowledge != "" {
-		entries = append(entries, nudgeEntry{
-			Pattern:     "knowledge",
-			Level:       "info",
-			Observation: "Relevant past knowledge found",
-			Suggestion:  knowledge,
-		})
-	}
-
-	// Strategic insight: cross-session behavioral guidance (the "JARVIS upper body").
-	// Delivers personal, data-driven insights that no static template can provide.
-	if insight := generateStrategicInsight(sdb, in.CWD); insight != "" {
-		entries = append(entries, nudgeEntry{
-			Pattern:     "strategic",
-			Level:       "insight",
-			Observation: "Strategic insight",
-			Suggestion:  insight,
-		})
-	}
-
-	// Track implicit feedback: if Claude hasn't called buddy MCP tools recently,
-	// record as a signal that current suggestions may not be valuable enough.
-	trackImplicitFeedback(sdb, in.SessionID)
-
-	// Inject coaching at the top of entries (high visibility, but doesn't block nudges).
-	if coachingEntry != nil {
-		entries = append([]nudgeEntry{*coachingEntry}, entries...)
-	}
-
-	// Inject task transition/classification briefing (after coaching, before session-context).
+	// 3. Task transition briefing (one-time event, not noise).
 	if taskBriefing != "" {
 		entries = append([]nudgeEntry{{
 			Pattern:     "task-briefing",
@@ -174,7 +129,7 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 		}}, entries...)
 	}
 
-	// Inject session context summary for rich situational awareness.
+	// 4. Session context summary (compact one-liner, cooldown-gated).
 	if summary := buildSessionContextSummary(sdb); summary != "" {
 		entries = append([]nudgeEntry{{
 			Pattern:     "session-context",
@@ -342,17 +297,27 @@ var knowledgeTypes = []knowledgeType{
 	{"decision", "knowledge_decision"},
 }
 
-// matchRelevantKnowledge searches past patterns matching the user's prompt.
+// findKnowledgeSignal searches past patterns matching the user's prompt via
+// semantic vector search. Returns a P2 Signal when relevant knowledge is found.
 // Uses split cooldowns per knowledge type and falls back to file-path keywords
 // when the prompt is short.
-func matchRelevantKnowledge(sdb *sessiondb.SessionDB, prompt string) string {
+func findKnowledgeSignal(sdb *sessiondb.SessionDB, prompt string) *Signal {
+	if prompt == "" {
+		return nil
+	}
+
+	on, _ := sdb.IsOnCooldown("briefing_knowledge")
+	if on {
+		return nil
+	}
+
 	// Build search terms: keywords from prompt + recent file paths as fallback.
 	keywords := extractKeywords(prompt, 3)
 	if len(keywords) == 0 {
 		keywords = recentFileKeywords(sdb)
 	}
 	if len(keywords) == 0 {
-		return ""
+		return nil
 	}
 
 	// Prioritize knowledge types based on task type.
@@ -362,24 +327,24 @@ func matchRelevantKnowledge(sdb *sessiondb.SessionDB, prompt string) string {
 	// Check at least one knowledge type is off cooldown.
 	var activeTypes []string
 	for _, t := range ordered {
-		on, _ := sdb.IsOnCooldown(t.cooldown)
-		if !on {
+		typeOn, _ := sdb.IsOnCooldown(t.cooldown)
+		if !typeOn {
 			activeTypes = append(activeTypes, t.name)
 		}
 	}
 	if len(activeTypes) == 0 {
-		return ""
+		return nil
 	}
 
 	query := strings.Join(keywords, " ")
 	vec := embedQuery(sdb, query, 1*time.Second)
 	if vec == nil {
-		return ""
+		return nil
 	}
 
 	st, err := store.OpenDefault()
 	if err != nil {
-		return ""
+		return nil
 	}
 	defer st.Close()
 
@@ -389,7 +354,7 @@ func matchRelevantKnowledge(sdb *sessiondb.SessionDB, prompt string) string {
 		allResults = append(allResults, patterns...)
 	}
 	if len(allResults) == 0 {
-		return ""
+		return nil
 	}
 
 	// Re-rank by task-type and domain affinity.
@@ -410,6 +375,8 @@ func matchRelevantKnowledge(sdb *sessiondb.SessionDB, prompt string) string {
 		}
 	}
 
+	_ = sdb.SetCooldown("briefing_knowledge", 5*time.Minute)
+
 	var b strings.Builder
 	b.WriteString("Relevant past knowledge:\n")
 	limit := min(3, len(allResults))
@@ -421,7 +388,7 @@ func matchRelevantKnowledge(sdb *sessiondb.SessionDB, prompt string) string {
 		}
 		fmt.Fprintf(&b, "  - [%s] %s\n", p.PatternType, content)
 	}
-	return b.String()
+	return &Signal{Priority: 2, Kind: "knowledge", Detail: b.String()}
 }
 
 // prioritizeKnowledgeTypes reorders knowledge types based on task type.

@@ -262,7 +262,12 @@ func generateCoaching(sdb *sessiondb.SessionDB) string {
 
 	domain, _ := sdb.GetWorkingSet("domain")
 
-	riskProfile, _ := sdb.GetWorkingSet("risk_profile")
+	// Use UserCluster as risk profile (conservative/balanced/aggressive).
+	var riskProfile string
+	if st, err := store.OpenDefault(); err == nil {
+		riskProfile = st.UserCluster()
+		defer st.Close()
+	}
 
 	// Try domain-specific override first.
 	if domain != "" && domain != "general" {

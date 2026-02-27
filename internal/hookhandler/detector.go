@@ -16,27 +16,55 @@ type HookDetector struct {
 
 // Detect runs lightweight signal detection and returns a context string
 // for Claude to evaluate. Returns "" if no signal detected.
+// Detection results are also persisted to sessiondb for JARVIS briefing
+// and TUI consumption.
 func (d *HookDetector) Detect() string {
+	type detection struct {
+		pattern string
+		level   string
+		message string
+	}
+
+	var det *detection
+
 	// Episode-based early warnings fire first (predict before full pattern).
 	if sig := d.detectEpisodes(); sig != nil {
-		return sig.Message
+		det = &detection{"episode", "action", sig.Message}
 	}
-	if sig := d.detectRetryLoop(); sig != "" {
-		return sig
+	if det == nil {
+		if sig := d.detectRetryLoop(); sig != "" {
+			det = &detection{"retry_loop", "action", sig}
+		}
 	}
-	if sig := d.detectNoProgress(); sig != "" {
-		return sig
+	if det == nil {
+		if sig := d.detectNoProgress(); sig != "" {
+			det = &detection{"no_progress", "warning", sig}
+		}
 	}
-	if sig := d.detectFileHotspot(); sig != "" {
-		return sig
+	if det == nil {
+		if sig := d.detectFileHotspot(); sig != "" {
+			det = &detection{"file_hotspot", "warning", sig}
+		}
 	}
-	if sig := d.detectPlanModeOpportunity(); sig != "" {
-		return sig
+	if det == nil {
+		if sig := d.detectPlanModeOpportunity(); sig != "" {
+			det = &detection{"plan_mode", "info", sig}
+		}
 	}
-	if sig := d.detectCompactionRisk(); sig != "" {
-		return sig
+	if det == nil {
+		if sig := d.detectCompactionRisk(); sig != "" {
+			det = &detection{"compaction_risk", "warning", sig}
+		}
 	}
-	return ""
+
+	if det == nil {
+		return ""
+	}
+
+	// Persist to sessiondb for JARVIS briefing and TUI.
+	_ = d.sdb.InsertDetection(det.pattern, det.level, det.message)
+
+	return det.message
 }
 
 // inPlanMode returns true if the session is currently in Plan Mode.

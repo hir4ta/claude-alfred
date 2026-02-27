@@ -473,3 +473,69 @@ func TestRecordAndPredictTrigram(t *testing.T) {
 		t.Errorf("PredictFromTrigram no data = (%q, %d), want (\"\", 0)", outcome, count)
 	}
 }
+
+func TestDetections(t *testing.T) {
+	t.Parallel()
+	sdb := openTestDB(t)
+
+	// Initially empty.
+	got, err := sdb.LatestDetection("action")
+	if err != nil {
+		t.Fatalf("LatestDetection empty = %v", err)
+	}
+	if got != nil {
+		t.Fatalf("LatestDetection empty = %+v, want nil", got)
+	}
+
+	// Insert a detection.
+	err = sdb.InsertDetection("retry_loop", "action", "Same tool called 3 times")
+	if err != nil {
+		t.Fatalf("InsertDetection = %v", err)
+	}
+
+	// Should be retrievable by level.
+	got, err = sdb.LatestDetection("action")
+	if err != nil {
+		t.Fatalf("LatestDetection = %v", err)
+	}
+	if got == nil {
+		t.Fatal("LatestDetection = nil, want detection")
+	}
+	if got.Pattern != "retry_loop" {
+		t.Errorf("Pattern = %q, want %q", got.Pattern, "retry_loop")
+	}
+	if got.Level != "action" {
+		t.Errorf("Level = %q, want %q", got.Level, "action")
+	}
+	if got.Detail != "Same tool called 3 times" {
+		t.Errorf("Detail = %q, want %q", got.Detail, "Same tool called 3 times")
+	}
+
+	// Non-matching level returns nil.
+	got, err = sdb.LatestDetection("warning")
+	if err != nil {
+		t.Fatalf("LatestDetection wrong level = %v", err)
+	}
+	if got != nil {
+		t.Fatalf("LatestDetection wrong level = %+v, want nil", got)
+	}
+
+	// Insert another at different level.
+	err = sdb.InsertDetection("no_progress", "warning", "10 minutes no writes")
+	if err != nil {
+		t.Fatalf("InsertDetection warning = %v", err)
+	}
+
+	// RecentDetections returns all.
+	all, err := sdb.RecentDetections(10)
+	if err != nil {
+		t.Fatalf("RecentDetections = %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("RecentDetections count = %d, want 2", len(all))
+	}
+	// Most recent first.
+	if all[0].Pattern != "no_progress" {
+		t.Errorf("RecentDetections[0].Pattern = %q, want %q", all[0].Pattern, "no_progress")
+	}
+}
