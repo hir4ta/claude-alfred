@@ -168,8 +168,8 @@ func buddyHookEntries(binPath string) map[string]any {
 		"PostToolUse":         makeEntry("PostToolUse", 5, true, ""),
 		"PostToolUseFailure":  makeEntry("PostToolUseFailure", 5, false, ""),
 		"UserPromptSubmit":    makeEntry("UserPromptSubmit", 2, false, ""),
-		"PreCompact":          makeEntry("PreCompact", 3, false, ""),
-		"SessionEnd":          makeEntry("SessionEnd", 5, true, ""),
+		"PreCompact":          makeEntry("PreCompact", 5, false, ""),
+		"SessionEnd":          makeEntry("SessionEnd", 8, false, ""),
 		"SubagentStart":       makeEntry("SubagentStart", 3, false, ""),
 		"SubagentStop":        makeEntry("SubagentStop", 3, false, ""),
 		"Notification":        makeEntry("Notification", 2, false, ""),
@@ -178,14 +178,25 @@ func buddyHookEntries(binPath string) map[string]any {
 		"PermissionRequest":   makeEntry("PermissionRequest", 1, false, ""),
 	}
 
-	// Stop prompt hook: verify task completion before allowing Claude to stop.
-	entries["Stop"] = []any{map[string]any{
-		"hooks": []any{map[string]any{
-			"type":    "prompt",
-			"prompt":  "[buddy] Check if the task is complete. Evaluate: (1) Were all requested changes implemented? (2) Were tests run if the project has tests? (3) Are there uncommitted changes that should be committed? If incomplete, state what remains in one sentence. If complete, confirm completion.",
-			"timeout": 15,
-		}},
-	}}
+	// Stop hooks: command hook persists session data + validates completeness,
+	// prompt hook verifies task completion before allowing Claude to stop.
+	cmd := binPath + " hook-handler Stop"
+	entries["Stop"] = []any{
+		map[string]any{
+			"hooks": []any{map[string]any{
+				"type":    "command",
+				"command": cmd,
+				"timeout": 8,
+			}},
+		},
+		map[string]any{
+			"hooks": []any{map[string]any{
+				"type":    "prompt",
+				"prompt":  "[buddy] Check if the task is complete. Evaluate: (1) Were all requested changes implemented? (2) Were tests run if the project has tests? (3) Are there uncommitted changes that should be committed? If incomplete, state what remains in one sentence. If complete, confirm completion.",
+				"timeout": 15,
+			}},
+		},
+	}
 
 	return entries
 }

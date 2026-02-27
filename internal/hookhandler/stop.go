@@ -84,6 +84,11 @@ func handleStop(input []byte) (*HookOutput, error) {
 		fmt.Fprintf(os.Stderr, "[buddy] %s\n", suggestion)
 	}
 
+	// Best-effort persist before session stops.
+	// All persist* functions are idempotent (Welford/EWMA/ON CONFLICT),
+	// so double-persist from both Stop and SessionEnd is safe.
+	persistSessionData(in.SessionID, in.CWD)
+
 	return nil, nil
 }
 

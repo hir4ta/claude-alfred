@@ -50,7 +50,7 @@
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook-handler PreCompact",
-            "timeout": 3,
+            "timeout": 5,
             "type": "command"
           }
         ]
@@ -71,9 +71,8 @@
       {
         "hooks": [
           {
-            "async": true,
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook-handler SessionEnd",
-            "timeout": 5,
+            "timeout": 8,
             "type": "command"
           }
         ]
@@ -92,6 +91,15 @@
       }
     ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook-handler Stop",
+            "timeout": 8,
+            "type": "command"
+          }
+        ]
+      },
       {
         "hooks": [
           {

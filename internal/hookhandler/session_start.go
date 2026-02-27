@@ -46,6 +46,12 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 	// Capture git context (branch, dirty files) for later hooks.
 	captureGitContext(sdb, in.CWD)
 
+	// Recover orphaned session DBs from previous sessions that didn't get
+	// a clean SessionEnd. Extracts their knowledge before destroying them.
+	if recovered := RecoverOrphanedSessions(in.SessionID, in.CWD); recovered > 0 {
+		fmt.Fprintf(os.Stderr, "[buddy] Recovered %d orphaned session(s)\n", recovered)
+	}
+
 	// Detect available external linters for PostToolUse checks.
 	detectAvailableLinters(sdb)
 

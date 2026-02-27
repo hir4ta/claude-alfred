@@ -3,6 +3,9 @@ package hookhandler
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
@@ -20,44 +23,66 @@ func handleSessionEnd(input []byte) (*HookOutput, error) {
 		return nil, fmt.Errorf("parse input: %w", err)
 	}
 
-	sdb, err := sessiondb.Open(in.SessionID)
-	if err != nil {
-		return nil, nil
+	// Persist session knowledge (workflow, metrics, user profile, global sync).
+	persistSessionData(in.SessionID, in.CWD)
+
+	// Clean up live session data from buddy.db.
+	if st, err := store.OpenDefault(); err == nil {
+		_ = st.CleanupLiveSession(in.SessionID)
+		st.Close()
 	}
 
-	// Persist workflow sequence, session metrics, tool sequences, and user profile
-	// before destroying session DB.
-	persistWorkflowSequence(sdb, in.SessionID)
-	persistSessionMetrics(sdb)
-	persistUserProfile(sdb)
-	persistCoChanges(sdb)
-	mergeToolSequencesToStore(sdb)
-	syncToGlobalDB(sdb, in.CWD)
-
-	_ = sdb.Destroy()
+	// Destroy ephemeral session DB.
+	if sdb, err := sessiondb.Open(in.SessionID); err == nil {
+		_ = sdb.Destroy()
+	}
 	return nil, nil
 }
 
-// persistWorkflowSequence extracts the phase sequence from session_phases
-// and saves it to the persistent store for future workflow learning.
+// persistSessionData runs all persist functions for the given session.
+// Safe to call multiple times — all writers are idempotent
+// (Welford, EWMA upsert, ON CONFLICT aggregation).
+// Does not destroy the session DB; caller decides lifecycle.
+func persistSessionData(sessionID, cwd string) {
+	if sessionID == "" {
+		return
+	}
+	sdb, err := sessiondb.Open(sessionID)
+	if err != nil {
+		return
+	}
+	defer sdb.Close()
+
+	persistWorkflowSequence(sdb, sessionID)
+	persistSessionMetrics(sdb)
+	persistUserProfile(sdb)
+	syncToGlobalDB(sdb, cwd)
+}
+
+// persistWorkflowSequence reads the phase sequence from buddy.db's live tables
+// (populated by PostToolUse) and saves it as a workflow_sequence for future learning.
+// Falls back to sessiondb phases if live data is unavailable.
 func persistWorkflowSequence(sdb *sessiondb.SessionDB, sessionID string) {
-	phases, err := sdb.GetPhaseSequence()
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	// Read phases from buddy.db (populated directly by PostToolUse).
+	phases, err := st.LivePhaseSequence(sessionID)
 	if err != nil || len(phases) < 2 {
-		return // not enough data to learn from
+		// Fall back to sessiondb for orphan recovery or legacy sessions.
+		phases, err = sdb.GetPhaseSequence()
+		if err != nil || len(phases) < 2 {
+			return
+		}
 	}
 
 	taskTypeStr, _ := sdb.GetContext("task_type")
 	if taskTypeStr == "" {
 		return
 	}
-
-	phaseCount, _ := sdb.PhaseCount()
-
-	st, err := store.OpenDefault()
-	if err != nil {
-		return
-	}
-	defer st.Close()
 
 	// Heuristic success: no recent unresolved failures.
 	success := true
@@ -73,7 +98,7 @@ func persistWorkflowSequence(sdb *sessiondb.SessionDB, sessionID string) {
 		}
 	}
 
-	_ = st.InsertWorkflowSequence(sessionID, taskTypeStr, phases, success, phaseCount, 0)
+	_ = st.InsertWorkflowSequence(sessionID, taskTypeStr, phases, success, len(phases), 0)
 }
 
 // persistSessionMetrics extracts per-session metrics and feeds them into
@@ -253,42 +278,6 @@ func persistUserProfile(sdb *sessiondb.SessionDB) {
 	}
 }
 
-// persistCoChanges records file co-change pairs from the working set.
-func persistCoChanges(sdb *sessiondb.SessionDB) {
-	files, err := sdb.GetWorkingSetFiles()
-	if err != nil || len(files) < 2 {
-		return
-	}
-
-	st, err := store.OpenDefault()
-	if err != nil {
-		return
-	}
-	defer st.Close()
-
-	_ = st.RecordCoChanges(files)
-}
-
-// mergeToolSequencesToStore merges session-local tool bigrams and trigrams
-// into the global persistent store for cross-session prediction.
-func mergeToolSequencesToStore(sdb *sessiondb.SessionDB) {
-	st, err := store.OpenDefault()
-	if err != nil {
-		return
-	}
-	defer st.Close()
-
-	bigrams, err := sdb.AllToolSequences()
-	if err == nil && len(bigrams) > 0 {
-		_ = st.MergeToolSequences(bigrams)
-	}
-
-	trigrams, err := sdb.AllToolTrigrams()
-	if err == nil && len(trigrams) > 0 {
-		_ = st.MergeToolTrigrams(trigrams)
-	}
-}
-
 // syncToGlobalDB syncs patterns and decisions from the project store
 // to the global cross-project database, and updates the project fingerprint.
 func syncToGlobalDB(sdb *sessiondb.SessionDB, cwd string) {
@@ -331,4 +320,53 @@ func syncToGlobalDB(sdb *sessiondb.SessionDB, cwd string) {
 		}
 		_ = gs.InsertPattern(fp.ProjectName, "decision", title, d.DecisionText, fp.Languages)
 	}
+}
+
+// RecoverOrphanedSessions scans /tmp/claude-buddy/ for session DBs
+// that were not properly destroyed (SessionEnd never fired).
+// Extracts and persists their data, then destroys them.
+// Skips the current session. Returns the number of recovered sessions.
+func RecoverOrphanedSessions(currentSessionID, cwd string) int {
+	dir := filepath.Join(os.TempDir(), "claude-buddy")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+
+	recovered := 0
+	const maxRecover = 5
+
+	for _, e := range entries {
+		if recovered >= maxRecover {
+			break
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, "session-") || !strings.HasSuffix(name, ".db") {
+			continue
+		}
+		// Skip WAL and SHM files.
+		if strings.HasSuffix(name, "-wal") || strings.HasSuffix(name, "-shm") {
+			continue
+		}
+
+		sessionID := strings.TrimPrefix(strings.TrimSuffix(name, ".db"), "session-")
+		if sessionID == currentSessionID {
+			continue
+		}
+
+		// Persist whatever knowledge the orphaned session accumulated.
+		persistSessionData(sessionID, cwd)
+
+		// Clean up live data and destroy the session DB.
+		if st, serr := store.OpenDefault(); serr == nil {
+			_ = st.CleanupLiveSession(sessionID)
+			st.Close()
+		}
+		if sdb, serr := sessiondb.Open(sessionID); serr == nil {
+			_ = sdb.Destroy()
+			recovered++
+		}
+	}
+
+	return recovered
 }

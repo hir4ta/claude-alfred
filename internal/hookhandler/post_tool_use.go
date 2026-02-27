@@ -41,6 +41,13 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Open buddy.db for direct knowledge writes (phases, files, sequences).
+	// Nil-safe: callers check st != nil before use.
+	st, _ := store.OpenDefault()
+	if st != nil {
+		defer st.Close()
+	}
+
 	// Cache task_type and velocity for contextual Thompson Sampling.
 	SetDeliveryContext(sdb)
 
@@ -164,6 +171,13 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	// Record workflow phase for adaptive learning.
 	recordPhase(sdb, in.ToolName, in.ToolInput)
 
+	// Persist phase to buddy.db for cross-session learning.
+	if st != nil {
+		if phase := classifyPhase(in.ToolName, in.ToolInput); phase != "" {
+			_ = st.RecordLivePhase(in.SessionID, phase, in.ToolName)
+		}
+	}
+
 	// Record tool outcome for prediction intelligence.
 	filePath := extractFilePath(in.ToolInput)
 	_ = sdb.RecordToolOutcome(in.ToolName, filePath, true) // success path
@@ -172,12 +186,18 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	prevTool, _ := sdb.GetContext("prev_tool")
 	if prevTool != "" {
 		_ = sdb.RecordSequence(prevTool, in.ToolName, "success")
+		if st != nil {
+			_ = st.IncrementToolSequence(prevTool, in.ToolName)
+		}
 	}
 
 	// Record trigram for 3-tool sequence prediction.
 	prevPrevTool, _ := sdb.GetContext("prev_prev_tool")
 	if prevPrevTool != "" && prevTool != "" {
 		_ = sdb.RecordTrigram(prevPrevTool, prevTool, in.ToolName, "success")
+		if st != nil {
+			_ = st.IncrementToolTrigram(prevPrevTool, prevTool, in.ToolName)
+		}
 	}
 	_ = sdb.SetContext("prev_prev_tool", prevTool)
 	_ = sdb.SetContext("prev_tool", in.ToolName)
@@ -186,6 +206,13 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	if isWrite {
 		if filePath != "" {
 			_ = sdb.AddWorkingSetFile(filePath)
+			if st != nil {
+				_ = st.RecordLiveFile(in.SessionID, filePath)
+				// Incremental co-change: record pairs with all files already in this session.
+				if files, ferr := st.LiveSessionFiles(in.SessionID); ferr == nil && len(files) >= 2 {
+					_ = st.RecordCoChanges(files)
+				}
+			}
 		}
 	}
 
@@ -537,36 +564,49 @@ func recordFailureSolution(sdb *sessiondb.SessionDB, sessionID, filePath string,
 	}
 }
 
-// recordPhase maps a tool call to a workflow phase and records it in sessiondb.
-// It also detects phase transitions and sets the at_workflow_boundary flag.
-func recordPhase(sdb *sessiondb.SessionDB, toolName string, toolInput json.RawMessage) {
-	var phase string
+// classifyPhase maps a tool call to a workflow phase string.
+// Returns "" if the tool doesn't map to a recognized phase.
+func classifyPhase(toolName string, toolInput json.RawMessage) string {
 	switch toolName {
 	case "Read", "Grep", "Glob":
-		phase = "read"
+		return "read"
 	case "Edit", "Write", "NotebookEdit":
-		phase = "write"
+		return "write"
 	case "EnterPlanMode":
-		phase = "plan"
+		return "plan"
 	case "Bash":
 		var bi struct {
 			Command string `json:"command"`
 		}
 		if json.Unmarshal(toolInput, &bi) == nil && bi.Command != "" {
 			if testCmdPattern.MatchString(bi.Command) {
-				phase = "test"
-			} else if isCompileCommand(bi.Command) {
-				phase = "compile"
+				return "test"
 			}
-			// git commit is a workflow boundary (task completion signal).
-			if isGitCommitCommand(bi.Command) {
-				_ = sdb.SetContext("at_workflow_boundary", "true")
+			if isCompileCommand(bi.Command) {
+				return "compile"
 			}
 		}
+	}
+	return ""
+}
+
+// recordPhase maps a tool call to a workflow phase and records it in sessiondb.
+// It also detects phase transitions and sets the at_workflow_boundary flag.
+func recordPhase(sdb *sessiondb.SessionDB, toolName string, toolInput json.RawMessage) {
+	// Detect workflow boundaries from task/git events.
+	switch toolName {
+	case "Bash":
+		var bi struct {
+			Command string `json:"command"`
+		}
+		if json.Unmarshal(toolInput, &bi) == nil && isGitCommitCommand(bi.Command) {
+			_ = sdb.SetContext("at_workflow_boundary", "true")
+		}
 	case "TaskCreate", "TaskUpdate":
-		// Task lifecycle events are workflow boundaries.
 		_ = sdb.SetContext("at_workflow_boundary", "true")
 	}
+
+	phase := classifyPhase(toolName, toolInput)
 	if phase == "" {
 		return
 	}

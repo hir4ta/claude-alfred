@@ -32,6 +32,10 @@ func handlePreCompact(input []byte) (*HookOutput, error) {
 	// Record compact event.
 	_ = sdb.RecordCompact()
 
+	// Checkpoint: persist accumulated session data before compaction.
+	// Compaction indicates a long session — good moment to ensure data survives.
+	persistSessionData(in.SessionID, in.CWD)
+
 	// Check for context thrashing (2+ compacts in 15 minutes).
 	count, _ := sdb.CompactsInWindow(15)
 	if count >= 2 {

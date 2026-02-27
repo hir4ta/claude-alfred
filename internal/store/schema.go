@@ -2,7 +2,7 @@ package store
 
 import "database/sql"
 
-const schemaVersion = 11
+const schemaVersion = 12
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -409,6 +409,24 @@ CREATE TABLE IF NOT EXISTS learned_episodes (
 CREATE INDEX IF NOT EXISTS idx_learned_ep_name ON learned_episodes(name);
 `
 
+const ddlV12 = `
+CREATE TABLE IF NOT EXISTS live_session_phases (
+    session_id TEXT NOT NULL,
+    phase      TEXT NOT NULL,
+    tool_name  TEXT NOT NULL,
+    timestamp  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_live_phases_session ON live_session_phases(session_id);
+
+CREATE TABLE IF NOT EXISTS live_session_files (
+    session_id TEXT NOT NULL,
+    file_path  TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(session_id, file_path)
+);
+CREATE INDEX IF NOT EXISTS idx_live_files_session ON live_session_files(session_id);
+`
+
 // Migrate applies all pending schema migrations to the database.
 func Migrate(db *sql.DB) error {
 	var current int
@@ -473,6 +491,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if current < 11 {
 		if _, err := db.Exec(ddlV11); err != nil {
+			return err
+		}
+	}
+	if current < 12 {
+		if _, err := db.Exec(ddlV12); err != nil {
 			return err
 		}
 	}
