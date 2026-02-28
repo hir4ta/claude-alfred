@@ -1,6 +1,6 @@
 #!/bin/sh
 # claude-buddy wrapper — auto-downloads binary on version mismatch.
-BUDDY_VERSION="0.14.5"
+BUDDY_VERSION="0.14.6"
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUDDY_BIN="${BIN_DIR}/claude-buddy"
 VERSION_FILE="${BIN_DIR}/.buddy-version"
@@ -98,7 +98,7 @@ ensure_binary() {
 
 case "$1" in
   setup)
-    # Explicit first-time setup (called from curl one-liner or /claude-buddy:init).
+    # Explicit first-time setup (called from curl one-liner).
     if is_current; then
       echo "claude-buddy ${BUDDY_VERSION} already installed"
     else

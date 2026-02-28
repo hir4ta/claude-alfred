@@ -205,7 +205,7 @@ ensure_binary() {
 
 case "$1" in
   setup)
-    # Explicit first-time setup (called from curl one-liner or /claude-buddy:init).
+    # Explicit first-time setup (called from curl one-liner).
     if is_current; then
       echo "claude-buddy ${BUDDY_VERSION} already installed"
     else

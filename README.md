@@ -17,7 +17,7 @@ A proactive session companion for Claude Code — real-time anti-pattern detecti
 curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-buddy/main/setup.sh | sh
 ```
 
-This downloads the binary and prompts you to choose a sync range (1 week / 2 weeks / 1 month / 3 months) with estimated time based on your actual session count. JSONL parsing, pattern extraction, and embedding generation are included in the time estimate.
+This downloads the binary and syncs all available sessions (JSONL parsing, pattern extraction, and embedding generation). Estimated time is shown before sync starts.
 
 **3. Restart Claude Code** to activate hooks and MCP tools.
 
@@ -162,8 +162,8 @@ claude-buddy plugin-bundle ./plugin
 
 claude-buddy is distributed as a Claude Code plugin. The plugin provides:
 
-- **14 hooks**: SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, PreCompact, SessionEnd, Stop (command + prompt), SubagentStart, SubagentStop, Notification, TeammateIdle, TaskCompleted, PermissionRequest
-- **6 skills**: init, buddy-recover, buddy-gate, buddy-analyze, buddy-forecast, buddy-context-recovery
+- **13 hooks**: SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, PreCompact, SessionEnd, SubagentStart, SubagentStop, Notification, TeammateIdle, TaskCompleted, PermissionRequest
+- **5 skills**: buddy-recover, buddy-gate, buddy-analyze, buddy-forecast, buddy-context-recovery
 - **1 agent**: buddy (persistent memory, session advisor)
 - **MCP server**: 14 tools for session analysis, feedback, and cross-project knowledge search
 
@@ -171,7 +171,6 @@ claude-buddy is distributed as a Claude Code plugin. The plugin provides:
 
 | Skill | Invocation | Description |
 |---|---|---|
-| init | `/claude-buddy:init` | Re-sync sessions and regenerate embeddings (binary updates are automatic) |
 | buddy-recover | auto | Failure recovery: stuck loops, error resolution diffs, test debugging |
 | buddy-gate | auto | Session health check + pre-commit quality gate |
 | buddy-analyze | `/claude-buddy:buddy-analyze` | Blast radius analysis and change review (runs in forked context) |
@@ -189,7 +188,6 @@ Hooks actively monitor your session through Claude Code's lifecycle events:
 | **PostToolUse** | Tracks tool/file patterns, code quality heuristics, coverage-aware test failure correlation, suggestion effectiveness with pending verification |
 | **UserPromptSubmit** | Classifies intent/task type, injects relevant past knowledge, delivers queued nudges |
 | **PreCompact** | Serializes working set (files, intent, decisions, git branch) for automatic restoration |
-| **Stop** | Detects incomplete work (TODO/FIXME, unresolved failures), warns about uncommitted git changes |
 | **PostToolUseFailure** | Causal WHY explanations for failures, deterministic Go compile error patterns, tracks failure cascades, searches past solutions, starts resolution chains, false-positive detection for nudge resolution |
 | **SubagentStart** | Injects session context into subagent launches |
 | **SubagentStop** | Records subagent outcomes and delivery context |
@@ -245,7 +243,7 @@ claude-buddy/
 │   ├── .claude-plugin/        # Plugin manifest
 │   ├── hooks/                 # Hook definitions (14 events)
 │   ├── bin/                   # Guard + setup wrapper script
-│   ├── skills/                # 11 skills (init + 10 buddy skills)
+│   ├── skills/                # 5 skills
 │   ├── agents/                # Buddy agent
 │   └── .mcp.json              # MCP server config
 ├── .claude-plugin/            # Marketplace manifest

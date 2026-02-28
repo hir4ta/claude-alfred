@@ -34,7 +34,7 @@ func TestBundle(t *testing.T) {
 		}
 	})
 
-	// Verify hooks.json has all 14 events.
+	// Verify hooks.json has all 13 events.
 	t.Run("hooks.json", func(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(outputDir, "hooks", "hooks.json"))
 		if err != nil {
@@ -54,7 +54,6 @@ func TestBundle(t *testing.T) {
 			"UserPromptSubmit", "PreCompact", "SessionEnd",
 			"SubagentStart", "SubagentStop", "Notification",
 			"TeammateIdle", "TaskCompleted", "PermissionRequest",
-			"Stop",
 		}
 		for _, event := range expectedEvents {
 			if _, ok := hooks[event]; !ok {

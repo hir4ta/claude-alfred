@@ -43,6 +43,17 @@ else
 fi
 echo ""
 
+# Show estimated time.
+INFO=$(sh "$RUN_SH" count-sessions 2>/dev/null || echo '{}')
+SESSIONS=$(echo "$INFO" | grep -o '"sessions":[0-9]*' | grep -o '[0-9]*')
+EST_MIN=$(echo "$INFO" | grep -o '"est_minutes":[0-9]*' | grep -o '[0-9]*')
+if [ -n "$SESSIONS" ] && [ "$SESSIONS" -gt 0 ]; then
+  echo "Found $SESSIONS sessions to sync (~${EST_MIN} min)"
+else
+  echo "No existing sessions found (fresh install)"
+fi
+echo ""
+
 # Run setup (downloads binary + syncs sessions + generates embeddings).
 sh "$RUN_SH" setup
 

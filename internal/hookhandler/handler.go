@@ -53,8 +53,6 @@ func Run(eventName string) error {
 		output, err = handleSessionEnd(input)
 	case "PostToolUseFailure":
 		output, err = handlePostToolUseFailure(input)
-	case "Stop":
-		output, err = handleStop(input)
 	case "SubagentStart":
 		output, err = handleSubagentStart(input)
 	case "SubagentStop":
@@ -118,11 +116,6 @@ func makeAskOutput(reason string) *HookOutput {
 			"permissionDecisionReason": reason,
 		},
 	}
-}
-
-// makeBlockStopOutput returns output that prevents Claude from stopping.
-func makeBlockStopOutput(reason string) *HookOutput {
-	return &HookOutput{Decision: "block", Reason: reason}
 }
 
 // makeUpdatedInputOutput creates a PreToolUse response with updatedInput.

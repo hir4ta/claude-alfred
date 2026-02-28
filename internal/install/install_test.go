@@ -310,7 +310,6 @@ func TestBuddyHookEntries(t *testing.T) {
 		"UserPromptSubmit", "PreCompact", "SessionEnd",
 		"SubagentStart", "SubagentStop", "Notification",
 		"TeammateIdle", "TaskCompleted", "PermissionRequest",
-		"Stop",
 	}
 	for _, ev := range events {
 		if _, ok := entries[ev]; !ok {

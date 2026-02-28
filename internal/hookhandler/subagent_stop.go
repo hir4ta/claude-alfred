@@ -92,5 +92,5 @@ func handleSubagentStop(input []byte) (*HookOutput, error) {
 		"Subagent output quality check", reason, PriorityHigh,
 		"Subagent output without test coverage risks propagating untested code into your codebase.")
 
-	return makeBlockStopOutput(reason), nil
+	return nil, nil
 }

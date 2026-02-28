@@ -44,6 +44,8 @@ var syncRanges = map[string]syncRange{
 // Hooks, skills, agent, and MCP are managed by the plugin — this only
 // syncs sessions/docs, generates embeddings, and ensures global rules.
 // args may contain --since=7d|14d|30d|90d (default: 30d).
+// Claude Code retains sessions for ~30 days (cleanupPeriodDays default),
+// so 30d captures everything available.
 func Run(args []string) error {
 	sinceFlag := "30d"
 	for _, a := range args {
@@ -78,43 +80,27 @@ func Run(args []string) error {
 	return nil
 }
 
-// CountSessions outputs session counts per sync range as JSON.
+// CountSessions outputs total session count and estimated sync time as JSON.
 func CountSessions() error {
 	sessions, err := listAllSessions()
 	if err != nil {
 		return err
 	}
 
-	type rangeInfo struct {
-		Days       int  `json:"days"`
-		Sessions   int  `json:"sessions"`
-		EstMinutes int  `json:"est_minutes"`
+	count := len(sessions)
+	est := (count + 119) / 120 // ~0.5s per session ≈ 120 sessions/min, round up
+	if est < 1 && count > 0 {
+		est = 1
 	}
+
 	type output struct {
-		Ranges      []rangeInfo `json:"ranges"`
-		HasVoyageKey bool       `json:"has_voyage_key"`
+		Sessions     int  `json:"sessions"`
+		EstMinutes   int  `json:"est_minutes"`
+		HasVoyageKey bool `json:"has_voyage_key"`
 	}
-
-	now := time.Now()
-	days := []int{7, 14, 30, 90}
-	var ranges []rangeInfo
-	for _, d := range days {
-		cutoff := now.AddDate(0, 0, -d)
-		count := 0
-		for _, s := range sessions {
-			if !s.ModTime.Before(cutoff) {
-				count++
-			}
-		}
-		est := (count + 119) / 120 // ~0.5s per session ≈ 120 sessions/min, round up
-		if est < 1 && count > 0 {
-			est = 1
-		}
-		ranges = append(ranges, rangeInfo{Days: d, Sessions: count, EstMinutes: est})
-	}
-
 	out := output{
-		Ranges:      ranges,
+		Sessions:     count,
+		EstMinutes:   est,
 		HasVoyageKey: os.Getenv("VOYAGE_API_KEY") != "",
 	}
 	return json.NewEncoder(os.Stdout).Encode(out)
@@ -347,28 +333,6 @@ func buddyHookEntries(binPath string) map[string]any {
 		"PermissionRequest":   makeEntry("PermissionRequest", 1, false, ""),
 	}
 
-	// Stop hooks: command hook persists session data + validates completeness,
-	// agent hook verifies task completion before allowing Claude to stop.
-	// Agent type is more reliable than prompt type at producing valid JSON
-	// (prompt hooks have a known upstream bug: anthropics/claude-code#11947).
-	cmd := binPath + " hook-handler Stop"
-	entries["Stop"] = []any{
-		map[string]any{
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": cmd,
-					"timeout": 8,
-				},
-				map[string]any{
-					"type":    "agent",
-					"prompt":  "[buddy] Check if the task is complete. Evaluate: (1) Were all requested changes implemented? (2) Were tests run if the project has tests? (3) Are there uncommitted changes that should be committed? If incomplete, state what remains in one sentence. If complete, confirm completion.",
-					"timeout": 30,
-				},
-			},
-		},
-	}
-
 	return entries
 }
 
@@ -496,7 +460,7 @@ func RemoveHooks() error {
 
 	events := []string{
 		"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure",
-		"UserPromptSubmit", "PreCompact", "SessionEnd", "Stop",
+		"UserPromptSubmit", "PreCompact", "SessionEnd",
 		"SubagentStart", "SubagentStop", "Notification",
 		"TeammateIdle", "TaskCompleted", "PermissionRequest",
 	}
