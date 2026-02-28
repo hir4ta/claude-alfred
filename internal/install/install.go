@@ -51,26 +51,69 @@ func Run() error {
 	return nil
 }
 
+// buddyRulesVersion tracks the rules content version for safe upgrades.
+// Bump this when buddyRulesContent changes to trigger overwrites.
+const buddyRulesVersion = "2"
+
 // buddyRulesContent is the content written to ~/.claude/rules/buddy.md.
-// It instructs Claude Code to consult buddy MCP tools when appropriate.
-const buddyRulesContent = `# claude-buddy
+// It instructs Claude Code to actively call buddy MCP tools when conditions are met.
+// NOTE: Go raw string literals cannot contain backticks, so we use regular strings
+// with explicit newlines for the rules content.
+var buddyRulesContent = strings.Join([]string{
+	"# claude-buddy",
+	"",
+	"buddy hooks inject context into every turn automatically.",
+	"These rules tell you when to call buddy MCP tools yourself.",
+	"",
+	"## On Tool Failure",
+	"",
+	"When a tool fails or returns an error:",
+	"1. Read the [buddy] hint in additionalContext — it has root cause analysis",
+	"2. When the hint says \"call buddy_diagnose\", do so with the error text",
+	"3. On repeated failure (2+ times), call `buddy_diagnose` before retrying",
+	"   — buddy_diagnose surfaces past fixes and resolution diffs so you don't repeat mistakes",
+	"",
+	"## Tool Trigger Map",
+	"",
+	"Call these MCP tools when the condition matches:",
+	"",
+	"**buddy_diagnose** — call on any tool failure or error",
+	"- Edit mismatch, compile error, test failure, non-zero exit",
+	"- Same error appearing 2+ times — get root cause before retrying",
+	"",
+	"**buddy_knowledge** — call to search past patterns and solutions",
+	"- Working on unfamiliar code or debugging a recurring pattern",
+	"- Hook output shows a \"knowledge\" briefing — call to dig deeper",
+	"- Looking for an architectural precedent or past design decision",
+	"",
+	"**buddy_state** — call to check session health",
+	"- Many tool calls without visible progress",
+	"- Hook output shows a health decline warning",
+	"- Before a major refactoring decision (risk assessment)",
+	"",
+	"**buddy_guidance** — call for workflow recommendations",
+	"- Switching to a new file or task",
+	"- Before editing a high-blast-radius file",
+	"- After completing a major milestone (what's next?)",
+	"",
+	"**buddy_feedback** — call to rate a suggestion (trains the model)",
+	"- After acting on a [buddy] suggestion: rate helpful / not_helpful",
+	"- After ignoring a suggestion that turned out wrong: rate misleading",
+	"- Each rating directly improves future suggestion quality",
+	"",
+	"## Reading Hook Output",
+	"",
+	"- `[buddy]` lines are session intelligence — read them",
+	"- Lines starting with → are actionable recommendations",
+	"- `WHY:` explains the reasoning behind a suggestion",
+	"- `IMPACT:` quantifies savings — prioritize high-impact items",
+	"- `suggested_tool` in JSON output names the MCP tool to call next",
+	"",
+}, "\n")
 
-claude-buddy hooks deliver automatic briefings every turn. MCP tools provide deeper analysis:
-
-- **buddy_guidance** — workflow alerts, next steps, and recommendations
-- **buddy_knowledge** — search past patterns, decisions, and error solutions
-- **buddy_diagnose** — root cause analysis + fix patches when errors occur
-- **buddy_state** — session health, statistics, and trend predictions
-
-Consult these tools when:
-- An error occurs or a tool fails repeatedly
-- You need to recall a past decision or pattern
-- Session health declines or you feel stuck
-- Starting work on a file with high blast radius
-`
-
-// ensureRulesFile creates ~/.claude/rules/buddy.md if it does not exist.
-// Existing files are never overwritten to respect user customizations.
+// ensureRulesFile creates or updates ~/.claude/rules/buddy.md.
+// Uses a version marker (<!-- buddy-rules-vN -->) to detect stale content.
+// Files with the current version marker are left untouched.
 func ensureRulesFile() {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -80,9 +123,13 @@ func ensureRulesFile() {
 	rulesDir := filepath.Join(home, ".claude", "rules")
 	rulesPath := filepath.Join(rulesDir, "buddy.md")
 
-	// Skip if file already exists.
-	if _, err := os.Stat(rulesPath); err == nil {
-		return
+	// Check existing file for version marker.
+	versionTag := "<!-- buddy-rules-v" + buddyRulesVersion + " -->"
+	existing, readErr := os.ReadFile(rulesPath)
+	if readErr == nil {
+		if strings.Contains(string(existing), versionTag) {
+			return // already current
+		}
 	}
 
 	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
@@ -90,12 +137,17 @@ func ensureRulesFile() {
 		return
 	}
 
-	if err := os.WriteFile(rulesPath, []byte(buddyRulesContent), 0o644); err != nil {
+	content := versionTag + "\n" + buddyRulesContent
+	if err := os.WriteFile(rulesPath, []byte(content), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to write rules file: %v\n", err)
 		return
 	}
 
-	fmt.Println("✓ Created ~/.claude/rules/buddy.md")
+	if readErr == nil {
+		fmt.Println("✓ Updated ~/.claude/rules/buddy.md (v" + buddyRulesVersion + ")")
+	} else {
+		fmt.Println("✓ Created ~/.claude/rules/buddy.md")
+	}
 }
 
 // cleanupLegacyInstall removes skills, agent, hooks, and MCP registration

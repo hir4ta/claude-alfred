@@ -87,7 +87,8 @@ type Signal struct {
 //
 //	P0 critical alert > P1 past solution > P2 knowledge match > P3 co-change >
 //	P4 phase transition > P5 strategic insight > P6 health decline
-func selectTopSignal(sdb *sessiondb.SessionDB, prompt, projectPath string) *Signal {
+func selectTopSignal(pc *promptContext, prompt, projectPath string) *Signal {
+	sdb := pc.sdb
 	// Candidate generators in priority order.
 	candidates := []func() *Signal{
 		// P0: Critical detection (action-level alert from HookDetector).
@@ -104,17 +105,17 @@ func selectTopSignal(sdb *sessiondb.SessionDB, prompt, projectPath string) *Sign
 			return &Signal{Priority: 0, Kind: "alert", Detail: det.Detail}
 		},
 		// P1: Past solution for a recent failure.
-		func() *Signal { return findPastSolution(sdb) },
+		func() *Signal { return findPastSolution(pc) },
 		// P2: Knowledge match (semantic search of past patterns).
 		func() *Signal { return findKnowledgeSignal(sdb, prompt) },
 		// P3: Co-change hint for the most recently edited file.
-		func() *Signal { return findCoChangeHint(sdb) },
+		func() *Signal { return findCoChangeHint(pc) },
 		// P4: Phase transition suggestion.
-		func() *Signal { return findPhaseSignal(sdb) },
+		func() *Signal { return findPhaseSignal(pc) },
 		// P5: Strategic insight (cross-session behavioral data).
 		func() *Signal { return findStrategicSignal(sdb, projectPath) },
 		// P6: Health decline trend.
-		func() *Signal { return findHealthSignal(sdb) },
+		func() *Signal { return findHealthSignal(pc) },
 	}
 
 	for _, gen := range candidates {
@@ -136,13 +137,14 @@ func selectTopSignal(sdb *sessiondb.SessionDB, prompt, projectPath string) *Sign
 }
 
 // findPastSolution checks for unresolved failures and looks up past solutions.
-func findPastSolution(sdb *sessiondb.SessionDB) *Signal {
+func findPastSolution(pc *promptContext) *Signal {
+	sdb := pc.sdb
 	on, _ := sdb.IsOnCooldown("briefing_solution")
 	if on {
 		return nil
 	}
 
-	failures, _ := sdb.RecentFailures(3)
+	failures := pc.RecentFailures(3)
 	if len(failures) == 0 {
 		return nil
 	}
@@ -184,13 +186,14 @@ func findPastSolution(sdb *sessiondb.SessionDB) *Signal {
 }
 
 // findCoChangeHint checks if the most recently edited file has co-change partners.
-func findCoChangeHint(sdb *sessiondb.SessionDB) *Signal {
+func findCoChangeHint(pc *promptContext) *Signal {
+	sdb := pc.sdb
 	on, _ := sdb.IsOnCooldown("briefing_cochange")
 	if on {
 		return nil
 	}
 
-	files, _ := sdb.GetWorkingSetFiles()
+	files := pc.WorkingSetFiles()
 	if len(files) == 0 {
 		return nil
 	}
@@ -252,13 +255,14 @@ func findCoChangeHint(sdb *sessiondb.SessionDB) *Signal {
 }
 
 // findPhaseSignal detects workflow phase transitions worth mentioning.
-func findPhaseSignal(sdb *sessiondb.SessionDB) *Signal {
+func findPhaseSignal(pc *promptContext) *Signal {
+	sdb := pc.sdb
 	on, _ := sdb.IsOnCooldown("briefing_phase")
 	if on {
 		return nil
 	}
 
-	progress := GetPhaseProgress(sdb)
+	progress := pc.PhaseProgress()
 	if progress == nil {
 		return nil
 	}
@@ -294,7 +298,8 @@ func findPhaseSignal(sdb *sessiondb.SessionDB) *Signal {
 }
 
 // findHealthSignal detects declining session health.
-func findHealthSignal(sdb *sessiondb.SessionDB) *Signal {
+func findHealthSignal(pc *promptContext) *Signal {
+	sdb := pc.sdb
 	on, _ := sdb.IsOnCooldown("briefing_health")
 	if on {
 		return nil
@@ -307,7 +312,7 @@ func findHealthSignal(sdb *sessiondb.SessionDB) *Signal {
 			ps.CurrentPace*100, int(ps.AvgToolsPerSession))
 	}
 
-	errRate := getFloat(sdb, "ewma_error_rate")
+	errRate := pc.EWMAErrorRate()
 	if errRate > 0.3 {
 		_ = sdb.SetCooldown("briefing_health", 10*time.Minute)
 		return &Signal{
@@ -317,7 +322,7 @@ func findHealthSignal(sdb *sessiondb.SessionDB) *Signal {
 		}
 	}
 
-	vel := getFloat(sdb, "ewma_tool_velocity")
+	vel := pc.EWMAVelocity()
 	if vel > 0 && vel < 2.0 {
 		_ = sdb.SetCooldown("briefing_health", 10*time.Minute)
 		return &Signal{
@@ -342,17 +347,18 @@ func formatBriefing(sig *Signal) string {
 
 // buildNarrative enriches a signal with session context to produce a coherent narrative.
 // Weaves together the signal, working set state, failure log, and phase info.
-func buildNarrative(sig *Signal, sdb *sessiondb.SessionDB) string {
+func buildNarrative(sig *Signal, pc *promptContext) string {
 	if sig == nil {
 		return ""
 	}
+	sdb := pc.sdb
 
 	var parts []string
 	parts = append(parts, sig.Detail)
 
 	// Add failure context for solution/alert signals with causal chain.
 	if sig.Kind == "solution" || sig.Kind == "alert" {
-		failures, _ := sdb.RecentFailures(1)
+		failures := pc.RecentFailures(1)
 		if len(failures) > 0 {
 			f := failures[0]
 			if f.FilePath != "" {
@@ -402,7 +408,7 @@ func buildNarrative(sig *Signal, sdb *sessiondb.SessionDB) string {
 
 	// Add co-change reminder for knowledge signals about specific files.
 	if sig.Kind == "knowledge" || sig.Kind == "cochange" {
-		files, _ := sdb.GetWorkingSetFiles()
+		files := pc.WorkingSetFiles()
 		if len(files) > 0 && len(files) <= 3 {
 			st, err := store.OpenDefaultCached()
 			if err == nil {

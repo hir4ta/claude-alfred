@@ -422,6 +422,10 @@ func checkSignalResolution(sdb *sessiondb.SessionDB, toolName string) {
 	}
 	_ = st.ResolveSignalOutcome(outcomeID)
 
+	// Feed Thompson Sampling: resolved signal = positive auto-feedback.
+	tc, _, _, _ := sdb.BurstState()
+	recordAutoFeedback(sdb, "briefing:"+kind, tc)
+
 	// Clear to avoid double-resolution.
 	_ = sdb.SetContext("last_signal_outcome_id", "")
 	_ = sdb.SetContext("last_signal_kind", "")

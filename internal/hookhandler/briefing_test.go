@@ -22,7 +22,7 @@ func TestSelectTopSignal_Silent(t *testing.T) {
 	t.Parallel()
 	sdb := openTestSDB(t)
 
-	sig := selectTopSignal(sdb, "", "")
+	sig := selectTopSignal(newPromptContext(sdb),"", "")
 	if sig != nil {
 		t.Errorf("selectTopSignal(empty) = %+v, want nil", sig)
 	}
@@ -38,7 +38,7 @@ func TestSelectTopSignal_P0_Alert(t *testing.T) {
 		t.Fatalf("InsertDetection = %v", err)
 	}
 
-	sig := selectTopSignal(sdb, "", "")
+	sig := selectTopSignal(newPromptContext(sdb),"", "")
 	if sig == nil {
 		t.Fatal("selectTopSignal = nil, want P0 alert")
 	}
@@ -63,13 +63,13 @@ func TestSelectTopSignal_P0_Cooldown(t *testing.T) {
 	}
 
 	// First call should return the alert.
-	sig := selectTopSignal(sdb, "", "")
+	sig := selectTopSignal(newPromptContext(sdb),"", "")
 	if sig == nil || sig.Priority != 0 {
 		t.Fatal("first call should return P0 alert")
 	}
 
 	// Second call should be silent (cooldown active).
-	sig = selectTopSignal(sdb, "", "")
+	sig = selectTopSignal(newPromptContext(sdb),"", "")
 	if sig != nil {
 		t.Errorf("second call = %+v, want nil (cooldown)", sig)
 	}
@@ -82,7 +82,7 @@ func TestSelectTopSignal_P6_HighErrorRate(t *testing.T) {
 	// Simulate high error rate.
 	_ = sdb.SetContext("ewma_error_rate", "0.5")
 
-	sig := selectTopSignal(sdb, "", "")
+	sig := selectTopSignal(newPromptContext(sdb),"", "")
 	if sig == nil {
 		t.Fatal("selectTopSignal = nil, want P6 health signal")
 	}
@@ -102,7 +102,7 @@ func TestSelectTopSignal_P0_Beats_P6(t *testing.T) {
 	_ = sdb.InsertDetection("retry_loop", "action", "Retry loop detected")
 	_ = sdb.SetContext("ewma_error_rate", "0.5")
 
-	sig := selectTopSignal(sdb, "", "")
+	sig := selectTopSignal(newPromptContext(sdb),"", "")
 	if sig == nil {
 		t.Fatal("selectTopSignal = nil, want signal")
 	}

@@ -18,6 +18,79 @@ type userPromptInput struct {
 	Prompt string `json:"prompt"`
 }
 
+// promptContext caches frequently-queried data within a single handleUserPromptSubmit call.
+// Fields are lazily populated on first access. Not safe for concurrent use.
+type promptContext struct {
+	sdb *sessiondb.SessionDB
+
+	wsFiles     []string
+	wsFilesDone bool
+
+	failures     []sessiondb.FailureEntry
+	failuresDone bool
+
+	phase     *PhaseProgress
+	phaseDone bool
+
+	ewmaVel  float64
+	ewmaErr  float64
+	ewmaDone bool
+}
+
+func newPromptContext(sdb *sessiondb.SessionDB) *promptContext {
+	return &promptContext{sdb: sdb}
+}
+
+// WorkingSetFiles returns cached working set files (fetched once per invocation).
+func (pc *promptContext) WorkingSetFiles() []string {
+	if !pc.wsFilesDone {
+		pc.wsFiles, _ = pc.sdb.GetWorkingSetFiles()
+		pc.wsFilesDone = true
+	}
+	return pc.wsFiles
+}
+
+// RecentFailures returns cached recent failures, sliced to the requested limit.
+func (pc *promptContext) RecentFailures(limit int) []sessiondb.FailureEntry {
+	if !pc.failuresDone {
+		pc.failures, _ = pc.sdb.RecentFailures(5) // max limit across all callers
+		pc.failuresDone = true
+	}
+	if limit >= len(pc.failures) {
+		return pc.failures
+	}
+	return pc.failures[:limit]
+}
+
+// PhaseProgress returns cached phase progress.
+func (pc *promptContext) PhaseProgress() *PhaseProgress {
+	if !pc.phaseDone {
+		pc.phase = GetPhaseProgress(pc.sdb)
+		pc.phaseDone = true
+	}
+	return pc.phase
+}
+
+// EWMAVelocity returns cached EWMA tool velocity.
+func (pc *promptContext) EWMAVelocity() float64 {
+	pc.loadEWMA()
+	return pc.ewmaVel
+}
+
+// EWMAErrorRate returns cached EWMA error rate.
+func (pc *promptContext) EWMAErrorRate() float64 {
+	pc.loadEWMA()
+	return pc.ewmaErr
+}
+
+func (pc *promptContext) loadEWMA() {
+	if !pc.ewmaDone {
+		pc.ewmaVel = getFloat(pc.sdb, "ewma_tool_velocity")
+		pc.ewmaErr = getFloat(pc.sdb, "ewma_error_rate")
+		pc.ewmaDone = true
+	}
+}
+
 func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	var in userPromptInput
 	if err := json.Unmarshal(input, &in); err != nil {
@@ -107,10 +180,11 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	}
 
 	// --- JARVIS briefing: select the single most important signal ---
+	pc := newPromptContext(sdb)
 	var entries []nudgeEntry
 
 	// 0. Predictive context: predict target files from prompt and surface proactive hints.
-	if predictiveHint := buildPredictiveContext(sdb, in.Prompt); predictiveHint != "" {
+	if predictiveHint := buildPredictiveContext(pc, in.Prompt); predictiveHint != "" {
 		entries = append(entries, nudgeEntry{
 			Pattern:     "predictive-context",
 			Level:       "info",
@@ -121,8 +195,8 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 
 	// 1. JARVIS briefing signal (max 1, priority-based).
 	// Use narrative synthesis to enrich the signal with session context.
-	if sig := selectTopSignal(sdb, in.Prompt, in.CWD); sig != nil {
-		detail := buildNarrative(sig, sdb)
+	if sig := selectTopSignal(pc, in.Prompt, in.CWD); sig != nil {
+		detail := buildNarrative(sig, pc)
 		briefing := fmt.Sprintf("[buddy:briefing] %s", detail)
 		entries = append(entries, nudgeEntry{
 			Pattern:     "briefing",
@@ -155,7 +229,7 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	}
 
 	// 4. Session context summary (compact one-liner, cooldown-gated).
-	if summary := buildSessionContextSummary(sdb); summary != "" {
+	if summary := buildSessionContextSummary(pc); summary != "" {
 		entries = append([]nudgeEntry{{
 			Pattern:     "session-context",
 			Level:       "info",
@@ -167,11 +241,16 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
-	return makeOutput("UserPromptSubmit", formatNudges(entries)), nil
+	out := makeOutput("UserPromptSubmit", formatNudges(entries))
+	if len(entries) > 0 {
+		enrichOutput(out, suggestedToolForPattern(entries[0].Pattern))
+	}
+	return out, nil
 }
 
 // buildSessionContextSummary creates a compact session context string.
-func buildSessionContextSummary(sdb *sessiondb.SessionDB) string {
+func buildSessionContextSummary(pc *promptContext) string {
+	sdb := pc.sdb
 	on, _ := sdb.IsOnCooldown("session_context_summary")
 	if on {
 		return ""
@@ -180,7 +259,7 @@ func buildSessionContextSummary(sdb *sessiondb.SessionDB) string {
 	var parts []string
 
 	// Working files.
-	files, _ := sdb.GetWorkingSetFiles()
+	files := pc.WorkingSetFiles()
 	if len(files) > 0 {
 		names := make([]string, 0, min(len(files), 3))
 		for i, f := range files {
@@ -197,7 +276,7 @@ func buildSessionContextSummary(sdb *sessiondb.SessionDB) string {
 	}
 
 	// Task type + phase progress.
-	if progress := GetPhaseProgress(sdb); progress != nil {
+	if progress := pc.PhaseProgress(); progress != nil {
 		phaseStr := fmt.Sprintf("Phase: %s (%d%%)", progress.CurrentPhase, progress.ProgressPct)
 		if progress.ExpectedPhase != PhaseUnknown && progress.ExpectedPhase != progress.CurrentPhase {
 			phaseStr += fmt.Sprintf(" → next: %s", progress.ExpectedPhase)
@@ -213,7 +292,7 @@ func buildSessionContextSummary(sdb *sessiondb.SessionDB) string {
 	}
 
 	// Unresolved failures: critical signal.
-	failures, _ := sdb.RecentFailures(5)
+	failures := pc.RecentFailures(5)
 	unresolvedCount := 0
 	for _, f := range failures {
 		if time.Since(f.Timestamp) > 10*time.Minute || f.FilePath == "" {
@@ -241,8 +320,8 @@ func buildSessionContextSummary(sdb *sessiondb.SessionDB) string {
 	}
 
 	// Velocity health.
-	vel := getFloat(sdb, "ewma_tool_velocity")
-	errRate := getFloat(sdb, "ewma_error_rate")
+	vel := pc.EWMAVelocity()
+	errRate := pc.EWMAErrorRate()
 	if vel > 0 || errRate > 0 {
 		health := "healthy"
 		if errRate > 0.3 {
@@ -485,7 +564,7 @@ func recentFileKeywords(sdb *sessiondb.SessionDB) []string {
 
 // predictTargetFiles predicts which files the user is likely to edit based on
 // the prompt content, working set, and co-change history.
-func predictTargetFiles(sdb *sessiondb.SessionDB, prompt string) []string {
+func predictTargetFiles(pc *promptContext, prompt string) []string {
 	var predicted []string
 	seen := make(map[string]bool)
 
@@ -504,7 +583,7 @@ func predictTargetFiles(sdb *sessiondb.SessionDB, prompt string) []string {
 	}
 
 	// 2. Include current working set files.
-	wsFiles, _ := sdb.GetWorkingSetFiles()
+	wsFiles := pc.WorkingSetFiles()
 	for _, f := range wsFiles {
 		if !seen[f] {
 			seen[f] = true
@@ -545,13 +624,14 @@ func predictTargetFiles(sdb *sessiondb.SessionDB, prompt string) []string {
 
 // buildPredictiveContext uses predicted target files to proactively surface
 // relevant warnings and context. Returns "" if no useful prediction.
-func buildPredictiveContext(sdb *sessiondb.SessionDB, prompt string) string {
+func buildPredictiveContext(pc *promptContext, prompt string) string {
+	sdb := pc.sdb
 	on, _ := sdb.IsOnCooldown("predictive_context")
 	if on {
 		return ""
 	}
 
-	predicted := predictTargetFiles(sdb, prompt)
+	predicted := predictTargetFiles(pc, prompt)
 	if len(predicted) == 0 {
 		return ""
 	}
@@ -591,7 +671,7 @@ func buildPredictiveContext(sdb *sessiondb.SessionDB, prompt string) string {
 	}
 
 	// Surface co-change files not yet in working set.
-	wsFiles, _ := sdb.GetWorkingSetFiles()
+	wsFiles := pc.WorkingSetFiles()
 	wsSet := make(map[string]bool, len(wsFiles))
 	for _, f := range wsFiles {
 		wsSet[f] = true

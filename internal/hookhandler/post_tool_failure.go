@@ -99,7 +99,10 @@ func handlePostToolUseFailure(input []byte) (*HookOutput, error) {
 		return nil, nil
 	}
 
-	return makeOutput("PostToolUseFailure", suggestion), nil
+	suggestion += "\n→ For root cause analysis: call buddy_diagnose with the error details."
+	out := makeOutput("PostToolUseFailure", suggestion)
+	enrichOutput(out, "buddy_diagnose")
+	return out, nil
 }
 
 // failureType constants.

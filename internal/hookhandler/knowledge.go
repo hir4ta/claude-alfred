@@ -2,7 +2,12 @@ package hookhandler
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
+	"hash/fnv"
+	"math"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -10,6 +15,19 @@ import (
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 	"github.com/hir4ta/claude-buddy/internal/store"
 )
+
+// Process-level cached Embedder instance (avoids allocating new HTTP clients per call).
+var (
+	cachedEmbedder     *embedder.Embedder
+	cachedEmbedderOnce sync.Once
+)
+
+func sharedEmbedder() *embedder.Embedder {
+	cachedEmbedderOnce.Do(func() {
+		cachedEmbedder = embedder.NewEmbedder()
+	})
+	return cachedEmbedder
+}
 
 // Common error indicators in tool output.
 var errorIndicators = []string{
@@ -67,13 +85,23 @@ func extractErrorSignature(text string) string {
 
 // embedQuery creates a query embedding using cached Voyage API status.
 // Returns nil if the embedder is unavailable or the request times out.
+// Results are cached in sessiondb keyed by FNV hash of the query text
+// to avoid repeated HTTP calls for the same query within a session.
 func embedQuery(sdb *sessiondb.SessionDB, text string, timeout time.Duration) []float32 {
 	avail, _ := sdb.GetContext("embedder_available")
 	if avail != "true" {
 		return nil
 	}
 
-	emb := embedder.NewEmbedder()
+	// Check sessiondb cache for this query's embedding vector.
+	cacheKey := "embed_cache:" + embedCacheKey(text)
+	if cached, _ := sdb.GetContext(cacheKey); cached != "" {
+		if vec := decodeVector(cached); vec != nil {
+			return vec
+		}
+	}
+
+	emb := sharedEmbedder()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -81,6 +109,42 @@ func embedQuery(sdb *sessiondb.SessionDB, text string, timeout time.Duration) []
 	if err != nil {
 		_ = sdb.SetContext("embedder_available", "false")
 		return nil
+	}
+
+	// Cache the result in sessiondb for reuse within this session.
+	if encoded := encodeVector(vec); encoded != "" {
+		_ = sdb.SetContext(cacheKey, encoded)
+	}
+	return vec
+}
+
+// embedCacheKey returns a short FNV-1a hash string for use as a sessiondb key.
+func embedCacheKey(text string) string {
+	h := fnv.New64a()
+	h.Write([]byte(text))
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, h.Sum64())
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+// encodeVector encodes a float32 slice to a base64 string for sessiondb storage.
+func encodeVector(vec []float32) string {
+	buf := make([]byte, len(vec)*4)
+	for i, v := range vec {
+		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+// decodeVector decodes a base64 string back to a float32 slice.
+func decodeVector(s string) []float32 {
+	buf, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil || len(buf) == 0 || len(buf)%4 != 0 {
+		return nil
+	}
+	vec := make([]float32, len(buf)/4)
+	for i := range vec {
+		vec[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[i*4:]))
 	}
 	return vec
 }

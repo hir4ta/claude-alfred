@@ -18,18 +18,15 @@ type CommonInput struct {
 }
 
 // HookOutput is the top-level JSON response written to stdout.
+// Fields follow the official Claude Code hook output schema.
 type HookOutput struct {
 	Continue           *bool          `json:"continue,omitempty"`
 	StopReason         string         `json:"stopReason,omitempty"`
 	SuppressOutput     *bool          `json:"suppressOutput,omitempty"`
 	SystemMessage      string         `json:"systemMessage,omitempty"`
-	AdditionalContext  string         `json:"additionalContext,omitempty"`
 	Decision           string         `json:"decision,omitempty"`
 	Reason             string         `json:"reason,omitempty"`
 	HookSpecificOutput map[string]any `json:"hookSpecificOutput,omitempty"`
-	Confidence         *float64       `json:"confidence,omitempty"`
-	ActionID           *int64         `json:"action_id,omitempty"`
-	SuggestedTool      string         `json:"suggested_tool,omitempty"`
 }
 
 // Run reads hook JSON from stdin, dispatches to the appropriate handler,
@@ -112,15 +109,6 @@ func makeDenyOutput(reason string) *HookOutput {
 	}
 }
 
-// makeAsyncContextOutput returns output with top-level additionalContext for async hooks.
-// The context is delivered to Claude on the next conversation turn.
-func makeAsyncContextOutput(context string) *HookOutput {
-	if context == "" {
-		return nil
-	}
-	return &HookOutput{AdditionalContext: context}
-}
-
 // makeAskOutput creates a PreToolUse "ask" response that prompts the user for confirmation.
 func makeAskOutput(reason string) *HookOutput {
 	return &HookOutput{
@@ -181,21 +169,18 @@ type nudgeEntry struct {
 	Suggestion  string
 }
 
-// enrichOutput attaches structured metadata to a HookOutput.
-// All fields are omitempty so callers can pass zero values safely.
-func enrichOutput(out *HookOutput, confidence float64, actionID int64, tool string) {
-	if out == nil {
+// enrichOutput appends a tool suggestion to the additionalContext inside
+// hookSpecificOutput, where Claude Code actually reads it.
+func enrichOutput(out *HookOutput, tool string) {
+	if out == nil || tool == "" || out.HookSpecificOutput == nil {
 		return
 	}
-	if confidence > 0 {
-		out.Confidence = &confidence
+	ctx, _ := out.HookSpecificOutput["additionalContext"].(string)
+	if ctx != "" {
+		ctx += "\n"
 	}
-	if actionID > 0 {
-		out.ActionID = &actionID
-	}
-	if tool != "" {
-		out.SuggestedTool = tool
-	}
+	ctx += "[suggested: " + tool + "]"
+	out.HookSpecificOutput["additionalContext"] = ctx
 }
 
 // suggestedToolForPattern maps a suggestion pattern to the MCP tool

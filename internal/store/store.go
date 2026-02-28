@@ -41,9 +41,15 @@ func Open(dbPath string) (*Store, error) {
 		}
 	}
 
-	if err := Migrate(db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("store: migrate: %w", err)
+	// Fast path: skip Migrate() entirely when schema is already current.
+	// PRAGMA user_version is a single-syscall read with no table scan.
+	var uv int
+	_ = db.QueryRow("PRAGMA user_version").Scan(&uv)
+	if uv != SchemaVersion() {
+		if err := Migrate(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("store: migrate: %w", err)
+		}
 	}
 
 	st := &Store{db: db, dbPath: dbPath}

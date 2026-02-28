@@ -68,12 +68,5 @@ func handleQualityGate(input []byte, eventName string) (*HookOutput, error) {
 	}
 
 	msg := fmt.Sprintf("[buddy] Quality gate (%s): %s", eventName, strings.Join(issues, "; "))
-
-	if eventName == "TeammateIdle" {
-		// Async delivery for TeammateIdle.
-		return makeAsyncContextOutput(msg), nil
-	}
-
-	// Synchronous feedback for TaskCompleted.
 	return makeOutput(eventName, msg), nil
 }

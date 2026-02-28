@@ -1,6 +1,9 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"strconv"
+)
 
 const schemaVersion = 15
 
@@ -564,5 +567,10 @@ func Migrate(db *sql.DB) error {
 		return err
 	}
 	_, err = db.Exec(`INSERT INTO schema_version (version) VALUES (?)`, schemaVersion)
+	if err != nil {
+		return err
+	}
+	// Set PRAGMA user_version for fast-path skip in store.Open().
+	_, err = db.Exec("PRAGMA user_version = " + strconv.Itoa(schemaVersion))
 	return err
 }

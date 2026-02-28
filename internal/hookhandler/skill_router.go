@@ -70,13 +70,12 @@ func SkillHintForPhase(phase string) string {
 	}
 }
 
-// skillHint formats a standard skill invocation instruction.
+// skillHint formats a skill invocation suggestion appended to nudge messages.
 func skillHint(skill, purpose string) string {
-	return "\nIMPORTANT: Use the Skill tool now: skill=\"" + skill + "\" to " + purpose + "."
+	return "\nRecommended: invoke skill=\"" + skill + "\" to " + purpose + "."
 }
 
-// skillDenyHint formats a stronger instruction used in deny/block contexts.
+// skillDenyHint formats a skill invocation instruction for active failure spirals.
 func skillDenyHint(skill, purpose string) string {
-	return "\n→ STOP: Use the Skill tool: skill=\"" + skill + "\" to " + purpose +
-		".\n→ Do NOT retry the same operation."
+	return "\nInvoke skill=\"" + skill + "\" to " + purpose + " before continuing."
 }

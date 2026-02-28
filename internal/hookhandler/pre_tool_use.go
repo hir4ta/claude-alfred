@@ -238,7 +238,11 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 			n.Pattern, n.Level, n.Observation, n.Suggestion))
 	}
 
-	return makeOutput("PreToolUse", budgetJoinPrioritized(signals, nudgeParts, flowDetail(sdb).Budget)), nil
+	out := makeOutput("PreToolUse", budgetJoinPrioritized(signals, nudgeParts, flowDetail(sdb).Budget))
+	if len(nudges) > 0 {
+		enrichOutput(out, suggestedToolForPattern(nudges[0].Pattern))
+	}
+	return out, nil
 }
 
 // extractCmdSignature extracts the base command pattern from a Bash command.

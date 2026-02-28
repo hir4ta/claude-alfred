@@ -104,6 +104,9 @@ var testCmdPattern = regexp.MustCompile(`\b(go\s+test|npm\s+test|npx\s+(jest|vit
 var decisionKeywords = []string{
 	"decided to", "going with", "opted for", "will use", "instead of",
 	"let's go with", "let's use", "choosing", "approach:",
+	"trade-off", "tradeoff", "prefer", "selected", "picked",
+	"switching to", "moving to", "better to", "went with",
+	"the plan is", "strategy:",
 }
 
 // containsDecisionKeyword returns true if the text contains a decision indicator.

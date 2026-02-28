@@ -523,19 +523,26 @@ func TestCheckCompleteness(t *testing.T) {
 	}
 }
 
-func TestMakeAsyncContextOutput(t *testing.T) {
+func TestEnrichOutput(t *testing.T) {
 	t.Parallel()
 
-	if out := makeAsyncContextOutput(""); out != nil {
-		t.Error("makeAsyncContextOutput('') should return nil")
+	// nil output is safe.
+	enrichOutput(nil, "buddy_diagnose")
+
+	// Empty tool is a no-op.
+	out := makeOutput("PostToolUse", "some context")
+	enrichOutput(out, "")
+	ctx, _ := out.HookSpecificOutput["additionalContext"].(string)
+	if ctx != "some context" {
+		t.Errorf("enrichOutput('') modified context: got %q", ctx)
 	}
 
-	out := makeAsyncContextOutput("test signal")
-	if out == nil {
-		t.Fatal("makeAsyncContextOutput('test signal') = nil")
-	}
-	if out.AdditionalContext != "test signal" {
-		t.Errorf("AdditionalContext = %q, want 'test signal'", out.AdditionalContext)
+	// Non-empty tool appends suggestion.
+	enrichOutput(out, "buddy_diagnose")
+	ctx, _ = out.HookSpecificOutput["additionalContext"].(string)
+	want := "some context\n[suggested: buddy_diagnose]"
+	if ctx != want {
+		t.Errorf("enrichOutput() = %q, want %q", ctx, want)
 	}
 }
 
@@ -783,5 +790,51 @@ func TestFormatResumeContext_Nil(t *testing.T) {
 	}
 	if result := FormatResumeContext(&ResumeData{}); result != "" {
 		t.Errorf("FormatResumeContext(empty) = %q, want empty", result)
+	}
+}
+
+func TestVectorEncodeDecode(t *testing.T) {
+	t.Parallel()
+
+	original := []float32{1.0, -0.5, 0.0, 3.14, -2.71}
+	encoded := encodeVector(original)
+	if encoded == "" {
+		t.Fatal("encodeVector() returned empty string")
+	}
+
+	decoded := decodeVector(encoded)
+	if len(decoded) != len(original) {
+		t.Fatalf("decodeVector() len = %d, want %d", len(decoded), len(original))
+	}
+	for i, v := range decoded {
+		if v != original[i] {
+			t.Errorf("decodeVector()[%d] = %v, want %v", i, v, original[i])
+		}
+	}
+
+	// Invalid input returns nil.
+	if decodeVector("not-valid!!!") != nil {
+		t.Error("decodeVector(invalid) should return nil")
+	}
+	if decodeVector("") != nil {
+		t.Error("decodeVector('') should return nil")
+	}
+}
+
+func TestEmbedCacheKey(t *testing.T) {
+	t.Parallel()
+
+	k1 := embedCacheKey("hello world")
+	k2 := embedCacheKey("hello world")
+	k3 := embedCacheKey("different text")
+
+	if k1 != k2 {
+		t.Error("embedCacheKey() not deterministic")
+	}
+	if k1 == k3 {
+		t.Error("embedCacheKey() collision for different input")
+	}
+	if k1 == "" {
+		t.Error("embedCacheKey() returned empty string")
 	}
 }

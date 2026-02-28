@@ -39,7 +39,7 @@ func TestSkillHintForPattern(t *testing.T) {
 			if !strings.Contains(got, tt.wantSkill) {
 				t.Errorf("SkillHintForPattern(%q) = %q, want skill %q", tt.pattern, got, tt.wantSkill)
 			}
-			if !strings.Contains(got, "IMPORTANT: Use the Skill tool") {
+			if !strings.Contains(got, "Recommended: invoke skill=") {
 				t.Errorf("SkillHintForPattern(%q) missing standard hint prefix", tt.pattern)
 			}
 		})
@@ -79,15 +79,12 @@ func TestSkillHintForEpisode(t *testing.T) {
 				t.Errorf("SkillHintForEpisode(%q) = %q, want skill %q", tt.episode, got, tt.wantSkill)
 			}
 			if tt.wantDeny {
-				if !strings.Contains(got, "STOP") {
-					t.Errorf("SkillHintForEpisode(%q) should use deny hint (STOP), got %q", tt.episode, got)
-				}
-				if !strings.Contains(got, "Do NOT retry") {
-					t.Errorf("SkillHintForEpisode(%q) should contain 'Do NOT retry'", tt.episode)
+				if !strings.Contains(got, "before continuing") {
+					t.Errorf("SkillHintForEpisode(%q) should contain 'before continuing', got %q", tt.episode, got)
 				}
 			} else {
-				if !strings.Contains(got, "IMPORTANT") {
-					t.Errorf("SkillHintForEpisode(%q) should use standard hint (IMPORTANT), got %q", tt.episode, got)
+				if !strings.Contains(got, "Recommended:") {
+					t.Errorf("SkillHintForEpisode(%q) should use standard hint (Recommended), got %q", tt.episode, got)
 				}
 			}
 		})

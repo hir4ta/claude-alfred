@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/embedder"
@@ -49,9 +48,6 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 		return nil, nil
 	}
 
-	// Cache embedder (Voyage API) availability for fast embedding in later hooks.
-	cacheEmbedderStatus(sdb)
-
 	// Capture git context (branch, dirty files) for later hooks.
 	captureGitContext(sdb, in.CWD)
 
@@ -64,39 +60,34 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 	// Detect available external linters for PostToolUse checks.
 	detectAvailableLinters(sdb)
 
-	// Generate test coverage map in background (Go projects only).
-	// Use WaitGroup to ensure the goroutine completes before the process exits.
-	var coverageWG sync.WaitGroup
-	if isGoProject(in.CWD) {
-		coverageWG.Add(1)
-		go func() {
-			defer coverageWG.Done()
+	// Background initialization: embedder probe + coverage map.
+	// Fire-and-forget — callers handle missing data gracefully:
+	//   - embedQuery() falls back to FTS5 when embedder_available != "true"
+	//   - LoadCoverageMap() returns nil when coverage map is not yet ready
+	go func() {
+		if db, err := sessiondb.Open(in.SessionID); err == nil {
+			cacheEmbedderStatus(db)
+			db.Close()
+		}
+		if isGoProject(in.CWD) {
 			cm := GenerateCoverageMap(in.CWD)
 			if cm != nil && len(cm.FuncToTests) > 0 {
-				// Re-open sessiondb in the goroutine (short-lived hook process).
 				if db, err := sessiondb.Open(in.SessionID); err == nil {
 					SaveCoverageMap(db, cm)
 					db.Close()
 				}
 			}
-		}()
-	}
+		}
+	}()
 
-	var result *HookOutput
-	var resultErr error
 	switch in.Source {
 	case "startup", "resume":
-		result, resultErr = handleStartupResume(in, sdb)
+		return handleStartupResume(in, sdb)
 	case "compact":
-		// Record compact in session DB.
 		_ = sdb.RecordCompact()
-		result, resultErr = handlePostCompactResume(sdb)
+		return handlePostCompactResume(sdb)
 	}
-
-	// Wait for background coverage map generation to complete before exiting.
-	coverageWG.Wait()
-
-	return result, resultErr
+	return nil, nil
 }
 
 func handleStartupResume(in sessionStartInput, sdb *sessiondb.SessionDB) (*HookOutput, error) {
@@ -157,7 +148,12 @@ func generateStartupBriefing(sdb *sessiondb.SessionDB, data *ResumeData, cwd str
 		limit := min(3, len(data.Files))
 		for i := range limit {
 			f := data.Files[i]
+			impactKey := "impact:" + filepath.Base(f.Path)
+			if on, _ := sdb.IsOnCooldown(impactKey); on {
+				continue
+			}
 			info := analyzeImpact(sdb, f.Path, cwd)
+			_ = sdb.SetCooldown(impactKey, 15*time.Minute)
 			if info == nil || info.BlastScore < 25 {
 				continue
 			}

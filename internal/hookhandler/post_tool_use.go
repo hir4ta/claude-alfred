@@ -308,7 +308,7 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	// Run lightweight signal detection → deliver via additionalContext.
 	det := &HookDetector{sdb: sdb}
 	if signal := det.Detect(); signal != "" {
-		return makeAsyncContextOutput(signal), nil
+		return makeOutput("PostToolUse", signal), nil
 	}
 
 	// Search for past error solutions when Bash fails.
@@ -339,7 +339,7 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		// Test failure: synchronous feedback with correlation + past solutions + re-run command.
 		if bi.Command != "" && testCmdPattern.MatchString(bi.Command) && containsError(resp) {
 			if msg := buildTestFailureGuidance(sdb, in.SessionID, bi.Command, resp, in.CWD); msg != "" {
-				return makeAsyncContextOutput(msg), nil
+				return makeOutput("PostToolUse", msg), nil
 			}
 		}
 	}
