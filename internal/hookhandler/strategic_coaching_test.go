@@ -24,12 +24,14 @@ func setupTestStore(t *testing.T) (*store.Store, string) {
 // by overriding $HOME. Functions that call store.OpenDefault() will use this.
 func setupDefaultTestStore(t *testing.T) *store.Store {
 	t.Helper()
+	store.ResetDefaultCached()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	st, err := store.OpenDefault()
 	if err != nil {
 		t.Fatalf("open default store: %v", err)
 	}
+	t.Cleanup(store.ResetDefaultCached)
 	return st
 }
 
