@@ -113,6 +113,7 @@ BUDDY_BIN="${BIN_DIR}/claude-buddy"
 VERSION_FILE="${BIN_DIR}/.buddy-version"
 LOCK_DIR="${BIN_DIR}/.buddy-download.lock"
 INSTALL_MARKER="${BIN_DIR}/.buddy-installed-${BUDDY_VERSION}"
+INSTALL_LOCK="${BIN_DIR}/.buddy-install.lock"
 
 # --- helpers ----------------------------------------------------------------
 
@@ -241,8 +242,19 @@ case "$1" in
       exit 1
     fi
     # Run install in background on first serve after download.
-    if [ ! -f "$INSTALL_MARKER" ]; then
-      ( "$BUDDY_BIN" install >/dev/null 2>&1; printf '%s' "$BUDDY_VERSION" > "$INSTALL_MARKER" ) &
+    # Use mkdir as atomic lock to prevent concurrent install processes.
+    # Clean stale lock (owner process dead).
+    if [ -d "$INSTALL_LOCK" ] && [ -f "$INSTALL_LOCK/pid" ]; then
+      INST_PID=$(cat "$INSTALL_LOCK/pid" 2>/dev/null)
+      if [ -n "$INST_PID" ] && ! kill -0 "$INST_PID" 2>/dev/null; then
+        rm -rf "$INSTALL_LOCK"
+      fi
+    fi
+    if [ ! -f "$INSTALL_MARKER" ] && mkdir "$INSTALL_LOCK" 2>/dev/null; then
+      ( echo $$ > "$INSTALL_LOCK/pid"
+        "$BUDDY_BIN" install >/dev/null 2>&1
+        printf '%s' "$BUDDY_VERSION" > "$INSTALL_MARKER"
+        rm -rf "$INSTALL_LOCK" ) &
     fi
     exec "$BUDDY_BIN" serve
     ;;
