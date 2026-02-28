@@ -154,6 +154,14 @@ CREATE TABLE IF NOT EXISTS health_snapshots (
 	error_rate REAL    NOT NULL DEFAULT 0,
 	timestamp  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS structured_events (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	category   TEXT NOT NULL,
+	summary    TEXT NOT NULL,
+	context    TEXT NOT NULL DEFAULT '{}',
+	created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `
 
 // HookEvent is a recorded tool event.
@@ -193,6 +201,15 @@ type Detection struct {
 	Level     string // "info", "warning", "action"
 	Detail    string
 	Timestamp time.Time
+}
+
+// StructuredEvent is a categorized session event for LLM pattern extraction.
+type StructuredEvent struct {
+	ID        int64
+	Category  string // "error", "decision", "discovery", "fix"
+	Summary   string
+	Context   string // JSON: file paths, tool names, etc.
+	CreatedAt time.Time
 }
 
 // SessionDB wraps an ephemeral per-session SQLite database for hook state.
@@ -1538,4 +1555,64 @@ func (s *SessionDB) RecentDetections(limit int) ([]Detection, error) {
 		dets = append(dets, d)
 	}
 	return dets, rows.Err()
+}
+
+// RecordStructuredEvent records a categorized event for later LLM extraction.
+// category should be one of: "error", "decision", "discovery", "fix".
+func (s *SessionDB) RecordStructuredEvent(category, summary, ctxJSON string) error {
+	if ctxJSON == "" {
+		ctxJSON = "{}"
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO structured_events (category, summary, context) VALUES (?, ?, ?)`,
+		category, summary, ctxJSON,
+	)
+	return err
+}
+
+// GetStructuredEvents returns all structured events ordered chronologically.
+func (s *SessionDB) GetStructuredEvents() ([]StructuredEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, category, summary, context, created_at FROM structured_events ORDER BY id`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []StructuredEvent
+	for rows.Next() {
+		var e StructuredEvent
+		var ts string
+		if err := rows.Scan(&e.ID, &e.Category, &e.Summary, &e.Context, &ts); err != nil {
+			continue
+		}
+		e.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", ts)
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
+// GetStructuredEventsByCategory returns events filtered by category.
+func (s *SessionDB) GetStructuredEventsByCategory(category string) ([]StructuredEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, category, summary, context, created_at FROM structured_events
+		 WHERE category = ? ORDER BY id`, category,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []StructuredEvent
+	for rows.Next() {
+		var e StructuredEvent
+		var ts string
+		if err := rows.Scan(&e.ID, &e.Category, &e.Summary, &e.Context, &ts); err != nil {
+			continue
+		}
+		e.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", ts)
+		events = append(events, e)
+	}
+	return events, rows.Err()
 }

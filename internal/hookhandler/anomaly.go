@@ -94,13 +94,20 @@ func countTransitions(phases []string, from, to string) int {
 // to the Welford-based adaptive threshold.
 func adaptiveReadThreshold(sdb *sessiondb.SessionDB) float64 {
 	const fallback = 0.7
+	var threshold float64
 	if FlowEventCount(sdb) < minEWMVSamples {
-		return adaptiveThreshold("explore_read_pct", 2.0, fallback)
+		threshold = adaptiveThreshold("explore_read_pct", 2.0, fallback)
+	} else {
+		// Use the current read fraction's running mean as baseline.
+		// A phase sequence with >70% reads is unusual; EWMV helps detect when
+		// the session has naturally high read ratios (e.g., research tasks).
+		threshold = adaptiveThreshold("explore_read_pct", 2.0, fallback)
 	}
-	// Use the current read fraction's running mean as baseline.
-	// A phase sequence with >70% reads is unusual; EWMV helps detect when
-	// the session has naturally high read ratios (e.g., research tasks).
-	return adaptiveThreshold("explore_read_pct", 2.0, fallback)
+	// Clamp: threshold > 0.95 makes spiral detection impossible (dist maxes at 1.0).
+	if threshold > 0.95 {
+		threshold = 0.95
+	}
+	return threshold
 }
 
 // adaptiveErrorThreshold returns the debug-spiral error rate threshold.

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hir4ta/claude-buddy/internal/coach"
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 	"github.com/hir4ta/claude-buddy/internal/store"
 )
@@ -263,6 +264,8 @@ func buildNarrative(sig *Signal, sdb *sessiondb.SessionDB) string {
 				}
 			}
 		}
+		// Actionable hint for solutions.
+		parts = append(parts, "→ Apply the past fix or use buddy_diagnose for alternatives.")
 	}
 
 	// Add test status context for phase transitions.
@@ -274,6 +277,17 @@ func buildNarrative(sig *Signal, sdb *sessiondb.SessionDB) string {
 				parts = append(parts, fmt.Sprintf("Tests not run yet (%d tools in session).", tc))
 			}
 		}
+
+		// Incorporate AI coaching context if available.
+		if cached := lookupCachedCoaching(sdb); cached != "" {
+			parts = append(parts, cached)
+		}
+	}
+
+	// Enrich knowledge signals with pattern content excerpt.
+	if sig.Kind == "knowledge" {
+		// Actionable hint.
+		parts = append(parts, "→ Use buddy_knowledge to see full pattern details.")
 	}
 
 	// Add co-change reminder for knowledge signals about specific files.
@@ -309,8 +323,43 @@ func buildNarrative(sig *Signal, sdb *sessiondb.SessionDB) string {
 		}
 	}
 
+	// Actionable hints for remaining signal types.
+	if sig.Kind == "health" {
+		parts = append(parts, "→ Use buddy_state for detailed health metrics.")
+	}
+	if sig.Kind == "strategic" {
+		parts = append(parts, "→ Use buddy_plan for a strategic session plan.")
+	}
+
 	if len(parts) == 1 {
 		return parts[0]
 	}
 	return strings.Join(parts, " ")
+}
+
+// lookupCachedCoaching returns a one-line AI coaching SITUATION from cache, or "".
+func lookupCachedCoaching(sdb *sessiondb.SessionDB) string {
+	cwd, _ := sdb.GetContext("cwd")
+	taskType, _ := sdb.GetContext("task_type")
+	domain, _ := sdb.GetWorkingSet("domain")
+	if cwd == "" || taskType == "" {
+		return ""
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+
+	cached, ok := st.GetCachedCoaching(cwd, taskType, domain, 24*time.Hour)
+	if !ok || cached == "" {
+		return ""
+	}
+
+	r := coach.ParseCoachingResult(cached)
+	if r.Situation != "" {
+		return "AI coaching: " + r.Situation
+	}
+	return ""
 }

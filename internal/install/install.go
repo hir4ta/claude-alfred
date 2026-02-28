@@ -179,7 +179,9 @@ func buddyHookEntries(binPath string) map[string]any {
 	}
 
 	// Stop hooks: command hook persists session data + validates completeness,
-	// prompt hook verifies task completion before allowing Claude to stop.
+	// agent hook verifies task completion before allowing Claude to stop.
+	// Agent type is more reliable than prompt type at producing valid JSON
+	// (prompt hooks have a known upstream bug: anthropics/claude-code#11947).
 	cmd := binPath + " hook-handler Stop"
 	entries["Stop"] = []any{
 		map[string]any{
@@ -190,9 +192,9 @@ func buddyHookEntries(binPath string) map[string]any {
 					"timeout": 8,
 				},
 				map[string]any{
-					"type":    "prompt",
+					"type":    "agent",
 					"prompt":  "[buddy] Check if the task is complete. Evaluate: (1) Were all requested changes implemented? (2) Were tests run if the project has tests? (3) Are there uncommitted changes that should be committed? If incomplete, state what remains in one sentence. If complete, confirm completion.",
-					"timeout": 15,
+					"timeout": 30,
 				},
 			},
 		},

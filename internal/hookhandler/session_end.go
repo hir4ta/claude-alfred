@@ -328,7 +328,7 @@ func syncToGlobalDB(sdb *sessiondb.SessionDB, cwd string) {
 }
 
 // preGenerateCoaching generates AI coaching for the next session and caches it.
-// Uses the current session's task type and domain to generate context-aware coaching.
+// Uses the current session's rich context for personalized SITUATION/WHY/SUGGESTION coaching.
 func preGenerateCoaching(sdb *sessiondb.SessionDB, cwd string) {
 	if cwd == "" {
 		return
@@ -340,23 +340,63 @@ func preGenerateCoaching(sdb *sessiondb.SessionDB, cwd string) {
 		return
 	}
 
-	// Gather recent pattern titles for context.
 	st, err := store.OpenDefault()
 	if err != nil {
 		return
 	}
 	defer st.Close()
 
-	patterns, _ := st.SearchPatternsByProject(cwd, 5)
-	var patternTitles []string
+	// Build rich coaching context from session state.
+	cc := coach.CoachingContext{
+		TaskType:    taskType,
+		Domain:      domain,
+		UserCluster: st.UserCluster(),
+	}
+
+	if intent, _ := sdb.GetWorkingSet("intent"); intent != "" {
+		cc.Intent = intent
+	}
+	if files, _ := sdb.GetWorkingSetFiles(); len(files) > 0 {
+		cc.Files = files
+	}
+	if decisions, _ := sdb.GetWorkingSetDecisions(); len(decisions) > 0 {
+		limit := len(decisions)
+		if limit > 3 {
+			limit = 3
+		}
+		cc.Decisions = decisions[:limit]
+	}
+
+	// Gather recent error summaries from structured events.
+	if errEvents, _ := sdb.GetStructuredEventsByCategory("error"); len(errEvents) > 0 {
+		limit := len(errEvents)
+		if limit > 3 {
+			limit = 3
+		}
+		for _, e := range errEvents[:limit] {
+			cc.RecentErrors = append(cc.RecentErrors, e.Summary)
+		}
+	}
+
+	// Gather related pattern titles.
+	patterns, _ := st.SearchPatternsByProject(cwd, 3)
 	for _, p := range patterns {
-		patternTitles = append(patternTitles, p.Title)
+		cc.PastPatterns = append(cc.PastPatterns, p.Title)
 	}
 
 	ctx := context.Background()
-	text, err := coach.GenerateCoaching(ctx, sdb, taskType, domain, patternTitles, 5*time.Second)
-	if err != nil || text == "" {
+	result, err := coach.GenerateCoachingWithContext(ctx, sdb, cc, 5*time.Second)
+	if err != nil || result == nil {
 		return
+	}
+
+	// Format as labeled text for cache storage.
+	var text string
+	if result.Situation != "" {
+		text = fmt.Sprintf("SITUATION: %s\nWHY: %s\nSUGGESTION: %s",
+			result.Situation, result.Reasoning, result.Suggestion)
+	} else {
+		text = result.Suggestion
 	}
 
 	_ = st.SetCachedCoaching(cwd, taskType, domain, text, "")
@@ -366,23 +406,13 @@ func preGenerateCoaching(sdb *sessiondb.SessionDB, cwd string) {
 // from the session's recent events via `claude -p`. Results are persisted to buddy.db.
 // Gracefully skips if claude CLI is not available or on timeout.
 func extractPatternsWithLLM(sdb *sessiondb.SessionDB, sessionID string) {
-	// Build a summary of recent events for the LLM.
-	events, err := sdb.RecentEvents(50)
-	if err != nil || len(events) == 0 {
+	summary := buildExtractionSummary(sdb)
+	if summary == "" {
 		return
 	}
 
-	var summary strings.Builder
-	for _, ev := range events {
-		line := ev.ToolName
-		if ev.IsWrite {
-			line += " [write]"
-		}
-		summary.WriteString(line + "\n")
-	}
-
 	ctx := context.Background()
-	results, err := coach.ExtractPatterns(ctx, sdb, summary.String(), 5*time.Second)
+	results, err := coach.ExtractPatterns(ctx, sdb, summary, 5*time.Second)
 	if err != nil || len(results) == 0 {
 		return
 	}
@@ -408,6 +438,102 @@ func extractPatternsWithLLM(sdb *sessiondb.SessionDB, sessionID string) {
 		}
 		_, _ = st.InsertPattern(p)
 	}
+}
+
+// buildExtractionSummary builds a rich session summary for LLM pattern extraction.
+// Combines working set context, structured events, tool sequence, and decisions.
+func buildExtractionSummary(sdb *sessiondb.SessionDB) string {
+	events, err := sdb.RecentEvents(50)
+	if err != nil || len(events) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+
+	// Section 1: Session context from working set.
+	b.WriteString("## Session Summary\n")
+	if intent, _ := sdb.GetWorkingSet("intent"); intent != "" {
+		fmt.Fprintf(&b, "- Task: %s\n", intent)
+	}
+	if taskType, _ := sdb.GetContext("task_type"); taskType != "" {
+		fmt.Fprintf(&b, "- Task Type: %s\n", taskType)
+	}
+	if domain, _ := sdb.GetWorkingSet("domain"); domain != "" {
+		fmt.Fprintf(&b, "- Domain: %s\n", domain)
+	}
+	if branch, _ := sdb.GetWorkingSet("git_branch"); branch != "" {
+		fmt.Fprintf(&b, "- Git Branch: %s\n", branch)
+	}
+	if files, _ := sdb.GetWorkingSetFiles(); len(files) > 0 {
+		b.WriteString("- Files Modified:")
+		limit := len(files)
+		if limit > 10 {
+			limit = 10
+		}
+		for _, f := range files[:limit] {
+			fmt.Fprintf(&b, " %s", filepath.Base(f))
+		}
+		b.WriteString("\n")
+	}
+
+	// Section 2: Structured events (errors, fixes, decisions, discoveries).
+	structuredEvents, _ := sdb.GetStructuredEvents()
+	if len(structuredEvents) > 0 {
+		b.WriteString("\n## Key Events\n")
+		limit := len(structuredEvents)
+		if limit > 15 {
+			limit = 15
+		}
+		for _, se := range structuredEvents[:limit] {
+			fmt.Fprintf(&b, "[%s] %s\n", se.Category, se.Summary)
+		}
+	}
+
+	// Section 3: Abbreviated tool sequence.
+	b.WriteString("\n## Tool Sequence\n")
+	prevTool := ""
+	repeatCount := 0
+	for _, ev := range events {
+		name := ev.ToolName
+		if ev.IsWrite {
+			name += "[w]"
+		}
+		if name == prevTool {
+			repeatCount++
+			continue
+		}
+		if prevTool != "" {
+			if repeatCount > 0 {
+				fmt.Fprintf(&b, "%s(x%d)→", prevTool, repeatCount+1)
+			} else {
+				b.WriteString(prevTool + "→")
+			}
+		}
+		prevTool = name
+		repeatCount = 0
+	}
+	if prevTool != "" {
+		if repeatCount > 0 {
+			fmt.Fprintf(&b, "%s(x%d)", prevTool, repeatCount+1)
+		} else {
+			b.WriteString(prevTool)
+		}
+	}
+	b.WriteString("\n")
+
+	// Section 4: Decisions from working set.
+	if decisions, _ := sdb.GetWorkingSetDecisions(); len(decisions) > 0 {
+		b.WriteString("\n## Decisions Made\n")
+		limit := len(decisions)
+		if limit > 5 {
+			limit = 5
+		}
+		for _, d := range decisions[:limit] {
+			fmt.Fprintf(&b, "- %s\n", d)
+		}
+	}
+
+	return b.String()
 }
 
 // RecoverOrphanedSessions scans /tmp/claude-buddy/ for session DBs

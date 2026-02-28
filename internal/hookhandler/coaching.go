@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hir4ta/claude-buddy/internal/coach"
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 	"github.com/hir4ta/claude-buddy/internal/store"
 )
@@ -267,12 +268,12 @@ func generateCoaching(sdb *sessiondb.SessionDB) string {
 	if st, err := store.OpenDefault(); err == nil {
 		riskProfile = st.UserCluster()
 
-		// Check AI-generated coaching cache first.
+		// Check AI-generated coaching cache first (contextual coaching).
 		cwd, _ := sdb.GetContext("cwd")
 		if cwd != "" {
 			if cached, ok := st.GetCachedCoaching(cwd, taskTypeStr, domain, 24*time.Hour); ok {
 				st.Close()
-				return "[buddy:coaching] " + cached + SkillHintForPhase(phaseStr)
+				return formatCachedCoaching(cached) + SkillHintForPhase(phaseStr)
 			}
 		}
 
@@ -306,6 +307,17 @@ func generateCoaching(sdb *sessiondb.SessionDB) string {
 	}
 
 	return ""
+}
+
+// formatCachedCoaching formats AI-generated cached coaching for display.
+// Attempts to parse SITUATION/WHY/SUGGESTION labels; falls back to raw text.
+func formatCachedCoaching(cached string) string {
+	r := coach.ParseCoachingResult(cached)
+	if r.Situation != "" && r.Reasoning != "" {
+		return fmt.Sprintf("[buddy] coaching: %s\n  WHY: %s\n→ %s",
+			r.Situation, r.Reasoning, r.Suggestion)
+	}
+	return "[buddy:coaching] " + cached
 }
 
 // adaptToneForRiskProfile adjusts coaching tone based on the user's risk profile.

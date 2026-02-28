@@ -136,9 +136,12 @@ func TestHandlePreToolUse_SafeCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handlePreToolUse() = %v", err)
 	}
-	// Safe command with no pending nudges → nil output.
+	// Safe command with no pending nudges → no deny/ask output.
+	// Advisory additionalContext output is acceptable (depends on buddy.db state).
 	if out != nil {
-		t.Errorf("handlePreToolUse(safe) = non-nil, want nil")
+		if decision, ok := out.HookSpecificOutput["permissionDecision"]; ok {
+			t.Errorf("handlePreToolUse(safe) has permissionDecision=%v, want no blocking decision", decision)
+		}
 	}
 }
 

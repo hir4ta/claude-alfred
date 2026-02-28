@@ -99,6 +99,16 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	// --- JARVIS briefing: select the single most important signal ---
 	var entries []nudgeEntry
 
+	// 0. Predictive context: predict target files from prompt and surface proactive hints.
+	if predictiveHint := buildPredictiveContext(sdb, in.Prompt); predictiveHint != "" {
+		entries = append(entries, nudgeEntry{
+			Pattern:     "predictive-context",
+			Level:       "info",
+			Observation: "Predictive context",
+			Suggestion:  predictiveHint,
+		})
+	}
+
 	// 1. JARVIS briefing signal (max 1, priority-based).
 	// Use narrative synthesis to enrich the signal with session context.
 	if sig := selectTopSignal(sdb, in.Prompt, in.CWD); sig != nil {
@@ -455,6 +465,139 @@ func recentFileKeywords(sdb *sessiondb.SessionDB) []string {
 		}
 	}
 	return keywords
+}
+
+// predictTargetFiles predicts which files the user is likely to edit based on
+// the prompt content, working set, and co-change history.
+func predictTargetFiles(sdb *sessiondb.SessionDB, prompt string) []string {
+	var predicted []string
+	seen := make(map[string]bool)
+
+	// 1. Extract file paths and package names from the prompt.
+	for _, word := range strings.Fields(prompt) {
+		// Match file-like tokens: contains '/' or common extensions.
+		if strings.Contains(word, "/") || strings.Contains(word, ".go") ||
+			strings.Contains(word, ".ts") || strings.Contains(word, ".py") ||
+			strings.Contains(word, ".rs") {
+			clean := strings.Trim(word, ".,;:\"'`()")
+			if clean != "" && !seen[clean] {
+				seen[clean] = true
+				predicted = append(predicted, clean)
+			}
+		}
+	}
+
+	// 2. Include current working set files.
+	wsFiles, _ := sdb.GetWorkingSetFiles()
+	for _, f := range wsFiles {
+		if !seen[f] {
+			seen[f] = true
+			predicted = append(predicted, f)
+		}
+	}
+
+	// 3. Expand with co-change partners.
+	st, err := store.OpenDefault()
+	if err != nil {
+		if len(predicted) > 3 {
+			return predicted[:3]
+		}
+		return predicted
+	}
+	defer st.Close()
+
+	var cochanged []string
+	for _, f := range predicted {
+		coFiles, _ := st.CoChangedFiles(f, 2)
+		for _, co := range coFiles {
+			peer := co.FileA
+			if peer == f {
+				peer = co.FileB
+			}
+			if !seen[peer] {
+				seen[peer] = true
+				cochanged = append(cochanged, peer)
+			}
+		}
+	}
+	predicted = append(predicted, cochanged...)
+
+	if len(predicted) > 5 {
+		predicted = predicted[:5]
+	}
+	return predicted
+}
+
+// buildPredictiveContext uses predicted target files to proactively surface
+// relevant warnings and context. Returns "" if no useful prediction.
+func buildPredictiveContext(sdb *sessiondb.SessionDB, prompt string) string {
+	on, _ := sdb.IsOnCooldown("predictive_context")
+	if on {
+		return ""
+	}
+
+	predicted := predictTargetFiles(sdb, prompt)
+	if len(predicted) == 0 {
+		return ""
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+
+	var hints []string
+
+	// Search for past failure solutions on predicted files.
+	for _, f := range predicted {
+		solutions, _ := st.SearchFailureSolutionsByFile(f, 1)
+		if len(solutions) > 0 {
+			sol := solutions[0]
+			hint := fmt.Sprintf("Past failure in %s: %s", filepath.Base(f), sol.SolutionText)
+			if len([]rune(hint)) > 150 {
+				hint = string([]rune(hint)[:150]) + "..."
+			}
+			hints = append(hints, hint)
+			break // max 1 failure hint
+		}
+	}
+
+	// Suggest related tests for predicted files.
+	cm := LoadCoverageMap(sdb)
+	if cm != nil {
+		for _, f := range predicted {
+			if filepath.Ext(f) == ".go" && !strings.HasSuffix(f, "_test.go") {
+				if cmd := SuggestTestCommand(cm, f, nil, ""); cmd != "" {
+					hints = append(hints, "Related test: "+cmd)
+					break // max 1 test hint
+				}
+			}
+		}
+	}
+
+	// Surface co-change files not yet in working set.
+	wsFiles, _ := sdb.GetWorkingSetFiles()
+	wsSet := make(map[string]bool, len(wsFiles))
+	for _, f := range wsFiles {
+		wsSet[f] = true
+	}
+	var missing []string
+	for _, f := range predicted {
+		if !wsSet[f] {
+			missing = append(missing, filepath.Base(f))
+		}
+	}
+	if len(missing) > 0 && len(missing) <= 3 {
+		hints = append(hints, "Predicted files: "+strings.Join(missing, ", "))
+	}
+
+	if len(hints) == 0 {
+		return ""
+	}
+
+	_ = sdb.SetCooldown("predictive_context", 5*time.Minute)
+	return "[buddy:predict] " + strings.Join(hints, " | ")
 }
 
 // dataMaturityLabel returns a short label indicating buddy's data maturity level.

@@ -2,6 +2,7 @@ package hookhandler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hir4ta/claude-buddy/internal/coach"
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 	"github.com/hir4ta/claude-buddy/internal/store"
 )
@@ -113,10 +115,19 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 				_ = sdb.SetContext("has_test_run", "true")
 
 				// Track test pass/fail status from tool response.
+				prevTestPassed, _ := sdb.GetContext("last_test_passed")
 				if hasError {
 					_ = sdb.SetContext("last_test_passed", "false")
+					if prevTestPassed == "true" {
+						ctxJSON, _ := json.Marshal(map[string]string{"tool": "Bash", "cmd": truncate(bi.Command, 120)})
+						_ = sdb.RecordStructuredEvent("error", "test regression: previously passing tests now fail", string(ctxJSON))
+					}
 				} else {
 					_ = sdb.SetContext("last_test_passed", "true")
+					if prevTestPassed == "false" {
+						ctxJSON, _ := json.Marshal(map[string]string{"tool": "Bash", "cmd": truncate(bi.Command, 120)})
+						_ = sdb.RecordStructuredEvent("fix", "tests now passing after previous failure", string(ctxJSON))
+					}
 				}
 
 				// Positive signal: test-first recognition for bugfix/refactor.
@@ -178,6 +189,12 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		}
 	}
 
+	// Async coaching pre-generation on phase transitions.
+	// PostToolUse is async (<5s), so a goroutine with 5s timeout is safe.
+	if changed, _ := sdb.GetContext("coaching_phase_changed"); changed == "true" {
+		asyncPreGenCoaching(sdb, in.SessionID)
+	}
+
 	// Record tool outcome for prediction intelligence.
 	filePath := extractFilePath(in.ToolInput)
 	_ = sdb.RecordToolOutcome(in.ToolName, filePath, true) // success path
@@ -213,6 +230,10 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 					_ = st.RecordCoChanges(files)
 				}
 			}
+			// Record structured event for LLM extraction.
+			summary := fmt.Sprintf("%s %s", in.ToolName, filepath.Base(filePath))
+			ctxJSON, _ := json.Marshal(map[string]string{"tool": in.ToolName, "file": filePath})
+			_ = sdb.RecordStructuredEvent("decision", summary, string(ctxJSON))
 		}
 	}
 
@@ -288,6 +309,11 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 				errSummary := extractErrorSignature(resp)
 				if sig != "" {
 					_ = sdb.RecordBashFailure(sig, errSummary)
+				}
+				// Record structured event for LLM extraction.
+				if errSummary != "" {
+					ctxJSON, _ := json.Marshal(map[string]string{"tool": "Bash", "cmd": truncate(bi.Command, 120)})
+					_ = sdb.RecordStructuredEvent("error", errSummary, string(ctxJSON))
 				}
 			}
 			matchPastErrorSolutions(sdb, resp)
@@ -781,6 +807,77 @@ func extractTestPackage(cmd string) string {
 		}
 	}
 	return ""
+}
+
+// asyncPreGenCoaching fires a background goroutine to pre-generate AI coaching
+// for the next UserPromptSubmit. Uses the current session context so the cached
+// coaching is ready before the next turn.
+func asyncPreGenCoaching(sdb *sessiondb.SessionDB, sessionID string) {
+	// Gather context synchronously (sdb is not goroutine-safe).
+	taskType, _ := sdb.GetContext("task_type")
+	domain, _ := sdb.GetWorkingSet("domain")
+	cwd, _ := sdb.GetContext("cwd")
+	if taskType == "" || cwd == "" {
+		return
+	}
+
+	phase, _ := sdb.GetContext("prev_phase")
+	intent, _ := sdb.GetWorkingSet("intent")
+	files, _ := sdb.GetWorkingSetFiles()
+	decisions, _ := sdb.GetWorkingSetDecisions()
+
+	var recentErrors []string
+	if errEvents, _ := sdb.GetStructuredEventsByCategory("error"); len(errEvents) > 0 {
+		limit := len(errEvents)
+		if limit > 3 {
+			limit = 3
+		}
+		for _, e := range errEvents[:limit] {
+			recentErrors = append(recentErrors, e.Summary)
+		}
+	}
+
+	cc := coach.CoachingContext{
+		TaskType:     taskType,
+		Domain:       domain,
+		Phase:        phase,
+		Intent:       intent,
+		Files:        files,
+		RecentErrors: recentErrors,
+	}
+	if len(decisions) > 3 {
+		cc.Decisions = decisions[:3]
+	} else {
+		cc.Decisions = decisions
+	}
+
+	// Fire and forget: the goroutine writes to llm_cache via its own sdb/store.
+	go func() {
+		genSDB, err := sessiondb.Open(sessionID)
+		if err != nil {
+			return
+		}
+		defer genSDB.Close()
+
+		ctx := context.Background()
+		result, err := coach.GenerateCoachingWithContext(ctx, genSDB, cc, 5*time.Second)
+		if err != nil || result == nil {
+			return
+		}
+
+		var text string
+		if result.Situation != "" {
+			text = fmt.Sprintf("SITUATION: %s\nWHY: %s\nSUGGESTION: %s",
+				result.Situation, result.Reasoning, result.Suggestion)
+		} else {
+			text = result.Suggestion
+		}
+
+		if genST, err := store.OpenDefault(); err == nil {
+			_ = genST.SetCachedCoaching(cwd, taskType, domain, text, "")
+			genST.Close()
+		}
+	}()
 }
 
 func hashInput(toolName string, toolInput json.RawMessage) uint64 {

@@ -100,8 +100,8 @@
           },
           {
             "prompt": "[buddy] Check if the task is complete. Evaluate: (1) Were all requested changes implemented? (2) Were tests run if the project has tests? (3) Are there uncommitted changes that should be committed? If incomplete, state what remains in one sentence. If complete, confirm completion.",
-            "timeout": 15,
-            "type": "prompt"
+            "timeout": 30,
+            "type": "agent"
           }
         ]
       }

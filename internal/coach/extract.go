@@ -12,21 +12,30 @@ import (
 
 // PatternResult represents a single extracted knowledge pattern.
 type PatternResult struct {
-	Type    string `json:"type"`    // error_solution, architecture, decision
-	Title   string `json:"title"`   // short summary
-	Content string `json:"content"` // reusable knowledge
+	Type       string  `json:"type"`       // error_solution, architecture, decision
+	Title      string  `json:"title"`      // short summary
+	Content    string  `json:"content"`    // reusable knowledge
+	Confidence float64 `json:"confidence"` // 0.0-1.0 extraction confidence
 }
 
-const extractPrompt = `Analyze the following session events and extract reusable knowledge patterns.
+const extractPrompt = `You are analyzing a coding session to extract reusable knowledge for future sessions.
+Read the session summary below as a STORY: what problem was tackled, what was tried, what worked, and what was learned.
+
 Return a JSON array of objects with these fields:
 - "type": one of "error_solution", "architecture", "decision"
 - "title": short summary (under 80 chars)
 - "content": the reusable knowledge (1-3 sentences)
+- "confidence": 0.0-1.0 how confident you are this is genuinely reusable
 
-Only include genuinely reusable patterns. If nothing is worth extracting, return an empty array [].
+Guidelines per type:
+- error_solution: Describe what failed AND what fixed it. Include the before/after if visible (e.g. "Changed X to Y in file Z").
+- architecture: Explain WHY a particular approach was chosen, not just what was done.
+- decision: Capture the trade-off reasoning — what alternatives existed and why this one won.
+
+Only include genuinely reusable patterns (confidence >= 0.5). If nothing is worth extracting, return [].
 Return ONLY the JSON array, no other text.
 
-Events:
+Session:
 `
 
 // ExtractPatterns uses the LLM to extract reusable knowledge from session events.
@@ -57,7 +66,15 @@ func ExtractPatterns(ctx context.Context, sdb *sessiondb.SessionDB, events strin
 		return nil, nil
 	}
 
-	return results, nil
+	// Filter out low-confidence extractions.
+	filtered := results[:0]
+	for _, r := range results {
+		if r.Confidence >= 0.5 || r.Confidence == 0 {
+			filtered = append(filtered, r)
+		}
+	}
+
+	return filtered, nil
 }
 
 // stripCodeFence removes ```json ... ``` wrapping from LLM output.

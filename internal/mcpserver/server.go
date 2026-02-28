@@ -74,7 +74,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 1. buddy_state: Consolidated session state (stats + current_state + session_outlook).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_state",
-				mcp.WithDescription("Get session state: health, statistics, burst state, and predictions. Use 'detail' to control depth: brief (stats only), standard (full snapshot), outlook (strategic view)."),
+				mcp.WithDescription("Get session health, statistics, burst state, and trend predictions. Use when you need to assess current session progress, check health metrics, or predict potential issues. The 'detail' parameter controls depth: 'brief' returns stats only, 'standard' (default) returns a full snapshot including burst state and phase, 'outlook' adds health trends and risk predictions."),
 				mcp.WithTitleAnnotation("Session State"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -96,7 +96,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 2. buddy_sessions: List recent sessions (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_sessions",
-				mcp.WithDescription("List recent Claude Code sessions with basic metadata."),
+				mcp.WithDescription("List recent Claude Code sessions with timestamps, durations, and tool counts. Use when browsing past sessions to find one to resume or compare. The 'limit' parameter controls how many sessions to return (default: 10). Results are sorted by recency; only sessions from the current Claude home directory are included."),
 				mcp.WithTitleAnnotation("Recent Sessions"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -112,7 +112,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 3. buddy_resume: Restore context from a previous session (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_resume",
-				mcp.WithDescription("Resume context from a previous session. Returns summary, events, decisions, and files modified."),
+				mcp.WithDescription("Restore full context from a previous session including summary, key events, decisions made, and files modified. Use when starting a new session that continues earlier work, or when you need to recall what happened in a past session. Specify 'session_id' for a specific session or 'project' to filter by project path; defaults to the most recent session."),
 				mcp.WithTitleAnnotation("Resume Context"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -131,7 +131,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 4. buddy_recall: Search pre-compact conversation history (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_recall",
-				mcp.WithDescription("Search pre-compact conversation history for lost details."),
+				mcp.WithDescription("Search pre-compact conversation history to recover details lost after context compaction. Use when important information from earlier in the session is no longer visible after a compact event. The required 'query' parameter accepts keyword searches; 'segment' selects which compact segment to search (0 = pre-compact)."),
 				mcp.WithTitleAnnotation("Recall Details"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -157,7 +157,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 5. buddy_knowledge: Consolidated knowledge search (patterns + decisions + cross_project).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_knowledge",
-				mcp.WithDescription("Search knowledge: past patterns, design decisions, and cross-project solutions. Use 'scope' for project vs global, 'type' to filter by pattern kind."),
+				mcp.WithDescription("Search accumulated knowledge including error solutions, architecture patterns, design decisions, and cross-project insights. Use when encountering a problem that may have been solved before, or when checking past architectural decisions. Set 'scope' to 'global' for cross-project search or 'project' (default) for current project; 'type' filters by kind (error_solution, architecture, decision, tool_usage)."),
 				mcp.WithTitleAnnotation("Knowledge Search"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -189,7 +189,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 6. buddy_guidance: Consolidated guidance (suggest + alerts + next_step + pending_nudges).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_guidance",
-				mcp.WithDescription("Get workflow guidance: alerts, recommendations, next steps, and pending nudges. Use 'focus' to narrow: all (default), alerts, recommendations, next_steps, pending."),
+				mcp.WithDescription("Get workflow guidance including active alerts, actionable recommendations, suggested next steps, and pending nudges. Use when you want to check what buddy recommends doing next, review outstanding warnings, or see queued suggestions. The 'focus' parameter narrows results: 'alerts' for warnings only, 'recommendations' for suggestions, 'next_steps' for prioritized actions, 'pending' for queued nudges."),
 				mcp.WithTitleAnnotation("Workflow Guidance"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -211,7 +211,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 7. buddy_plan: Consolidated planning (estimate + task_progress + strategic_plan).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_plan",
-				mcp.WithDescription("Planning tools: task estimation, progress tracking, and strategic plans. Use 'mode' to select: estimate, progress, strategy, or all."),
+				mcp.WithDescription("Plan and estimate tasks using historical session data for complexity estimation, multi-session progress tracking, and strategic workflow planning. Use when starting a new task to get effort estimates, checking progress on ongoing work, or generating an optimal phase sequence. The 'mode' parameter selects the function: 'estimate' returns median tool counts, 'progress' shows tracking, 'strategy' generates a phase-sequenced plan."),
 				mcp.WithTitleAnnotation("Planning"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -236,7 +236,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 8. buddy_diagnose: Consolidated diagnosis (diagnose + fix).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_diagnose",
-				mcp.WithDescription("Diagnose errors and generate fix patches. Provide error_output for diagnosis, or file_path with finding_rule for code fixes. Set fix=true to include a patch alongside diagnosis."),
+				mcp.WithDescription("Diagnose errors and generate concrete fix patches with before/after code and verification commands. Use when a tool produces an error you need to understand, or when code quality findings need automated fixes. Provide 'error_output' for error diagnosis, or 'file_path' with 'finding_rule' for code fix generation. Supports Go compile errors, test failure correlation, and AST-based code fixes."),
 				mcp.WithTitleAnnotation("Error Diagnosis & Fix"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -267,7 +267,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 9. buddy_feedback: Provide suggestion feedback (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_feedback",
-				mcp.WithDescription("Rate suggestion quality: helpful, partially_helpful, not_helpful, or misleading."),
+				mcp.WithDescription("Rate the quality of a buddy suggestion to improve future relevance via Thompson Sampling. Use when a suggestion was particularly helpful or unhelpful and you want to provide explicit signal. The required 'pattern' identifies which suggestion to rate; 'rating' must be helpful, partially_helpful, not_helpful, or misleading. Explicit feedback overrides automatic inference and has lasting impact on prioritization."),
 				mcp.WithTitleAnnotation("Suggestion Feedback"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -294,7 +294,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 		// 10. buddy_skill_context: Skill-specific context (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_skill_context",
-				mcp.WithDescription("Get aggregated session context for a specific skill."),
+				mcp.WithDescription("Get aggregated session context tailored for a specific skill, including relevant files, health status, test results, patterns, and alerts. Use when a skill needs session-aware context before executing its workflow. The required 'skill_name' determines which context facets are included. Returns a compact summary designed to fit within skill context budgets."),
 				mcp.WithTitleAnnotation("Skill Context"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
