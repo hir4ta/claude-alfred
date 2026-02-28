@@ -63,3 +63,31 @@ func (s *Store) CoChangedFiles(filePath string, limit int) ([]CoChange, error) {
 	}
 	return results, rows.Err()
 }
+
+// TopCoChangePairs returns the most frequently co-changed file pairs globally.
+// Ordered by session_count descending.
+func (s *Store) TopCoChangePairs(limit int) ([]CoChange, error) {
+	if limit <= 0 {
+		limit = 3
+	}
+	rows, err := s.db.Query(
+		`SELECT file_a, file_b, session_count FROM file_co_changes
+		 ORDER BY session_count DESC
+		 LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("store: top co-change pairs: %w", err)
+	}
+	defer rows.Close()
+
+	var results []CoChange
+	for rows.Next() {
+		var cc CoChange
+		if err := rows.Scan(&cc.FileA, &cc.FileB, &cc.SessionCount); err != nil {
+			continue
+		}
+		results = append(results, cc)
+	}
+	return results, rows.Err()
+}

@@ -1,6 +1,7 @@
 package hookhandler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hir4ta/claude-buddy/internal/coach"
 	"github.com/hir4ta/claude-buddy/internal/sessiondb"
 	"github.com/hir4ta/claude-buddy/internal/store"
 )
@@ -57,6 +59,9 @@ func persistSessionData(sessionID, cwd string) {
 	persistSessionMetrics(sdb)
 	persistUserProfile(sdb)
 	syncToGlobalDB(sdb, cwd)
+	extractPatternsWithLLM(sdb, sessionID)
+	preGenerateCoaching(sdb, cwd)
+	persistSessionMemory(sessionID, cwd)
 }
 
 // persistWorkflowSequence reads the phase sequence from buddy.db's live tables
@@ -319,6 +324,89 @@ func syncToGlobalDB(sdb *sessiondb.SessionDB, cwd string) {
 			}
 		}
 		_ = gs.InsertPattern(fp.ProjectName, "decision", title, d.DecisionText, fp.Languages)
+	}
+}
+
+// preGenerateCoaching generates AI coaching for the next session and caches it.
+// Uses the current session's task type and domain to generate context-aware coaching.
+func preGenerateCoaching(sdb *sessiondb.SessionDB, cwd string) {
+	if cwd == "" {
+		return
+	}
+
+	taskType, _ := sdb.GetContext("task_type")
+	domain, _ := sdb.GetWorkingSet("domain")
+	if taskType == "" {
+		return
+	}
+
+	// Gather recent pattern titles for context.
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	patterns, _ := st.SearchPatternsByProject(cwd, 5)
+	var patternTitles []string
+	for _, p := range patterns {
+		patternTitles = append(patternTitles, p.Title)
+	}
+
+	ctx := context.Background()
+	text, err := coach.GenerateCoaching(ctx, sdb, taskType, domain, patternTitles, 5*time.Second)
+	if err != nil || text == "" {
+		return
+	}
+
+	_ = st.SetCachedCoaching(cwd, taskType, domain, text, "")
+}
+
+// extractPatternsWithLLM uses the coach package to extract reusable knowledge
+// from the session's recent events via `claude -p`. Results are persisted to buddy.db.
+// Gracefully skips if claude CLI is not available or on timeout.
+func extractPatternsWithLLM(sdb *sessiondb.SessionDB, sessionID string) {
+	// Build a summary of recent events for the LLM.
+	events, err := sdb.RecentEvents(50)
+	if err != nil || len(events) == 0 {
+		return
+	}
+
+	var summary strings.Builder
+	for _, ev := range events {
+		line := ev.ToolName
+		if ev.IsWrite {
+			line += " [write]"
+		}
+		summary.WriteString(line + "\n")
+	}
+
+	ctx := context.Background()
+	results, err := coach.ExtractPatterns(ctx, sdb, summary.String(), 5*time.Second)
+	if err != nil || len(results) == 0 {
+		return
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return
+	}
+	defer st.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, r := range results {
+		p := &store.PatternRow{
+			SessionID:   sessionID,
+			PatternType: r.Type,
+			Title:       r.Title,
+			Content:     r.Content,
+			EmbedText:   r.Title + " " + r.Content,
+			Language:    "en",
+			Scope:       "project",
+			Timestamp:   now,
+			Tags:        []string{r.Type, "llm-extracted"},
+		}
+		_, _ = st.InsertPattern(p)
 	}
 }
 

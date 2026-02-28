@@ -38,46 +38,23 @@ func resetBuddyTracker(st *store.Store) {
 	hookhandler.ResetBuddyCallTracker(sdb)
 }
 
-const serverInstructions = `claude-buddy is a real-time session advisor for Claude Code. It monitors your session, detects anti-patterns, and provides proactive workflow guidance.
+const serverInstructions = `claude-buddy is a real-time session advisor for Claude Code.
+Hook-based briefings are delivered automatically every turn.
 
-## Available Tools
+## When you need more detail from a briefing:
+  buddy_knowledge — Search past patterns, decisions, and solutions
+  buddy_guidance — Get alerts, recommendations, next steps
+  buddy_diagnose — Root cause analysis + fix patches for errors
 
-- buddy_stats: Get session statistics (turn counts, tool usage, duration). Use to understand session patterns.
-- buddy_suggest: Get prioritized workflow recommendations with health score, alerts, and feature utilization.
-- buddy_current_state: Quick pulse check — session health, burst state, predictions, and active alerts.
-- buddy_sessions: List recent sessions by project or date.
-- buddy_resume: Recover context from a previous session (summary, decisions, files modified).
-- buddy_recall: Search pre-compact conversation history for lost details (topics, file paths, decisions).
-- buddy_alerts: Detect active anti-patterns and get session health score.
-- buddy_decisions: List past design decisions. Use before making related changes to check architectural history.
-- buddy_patterns: Search knowledge patterns (error solutions, architecture, decisions) from past sessions.
-- buddy_feedback: Provide feedback on suggestion quality. Call when a suggestion was helpful, not helpful, or misleading.
-- buddy_estimate: Estimate task complexity based on historical workflow data.
-- buddy_next_step: Get recommended next actions based on session context. Call when unsure what to do next or after encountering errors.
-- buddy_cross_project: Search cross-project knowledge patterns. Find reusable solutions from other projects.
-- buddy_fix: Generate concrete fix patches for code quality findings. Returns Before/After code with confidence and explanation.
-- buddy_diagnose: Diagnose root cause of errors. Parses stack traces, searches past solutions, and provides recommended actions.
-- buddy_session_outlook: Get a holistic session outlook with health, phase progress, risk assessment, and recommendations.
-- buddy_task_progress: Track multi-session progress with session chains, decisions, workflows, and failure patterns.
-- buddy_strategic_plan: Generate optimal workflow plan for a task type based on historical data and user style.
-- buddy_pending_nudges: Get pending and recently delivered nudges from hook system. Bridges proactive hooks and on-demand MCP.
+## Session management:
+  buddy_state — Session health, statistics, and predictions
+  buddy_resume — Restore context from a previous session
+  buddy_recall — Search pre-compact conversation details
 
-## How Briefings Work
-
-Session briefings are delivered automatically via hooks on every turn.
-When a briefing mentions past solutions or patterns, call buddy_patterns for full details.
-When a briefing mentions health concerns, call buddy_alerts for the complete picture.
-When a briefing mentions co-change files, call buddy_current_state for working set context.
-
-## Deep Dive Tools (call when you need more detail)
-
-- buddy_patterns: Expand on past solutions or architecture patterns mentioned in briefings.
-- buddy_alerts: Full anti-pattern analysis when briefing flags health decline.
-- buddy_diagnose: Root cause analysis when briefing flags repeated failures.
-- buddy_decisions: Check architectural history before making related changes.
-- buddy_recall: Recover lost context after compaction.
-- buddy_feedback: Rate suggestion quality (helps buddy learn your preferences).
-- buddy_estimate: Complexity estimate for planning before complex tasks.
+## Planning & feedback:
+  buddy_plan — Task estimation, progress tracking, strategic plans
+  buddy_feedback — Rate suggestion quality (improves future relevance)
+  buddy_skill_context — Aggregated context for skills
 `
 
 // New creates a new MCP server with all tools registered.
@@ -85,7 +62,7 @@ When a briefing mentions co-change files, call buddy_current_state for working s
 func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 	s := server.NewMCPServer(
 		"claude-buddy",
-		"0.2.0",
+		"0.3.0",
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
 		server.WithPromptCapabilities(true),
@@ -94,68 +71,48 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 	)
 
 	s.AddTools(
+		// 1. buddy_state: Consolidated session state (stats + current_state + session_outlook).
 		server.ServerTool{
-			Tool: mcp.NewTool("buddy_stats",
-				mcp.WithDescription("Get usage statistics for Claude Code sessions. Returns turn counts, tool usage frequency, and session duration. Use to understand session patterns."),
-				mcp.WithTitleAnnotation("Session Statistics"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("session_id",
-					mcp.Description("Session ID to analyze (optional, defaults to most recent)"),
-				),
-				mcp.WithNumber("limit",
-					mcp.Description("Number of recent sessions to include (default: 1)"),
-				),
-			),
-			Handler: withBuddyTracker(st, statsHandler(claudeHome)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_suggest",
-				mcp.WithDescription("Get structured usage recommendations for a Claude Code session. Returns session health, active alerts, usage hints, feature utilization, and prioritized recommendations. Use to improve Claude Code workflow."),
-				mcp.WithTitleAnnotation("Usage Recommendations"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("session_id",
-					mcp.Description("Session ID to analyze (optional, defaults to most recent)"),
-				),
-			),
-			Handler: withBuddyTracker(st, suggestHandler(claudeHome)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_current_state",
-				mcp.WithDescription("Get real-time session snapshot including stats, burst state, health score, predictions, and feature utilization. Use for quick pulse check on session health."),
+			Tool: mcp.NewTool("buddy_state",
+				mcp.WithDescription("Get session state: health, statistics, burst state, and predictions. Use 'detail' to control depth: brief (stats only), standard (full snapshot), outlook (strategic view)."),
 				mcp.WithTitleAnnotation("Session State"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
+				mcp.WithString("detail",
+					mcp.Description("Level of detail: brief (stats), standard (default, full snapshot), outlook (health + phase + risk)"),
+				),
 				mcp.WithString("session_id",
 					mcp.Description("Session ID (optional, defaults to latest)"),
 				),
+				mcp.WithNumber("limit",
+					mcp.Description("Number of sessions for brief mode (default: 1)"),
+				),
 			),
-			Handler: withBuddyTracker(st, currentStateHandler(claudeHome)),
+			Handler: withBuddyTracker(st, stateConsolidatedHandler(claudeHome, st)),
 		},
+
+		// 2. buddy_sessions: List recent sessions (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_sessions",
-				mcp.WithDescription("List recent Claude Code sessions with basic metadata. Use to find sessions by project or date."),
+				mcp.WithDescription("List recent Claude Code sessions with basic metadata."),
 				mcp.WithTitleAnnotation("Recent Sessions"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithNumber("limit",
-					mcp.Description("Maximum number of sessions to return (default: 10)"),
+					mcp.Description("Maximum sessions to return (default: 10)"),
 				),
 			),
 			Handler: withBuddyTracker(st, sessionsHandler(claudeHome)),
 		},
+
+		// 3. buddy_resume: Restore context from a previous session (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_resume",
-				mcp.WithDescription("Resume context from a previous Claude Code session. Call this at session start to recover prior context. Returns summary, recent events, decisions, and files modified."),
+				mcp.WithDescription("Resume context from a previous session. Returns summary, events, decisions, and files modified."),
 				mcp.WithTitleAnnotation("Resume Context"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -165,76 +122,43 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 					mcp.Description("Session ID to resume from (optional, defaults to most recent)"),
 				),
 				mcp.WithString("project",
-					mcp.Description("Project name or path to filter sessions (optional)"),
+					mcp.Description("Project name or path to filter sessions"),
 				),
 			),
 			Handler: withBuddyTracker(st, resumeHandler(st)),
 		},
+
+		// 4. buddy_recall: Search pre-compact conversation history (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_recall",
-				mcp.WithDescription("Recall details lost during auto-compact. Searches pre-compact conversation history for specific topics, file paths, or decisions. Call this when you notice context has been compacted and need specific details."),
+				mcp.WithDescription("Search pre-compact conversation history for lost details."),
 				mcp.WithTitleAnnotation("Recall Details"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("query",
-					mcp.Description("Search query for finding specific details"),
+					mcp.Description("Search query"),
 					mcp.Required(),
 				),
 				mcp.WithString("session_id",
-					mcp.Description("Session ID to search in (optional, defaults to most recent)"),
+					mcp.Description("Session ID to search in"),
 				),
 				mcp.WithNumber("segment",
-					mcp.Description("Compact segment to search (0=pre-compact, default: 0)"),
+					mcp.Description("Compact segment (0=pre-compact)"),
 				),
 				mcp.WithNumber("limit",
-					mcp.Description("Maximum number of results to return (default: 10)"),
+					mcp.Description("Maximum results (default: 10)"),
 				),
 			),
 			Handler: withBuddyTracker(st, recallHandler(st)),
 		},
+
+		// 5. buddy_knowledge: Consolidated knowledge search (patterns + decisions + cross_project).
 		server.ServerTool{
-			Tool: mcp.NewTool("buddy_alerts",
-				mcp.WithDescription("Detect anti-patterns in Claude Code sessions. Returns active alerts and session health score. Use to check session health."),
-				mcp.WithTitleAnnotation("Anti-pattern Alerts"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("session_id",
-					mcp.Description("Session ID (optional, defaults to latest)"),
-				),
-			),
-			Handler: withBuddyTracker(st, alertsHandler(claudeHome)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_decisions",
-				mcp.WithDescription("List design decisions from past sessions. Use before making related changes to check past architectural choices."),
-				mcp.WithTitleAnnotation("Design Decisions"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("session_id",
-					mcp.Description("Session ID to filter decisions (optional)"),
-				),
-				mcp.WithString("project",
-					mcp.Description("Project name to filter decisions (optional)"),
-				),
-				mcp.WithString("query",
-					mcp.Description("Search query to find specific decisions (optional)"),
-				),
-				mcp.WithNumber("limit",
-					mcp.Description("Maximum number of decisions to return (default: 20)"),
-				),
-			),
-			Handler: withBuddyTracker(st, decisionsHandler(st)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_patterns",
-				mcp.WithDescription("Search knowledge patterns from past sessions (error solutions, architecture, decisions). Use to find reusable patterns and prior solutions."),
-				mcp.WithTitleAnnotation("Knowledge Patterns"),
+			Tool: mcp.NewTool("buddy_knowledge",
+				mcp.WithDescription("Search knowledge: past patterns, design decisions, and cross-project solutions. Use 'scope' for project vs global, 'type' to filter by pattern kind."),
+				mcp.WithTitleAnnotation("Knowledge Search"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
@@ -243,53 +167,107 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 					mcp.Description("Search query (required)"),
 					mcp.Required(),
 				),
+				mcp.WithString("scope",
+					mcp.Description("Search scope: project (default) or global (cross-project)"),
+				),
 				mcp.WithString("type",
-					mcp.Description("Pattern type filter: error_solution, architecture, tool_usage, decision (optional)"),
+					mcp.Description("Filter: all (default), error_solution, architecture, decision, tool_usage"),
+				),
+				mcp.WithString("session_id",
+					mcp.Description("Session ID to filter decisions"),
+				),
+				mcp.WithString("project",
+					mcp.Description("Project name to filter"),
 				),
 				mcp.WithNumber("limit",
 					mcp.Description("Maximum results (default: 5)"),
 				),
 			),
-			Handler: withBuddyTracker(st, patternsHandler(st, emb)),
+			Handler: withBuddyTracker(st, knowledgeConsolidatedHandler(st, emb)),
 		},
+
+		// 6. buddy_guidance: Consolidated guidance (suggest + alerts + next_step + pending_nudges).
 		server.ServerTool{
-			Tool: mcp.NewTool("buddy_estimate",
-				mcp.WithDescription("Estimate task complexity based on historical workflow data. Returns median tool count, success rate, and common workflow pattern."),
-				mcp.WithTitleAnnotation("Task Estimation"),
+			Tool: mcp.NewTool("buddy_guidance",
+				mcp.WithDescription("Get workflow guidance: alerts, recommendations, next steps, and pending nudges. Use 'focus' to narrow: all (default), alerts, recommendations, next_steps, pending."),
+				mcp.WithTitleAnnotation("Workflow Guidance"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("task_type",
-					mcp.Description("Task type: bugfix, feature, refactor, research, review"),
-					mcp.Required(),
+				mcp.WithString("focus",
+					mcp.Description("Focus area: all (default), alerts, recommendations, next_steps, pending"),
 				),
-				mcp.WithString("project",
-					mcp.Description("Project path to filter estimates (optional)"),
-				),
-			),
-			Handler: withBuddyTracker(st, estimateHandler(st)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_next_step",
-				mcp.WithDescription("Get recommended next actions based on session context. Returns up to 3 prioritized suggestions considering recent tool history, failures, working set, and task type. Call when unsure what to do next or after encountering errors."),
-				mcp.WithTitleAnnotation("Next Step Recommendations"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("session_id",
 					mcp.Description("Session ID (optional, defaults to latest)"),
 				),
 				mcp.WithString("context",
-					mcp.Description("Optional additional context about what you're trying to achieve"),
+					mcp.Description("Additional context for next_steps recommendations"),
 				),
 			),
-			Handler: withBuddyTracker(st, nextStepHandler(claudeHome)),
+			Handler: withBuddyTracker(st, guidanceConsolidatedHandler(claudeHome, st)),
 		},
+
+		// 7. buddy_plan: Consolidated planning (estimate + task_progress + strategic_plan).
+		server.ServerTool{
+			Tool: mcp.NewTool("buddy_plan",
+				mcp.WithDescription("Planning tools: task estimation, progress tracking, and strategic plans. Use 'mode' to select: estimate, progress, strategy, or all."),
+				mcp.WithTitleAnnotation("Planning"),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithIdempotentHintAnnotation(true),
+				mcp.WithOpenWorldHintAnnotation(false),
+				mcp.WithString("mode",
+					mcp.Description("Mode: estimate (task complexity), progress (multi-session tracking), strategy (optimal workflow), all"),
+				),
+				mcp.WithString("task_type",
+					mcp.Description("Task type: bugfix, feature, refactor, test, explore, debug"),
+				),
+				mcp.WithString("project",
+					mcp.Description("Project path"),
+				),
+				mcp.WithString("session_id",
+					mcp.Description("Session ID for progress tracking"),
+				),
+			),
+			Handler: withBuddyTracker(st, planConsolidatedHandler(st)),
+		},
+
+		// 8. buddy_diagnose: Consolidated diagnosis (diagnose + fix).
+		server.ServerTool{
+			Tool: mcp.NewTool("buddy_diagnose",
+				mcp.WithDescription("Diagnose errors and generate fix patches. Provide error_output for diagnosis, or file_path with finding_rule for code fixes. Set fix=true to include a patch alongside diagnosis."),
+				mcp.WithTitleAnnotation("Error Diagnosis & Fix"),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithIdempotentHintAnnotation(true),
+				mcp.WithOpenWorldHintAnnotation(false),
+				mcp.WithString("error_output",
+					mcp.Description("Error message or command output to diagnose"),
+				),
+				mcp.WithString("tool_name",
+					mcp.Description("Tool that produced the error (e.g., 'Bash', 'Edit')"),
+				),
+				mcp.WithString("file_path",
+					mcp.Description("File path related to the error or containing the finding"),
+				),
+				mcp.WithString("finding_rule",
+					mcp.Description("Code quality rule identifier for fix generation"),
+				),
+				mcp.WithString("message",
+					mcp.Description("Finding message text (for fix generation when rule is not known)"),
+				),
+				mcp.WithNumber("line",
+					mcp.Description("Line number of the finding"),
+				),
+			),
+			Handler: withBuddyTracker(st, diagnoseConsolidatedHandler(st)),
+		},
+
+		// 9. buddy_feedback: Provide suggestion feedback (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_feedback",
-				mcp.WithDescription("Provide feedback on suggestion quality. Call when a buddy suggestion was helpful, not helpful, or misleading. This helps improve future suggestion relevance."),
+				mcp.WithDescription("Rate suggestion quality: helpful, partially_helpful, not_helpful, or misleading."),
 				mcp.WithTitleAnnotation("Suggestion Feedback"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -297,167 +275,40 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("pattern",
 					mcp.Required(),
-					mcp.Description("The suggestion pattern name (e.g., code-quality, retry-loop, workflow)"),
+					mcp.Description("The suggestion pattern name"),
 				),
 				mcp.WithString("rating",
 					mcp.Required(),
 					mcp.Description("Rating: helpful, partially_helpful, not_helpful, or misleading"),
 				),
 				mcp.WithNumber("suggestion_id",
-					mcp.Description("Specific suggestion outcome ID (optional)"),
+					mcp.Description("Specific suggestion outcome ID"),
 				),
 				mcp.WithString("comment",
-					mcp.Description("Additional feedback details (optional)"),
+					mcp.Description("Additional feedback details"),
 				),
 			),
 			Handler: withBuddyTracker(st, feedbackHandler(st)),
 		},
+
+		// 10. buddy_skill_context: Skill-specific context (unchanged).
 		server.ServerTool{
 			Tool: mcp.NewTool("buddy_skill_context",
-				mcp.WithDescription("Get aggregated session context tailored for a specific skill. Returns session health, modified files, alerts, and skill-specific data in one call. Use at the start of a skill to get all needed context without multiple tool calls."),
-				mcp.WithTitleAnnotation("Skill Dynamic Context"),
+				mcp.WithDescription("Get aggregated session context for a specific skill."),
+				mcp.WithTitleAnnotation("Skill Context"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("skill_name",
 					mcp.Required(),
-					mcp.Description("Name of the skill requesting context (e.g., buddy-analyze, buddy-gate, buddy-recover, buddy-forecast)"),
+					mcp.Description("Name of the skill requesting context"),
 				),
 				mcp.WithString("session_id",
 					mcp.Description("Session ID (optional, defaults to latest)"),
 				),
 			),
 			Handler: withBuddyTracker(st, skillContextHandler(claudeHome)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_cross_project",
-				mcp.WithDescription("Search cross-project knowledge patterns. Finds reusable solutions, architecture decisions, and error fixes from other projects. Use when encountering a problem that may have been solved elsewhere."),
-				mcp.WithTitleAnnotation("Cross-Project Search"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("query",
-					mcp.Required(),
-					mcp.Description("Search query (keywords)"),
-				),
-				mcp.WithString("pattern_type",
-					mcp.Description("Filter by type: error_solution, architecture, decision (optional)"),
-				),
-				mcp.WithNumber("limit",
-					mcp.Description("Maximum results (default: 5)"),
-				),
-			),
-			Handler: withBuddyTracker(st, crossProjectHandler()),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_fix",
-				mcp.WithDescription("Generate concrete fix patches for code quality findings. Takes a file path and finding rule/message, returns Before/After code with explanation and confidence score."),
-				mcp.WithTitleAnnotation("Code Fix Generator"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("file_path",
-					mcp.Required(),
-					mcp.Description("Path to the file containing the finding"),
-				),
-				mcp.WithString("finding_rule",
-					mcp.Description("Rule identifier (e.g., 'go_defer_in_loop', 'py_bare_except', 'js_var_usage')"),
-				),
-				mcp.WithString("message",
-					mcp.Description("Finding message text (used when rule is not known)"),
-				),
-				mcp.WithNumber("line",
-					mcp.Description("Line number of the finding (1-indexed)"),
-				),
-			),
-			Handler: withBuddyTracker(st, fixHandler()),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_diagnose",
-				mcp.WithDescription("Diagnose root cause of errors and failures. Analyzes error output, searches past solutions, parses stack traces, and provides structured diagnosis with recommended actions."),
-				mcp.WithTitleAnnotation("Error Diagnosis"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("error_output",
-					mcp.Required(),
-					mcp.Description("The error message or command output to diagnose"),
-				),
-				mcp.WithString("tool_name",
-					mcp.Description("Tool that produced the error (e.g., 'Bash', 'Edit')"),
-				),
-				mcp.WithString("file_path",
-					mcp.Description("File path related to the error"),
-				),
-			),
-			Handler: withBuddyTracker(st, diagnoseHandler(st)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_session_outlook",
-				mcp.WithDescription("Get a holistic session outlook: health score, current phase, risk assessment, trajectory analysis, and actionable recommendations. Use for a quick strategic pulse check."),
-				mcp.WithTitleAnnotation("Session Outlook"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-			),
-			Handler: withBuddyTracker(st, sessionOutlookHandler(claudeHome, st)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_task_progress",
-				mcp.WithDescription("Track task progress across multiple sessions. Shows session chain, decisions made, workflow patterns, and common failures. Use to understand multi-session context."),
-				mcp.WithTitleAnnotation("Task Progress"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("project",
-					mcp.Description("Project path to filter by (optional)"),
-				),
-				mcp.WithString("session_id",
-					mcp.Description("Session ID to trace the chain from (optional)"),
-				),
-				mcp.WithString("task_type",
-					mcp.Description("Task type for workflow analysis (bugfix/feature/refactor/test/explore)"),
-				),
-			),
-			Handler: withBuddyTracker(st, taskProgressHandler(st)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_strategic_plan",
-				mcp.WithDescription("Generate a strategic plan for a task type. Recommends optimal phase sequence, estimates effort, adapts to user style, and warns about risk phases based on historical data."),
-				mcp.WithTitleAnnotation("Strategic Plan"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("task_type",
-					mcp.Required(),
-					mcp.Description("Task type (bugfix/feature/refactor/test/explore/debug)"),
-				),
-				mcp.WithString("project",
-					mcp.Description("Project path for project-specific patterns (optional)"),
-				),
-			),
-			Handler: withBuddyTracker(st, strategicPlanHandler(st)),
-		},
-		server.ServerTool{
-			Tool: mcp.NewTool("buddy_pending_nudges",
-				mcp.WithDescription("Get pending and recently delivered nudges from the hook system. Bridges the gap between proactive hook signals and on-demand MCP queries. Call this to discover advice that hooks generated but you may have missed."),
-				mcp.WithTitleAnnotation("Pending Nudges"),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("session_id",
-					mcp.Description("Session ID (optional, defaults to latest)"),
-				),
-			),
-			Handler: withBuddyTracker(st, pendingNudgesHandler(st)),
 		},
 	)
 

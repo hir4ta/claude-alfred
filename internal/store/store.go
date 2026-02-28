@@ -45,7 +45,14 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("store: migrate: %w", err)
 	}
 
-	return &Store{db: db, dbPath: dbPath}, nil
+	st := &Store{db: db, dbPath: dbPath}
+
+	// Seed knowledge patterns for cold-start users.
+	if err := SeedIfEmpty(st); err != nil {
+		fmt.Fprintf(os.Stderr, "[buddy] seed patterns: %v\n", err)
+	}
+
+	return st, nil
 }
 
 // OpenDefault opens the database at the default path (~/.claude-buddy/buddy.db).

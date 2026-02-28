@@ -100,7 +100,10 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	var entries []nudgeEntry
 
 	// 1. JARVIS briefing signal (max 1, priority-based).
-	if briefing := formatBriefing(selectTopSignal(sdb, in.Prompt, in.CWD)); briefing != "" {
+	// Use narrative synthesis to enrich the signal with session context.
+	if sig := selectTopSignal(sdb, in.Prompt, in.CWD); sig != nil {
+		detail := buildNarrative(sig, sdb)
+		briefing := fmt.Sprintf("[buddy:briefing] %s", detail)
 		entries = append(entries, nudgeEntry{
 			Pattern:     "briefing",
 			Level:       "insight",
@@ -233,6 +236,11 @@ func buildSessionContextSummary(sdb *sessiondb.SessionDB) string {
 		if coHint := coChangeCandidates(files); coHint != "" {
 			parts = append(parts, coHint)
 		}
+	}
+
+	// Data maturity: signal when buddy is still learning.
+	if label := dataMaturityLabel(sdb); label != "" {
+		parts = append(parts, "buddy: "+label)
 	}
 
 	if len(parts) < 2 {
@@ -447,4 +455,30 @@ func recentFileKeywords(sdb *sessiondb.SessionDB) []string {
 		}
 	}
 	return keywords
+}
+
+// dataMaturityLabel returns a short label indicating buddy's data maturity level.
+// Returns "" when mature (silence is healthy).
+func dataMaturityLabel(sdb *sessiondb.SessionDB) string {
+	st, err := store.OpenDefault()
+	if err != nil {
+		return ""
+	}
+	defer st.Close()
+
+	sessionCount := 0
+	if stats, err := st.GetProjectSessionStats(""); err == nil && stats != nil {
+		sessionCount = stats.TotalSessions
+	}
+
+	patternCount, _ := st.CountPatterns()
+
+	switch {
+	case sessionCount < 3:
+		return fmt.Sprintf("Learning (session %d/3)", sessionCount)
+	case patternCount < 10:
+		return fmt.Sprintf("Growing (%d patterns)", patternCount)
+	default:
+		return ""
+	}
 }

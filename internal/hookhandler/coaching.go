@@ -266,7 +266,17 @@ func generateCoaching(sdb *sessiondb.SessionDB) string {
 	var riskProfile string
 	if st, err := store.OpenDefault(); err == nil {
 		riskProfile = st.UserCluster()
-		defer st.Close()
+
+		// Check AI-generated coaching cache first.
+		cwd, _ := sdb.GetContext("cwd")
+		if cwd != "" {
+			if cached, ok := st.GetCachedCoaching(cwd, taskTypeStr, domain, 24*time.Hour); ok {
+				st.Close()
+				return "[buddy:coaching] " + cached + SkillHintForPhase(phaseStr)
+			}
+		}
+
+		st.Close()
 	}
 
 	// Try domain-specific override first.

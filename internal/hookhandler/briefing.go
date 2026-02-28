@@ -232,10 +232,85 @@ func findHealthSignal(sdb *sessiondb.SessionDB) *Signal {
 }
 
 // formatBriefing converts a Signal into a compact string for additionalContext injection.
-// Returns "" for nil signals.
+// Returns "" for nil signals. When additional context is available, builds a narrative
+// that weaves together the signal with session state.
 func formatBriefing(sig *Signal) string {
 	if sig == nil {
 		return ""
 	}
 	return fmt.Sprintf("[buddy:briefing] %s", sig.Detail)
+}
+
+// buildNarrative enriches a signal with session context to produce a coherent narrative.
+// Weaves together the signal, working set state, failure log, and phase info.
+func buildNarrative(sig *Signal, sdb *sessiondb.SessionDB) string {
+	if sig == nil {
+		return ""
+	}
+
+	var parts []string
+	parts = append(parts, sig.Detail)
+
+	// Add failure context for solution/alert signals.
+	if sig.Kind == "solution" || sig.Kind == "alert" {
+		failures, _ := sdb.RecentFailures(1)
+		if len(failures) > 0 {
+			f := failures[0]
+			if f.FilePath != "" {
+				count, _ := sdb.FileEditCount(f.FilePath)
+				if count > 1 {
+					parts = append(parts, fmt.Sprintf("(%s edited %d times in this session)", filepath.Base(f.FilePath), count))
+				}
+			}
+		}
+	}
+
+	// Add test status context for phase transitions.
+	if sig.Kind == "phase" {
+		hasTestRun, _ := sdb.GetContext("has_test_run")
+		if hasTestRun != "true" {
+			tc, _, _, _ := sdb.BurstState()
+			if tc > 15 {
+				parts = append(parts, fmt.Sprintf("Tests not run yet (%d tools in session).", tc))
+			}
+		}
+	}
+
+	// Add co-change reminder for knowledge signals about specific files.
+	if sig.Kind == "knowledge" || sig.Kind == "cochange" {
+		files, _ := sdb.GetWorkingSetFiles()
+		if len(files) > 0 && len(files) <= 3 {
+			st, err := store.OpenDefault()
+			if err == nil {
+				defer st.Close()
+				for _, f := range files {
+					coFiles, _ := st.CoChangedFiles(f, 2)
+					for _, co := range coFiles {
+						peer := co.FileA
+						if peer == f {
+							peer = co.FileB
+						}
+						// Check peer not already in working set.
+						inWS := false
+						for _, wf := range files {
+							if wf == peer {
+								inWS = true
+								break
+							}
+						}
+						if !inWS {
+							parts = append(parts, fmt.Sprintf("Also check %s (frequently changed together).", filepath.Base(peer)))
+							break
+						}
+					}
+					break // only check first file
+				}
+			}
+		}
+	}
+
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return strings.Join(parts, " ")
 }
