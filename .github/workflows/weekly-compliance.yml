@@ -1,0 +1,152 @@
+name: Weekly Plugin Compliance Check
+
+on:
+  schedule:
+    - cron: "0 0 * * 1" # Every Monday 00:00 UTC (09:00 JST)
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  compliance-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check plugin compliance
+        id: check
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            You are a Claude Code plugin compliance auditor.
+
+            ## Task
+
+            Check the claude-buddy plugin for compliance with the LATEST Claude Code best practices.
+
+            ## Step 1: Fetch latest docs
+
+            Fetch ALL of these official documentation pages (in parallel):
+            - https://code.claude.com/docs/en/hooks
+            - https://code.claude.com/docs/en/plugins-reference
+            - https://code.claude.com/docs/en/skills
+            - https://code.claude.com/docs/en/mcp
+
+            If a fetch fails, use WebSearch with `site:code.claude.com` as fallback.
+
+            ## Step 2: Read current plugin files
+
+            Read all of these:
+            - plugin/hooks/hooks.json
+            - plugin/.claude-plugin/plugin.json
+            - plugin/.mcp.json
+            - plugin/agents/buddy.md
+            - All files matching plugin/skills/*/SKILL.md
+
+            ## Step 3: Cross-reference
+
+            Compare the plugin files against the docs. For each category (Hooks, Skills, MCP, Plugin Manifest, Agent), check:
+            - Missing required/recommended fields
+            - Deprecated patterns still in use
+            - New features not yet adopted
+            - Structural issues
+
+            ## Step 4: Output
+
+            Output ONLY a JSON object (no markdown, no explanation) with this exact structure:
+
+            ```json
+            {
+              "date": "YYYY-MM-DD",
+              "summary": { "pass": N, "high": N, "medium": N, "low": N },
+              "findings": [
+                {
+                  "severity": "HIGH|MEDIUM|LOW",
+                  "category": "hooks|skills|mcp|manifest|agent",
+                  "item": "specific item name",
+                  "message": "what's wrong",
+                  "recommendation": "how to fix",
+                  "doc_reference": "which doc section this is based on"
+                }
+              ]
+            }
+            ```
+
+            Only include findings that are clearly documented in the fetched docs.
+            Do NOT speculate or infer requirements not in the docs.
+          max_turns: "10"
+
+      - name: Parse findings
+        id: parse
+        env:
+          RESULT: ${{ steps.check.outputs.result }}
+        run: |
+          # Extract JSON from result (may be wrapped in markdown code block)
+          JSON=$(echo "$RESULT" | sed -n '/^{/,/^}/p' | head -1)
+          if [ -z "$JSON" ]; then
+            JSON=$(echo "$RESULT" | sed -n '/```json/,/```/p' | sed '1d;$d')
+          fi
+          if [ -z "$JSON" ]; then
+            echo "No JSON found in output"
+            echo "has_high=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          HIGH_COUNT=$(echo "$JSON" | jq '[.findings[] | select(.severity == "HIGH")] | length')
+          echo "high_count=$HIGH_COUNT" >> "$GITHUB_OUTPUT"
+          echo "has_high=$([ "$HIGH_COUNT" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+          # Save full JSON for issue body
+          echo "$JSON" > /tmp/findings.json
+
+      - name: Create issue if HIGH findings
+        if: steps.parse.outputs.has_high == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          HIGH_COUNT=${{ steps.parse.outputs.high_count }}
+
+          # Build issue body from findings
+          BODY=$(cat <<'HEREDOC'
+          ## Weekly Plugin Compliance Check
+
+          **Date**: $DATE
+          **HIGH severity issues**: $HIGH_COUNT
+
+          ### Findings
+
+          HEREDOC
+          )
+
+          # Append HIGH findings
+          FINDINGS=$(jq -r '.findings[] | select(.severity == "HIGH") | "#### [\(.severity)] \(.category): \(.item)\n\(.message)\n\n**Recommendation**: \(.recommendation)\n\n**Doc reference**: \(.doc_reference)\n"' /tmp/findings.json)
+
+          # Append MEDIUM findings as collapsed section
+          MEDIUM=$(jq -r '.findings[] | select(.severity == "MEDIUM") | "- **\(.category)/\(.item)**: \(.message) → \(.recommendation)"' /tmp/findings.json)
+
+          ISSUE_BODY="## Weekly Plugin Compliance Check
+
+          **Date**: ${DATE}
+          **HIGH severity issues**: ${HIGH_COUNT}
+
+          ### HIGH (action required)
+
+          ${FINDINGS}
+
+          <details><summary>MEDIUM findings</summary>
+
+          ${MEDIUM}
+
+          </details>
+
+          ---
+          *Auto-generated by [weekly-compliance workflow](https://github.com/${{ github.repository }}/actions/workflows/weekly-compliance.yml)*"
+
+          gh issue create \
+            --title "Plugin Compliance: ${HIGH_COUNT} HIGH severity issues (${DATE})" \
+            --body "$ISSUE_BODY" \
+            --label "compliance"
