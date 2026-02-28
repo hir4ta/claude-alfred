@@ -13,7 +13,12 @@ import (
 // recordNudgeDelivery records delivered nudges in the persistent store for effectiveness tracking.
 // It saves the last outcome ID in session context for resolution detection,
 // and records the current tool count for timeout-based negative signal detection.
+// deliveryChannel indicates source ("hook" or "mcp"), predictedPriority is the TS-adjusted priority.
 func recordNudgeDelivery(sdb *sessiondb.SessionDB, sessionID string, nudges []sessiondb.Nudge) {
+	recordNudgeDeliveryWithMeta(sdb, sessionID, nudges, "hook", "")
+}
+
+func recordNudgeDeliveryWithMeta(sdb *sessiondb.SessionDB, sessionID string, nudges []sessiondb.Nudge, deliveryChannel, predictedPriority string) {
 	if len(nudges) == 0 {
 		return
 	}
@@ -31,6 +36,15 @@ func recordNudgeDelivery(sdb *sessiondb.SessionDB, sessionID string, nudges []se
 			fmt.Fprintf(os.Stderr, "[buddy] record nudge delivery: %v\n", err)
 			continue
 		}
+		// Record delivery metadata for accuracy measurement.
+		if deliveryChannel != "" || predictedPriority != "" {
+			_ = st.UpdateSuggestionMeta(id, deliveryChannel, predictedPriority)
+		}
+		// Estimate token cost for B8 cost tracking.
+		cost := estimateTokenCost(n.Suggestion)
+		if cost > 0 {
+			_ = st.UpdateSuggestionContext(id, fmt.Sprintf(`{"estimated_tokens":%d}`, cost))
+		}
 		lastID = id
 		lastPattern = n.Pattern
 	}
@@ -43,6 +57,15 @@ func recordNudgeDelivery(sdb *sessiondb.SessionDB, sessionID string, nudges []se
 		tc, _, _, _ := sdb.BurstState()
 		_ = sdb.SetContext("nudge_delivered_tool_count", strconv.Itoa(tc))
 	}
+}
+
+// estimateTokenCost approximates token count from character length.
+// Uses a rough 4 chars/token ratio for English-heavy content.
+func estimateTokenCost(text string) int {
+	if len(text) == 0 {
+		return 0
+	}
+	return (len(text) + 3) / 4
 }
 
 // checkNudgeTimeout detects when a nudge has been delivered but not resolved
@@ -201,6 +224,13 @@ func verifyPendingResolution(sdb *sessiondb.SessionDB, isSuccess bool) {
 		_ = st.ResolveSuggestion(outcomeID)
 		_ = st.UpdateToolsAfter(outcomeID, toolsAfter)
 
+		// Update per-user pattern effectiveness.
+		cwd, _ := sdb.GetContext("cwd")
+		taskType, _ := sdb.GetContext("task_type")
+		if cwd != "" {
+			_ = st.UpdateUserPatternEffectiveness(cwd, pattern, taskType, true)
+		}
+
 		// If a past-solution nudge was resolved, mark the solution as effective.
 		if pattern == "past-solution" {
 			if idStr, _ := sdb.GetContext("last_surfaced_solution_id"); idStr != "" {
@@ -214,6 +244,16 @@ func verifyPendingResolution(sdb *sessiondb.SessionDB, isSuccess bool) {
 	} else {
 		// False positive: the "resolution" action failed — the nudge didn't actually help.
 		recordFalsePositiveFeedback(sdb, pattern)
+
+		// Track unresolved in per-user effectiveness.
+		st, err := store.OpenDefaultCached()
+		if err == nil {
+			cwd, _ := sdb.GetContext("cwd")
+			taskType, _ := sdb.GetContext("task_type")
+			if cwd != "" {
+				_ = st.UpdateUserPatternEffectiveness(cwd, pattern, taskType, false)
+			}
+		}
 	}
 }
 

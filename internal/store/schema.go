@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-const schemaVersion = 15
+const schemaVersion = 16
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -470,6 +470,28 @@ CREATE INDEX IF NOT EXISTS idx_sigout_session ON signal_outcomes(session_id);
 CREATE INDEX IF NOT EXISTS idx_sigout_priority ON signal_outcomes(priority);
 `
 
+const ddlV16 = `
+-- suggestion_outcomes: add tracking columns for accuracy measurement
+ALTER TABLE suggestion_outcomes ADD COLUMN delivery_channel TEXT NOT NULL DEFAULT '';
+ALTER TABLE suggestion_outcomes ADD COLUMN predicted_priority TEXT NOT NULL DEFAULT '';
+ALTER TABLE suggestion_outcomes ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE suggestion_outcomes ADD COLUMN action_event_id INTEGER NOT NULL DEFAULT 0;
+
+-- user_pattern_effectiveness: per-project individual pattern tracking
+CREATE TABLE IF NOT EXISTS user_pattern_effectiveness (
+    project_path TEXT NOT NULL,
+    pattern      TEXT NOT NULL,
+    task_type    TEXT NOT NULL DEFAULT '',
+    resolved     INTEGER NOT NULL DEFAULT 0,
+    not_resolved INTEGER NOT NULL DEFAULT 0,
+    explicit_helpful     INTEGER NOT NULL DEFAULT 0,
+    explicit_not_helpful INTEGER NOT NULL DEFAULT 0,
+    last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (project_path, pattern, task_type)
+);
+CREATE INDEX IF NOT EXISTS idx_upe_pattern ON user_pattern_effectiveness(pattern);
+`
+
 // SchemaVersion returns the current schema version constant.
 func SchemaVersion() int { return schemaVersion }
 
@@ -557,6 +579,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if current < 15 {
 		if _, err := db.Exec(ddlV15); err != nil {
+			return err
+		}
+	}
+	if current < 16 {
+		if _, err := db.Exec(ddlV16); err != nil {
 			return err
 		}
 	}

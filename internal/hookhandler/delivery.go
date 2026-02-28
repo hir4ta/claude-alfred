@@ -94,8 +94,17 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 		priority = PriorityHigh
 	}
 
-	// Apply adaptive priority adjustment using Thompson Sampling.
+	// Apply graduated demotion before TS — probabilistically skip low-performing patterns.
 	rng := getSessionRNG(sdb)
+	if priority > PriorityHigh {
+		if st, err := store.OpenDefaultCached(); err == nil {
+			if applyGraduatedDemotion(rng, st, pattern) {
+				return DeliveryDecision{Channel: ChannelSuppress, Priority: PrioritySuppressed}
+			}
+		}
+	}
+
+	// Apply adaptive priority adjustment using Thompson Sampling.
 	result := adjustPriorityWithConfidence(rng, pattern, priority)
 	ctxLastConfidence = result.Confidence
 	adjusted := result.Priority
@@ -203,9 +212,23 @@ func adjustPriorityWithConfidence(rng *rand.Rand, pattern string, base Suggestio
 		return AdjustResult{Priority: PrioritySuppressed, Confidence: 0}
 	}
 
-	// Thompson Sampling: 2-tier fallback for data density.
-	// 1. Contextual key (pattern:taskType:cluster)
-	// 2. Base pattern only
+	// Per-user individual effectiveness (Tier 1 of 3-tier fallback).
+	// Uses per-project resolution history which is more personalized than
+	// contextual TS but requires sufficient samples (≥ 5).
+	cwd := ctxCwd
+	if cwd != "" {
+		taskType := ctxTaskType
+		if stats, uerr := st.GetUserPatternEffectiveness(cwd, pattern, taskType); uerr == nil && stats.SampleSize >= 5 {
+			return AdjustResult{
+				Priority:   adjustFromEstimate(stats.Rate, base),
+				Confidence: stats.Rate,
+			}
+		}
+	}
+
+	// Thompson Sampling: 2-tier fallback for data density (Tier 2 & 3).
+	// 2. Contextual key (pattern:taskType:cluster)
+	// 3. Base pattern only
 	hl := patternDecayHalfLife(pattern)
 	delivered, resolved, err := st.DecayedPatternEffectiveness(ctxKey, hl)
 	if err != nil || delivered < 3.0 {
@@ -402,6 +425,7 @@ func currentTaskType() string {
 // but excluded from the contextual pattern key to increase data density.
 func SetDeliveryContext(sdb *sessiondb.SessionDB) {
 	ctxTaskType, _ = sdb.GetContext("task_type")
+	ctxCwd, _ = sdb.GetContext("cwd")
 	ctxDomain, _ = sdb.GetWorkingSet("domain")
 	vel := getFloat(sdb, "ewma_tool_velocity")
 	switch {
@@ -435,6 +459,7 @@ var (
 	ctxVelocityState string
 	ctxUserCluster   string
 	ctxDomain        string  // used by SetDeliveryContext for domain-aware features outside TS
+	ctxCwd           string  // project path for per-user pattern effectiveness lookup
 	ctxLastConfidence float64 // last confidence from adjustPriorityWithConfidence
 )
 
@@ -647,25 +672,58 @@ func burstCapForCluster() int {
 
 // shouldSuppressForCluster applies cluster-adapted suppression thresholds.
 func shouldSuppressForCluster(st *store.Store, pattern string) bool {
-	delivered, resolved, err := st.DecayedPatternEffectiveness(pattern)
-	if err != nil {
-		return false
-	}
-	minDel, maxRate := suppressThresholdsForCluster()
-	if delivered < float64(minDel) {
-		return false
-	}
-	rate := resolved / delivered
-	return rate < maxRate
+	return graduatedDemotion(st, pattern) >= 1.0
 }
 
-func suppressThresholdsForCluster() (int, float64) {
+// graduatedDemotion returns a delivery reduction factor [0.0, 1.0] based on
+// the pattern's decayed effectiveness and delivery count.
+// Stage 1 (15+ deliveries, < 15% rate): 50% reduction
+// Stage 2 (20+ deliveries, < 10% rate): 80% reduction
+// Stage 3 (30+ deliveries, < 5% rate): 100% suppression
+func graduatedDemotion(st *store.Store, pattern string) float64 {
+	delivered, resolved, err := st.DecayedPatternEffectiveness(pattern)
+	if err != nil || delivered < 10 {
+		return 0
+	}
+	rate := resolved / delivered
+
+	// Apply cluster-specific multiplier.
+	multiplier := clusterDemotionMultiplier()
+
+	switch {
+	case delivered >= 30*multiplier && rate < 0.05:
+		return 1.0 // Stage 3: full suppression
+	case delivered >= 20*multiplier && rate < 0.10:
+		return 0.8 // Stage 2: 80% reduction
+	case delivered >= 15*multiplier && rate < 0.15:
+		return 0.5 // Stage 1: 50% reduction
+	default:
+		return 0
+	}
+}
+
+// clusterDemotionMultiplier adjusts delivery thresholds per user cluster.
+// Conservative users tolerate more suggestions before demotion kicks in.
+func clusterDemotionMultiplier() float64 {
 	switch ctxUserCluster {
 	case "conservative":
-		return 20, 0.03
+		return 1.3
 	case "aggressive":
-		return 10, 0.08
+		return 0.7
 	default:
-		return 15, 0.05
+		return 1.0
 	}
+}
+
+// applyGraduatedDemotion probabilistically suppresses delivery based on demotion factor.
+// Returns true if delivery should be skipped this time.
+func applyGraduatedDemotion(rng *rand.Rand, st *store.Store, pattern string) bool {
+	factor := graduatedDemotion(st, pattern)
+	if factor <= 0 {
+		return false
+	}
+	if factor >= 1.0 {
+		return true
+	}
+	return rng.Float64() < factor
 }

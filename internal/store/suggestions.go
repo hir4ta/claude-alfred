@@ -20,6 +20,18 @@ func (s *Store) InsertSuggestionOutcome(sessionID, pattern, suggestion string) (
 	return id, nil
 }
 
+// UpdateSuggestionMeta records delivery channel and predicted priority for accuracy tracking.
+func (s *Store) UpdateSuggestionMeta(id int64, deliveryChannel, predictedPriority string) error {
+	_, err := s.db.Exec(
+		`UPDATE suggestion_outcomes SET delivery_channel = ?, predicted_priority = ? WHERE id = ?`,
+		deliveryChannel, predictedPriority, id,
+	)
+	if err != nil {
+		return fmt.Errorf("store: update suggestion meta: %w", err)
+	}
+	return nil
+}
+
 // UpdateToolsAfter records the number of tool calls between delivery and outcome.
 func (s *Store) UpdateToolsAfter(id int64, toolsAfter int) error {
 	_, err := s.db.Exec(
@@ -28,6 +40,30 @@ func (s *Store) UpdateToolsAfter(id int64, toolsAfter int) error {
 	)
 	if err != nil {
 		return fmt.Errorf("store: update tools_after: %w", err)
+	}
+	return nil
+}
+
+// UpdateSuggestionContext records context JSON for cost and traceability tracking.
+func (s *Store) UpdateSuggestionContext(id int64, contextJSON string) error {
+	_, err := s.db.Exec(
+		`UPDATE suggestion_outcomes SET context_json = ? WHERE id = ?`,
+		contextJSON, id,
+	)
+	if err != nil {
+		return fmt.Errorf("store: update suggestion context: %w", err)
+	}
+	return nil
+}
+
+// UpdateActionEventID records the event ID that resolved a suggestion (D7 traceability).
+func (s *Store) UpdateActionEventID(id int64, eventID int64) error {
+	_, err := s.db.Exec(
+		`UPDATE suggestion_outcomes SET action_event_id = ? WHERE id = ?`,
+		eventID, id,
+	)
+	if err != nil {
+		return fmt.Errorf("store: update action event id: %w", err)
 	}
 	return nil
 }

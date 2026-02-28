@@ -6,19 +6,19 @@ description: >
   truncated. Recovers the current task intent, working set files, recent
   decisions, and git branch state from session memory.
 user-invocable: false
-allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_recall, mcp__claude-buddy__buddy_decisions
+allowed-tools: mcp__claude-buddy__buddy_state, mcp__claude-buddy__buddy_knowledge
 ---
 
 Automatic context recovery after compaction.
 
 ## Steps
 
-1. Call buddy_skill_context with skill_name="buddy-context-recovery" to get working set, decisions, and session state
-2. If key details are missing, call buddy_recall with specific queries for:
+1. Call buddy_state with detail="skill", skill_name="buddy-context-recovery" to get working set, decisions, and session state
+2. If key details are missing, call buddy_knowledge with scope="recall" for:
    - Current task/goal
    - Files being actively edited
    - Recent decisions made
-3. Call buddy_decisions to restore architectural context if working on a complex task
+3. Call buddy_knowledge with type="decision" to restore architectural context if working on a complex task
 
 ## Output
 

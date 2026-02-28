@@ -181,7 +181,7 @@ func (d *Detector) detectCompactAmnesia() *Alert {
 		}
 		obs += ")"
 	}
-	suggestion := "Use buddy_recall to search for pre-compact context — faster than re-reading files"
+	suggestion := "Use buddy_knowledge(scope=recall) to search for pre-compact context — faster than re-reading files"
 
 	return &Alert{
 		Pattern:     PatternCompactAmnesia,

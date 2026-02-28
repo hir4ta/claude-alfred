@@ -112,24 +112,18 @@ Run as an MCP server (stdio) for Claude Code integration.
 claude-buddy serve
 ```
 
-**MCP Tools:**
+**MCP Tools (6 consolidated):**
 
 | Tool | Description |
 |------|-------------|
-| `buddy_stats` | Session statistics (turns, tool frequency, duration) |
-| `buddy_suggest` | Structured recommendations with session health, alerts, and feature utilization |
-| `buddy_current_state` | Real-time session snapshot (stats, burst state, health score, predictions) |
-| `buddy_sessions` | List recent sessions with metadata |
-| `buddy_resume` | Restore previous session context (goal, intent, compaction history, files changed/referenced, decisions) |
-| `buddy_recall` | Search across past session history |
-| `buddy_alerts` | Real-time anti-pattern detection (retry loops, context thrashing, etc.) |
-| `buddy_decisions` | Extract design decisions from past sessions |
-| `buddy_patterns` | Cross-project knowledge search with vector semantic search |
-| `buddy_estimate` | Task complexity estimation based on historical workflow data |
-| `buddy_next_step` | Recommended next actions based on session context and recent tool history |
-| `buddy_feedback` | Explicit feedback channel for suggestion effectiveness (helpful/not_helpful/misleading) |
-| `buddy_skill_context` | Aggregated session context tailored for a specific skill |
-| `buddy_cross_project` | Cross-project pattern search from global knowledge base |
+| `buddy_state` | Session health, statistics, predictions, session list, context recovery, skill context, accuracy metrics (`detail`: brief/standard/outlook/sessions/resume/skill/accuracy) |
+| `buddy_knowledge` | Search past patterns, decisions, cross-project insights, and pre-compact history (`scope`: project/global/recall) |
+| `buddy_guidance` | Workflow recommendations, alerts, next steps, pending nudges (`focus`: all/alerts/recommendations/next_steps/pending) |
+| `buddy_plan` | Task estimation, progress tracking, strategic workflow planning (`mode`: estimate/progress/strategy) |
+| `buddy_diagnose` | Error diagnosis + concrete fix patches with before/after code and verification commands |
+| `buddy_feedback` | Rate suggestion quality (helpful/partially_helpful/not_helpful/misleading) to improve future relevance |
+
+All tools support `format=concise` for reduced token consumption (summary + key data only).
 
 ---
 
@@ -165,7 +159,7 @@ claude-buddy is distributed as a Claude Code plugin. The plugin provides:
 - **13 hooks**: SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, PreCompact, SessionEnd, SubagentStart, SubagentStop, Notification, TeammateIdle, TaskCompleted, PermissionRequest
 - **5 skills**: buddy-recover, buddy-gate, buddy-analyze, buddy-forecast, buddy-context-recovery
 - **1 agent**: buddy (persistent memory, session advisor)
-- **MCP server**: 14 tools for session analysis, feedback, and cross-project knowledge search
+- **MCP server**: 6 consolidated tools for session analysis, feedback, and cross-project knowledge search
 
 ### Skills
 
@@ -212,6 +206,7 @@ Hooks actively monitor your session through Claude Code's lifecycle events:
 - **Past failure warning**: Similar Bash command failed earlier in the session, with resolution diff display showing previous `old→new` fixes
 - **Git dirty file warning**: Editing a file with pre-existing uncommitted changes
 - **Code quality analysis**: Go via `go/ast`, Python/JS/TS/Rust via tree-sitter AST — detects unchecked errors, debug prints, bare excepts, mutable defaults, loose equality, hardcoded secrets, TODO without ticket numbers, and more. Includes concrete fix patch generation via CodeFixer
+- **Regression probability**: Heuristic combining dependency depth, co-change frequency, exported symbol breadth, and test coverage to estimate change risk. Integrated into blast score for high-impact file warnings
 - **Test coverage mapping**: AST-based function→test mapping generates specific `go test -run TestName ./pkg/` suggestions instead of generic "run tests". Coverage map used for causal test failure correlation
 - **Test failure correlation**: Connects test failures to recently edited files via coverage map (function-level precision) with fallback to file-list heuristics
 - **Workflow guidance**: Learned playbooks from past sessions with concrete file names and test commands; suggests test-first approach for bugfix/refactor tasks
@@ -224,7 +219,7 @@ Working set (currently edited files, intent, task type, key decisions, git branc
 
 **Suggestion effectiveness tracking**:
 
-Nudge delivery and resolution are tracked across sessions with two-step pending verification (mark pending on resolution action → confirm on next tool success/failure) to reduce false positives. Implicit negative signals are recorded when 4+ tools elapse without resolution. Patterns delivered 20+ times with <10% resolution rate are automatically suppressed. Auto-feedback is skipped when it contradicts explicit user feedback. Explicit feedback via `buddy_feedback` MCP tool is integrated into Thompson Sampling with KL regularization for priority adjustment.
+Nudge delivery and resolution are tracked across sessions with two-step pending verification (mark pending on resolution action → confirm on next tool success/failure) to reduce false positives. Implicit negative signals are recorded when 4+ tools elapse without resolution. Graduated demotion replaces binary suppression: Stage 1 (15+ deliveries, <15% rate → 50% frequency reduction), Stage 2 (20+, <10% → 80% reduction), Stage 3 (30+, <5% → full suppression). Auto-feedback is skipped when it contradicts explicit user feedback. Explicit feedback via `buddy_feedback` MCP tool is integrated into Thompson Sampling with KL regularization and 3-tier fallback (per-user → contextual → base pattern) for priority adjustment. Token cost estimation tracks relative cost per suggestion delivery. Per-user pattern effectiveness is tracked per project for personalized prioritization.
 
 **Deep intent model**:
 
@@ -256,8 +251,8 @@ claude-buddy/
 │   ├── sessiondb/             # Ephemeral per-session SQLite (working set, burst state, nudges)
 │   ├── embedder/              # Voyage AI integration for semantic search
 │   ├── tui/                   # Bubble Tea TUI (watch / browse / select)
-│   ├── mcpserver/             # MCP server (stdio, 14 tools)
-│   ├── store/                 # SQLite persistence (vector search + LIKE search + incremental sync + global DB)
+│   ├── mcpserver/             # MCP server (stdio, 6 consolidated tools)
+│   ├── store/                 # SQLite persistence (vector search + LIKE search + incremental sync + global DB + accuracy metrics)
 │   └── install/               # Plugin bundle + guard/setup wrapper + initial sync
 ├── go.mod
 └── go.sum
@@ -276,6 +271,6 @@ claude-buddy/
 
 ## Semantic Search
 
-Voyage AI (`voyage-4-large`, 2048 dimensions) powers `buddy_patterns` and hook-based knowledge injection via vector semantic search. Set `VOYAGE_API_KEY` to enable.
+Voyage AI (`voyage-4-large`, 2048 dimensions) powers `buddy_knowledge` and hook-based knowledge injection via vector semantic search. Set `VOYAGE_API_KEY` to enable.
 
 Without `VOYAGE_API_KEY`, knowledge search falls back to FTS5 BM25 / LIKE — all features work, just without semantic matching. FTS5 uses phrase-first search for multi-word queries (higher precision), falling back to OR-based search, with title-match reordering for relevance.

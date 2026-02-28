@@ -10,12 +10,16 @@ import (
 	"github.com/hir4ta/claude-buddy/internal/store"
 )
 
-// stateConsolidatedHandler consolidates stats + current_state + session_outlook.
-// Routes based on the "detail" parameter: brief, standard (default), outlook.
+// stateConsolidatedHandler consolidates stats + current_state + session_outlook + sessions + resume + skill_context + accuracy.
+// Routes based on the "detail" parameter: brief, standard (default), outlook, sessions, resume, skill, accuracy.
 func stateConsolidatedHandler(claudeHome string, st *store.Store) server.ToolHandlerFunc {
 	statsFn := withMetaHandler(statsHandler(claudeHome), st, "session")
 	currentStateFn := withMetaHandler(currentStateHandler(claudeHome), st, "session")
 	outlookFn := withMetaHandler(sessionOutlookHandler(claudeHome, st), st, "session")
+	sessionsFn := withMetaHandler(sessionsHandler(claudeHome), st, "session")
+	resumeFn := withMetaHandler(resumeHandler(st), st, "session")
+	skillFn := withMetaHandler(skillContextHandler(claudeHome), st, "session")
+	accuracyFn := withMetaHandler(accuracyHandler(st), st, "project")
 
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		detail := req.GetString("detail", "standard")
@@ -24,30 +28,43 @@ func stateConsolidatedHandler(claudeHome string, st *store.Store) server.ToolHan
 			return statsFn(ctx, req)
 		case "outlook":
 			return outlookFn(ctx, req)
+		case "sessions":
+			return sessionsFn(ctx, req)
+		case "resume":
+			return resumeFn(ctx, req)
+		case "skill":
+			return skillFn(ctx, req)
+		case "accuracy":
+			return accuracyFn(ctx, req)
 		default:
 			return currentStateFn(ctx, req)
 		}
 	}
 }
 
-// knowledgeConsolidatedHandler consolidates patterns + decisions + cross_project.
-// Routes based on "scope" (project/global) and "type" parameters.
+// knowledgeConsolidatedHandler consolidates patterns + decisions + cross_project + recall.
+// Routes based on "scope" (project/global/recall) and "type" parameters.
 func knowledgeConsolidatedHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
 	patternsFn := withMetaHandler(patternsHandler(st, emb), st, "project")
 	decisionsFn := withMetaHandler(decisionsHandler(st), st, "project")
 	crossProjectFn := withMetaHandler(crossProjectHandler(), st, "global")
+	recallFn := withMetaHandler(recallHandler(st), st, "session")
 
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		scope := req.GetString("scope", "project")
 		patternType := req.GetString("type", "all")
 
-		if scope == "global" {
+		switch scope {
+		case "global":
 			return crossProjectFn(ctx, req)
+		case "recall":
+			return recallFn(ctx, req)
+		default:
+			if patternType == "decision" {
+				return decisionsFn(ctx, req)
+			}
+			return patternsFn(ctx, req)
 		}
-		if patternType == "decision" {
-			return decisionsFn(ctx, req)
-		}
-		return patternsFn(ctx, req)
 	}
 }
 

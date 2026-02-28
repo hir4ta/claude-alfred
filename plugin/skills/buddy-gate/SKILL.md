@@ -5,16 +5,16 @@ description: >
   or tasks. Quick health + quality gate that catches problems early and
   prevents bad commits. Do NOT skip before git operations.
 user-invocable: false
-allowed-tools: mcp__claude-buddy__buddy_skill_context, mcp__claude-buddy__buddy_alerts, mcp__claude-buddy__buddy_current_state, Bash, Read
+allowed-tools: mcp__claude-buddy__buddy_state, mcp__claude-buddy__buddy_guidance, Bash, Read
 ---
 
 Session health check and pre-commit quality gate.
 
 ## Steps
 
-1. Call buddy_skill_context with skill_name="buddy-gate" to get health score, test/build status, unresolved failures, and alerts
+1. Call buddy_state with detail="skill", skill_name="buddy-gate" to get health score, test/build status, unresolved failures, and alerts
 2. If this is a pre-commit check, verify tests have been run and no active alerts exist
-3. Only call buddy_alerts separately if health < 0.7 and you need more detail
+3. Only call buddy_guidance with focus="alerts" separately if health < 0.7 and you need more detail
 
 ## Output
 

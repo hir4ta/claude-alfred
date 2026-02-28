@@ -27,6 +27,7 @@ type ImpactInfo struct {
 	Risk                 string   // "low", "medium", "high"
 	SuggestedTestCmd     string   // specific go test -run command from coverage map
 	DomainRisk           string   // domain-specific risk note (auth, database, etc.)
+	RegressionProb       float64  // estimated regression probability (0-1), Go only
 }
 
 // analyzeImpact runs a lightweight impact analysis for a file being edited.
@@ -67,6 +68,11 @@ func analyzeImpact(sdb *sessiondb.SessionDB, filePath, cwd string) *ImpactInfo {
 
 	// Domain risk from file path.
 	info.DomainRisk = classifyDomainRisk(filePath)
+
+	// Regression probability for Go files (combines dep depth, co-change, test coverage).
+	if ext == ".go" && sdb != nil {
+		info.RegressionProb = regressionProbability(info, filePath)
+	}
 
 	info.BlastScore = computeBlastScore(info)
 	info.Risk = assessRisk(info)
@@ -269,6 +275,72 @@ func findCoChanges(info *ImpactInfo, filePath, cwd string) {
 	}
 }
 
+// regressionProbability estimates the likelihood that editing this file will cause
+// a regression, based on three factors:
+//   - Dependency depth: more transitive importers = higher coupling
+//   - Co-change frequency: files frequently co-changed suggest hidden coupling
+//   - Test coverage: lack of tests increases undetected regression risk
+//
+// Returns a value in [0, 1]. This is a heuristic estimate, not a statistical probability.
+func regressionProbability(info *ImpactInfo, filePath string) float64 {
+	prob := 0.0
+
+	// Factor 1: Dependency depth (transitive importers).
+	// 0 importers = 0, 1-3 = 0.1, 4-10 = 0.2, 10+ = 0.3
+	switch {
+	case info.TransitiveImporterN >= 10:
+		prob += 0.30
+	case info.TransitiveImporterN >= 4:
+		prob += 0.20
+	case info.TransitiveImporterN >= 1:
+		prob += 0.10
+	}
+
+	// Factor 2: Co-change frequency from persistent store.
+	st, err := store.OpenDefaultCached()
+	if err == nil {
+		coChanges, cerr := st.CoChangedFiles(filePath, 5)
+		if cerr == nil {
+			totalCoSessions := 0
+			for _, cc := range coChanges {
+				totalCoSessions += cc.SessionCount
+			}
+			switch {
+			case totalCoSessions >= 15:
+				prob += 0.25
+			case totalCoSessions >= 8:
+				prob += 0.15
+			case totalCoSessions >= 3:
+				prob += 0.10
+			}
+		}
+	}
+
+	// Factor 3: Exported symbols breadth.
+	switch {
+	case info.ExportedN >= 20:
+		prob += 0.20
+	case info.ExportedN >= 10:
+		prob += 0.15
+	case info.ExportedN >= 5:
+		prob += 0.10
+	}
+
+	// Factor 4: Test coverage (protective factor — reduces probability).
+	if len(info.TestFiles) > 0 {
+		prob *= 0.6 // Tests reduce regression risk by 40%
+	}
+	if info.SuggestedTestCmd != "" {
+		prob *= 0.8 // Specific test command further reduces risk
+	}
+
+	// Clamp to [0, 1].
+	if prob > 1.0 {
+		prob = 1.0
+	}
+	return prob
+}
+
 // computeBlastScore computes a composite risk score (0-100) from impact signals.
 func computeBlastScore(info *ImpactInfo) int {
 	score := 0
@@ -309,6 +381,10 @@ func computeBlastScore(info *ImpactInfo) int {
 	if info.DomainRisk != "" {
 		score += 10
 	}
+
+	// Regression probability adds up to 15 points.
+	regPts := int(info.RegressionProb * 15)
+	score += regPts
 
 	if score > 100 {
 		score = 100
@@ -355,6 +431,9 @@ func formatImpact(info *ImpactInfo) string {
 	}
 	if info.DomainRisk != "" {
 		parts = append(parts, fmt.Sprintf("Domain risk: %s", info.DomainRisk))
+	}
+	if info.RegressionProb > 0.1 {
+		parts = append(parts, fmt.Sprintf("Regression probability: %.0f%%", info.RegressionProb*100))
 	}
 	if info.BlastScore > 0 {
 		parts = append(parts, fmt.Sprintf("Blast radius: %d/100 (%s)", info.BlastScore, info.Risk))

@@ -102,6 +102,13 @@ func generateMemoryContent(st *store.Store, cwd string, totalSessions int) strin
 		sections++
 	}
 
+	// Suggestion accuracy.
+	if s := buildAccuracySection(st); s != "" {
+		b.WriteString("\n")
+		b.WriteString(s)
+		sections++
+	}
+
 	if sections == 0 {
 		return ""
 	}
@@ -191,7 +198,7 @@ func buildDecisionsSection(st *store.Store, cwd string) string {
 
 // buildCoChangeSection generates the "File Co-change Patterns" section.
 func buildCoChangeSection(st *store.Store) string {
-	pairs, err := st.TopCoChangePairs(3)
+	pairs, err := st.TopCoChangePairs(5)
 	if err != nil || len(pairs) == 0 {
 		return ""
 	}
@@ -214,6 +221,8 @@ func buildWorkStyleSection(st *store.Store) string {
 
 	tf, tfCount, _ := st.GetUserProfile("test_frequency")
 	rw, rwCount, _ := st.GetUserProfile("read_write_ratio")
+	tpb, tpbCount, _ := st.GetUserProfile("tools_per_burst")
+	cf, cfCount, _ := st.GetUserProfile("compact_frequency")
 
 	// Need at least some data to be useful.
 	if tfCount == 0 && rwCount == 0 {
@@ -230,6 +239,44 @@ func buildWorkStyleSection(st *store.Store) string {
 		fmt.Fprintf(&b, " | R/W ratio: %.1f", rw)
 	}
 	b.WriteString("\n")
+	if tpbCount > 0 || cfCount > 0 {
+		b.WriteString("- Session profile:")
+		if tpbCount > 0 {
+			fmt.Fprintf(&b, " avg tools/burst: %.0f", tpb)
+		}
+		if cfCount > 0 {
+			fmt.Fprintf(&b, " | compact frequency: %.2f", cf)
+		}
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+// buildAccuracySection generates the "Suggestion Accuracy" section.
+func buildAccuracySection(st *store.Store) string {
+	metrics, err := st.ComputeAccuracyMetrics(30)
+	if err != nil || metrics.TotalDelivered < 5 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("## Suggestion Accuracy (30d)\n")
+	fmt.Fprintf(&b, "- SNR: %.2f | Precision: %.2f | Recall: %.2f (n=%d)\n",
+		metrics.SNR, metrics.Precision, metrics.Recall, metrics.TotalDelivered)
+
+	if len(metrics.TopPatterns) > 0 {
+		b.WriteString("- Top effective patterns: ")
+		names := make([]string, 0, 3)
+		for i, p := range metrics.TopPatterns {
+			if i >= 3 {
+				break
+			}
+			names = append(names, fmt.Sprintf("%s (%.0f%%)", p.Pattern, p.Rate*100))
+		}
+		b.WriteString(strings.Join(names, ", "))
+		b.WriteString("\n")
+	}
 
 	return b.String()
 }
