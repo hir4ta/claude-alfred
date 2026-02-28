@@ -105,6 +105,8 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		_ = sdb.SetContext("plan_mode", "")
 	case "Task":
 		_ = sdb.SetContext("subagent_active", "true")
+	case "AskUserQuestion":
+		_ = sdb.SetContext("awaiting_question_followup", "true")
 	}
 
 	// Track test and build command execution for workflow guidance.

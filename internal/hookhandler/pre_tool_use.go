@@ -64,6 +64,9 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Clear pending question followup flag — Claude is taking an action.
+	_ = sdb.SetContext("awaiting_question_followup", "")
+
 	// Lightweight mode: skip heavy analysis during subagent activity or in agent sessions.
 	// Agent sessions (spawned by Agent tool) have their own sessiondb with count=0,
 	// so we also check the is_agent_session flag set at SessionStart.

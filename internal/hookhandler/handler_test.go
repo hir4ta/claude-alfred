@@ -473,6 +473,64 @@ func TestHandleStop_DetectsTODO(t *testing.T) {
 	}
 }
 
+func TestHandleStop_BlocksAfterQuestion(t *testing.T) {
+	t.Parallel()
+
+	sid := "test-stop-question-" + t.Name()
+	sdb, err := sessiondb.Open(sid)
+	if err != nil {
+		t.Fatalf("open sessiondb: %v", err)
+	}
+	_ = sdb.SetContext("awaiting_question_followup", "true")
+	sdb.Close()
+
+	input := stopInput{
+		CommonInput:          CommonInput{SessionID: sid},
+		StopHookActive:       false,
+		LastAssistantMessage: "Which sync range would you like to use?",
+	}
+	data, _ := json.Marshal(input)
+
+	out, err := handleStop(data)
+	if err != nil {
+		t.Fatalf("handleStop() = %v", err)
+	}
+	if out == nil {
+		t.Fatal("handleStop() should block when awaiting question followup")
+	}
+	if out.Decision != "block" {
+		t.Errorf("Decision = %q, want block", out.Decision)
+	}
+}
+
+func TestHandleStop_AllowsAfterQuestionFollowup(t *testing.T) {
+	t.Parallel()
+
+	sid := "test-stop-followup-" + t.Name()
+	sdb, err := sessiondb.Open(sid)
+	if err != nil {
+		t.Fatalf("open sessiondb: %v", err)
+	}
+	// Flag was cleared (by PreToolUse taking an action).
+	_ = sdb.SetContext("awaiting_question_followup", "")
+	sdb.Close()
+
+	input := stopInput{
+		CommonInput:          CommonInput{SessionID: sid},
+		StopHookActive:       false,
+		LastAssistantMessage: "Setup complete. Sessions synced successfully.",
+	}
+	data, _ := json.Marshal(input)
+
+	out, err := handleStop(data)
+	if err != nil {
+		t.Fatalf("handleStop() = %v", err)
+	}
+	if out != nil {
+		t.Errorf("handleStop() should allow stop after followup, got Decision=%q", out.Decision)
+	}
+}
+
 func TestHandleStop_AllowsCleanStop(t *testing.T) {
 	t.Parallel()
 

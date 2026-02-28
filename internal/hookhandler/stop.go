@@ -31,6 +31,7 @@ func handleStop(input []byte) (*HookOutput, error) {
 
 	// Session-aware pre-check: read ground truth from sessiondb.
 	hasCodeChanges := false
+	awaitingFollowup := false
 	var testsPassed, buildPassed bool
 	if in.SessionID != "" {
 		if sdb, err := sessiondb.Open(in.SessionID); err == nil {
@@ -42,15 +43,25 @@ func handleStop(input []byte) (*HookOutput, error) {
 			if v, _ := sdb.GetContext("last_build_passed"); v == "true" {
 				buildPassed = true
 			}
+			if v, _ := sdb.GetContext("awaiting_question_followup"); v == "true" {
+				awaitingFollowup = true
+				_ = sdb.SetContext("awaiting_question_followup", "")
+			}
 			sdb.Close()
 		}
 	}
 
 	var issues []string
 
+	// Block stopping when a question was asked but the answer hasn't been acted on yet.
+	// AskUserQuestion always implies follow-up work (e.g., skill continuation).
+	if awaitingFollowup {
+		issues = append(issues, "Question was asked but answer not yet acted on — continue with next step")
+	}
+
 	// Always check for explicit TODO/FIXME markers and incomplete work in assistant message.
 	// These indicate unfinished intent regardless of whether code was modified.
-	issues = checkCompleteness(in.LastAssistantMessage, hasCodeChanges)
+	issues = append(issues, checkCompleteness(in.LastAssistantMessage, hasCodeChanges)...)
 
 	// Filter out text-based failure detections when sessiondb confirms actual state.
 	// This prevents false positives from feature descriptions, examples, and summaries
