@@ -56,7 +56,7 @@ func handleStop(input []byte) (*HookOutput, error) {
 	// Block stopping when a question was asked but the answer hasn't been acted on yet.
 	// AskUserQuestion always implies follow-up work (e.g., skill continuation).
 	if awaitingFollowup {
-		issues = append(issues, "Question was asked but answer not yet acted on — continue with next step")
+		issues = append(issues, "Question was asked but answer not yet acted on — wait for user selection before proceeding")
 	}
 
 	// Always check for explicit TODO/FIXME markers and incomplete work in assistant message.

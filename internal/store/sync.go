@@ -69,9 +69,11 @@ func (s *Store) SyncSession(jsonlPath string) error {
 		firstPrompt = sess.FirstPrompt
 	}
 
+	hasNewEvents := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		lineLen := int64(len(line)) + 1 // +1 for newline
+		hasNewEvents = true
 
 		pl := parser.ParseLineRaw(line)
 
@@ -235,8 +237,10 @@ func (s *Store) SyncSession(jsonlPath string) error {
 		return err
 	}
 
-	// Extract and store patterns from assistant events.
-	s.extractAndStorePatterns(sess.ID)
+	// Extract and store patterns from assistant events (only when new data was added).
+	if hasNewEvents {
+		s.extractAndStorePatterns(sess.ID)
+	}
 
 	return nil
 }
