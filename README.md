@@ -17,7 +17,7 @@ A proactive session companion for Claude Code — real-time anti-pattern detecti
 curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-buddy/main/setup.sh | sh
 ```
 
-This downloads the binary, syncs past sessions, and generates embeddings.
+This downloads the binary, syncs past 1 month of sessions, and generates embeddings. JSONL parsing and pattern extraction may take a few minutes depending on session count.
 
 **3. Restart Claude Code** to activate hooks and MCP tools.
 
@@ -31,6 +31,8 @@ curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-buddy/main/setup.sh |
 ```
 
 Already ran setup without the key? Just set the key and re-run — embeddings are generated incrementally.
+
+Setting `VOYAGE_API_KEY` before initial setup allows you to pre-build vector embeddings from your past month of session data, giving buddy semantic search capabilities from the first conversation.
 
 Uses `voyage-4-large` (2048 dimensions) for maximum retrieval accuracy.
 

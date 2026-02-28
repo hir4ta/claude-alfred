@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hir4ta/claude-buddy/internal/embedder"
 	"github.com/hir4ta/claude-buddy/internal/store"
@@ -473,7 +474,10 @@ func initialSync() error {
 	}
 	defer st.Close()
 
-	if err := st.SyncAllWithProgress(func(done, total int) {
+	since := time.Now().AddDate(0, -1, 0)
+	fmt.Println("Syncing sessions from the past month (parsing JSONL + extracting patterns)...")
+
+	if err := st.SyncAllWithProgress(since, func(done, total int) {
 		renderProgress("Syncing sessions", done, total)
 	}); err != nil {
 		return fmt.Errorf("sync: %w", err)
@@ -485,7 +489,7 @@ func initialSync() error {
 	st.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&eventCount)
 	st.DB().QueryRow("SELECT COUNT(*) FROM patterns").Scan(&patternCount)
 
-	fmt.Printf("✓ Synced %d sessions (%d events, %d patterns)\n", sessionCount, eventCount, patternCount)
+	fmt.Printf("✓ Synced sessions from past month (total: %d sessions, %d events, %d patterns)\n", sessionCount, eventCount, patternCount)
 	return nil
 }
 

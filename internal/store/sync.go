@@ -298,15 +298,26 @@ func detectLang(projectPath string) string {
 
 // SyncAll discovers all sessions and syncs them, then estimates chains.
 func (s *Store) SyncAll() error {
-	return s.SyncAllWithProgress(nil)
+	return s.SyncAllWithProgress(time.Time{}, nil)
 }
 
 // SyncAllWithProgress is like SyncAll but calls progressFn after each session.
-func (s *Store) SyncAllWithProgress(progressFn func(done, total int)) error {
+// If since is non-zero, only sessions modified after since are synced.
+func (s *Store) SyncAllWithProgress(since time.Time, progressFn func(done, total int)) error {
 	claudeHome := watcher.DefaultClaudeHome()
 	sessions, err := watcher.ListSessions(claudeHome)
 	if err != nil {
 		return fmt.Errorf("store: list sessions: %w", err)
+	}
+
+	if !since.IsZero() {
+		filtered := sessions[:0]
+		for _, si := range sessions {
+			if !si.ModTime.Before(since) {
+				filtered = append(filtered, si)
+			}
+		}
+		sessions = filtered
 	}
 
 	total := len(sessions)
