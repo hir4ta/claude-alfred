@@ -31,6 +31,11 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Lightweight mode: skip all processing for agent sessions.
+	if isAgent, _ := sdb.GetContext("is_agent_session"); isAgent == "true" {
+		return nil, nil
+	}
+
 	// Record unresolved nudge feedback before resetting burst state.
 	recordUnresolvedFeedback(sdb)
 

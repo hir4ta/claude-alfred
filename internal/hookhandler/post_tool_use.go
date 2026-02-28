@@ -43,6 +43,12 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
+	// Lightweight mode: skip all analysis for agent sessions.
+	// Agent sessions have their own sessiondb and don't benefit from monitoring.
+	if isAgent, _ := sdb.GetContext("is_agent_session"); isAgent == "true" {
+		return nil, nil
+	}
+
 	// Open buddy.db for direct knowledge writes (phases, files, sequences).
 	// Nil-safe: callers check st != nil before use.
 	st, _ := store.OpenDefaultCached()

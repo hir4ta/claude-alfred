@@ -64,9 +64,12 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 	}
 	defer sdb.Close()
 
-	// Lightweight mode: skip heavy analysis during subagent activity.
+	// Lightweight mode: skip heavy analysis during subagent activity or in agent sessions.
+	// Agent sessions (spawned by Agent tool) have their own sessiondb with count=0,
+	// so we also check the is_agent_session flag set at SessionStart.
 	// Safety checks (destructive gate, bash safety) already ran above.
-	if sdb.ActiveSubagentCount() > 0 {
+	isAgent, _ := sdb.GetContext("is_agent_session")
+	if sdb.ActiveSubagentCount() > 0 || isAgent == "true" {
 		if safetyWarning != "" {
 			return makeOutput("PreToolUse", safetyWarning), nil
 		}

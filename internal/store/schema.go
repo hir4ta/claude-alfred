@@ -2,7 +2,7 @@ package store
 
 import "database/sql"
 
-const schemaVersion = 13
+const schemaVersion = 14
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -439,6 +439,10 @@ CREATE TABLE IF NOT EXISTS coaching_cache (
 );
 `
 
+const ddlV14 = `
+ALTER TABLE suggestion_outcomes ADD COLUMN tools_after INTEGER NOT NULL DEFAULT 0;
+`
+
 // Migrate applies all pending schema migrations to the database.
 func Migrate(db *sql.DB) error {
 	var current int
@@ -513,6 +517,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if current < 13 {
 		if _, err := db.Exec(ddlV13); err != nil {
+			return err
+		}
+	}
+	if current < 14 {
+		if _, err := db.Exec(ddlV14); err != nil {
 			return err
 		}
 	}

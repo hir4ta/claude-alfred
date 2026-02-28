@@ -69,6 +69,9 @@ func checkNudgeTimeout(sdb *sessiondb.SessionDB) {
 	}
 
 	// 4+ tools elapsed without resolution — record negative signal.
+	outcomeIDStr, _ := sdb.GetContext("last_nudge_outcome_id")
+	toolsAfter := tc - deliveredAt
+
 	_ = sdb.SetContext("last_nudge_pattern", "")
 	_ = sdb.SetContext("last_nudge_outcome_id", "")
 	_ = sdb.SetContext("nudge_delivered_tool_count", "")
@@ -76,6 +79,13 @@ func checkNudgeTimeout(sdb *sessiondb.SessionDB) {
 	st, err := store.OpenDefaultCached()
 	if err != nil {
 		return
+	}
+
+	// Record tools_after for savings analysis.
+	if outcomeIDStr != "" {
+		if oid, perr := strconv.ParseInt(outcomeIDStr, 10, 64); perr == nil {
+			_ = st.UpdateToolsAfter(oid, toolsAfter)
+		}
 	}
 
 	sessionID, _ := sdb.GetContext("session_id")
@@ -170,6 +180,15 @@ func verifyPendingResolution(sdb *sessiondb.SessionDB, isSuccess bool) {
 
 	tc, _, _, _ := sdb.BurstState()
 
+	// Compute tools elapsed since delivery for savings tracking.
+	deliveredAtStr, _ := sdb.GetContext("nudge_delivered_tool_count")
+	toolsAfter := tc
+	if deliveredAtStr != "" {
+		if dat, err := strconv.Atoi(deliveredAtStr); err == nil {
+			toolsAfter = tc - dat
+		}
+	}
+
 	if isSuccess {
 		// Confirmed: the resolution action succeeded.
 		updatePreferenceOnResolution(pattern, tc)
@@ -180,6 +199,7 @@ func verifyPendingResolution(sdb *sessiondb.SessionDB, isSuccess bool) {
 			return
 		}
 		_ = st.ResolveSuggestion(outcomeID)
+		_ = st.UpdateToolsAfter(outcomeID, toolsAfter)
 
 		// If a past-solution nudge was resolved, mark the solution as effective.
 		if pattern == "past-solution" {
@@ -318,9 +338,13 @@ func recordUnresolvedFeedback(sdb *sessiondb.SessionDB) {
 		return
 	}
 
+	outcomeIDStr, _ := sdb.GetContext("last_nudge_outcome_id")
+	deliveredAtStr, _ := sdb.GetContext("nudge_delivered_tool_count")
+
 	// Clear the pending nudge to prevent double-recording.
 	_ = sdb.SetContext("last_nudge_pattern", "")
 	_ = sdb.SetContext("last_nudge_outcome_id", "")
+	_ = sdb.SetContext("nudge_delivered_tool_count", "")
 
 	// Track unresolved pattern for enrichment on next encounter.
 	_ = sdb.SetContext("last_unresolved_pattern", pattern)
@@ -328,6 +352,16 @@ func recordUnresolvedFeedback(sdb *sessiondb.SessionDB) {
 	st, err := store.OpenDefaultCached()
 	if err != nil {
 		return
+	}
+
+	// Record tools_after for savings analysis.
+	if outcomeIDStr != "" && deliveredAtStr != "" {
+		tc, _, _, _ := sdb.BurstState()
+		if dat, derr := strconv.Atoi(deliveredAtStr); derr == nil {
+			if oid, perr := strconv.ParseInt(outcomeIDStr, 10, 64); perr == nil {
+				_ = st.UpdateToolsAfter(oid, tc-dat)
+			}
+		}
 	}
 
 	sessionID, _ := sdb.GetContext("session_id")

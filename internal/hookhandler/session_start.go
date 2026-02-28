@@ -40,6 +40,15 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 	// Store CWD for later hooks (PostCompactResume, git context, etc.).
 	_ = sdb.SetContext("cwd", in.CWD)
 
+	// Agent sessions (spawned by Agent tool): minimal setup only.
+	// Skip embedder probe, git context, coverage map, orphan recovery, and resume.
+	// These short-lived sessions don't benefit from monitoring and would otherwise
+	// cause CPU spikes when multiple agents run in parallel.
+	if in.AgentType != "" {
+		_ = sdb.SetContext("is_agent_session", "true")
+		return nil, nil
+	}
+
 	// Cache embedder (Voyage API) availability for fast embedding in later hooks.
 	cacheEmbedderStatus(sdb)
 

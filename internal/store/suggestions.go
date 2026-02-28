@@ -19,6 +19,18 @@ func (s *Store) InsertSuggestionOutcome(sessionID, pattern, suggestion string) (
 	return id, nil
 }
 
+// UpdateToolsAfter records the number of tool calls between delivery and outcome.
+func (s *Store) UpdateToolsAfter(id int64, toolsAfter int) error {
+	_, err := s.db.Exec(
+		`UPDATE suggestion_outcomes SET tools_after = ? WHERE id = ?`,
+		toolsAfter, id,
+	)
+	if err != nil {
+		return fmt.Errorf("store: update tools_after: %w", err)
+	}
+	return nil
+}
+
 // ResolveSuggestion marks a suggestion outcome as resolved (acted upon).
 func (s *Store) ResolveSuggestion(id int64) error {
 	_, err := s.db.Exec(
