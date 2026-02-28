@@ -13,18 +13,20 @@ import (
 
 // ResponseMeta provides context about the quality and source of a response.
 type ResponseMeta struct {
-	Confidence   float64 `json:"confidence,omitempty"`    // 0-1
-	Source       string  `json:"source,omitempty"`        // "session" | "project" | "global" | "seed"
-	DataMaturity string  `json:"data_maturity,omitempty"` // "learning" | "growing" | "mature"
-	SessionCount int     `json:"session_count,omitempty"`
-	GeneratedAt  string  `json:"generated_at,omitempty"`  // RFC3339 timestamp
+	Confidence    float64 `json:"confidence,omitempty"`     // 0-1
+	Source        string  `json:"source,omitempty"`         // "session" | "project" | "global" | "seed"
+	DataMaturity  string  `json:"data_maturity,omitempty"`  // "learning" | "growing" | "mature"
+	SessionCount  int     `json:"session_count,omitempty"`
+	SchemaVersion int     `json:"schema_version,omitempty"` // current DB schema version
+	GeneratedAt   string  `json:"generated_at,omitempty"`   // RFC3339 timestamp
 }
 
 // buildResponseMeta creates metadata based on current data maturity.
 func buildResponseMeta(st *store.Store, source string) *ResponseMeta {
 	meta := &ResponseMeta{
-		Source:      source,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		Source:        source,
+		SchemaVersion: store.SchemaVersion(),
+		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
 
 	if st == nil {

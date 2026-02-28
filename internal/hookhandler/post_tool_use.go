@@ -68,6 +68,7 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 	// Check if this action resolves a previously delivered nudge or LLM suggestion.
 	checkNudgeResolution(sdb, in.ToolName)
 	checkLLMSuggestionResolution(sdb, in.ToolName)
+	checkSignalResolution(sdb, in.ToolName)
 
 	if err := sdb.RecordEvent(in.ToolName, inputHash, isWrite); err != nil {
 		fmt.Fprintf(os.Stderr, "[buddy] PostToolUse: record event: %v\n", err)

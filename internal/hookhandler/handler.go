@@ -27,6 +27,9 @@ type HookOutput struct {
 	Decision           string         `json:"decision,omitempty"`
 	Reason             string         `json:"reason,omitempty"`
 	HookSpecificOutput map[string]any `json:"hookSpecificOutput,omitempty"`
+	Confidence         *float64       `json:"confidence,omitempty"`
+	ActionID           *int64         `json:"action_id,omitempty"`
+	SuggestedTool      string         `json:"suggested_tool,omitempty"`
 }
 
 // Run reads hook JSON from stdin, dispatches to the appropriate handler,
@@ -176,4 +179,43 @@ type nudgeEntry struct {
 	Level       string
 	Observation string
 	Suggestion  string
+}
+
+// enrichOutput attaches structured metadata to a HookOutput.
+// All fields are omitempty so callers can pass zero values safely.
+func enrichOutput(out *HookOutput, confidence float64, actionID int64, tool string) {
+	if out == nil {
+		return
+	}
+	if confidence > 0 {
+		out.Confidence = &confidence
+	}
+	if actionID > 0 {
+		out.ActionID = &actionID
+	}
+	if tool != "" {
+		out.SuggestedTool = tool
+	}
+}
+
+// suggestedToolForPattern maps a suggestion pattern to the MCP tool
+// most likely to be useful as a follow-up action.
+func suggestedToolForPattern(pattern string) string {
+	// Strip contextual suffix (e.g., "retry-loop:bugfix:balanced" → "retry-loop").
+	base := pattern
+	if idx := strings.Index(pattern, ":"); idx > 0 {
+		base = pattern[:idx]
+	}
+	switch base {
+	case "retry-loop", "explore-stuck", "edit-fail-spiral":
+		return "buddy_diagnose"
+	case "knowledge", "solution", "past-fix":
+		return "buddy_knowledge"
+	case "health-decline", "context-overload", "velocity-wall":
+		return "buddy_state"
+	case "co-change", "blast-radius", "code-quality":
+		return "buddy_analyze"
+	default:
+		return "buddy_guidance"
+	}
 }

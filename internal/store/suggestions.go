@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -171,6 +172,108 @@ type PatternSNR struct {
 	Rate     float64
 }
 
+// SNREntry holds a single SNR history data point.
+type SNREntry struct {
+	SessionID  string
+	SNR        float64
+	SampleSize int
+	Eliminated string
+	RecordedAt string
+}
+
+// InsertSNRHistory records a SNR measurement at session end.
+func (s *Store) InsertSNRHistory(sessionID string, snr float64, sampleSize int, eliminated string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO snr_history (session_id, snr_value, sample_size, eliminated) VALUES (?, ?, ?, ?)`,
+		sessionID, snr, sampleSize, eliminated,
+	)
+	if err != nil {
+		return fmt.Errorf("store: insert snr history: %w", err)
+	}
+	return nil
+}
+
+// RecentSNRTrend returns the most recent N SNR history entries, ordered newest first.
+func (s *Store) RecentSNRTrend(limit int) ([]SNREntry, error) {
+	rows, err := s.db.Query(
+		`SELECT session_id, snr_value, sample_size, eliminated, recorded_at
+		 FROM snr_history ORDER BY recorded_at DESC LIMIT ?`, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("store: recent snr trend: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []SNREntry
+	for rows.Next() {
+		var e SNREntry
+		if err := rows.Scan(&e.SessionID, &e.SNR, &e.SampleSize, &e.Eliminated, &e.RecordedAt); err != nil {
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// AutoEliminateNoisePatterns identifies patterns that have been the lowest-performing
+// for minSessions consecutive sessions and suppresses them. Returns the list of
+// newly suppressed pattern names.
+func (s *Store) AutoEliminateNoisePatterns(targetSNR float64, minSessions int) ([]string, error) {
+	snr, total, err := s.ComputeSNR(30)
+	if err != nil || total < 10 || snr >= targetSNR {
+		return nil, err
+	}
+
+	// Find patterns with consistently terrible performance (< 10% resolution).
+	worst, err := s.LowestPerformingPatterns(30, 3, 10)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check that these patterns have been bad for minSessions consecutive entries.
+	trend, err := s.RecentSNRTrend(minSessions)
+	if err != nil || len(trend) < minSessions {
+		return nil, err
+	}
+
+	// Build set of previously eliminated patterns.
+	eliminated := make(map[string]int)
+	for _, entry := range trend {
+		if entry.Eliminated != "" {
+			for _, p := range splitCSV(entry.Eliminated) {
+				eliminated[p]++
+			}
+		}
+	}
+
+	var suppressed []string
+	for _, w := range worst {
+		if w.Rate >= 0.10 {
+			break // sorted by rate ascending; stop once above threshold
+		}
+		// Already counted as eliminated in recent sessions → candidate for suppression.
+		if eliminated[w.Pattern] >= minSessions-1 || w.Rate < 0.05 {
+			suppressed = append(suppressed, w.Pattern)
+		}
+	}
+	return suppressed, nil
+}
+
+// splitCSV splits a comma-separated string into trimmed parts.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var parts []string
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return parts
+}
+
 // DecayedPatternEffectiveness returns time-weighted delivery and resolution counts.
 // Recent outcomes (last 30 days) count fully; older outcomes are exponentially
 // decayed with a half-life of 30 days. Returns float64 counts to preserve decay precision.
@@ -212,4 +315,53 @@ func (s *Store) DecayedPatternEffectiveness(pattern string, halfLifeOverride ...
 		}
 	}
 	return delivered, resolved, rows.Err()
+}
+
+// PatternSaving holds per-pattern savings data for TotalSavings.
+type PatternSaving struct {
+	Pattern   string
+	Saved     int
+	Instances int
+}
+
+// TotalSavings aggregates cross-session cumulative tool savings across all patterns
+// over the last N days. Only includes patterns with >= 3 resolved instances and
+// a positive savings delta. Returns total saved tools, total instances, and top patterns.
+func (s *Store) TotalSavings(days int) (totalSaved, totalInstances int, topPatterns []PatternSaving, err error) {
+	rows, err := s.db.Query(`
+		SELECT pattern,
+			COALESCE(AVG(CASE WHEN resolved = 0 THEN tools_after END), 0) AS avg_unresolved,
+			COALESCE(AVG(CASE WHEN resolved = 1 THEN tools_after END), 0) AS avg_resolved,
+			COUNT(CASE WHEN resolved = 1 THEN 1 END) AS resolved_count
+		FROM suggestion_outcomes
+		WHERE tools_after > 0 AND delivered_at > datetime('now', ? || ' days')
+		GROUP BY pattern
+		HAVING resolved_count >= 3`,
+		fmt.Sprintf("-%d", days),
+	)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("store: total savings: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var pattern string
+		var avgUnresolved, avgResolved float64
+		var resolvedCount int
+		if err := rows.Scan(&pattern, &avgUnresolved, &avgResolved, &resolvedCount); err != nil {
+			continue
+		}
+		saved := int(avgUnresolved - avgResolved)
+		if saved <= 0 {
+			continue
+		}
+		topPatterns = append(topPatterns, PatternSaving{
+			Pattern:   pattern,
+			Saved:     saved,
+			Instances: resolvedCount,
+		})
+		totalSaved += saved * resolvedCount
+		totalInstances += resolvedCount
+	}
+	return totalSaved, totalInstances, topPatterns, rows.Err()
 }

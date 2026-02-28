@@ -189,10 +189,93 @@ func generateStartupBriefing(sdb *sessiondb.SessionDB, data *ResumeData, cwd str
 		}
 	}
 
+	// 5. SNR health with trend.
+	if note := snrHealthNote(); note != "" {
+		parts = append(parts, note)
+	}
+
+	// 6. Cumulative savings from acting on suggestions.
+	if note := totalSavingsNote(); note != "" {
+		parts = append(parts, note)
+	}
+
+	// 6. Learning progress: data availability by session count.
+	if note := learningProgressNote(sdb); note != "" {
+		parts = append(parts, note)
+	}
+
 	if len(parts) == 0 {
 		return ""
 	}
 	return "[buddy] Proactive briefing:\n" + strings.Join(parts, "\n")
+}
+
+// snrHealthNote returns a signal-to-noise ratio health summary with trend.
+// Only displayed when there is meaningful data.
+func snrHealthNote() string {
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		return ""
+	}
+	snr, total, err := st.ComputeSNR(30)
+	if err != nil || total < 5 {
+		return ""
+	}
+
+	note := fmt.Sprintf("SNR: %.0f%% (%d suggestions, 30 days)", snr*100, total)
+
+	// Add trend from recent history.
+	trend, err := st.RecentSNRTrend(3)
+	if err == nil && len(trend) >= 2 {
+		newest := trend[0].SNR
+		oldest := trend[len(trend)-1].SNR
+		delta := newest - oldest
+		switch {
+		case delta > 0.05:
+			note += " [trending up]"
+		case delta < -0.05:
+			note += " [trending down]"
+		default:
+			note += " [stable]"
+		}
+	}
+
+	if snr < 0.80 {
+		note += fmt.Sprintf(" — target: 80%%. Auto-elimination active for patterns below 10%%")
+	}
+	return note
+}
+
+// totalSavingsNote returns a cumulative savings summary from suggestion outcomes.
+// Only shown when there are enough data points (>= 5 total saved tools).
+func totalSavingsNote() string {
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		return ""
+	}
+	totalSaved, totalInstances, _, err := st.TotalSavings(30)
+	if err != nil || totalSaved < 5 {
+		return ""
+	}
+	return fmt.Sprintf("Saved ~%d tools across %d actions in 30 days by following suggestions", totalSaved, totalInstances)
+}
+
+// learningProgressNote returns a message describing what data is available
+// based on the number of project sessions. At >= 10 sessions the system is
+// mature and the note is suppressed (silence = healthy).
+func learningProgressNote(sdb *sessiondb.SessionDB) string {
+	ps := personalContext(sdb)
+	n := ps.SessionCount
+	switch {
+	case n < 3:
+		return fmt.Sprintf("Learning (session %d/3): Unlocks at 3: baselines, workflow. At 5: Thompson Sampling, strategic insights. At 10: mature thresholds", n)
+	case n < 5:
+		return fmt.Sprintf("Growing (session %d): Active: baselines, workflow. Unlocks at 5: Thompson Sampling. At 10: mature thresholds", n)
+	case n < 10:
+		return fmt.Sprintf("Growing (session %d): Active: baselines, TS, strategic insights. Unlocks at 10: mature adaptive thresholds", n)
+	default:
+		return ""
+	}
 }
 
 // recommendFirstAction analyzes resume data and produces a concrete "do this first" recommendation.

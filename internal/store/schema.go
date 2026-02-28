@@ -2,7 +2,7 @@ package store
 
 import "database/sql"
 
-const schemaVersion = 14
+const schemaVersion = 15
 
 const ddlV1 = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -443,6 +443,33 @@ const ddlV14 = `
 ALTER TABLE suggestion_outcomes ADD COLUMN tools_after INTEGER NOT NULL DEFAULT 0;
 `
 
+const ddlV15 = `
+CREATE TABLE IF NOT EXISTS snr_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT NOT NULL,
+    snr_value   REAL NOT NULL,
+    sample_size INTEGER NOT NULL,
+    eliminated  TEXT NOT NULL DEFAULT '',
+    recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_snr_recorded ON snr_history(recorded_at);
+
+CREATE TABLE IF NOT EXISTS signal_outcomes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id   TEXT NOT NULL,
+    priority     INTEGER NOT NULL,
+    kind         TEXT NOT NULL,
+    detail_hash  TEXT NOT NULL,
+    acted_on     INTEGER NOT NULL DEFAULT 0,
+    delivered_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sigout_session ON signal_outcomes(session_id);
+CREATE INDEX IF NOT EXISTS idx_sigout_priority ON signal_outcomes(priority);
+`
+
+// SchemaVersion returns the current schema version constant.
+func SchemaVersion() int { return schemaVersion }
+
 // Migrate applies all pending schema migrations to the database.
 func Migrate(db *sql.DB) error {
 	var current int
@@ -522,6 +549,11 @@ func Migrate(db *sql.DB) error {
 	}
 	if current < 14 {
 		if _, err := db.Exec(ddlV14); err != nil {
+			return err
+		}
+	}
+	if current < 15 {
+		if _, err := db.Exec(ddlV15); err != nil {
 			return err
 		}
 	}

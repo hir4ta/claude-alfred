@@ -130,6 +130,8 @@ func handleUserPromptSubmit(input []byte) (*HookOutput, error) {
 			Observation: "JARVIS briefing",
 			Suggestion:  briefing,
 		})
+		// Record signal delivery for priority accuracy tracking (B6).
+		recordSignalOutcome(sdb, in.SessionID, sig)
 	}
 
 	// 2. Queued nudges from other hooks (PostToolUse etc.).
@@ -610,6 +612,21 @@ func buildPredictiveContext(sdb *sessiondb.SessionDB, prompt string) string {
 
 	_ = sdb.SetCooldown("predictive_context", 5*time.Minute)
 	return "[buddy:predict] " + strings.Join(hints, " | ")
+}
+
+// recordSignalOutcome persists a delivered briefing signal for priority accuracy tracking.
+// Stores the outcome ID and signal kind in sessiondb so PostToolUse can mark resolution.
+func recordSignalOutcome(sdb *sessiondb.SessionDB, sessionID string, sig *Signal) {
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		return
+	}
+	id, err := st.InsertSignalOutcome(sessionID, sig.Priority, sig.Kind, sig.Detail)
+	if err != nil {
+		return
+	}
+	_ = sdb.SetContext("last_signal_outcome_id", strconv.FormatInt(id, 10))
+	_ = sdb.SetContext("last_signal_kind", sig.Kind)
 }
 
 // dataMaturityLabel returns a short label indicating buddy's data maturity level.

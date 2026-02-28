@@ -44,8 +44,8 @@ func handleSessionEnd(input []byte) (*HookOutput, error) {
 }
 
 // logSNR computes and logs the suggestion signal-to-noise ratio at session end.
-// When SNR is below 0.5 with a meaningful sample size, identifies the
-// lowest-performing patterns for diagnostic visibility.
+// Records the measurement to snr_history and runs auto-elimination for
+// consistently low-performing patterns.
 func logSNR() {
 	st, err := store.OpenDefaultCached()
 	if err != nil {
@@ -58,6 +58,17 @@ func logSNR() {
 	}
 
 	fmt.Fprintf(os.Stderr, "[buddy] SNR: %.2f (%d suggestions in last 30 days)\n", snr, total)
+
+	// Auto-eliminate noise patterns (3 consecutive sessions below target).
+	var eliminatedStr string
+	suppressed, _ := st.AutoEliminateNoisePatterns(0.80, 3)
+	if len(suppressed) > 0 {
+		eliminatedStr = strings.Join(suppressed, ",")
+		fmt.Fprintf(os.Stderr, "[buddy] Auto-eliminated noise patterns: %s\n", eliminatedStr)
+	}
+
+	// Record SNR measurement to history.
+	_ = st.InsertSNRHistory("", snr, total, eliminatedStr)
 
 	if snr < 0.5 && total > 20 {
 		worst, err := st.LowestPerformingPatterns(30, 3, 5)

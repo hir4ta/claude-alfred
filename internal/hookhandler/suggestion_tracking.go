@@ -372,3 +372,57 @@ func recordUnresolvedFeedback(sdb *sessiondb.SessionDB) {
 	_ = st.InsertFeedback(sessionID, pattern, store.RatingNotHelpful, "", 0)
 	_ = st.UpsertUserPreference(pattern, false, 0)
 }
+
+// checkSignalResolution detects whether the current tool action resolves a
+// previously delivered JARVIS briefing signal. Uses kind-specific heuristics.
+func checkSignalResolution(sdb *sessiondb.SessionDB, toolName string) {
+	idStr, _ := sdb.GetContext("last_signal_outcome_id")
+	if idStr == "" {
+		return
+	}
+	kind, _ := sdb.GetContext("last_signal_kind")
+
+	resolved := false
+	switch kind {
+	case "critical_alert", "episode_alert":
+		// Alert acted on if the user changes approach (Edit, Write, or different tool).
+		resolved = toolName == "Edit" || toolName == "Write"
+	case "past_solution", "knowledge_match":
+		// Knowledge applied via Edit/Write.
+		resolved = toolName == "Edit" || toolName == "Write"
+	case "co_change":
+		// Co-change hint acted on if the related file is read or edited.
+		resolved = toolName == "Read" || toolName == "Edit" || toolName == "Write"
+	case "phase_transition":
+		// Phase transition acknowledged by any subsequent action.
+		resolved = true
+	case "strategic_insight":
+		// Strategic insights are informational; any MCP call or test run counts.
+		resolved = toolName == "Bash" || toolName == "Edit"
+	case "health_decline":
+		// Health concern addressed if user changes approach.
+		resolved = toolName == "Edit" || toolName == "Write" || toolName == "Read"
+	default:
+		// Unknown kind — resolve on any write action.
+		resolved = toolName == "Edit" || toolName == "Write"
+	}
+
+	if !resolved {
+		return
+	}
+
+	outcomeID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		return
+	}
+
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		return
+	}
+	_ = st.ResolveSignalOutcome(outcomeID)
+
+	// Clear to avoid double-resolution.
+	_ = sdb.SetContext("last_signal_outcome_id", "")
+	_ = sdb.SetContext("last_signal_kind", "")
+}

@@ -75,6 +75,22 @@ func sessionOutlookHandler(claudeHome string, st *store.Store) server.ToolHandle
 			}
 		}
 
+		// Priority accuracy from signal outcomes (30-day window).
+		if st != nil {
+			if stats, overall, paErr := st.PriorityAccuracy(30); paErr == nil && len(stats) > 0 {
+				result["signal_accuracy"] = overall
+				priorityDetail := make(map[string]any)
+				for p, s := range stats {
+					priorityDetail[fmt.Sprintf("P%d", p)] = map[string]any{
+						"delivered": s.Delivered,
+						"acted_on":  s.ActedOn,
+						"rate":      s.Rate,
+					}
+				}
+				result["priority_accuracy"] = priorityDetail
+			}
+		}
+
 		// User profile context.
 		if st != nil {
 			cluster := st.UserCluster()

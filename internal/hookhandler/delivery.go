@@ -96,7 +96,9 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 
 	// Apply adaptive priority adjustment using Thompson Sampling.
 	rng := getSessionRNG(sdb)
-	adjusted := adjustPriority(rng, pattern, priority)
+	result := adjustPriorityWithConfidence(rng, pattern, priority)
+	ctxLastConfidence = result.Confidence
+	adjusted := result.Priority
 	if adjusted >= PrioritySuppressed {
 		// Never suppress High-priority suggestions — deliver as nudge instead.
 		if priority <= PriorityHigh {
@@ -140,17 +142,23 @@ func isAtWorkflowBoundary(sdb *sessiondb.SessionDB) bool {
 	return true
 }
 
-// adjustPriority uses contextual Thompson Sampling to adaptively adjust suggestion priority.
-// It builds a contextual key from (pattern, task_type, velocity_state) and uses that
-// for finer-grained adaptation. Falls back to the base pattern key when context data is sparse.
+// AdjustResult holds the priority adjustment decision along with the
+// confidence level of the underlying Thompson Sampling estimate.
+type AdjustResult struct {
+	Priority   SuggestionPriority
+	Confidence float64 // alpha/(alpha+beta), range [0,1]; 0 means no data
+}
+
+// adjustPriorityWithConfidence uses contextual Thompson Sampling to adaptively adjust
+// suggestion priority. Returns both the adjusted priority and a confidence score
+// representing how much data backs the decision (alpha/(alpha+beta)).
 // For patterns with UserPref data, it uses the weighted effectiveness score (deterministic).
 // For patterns with only delivery/resolution counts, it draws from a Beta distribution
 // to naturally balance exploration (new patterns) and exploitation (proven patterns).
-// Returns PrioritySuppressed if the pattern should not be delivered at all.
-func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) SuggestionPriority {
+func adjustPriorityWithConfidence(rng *rand.Rand, pattern string, base SuggestionPriority) AdjustResult {
 	st, err := store.OpenDefaultCached()
 	if err != nil {
-		return base
+		return AdjustResult{Priority: base, Confidence: 0}
 	}
 
 	// Build contextual key for finer-grained Thompson Sampling.
@@ -159,26 +167,40 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 	// Step 1: Explicit feedback has highest priority — if sufficient data exists,
 	// use the weighted score directly (deterministic, no randomness needed).
 	if stats, serr := st.PatternFeedbackStats(ctxKey); serr == nil && stats.TotalCount >= 3 {
-		return adjustFromEstimate(normalizeFeedbackScore(stats.WeightedScore), base)
+		score := normalizeFeedbackScore(stats.WeightedScore)
+		return AdjustResult{
+			Priority:   adjustFromEstimate(score, base),
+			Confidence: score,
+		}
 	}
 	if stats, serr := st.PatternFeedbackStats(pattern); serr == nil && stats.TotalCount >= 3 {
-		return adjustFromEstimate(normalizeFeedbackScore(stats.WeightedScore), base)
+		score := normalizeFeedbackScore(stats.WeightedScore)
+		return AdjustResult{
+			Priority:   adjustFromEstimate(score, base),
+			Confidence: score,
+		}
 	}
 
 	// Step 2: Check contextual UserPref, then fall back to base pattern.
 	pref, err := st.UserPreference(ctxKey)
 	if err == nil && pref != nil {
-		return adjustFromUserPref(pref, base)
+		return AdjustResult{
+			Priority:   adjustFromUserPref(pref, base),
+			Confidence: pref.EffectivenessScore,
+		}
 	}
 	pref, err = st.UserPreference(pattern)
 	if err == nil && pref != nil {
-		return adjustFromUserPref(pref, base)
+		return AdjustResult{
+			Priority:   adjustFromUserPref(pref, base),
+			Confidence: pref.EffectivenessScore,
+		}
 	}
 
 	// Hard suppression safety net for truly dead patterns.
 	// Critical/High bypass: never permanently suppress important signals.
 	if base > PriorityHigh && shouldSuppressForCluster(st, pattern) {
-		return PrioritySuppressed
+		return AdjustResult{Priority: PrioritySuppressed, Confidence: 0}
 	}
 
 	// Thompson Sampling: 2-tier fallback for data density.
@@ -192,7 +214,10 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 	if err != nil || delivered < 0.5 {
 		// No data at all — uniform prior Beta(1,1), sample for exploration.
 		sample := betaSample(rng, 1, 1)
-		return adjustFromEstimate(sample, base)
+		return AdjustResult{
+			Priority:   adjustFromEstimate(sample, base),
+			Confidence: 0.5, // uniform prior = maximum uncertainty
+		}
 	}
 
 	// Posterior from contextual data.
@@ -214,8 +239,12 @@ func adjustPriority(rng *rand.Rand, pattern string, base SuggestionPriority) Sug
 		}
 	}
 
+	confidence := alpha / (alpha + beta)
 	sample := betaSample(rng, alpha, beta)
-	return adjustFromEstimate(sample, base)
+	return AdjustResult{
+		Priority:   adjustFromEstimate(sample, base),
+		Confidence: confidence,
+	}
 }
 
 // adjustFromUserPref uses the weighted effectiveness score from UserPref.
@@ -307,6 +336,11 @@ func Deliver(sdb *sessiondb.SessionDB, pattern, level, observation, suggestion s
 
 	decision := RouteDelivery(sdb, pattern, priority)
 
+	// Append confidence to WHY when available.
+	if why != "" && ctxLastConfidence > 0 {
+		why += fmt.Sprintf(" (confidence: %.0f%%)", ctxLastConfidence*100)
+	}
+
 	switch decision.Channel {
 	case ChannelImmediate:
 		msg := fmt.Sprintf("[buddy] %s (%s): %s\n→ %s", pattern, level, observation, suggestion)
@@ -390,12 +424,18 @@ func currentUserCluster() string {
 	return ctxUserCluster
 }
 
+// LastConfidence returns the confidence from the most recent adjustPriorityWithConfidence call.
+func LastConfidence() float64 {
+	return ctxLastConfidence
+}
+
 // Process-level cache for contextual delivery (set once per hook invocation).
 var (
 	ctxTaskType      string
 	ctxVelocityState string
 	ctxUserCluster   string
-	ctxDomain        string // used by SetDeliveryContext for domain-aware features outside TS
+	ctxDomain        string  // used by SetDeliveryContext for domain-aware features outside TS
+	ctxLastConfidence float64 // last confidence from adjustPriorityWithConfidence
 )
 
 func getBurstSuggestionCount(sdb *sessiondb.SessionDB) int {
