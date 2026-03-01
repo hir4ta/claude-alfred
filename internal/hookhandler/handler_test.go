@@ -2,6 +2,7 @@ package hookhandler
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -540,7 +541,9 @@ func TestCaptureGitContext(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sdb.Destroy() })
 
-	captureGitContext(sdb, "/Users/user/Projects/claude-buddy")
+	// Use a path inside this repo so git commands succeed regardless of directory name.
+	cwd, _ := os.Getwd()
+	captureGitContext(sdb, cwd)
 
 	branch, _ := sdb.GetWorkingSet("git_branch")
 	if branch == "" {

@@ -1,5 +1,4 @@
 claude-alfred
-claude-buddy
 *.exe
 .DS_Store
 dist/
