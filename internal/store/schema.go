@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// schemaVersion 100 = alfred v1 (full reset from buddy V1-V16).
+// schemaVersion 100 = alfred v1 (full reset from V1-V16).
 const schemaVersion = 100
 
 const ddlV1 = `
@@ -224,7 +224,7 @@ CREATE TRIGGER IF NOT EXISTS docs_fts_au AFTER UPDATE ON docs BEGIN
 END;
 `
 
-// legacyTables are tables from buddy V1-V16 that no longer exist in alfred.
+// legacyTables are tables from V1-V16 that no longer exist in alfred.
 var legacyTables = []string{
 	"patterns", "pattern_tags", "pattern_files", "patterns_fts",
 	"alerts", "alert_events",
@@ -252,7 +252,7 @@ func Migrate(db *sql.DB) error {
 		return nil
 	}
 
-	// Drop legacy tables from buddy V1-V16.
+	// Drop legacy tables from V1-V16.
 	if current > 0 && current < schemaVersion {
 		for _, trigger := range legacyTriggers {
 			db.Exec("DROP TRIGGER IF EXISTS " + trigger)

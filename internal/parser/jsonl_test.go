@@ -403,7 +403,7 @@ func TestParseTaskListOutputNoMatch(t *testing.T) {
 func TestParseAlfredResumeDefault(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
-		"uuid": "buddy-001",
+		"uuid": "test-001",
 		"timestamp": "2026-02-25T10:00:00.000Z",
 		"sessionId": "sess-001",
 		"message": {
@@ -434,10 +434,10 @@ func TestParseAlfredResumeDefault(t *testing.T) {
 	}
 }
 
-func TestParseBuddyResumeWithProject(t *testing.T) {
+func TestParseAlfredResumeWithProject(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
-		"uuid": "buddy-002",
+		"uuid": "test-002",
 		"timestamp": "2026-02-25T10:01:00.000Z",
 		"sessionId": "sess-001",
 		"message": {
@@ -462,15 +462,15 @@ func TestParseBuddyResumeWithProject(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].ToolInput != "project:claude-buddy" {
-		t.Errorf("expected 'project:claude-buddy', got %q", events[0].ToolInput)
+	if events[0].ToolInput != "project:claude-alfred" {
+		t.Errorf("expected 'project:claude-alfred', got %q", events[0].ToolInput)
 	}
 }
 
-func TestParseBuddyRecallWithQuery(t *testing.T) {
+func TestParseAlfredRecallWithQuery(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
-		"uuid": "buddy-003",
+		"uuid": "test-003",
 		"timestamp": "2026-02-25T10:02:00.000Z",
 		"sessionId": "sess-001",
 		"message": {
@@ -479,7 +479,7 @@ func TestParseBuddyRecallWithQuery(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b3",
-					"name": "mcp__claude-alfred__buddy_recall",
+					"name": "mcp__claude-alfred__alfred_recall",
 					"input": {
 						"query": "authentication flow"
 					}
@@ -500,10 +500,10 @@ func TestParseBuddyRecallWithQuery(t *testing.T) {
 	}
 }
 
-func TestParseBuddyPatternsWithQuery(t *testing.T) {
+func TestParseAlfredPatternsWithQuery(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
-		"uuid": "buddy-004",
+		"uuid": "test-004",
 		"timestamp": "2026-02-25T10:03:00.000Z",
 		"sessionId": "sess-001",
 		"message": {
@@ -512,7 +512,7 @@ func TestParseBuddyPatternsWithQuery(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b4",
-					"name": "mcp__claude-alfred__buddy_patterns",
+					"name": "mcp__claude-alfred__alfred_patterns",
 					"input": {
 						"query": "error handling",
 						"type": "error_solution"
@@ -534,10 +534,10 @@ func TestParseBuddyPatternsWithQuery(t *testing.T) {
 	}
 }
 
-func TestParseBuddyStatsDefault(t *testing.T) {
+func TestParseAlfredStatsDefault(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
-		"uuid": "buddy-005",
+		"uuid": "test-005",
 		"timestamp": "2026-02-25T10:04:00.000Z",
 		"sessionId": "sess-001",
 		"message": {
@@ -546,7 +546,7 @@ func TestParseBuddyStatsDefault(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b5",
-					"name": "mcp__claude-alfred__buddy_stats",
+					"name": "mcp__claude-alfred__alfred_stats",
 					"input": {}
 				}
 			]
@@ -565,10 +565,10 @@ func TestParseBuddyStatsDefault(t *testing.T) {
 	}
 }
 
-func TestParseBuddyDecisionsWithSessionID(t *testing.T) {
+func TestParseAlfredDecisionsWithSessionID(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
-		"uuid": "buddy-006",
+		"uuid": "test-006",
 		"timestamp": "2026-02-25T10:05:00.000Z",
 		"sessionId": "sess-001",
 		"message": {
@@ -577,7 +577,7 @@ func TestParseBuddyDecisionsWithSessionID(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b6",
-					"name": "mcp__claude-alfred__buddy_decisions",
+					"name": "mcp__claude-alfred__alfred_decisions",
 					"input": {
 						"session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 					}

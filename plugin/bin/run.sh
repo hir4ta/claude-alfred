@@ -2,7 +2,7 @@
 # claude-alfred wrapper — auto-downloads binary on version mismatch.
 ALFRED_VERSION="0.16.0"
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUDDY_BIN="${BIN_DIR}/claude-alfred"
+ALFRED_BIN="${BIN_DIR}/claude-alfred"
 VERSION_FILE="${BIN_DIR}/.alfred-version"
 LOCK_DIR="${BIN_DIR}/.alfred-download.lock"
 INSTALL_MARKER="${BIN_DIR}/.alfred-installed-${ALFRED_VERSION}"
@@ -11,7 +11,7 @@ INSTALL_LOCK="${BIN_DIR}/.alfred-install.lock"
 # --- helpers ----------------------------------------------------------------
 
 is_current() {
-  [ -f "$BUDDY_BIN" ] && [ -f "$VERSION_FILE" ] && \
+  [ -f "$ALFRED_BIN" ] && [ -f "$VERSION_FILE" ] && \
     [ "$(cat "$VERSION_FILE" 2>/dev/null)" = "$ALFRED_VERSION" ]
 }
 
@@ -64,7 +64,7 @@ download_binary() {
     return 1
   fi
   chmod +x "${TMP_EXTRACT}/claude-alfred"
-  mv -f "${TMP_EXTRACT}/claude-alfred" "$BUDDY_BIN"
+  mv -f "${TMP_EXTRACT}/claude-alfred" "$ALFRED_BIN"
   printf '%s' "$ALFRED_VERSION" > "$VERSION_FILE"
   rm -f "$TMP_TAR"; rm -rf "$TMP_EXTRACT"
   return 0
@@ -90,7 +90,7 @@ ensure_binary() {
   fi
 
   # Fallback: use old binary if it exists (version mismatch but functional).
-  [ -f "$BUDDY_BIN" ] && return 0
+  [ -f "$ALFRED_BIN" ] && return 0
   return 1
 }
 
@@ -116,7 +116,7 @@ case "$1" in
       echo "claude-alfred ${ALFRED_VERSION} installed"
     fi
     shift
-    exec "$BUDDY_BIN" install "$@"
+    exec "$ALFRED_BIN" install "$@"
     ;;
 
   count-sessions)
@@ -125,7 +125,7 @@ case "$1" in
       echo '{"error":"binary not available"}' >&2
       exit 1
     fi
-    exec "$BUDDY_BIN" count-sessions
+    exec "$ALFRED_BIN" count-sessions
     ;;
 
   serve)
@@ -145,11 +145,11 @@ case "$1" in
     fi
     if [ ! -f "$INSTALL_MARKER" ] && mkdir "$INSTALL_LOCK" 2>/dev/null; then
       ( echo $$ > "$INSTALL_LOCK/pid"
-        "$BUDDY_BIN" install >/dev/null 2>&1
+        "$ALFRED_BIN" install >/dev/null 2>&1
         printf '%s' "$ALFRED_VERSION" > "$INSTALL_MARKER"
         rm -rf "$INSTALL_LOCK" ) &
     fi
-    exec "$BUDDY_BIN" serve
+    exec "$ALFRED_BIN" serve
     ;;
 
   hook-handler)
@@ -158,12 +158,12 @@ case "$1" in
       echo '{"additionalContext":"[claude-alfred] Updating binary. Will be ready shortly."}'
       exit 0
     fi
-    exec "$BUDDY_BIN" "$@"
+    exec "$ALFRED_BIN" "$@"
     ;;
 
   version|--version|-v)
     if is_current; then
-      exec "$BUDDY_BIN" version
+      exec "$ALFRED_BIN" version
     fi
     echo "claude-alfred ${ALFRED_VERSION} (binary not yet downloaded)"
     ;;
@@ -173,6 +173,6 @@ case "$1" in
       echo "claude-alfred: binary not available. Run setup first." >&2
       exit 1
     fi
-    exec "$BUDDY_BIN" "$@"
+    exec "$ALFRED_BIN" "$@"
     ;;
 esac

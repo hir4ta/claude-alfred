@@ -541,7 +541,6 @@ func TestCaptureGitContext(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sdb.Destroy() })
 
-	// Use the current repo (claude-alfred) as the test target.
 	captureGitContext(sdb, "/Users/user/Projects/claude-buddy")
 
 	branch, _ := sdb.GetWorkingSet("git_branch")
