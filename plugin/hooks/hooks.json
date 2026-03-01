@@ -90,6 +90,17 @@
         "matcher": "startup|resume|compact"
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook-handler Stop",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [

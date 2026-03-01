@@ -328,6 +328,7 @@ func alfredHookEntries(binPath string) map[string]any {
 		"TeammateIdle":        makeEntry("TeammateIdle", 3, true, ""),
 		"TaskCompleted":       makeEntry("TaskCompleted", 3, false, ""),
 		"PermissionRequest":   makeEntry("PermissionRequest", 1, false, ""),
+		"Stop":                makeEntry("Stop", 3, false, ""),
 	}
 
 	return entries
@@ -460,6 +461,7 @@ func RemoveHooks() error {
 		"UserPromptSubmit", "PreCompact", "SessionEnd",
 		"SubagentStart", "SubagentStop", "Notification",
 		"TeammateIdle", "TaskCompleted", "PermissionRequest",
+		"Stop",
 	}
 	changed := false
 	for _, event := range events {

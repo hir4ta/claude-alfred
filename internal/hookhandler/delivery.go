@@ -111,7 +111,11 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 	}
 
 	// Apply adaptive priority adjustment using Thompson Sampling.
-	result := adjustPriorityWithConfidence(rng, pattern, priority)
+	var st *store.Store
+	if s, err := store.OpenDefaultCached(); err == nil {
+		st = s
+	}
+	result := adjustPriorityWithConfidence(rng, st, pattern, priority)
 	ctxLastConfidence = result.Confidence
 	adjusted := result.Priority
 	if adjusted >= PrioritySuppressed {
@@ -164,11 +168,39 @@ type AdjustResult struct {
 	Confidence float64 // alpha/(alpha+beta), range [0,1]; 0 means no data
 }
 
-// adjustPriorityWithConfidence returns the base priority with uniform confidence.
-// Thompson Sampling data sources (patterns, feedback stats) were removed in alfred v1.
-// This stub preserves the interface for future knowledge-base integration.
-func adjustPriorityWithConfidence(_ *rand.Rand, _ string, base SuggestionPriority) AdjustResult {
-	return AdjustResult{Priority: base, Confidence: 0.5}
+// adjustPriorityWithConfidence uses Thompson Sampling to adaptively adjust
+// suggestion priority based on historical effectiveness from user feedback.
+// Alpha = resolution_count + 1 (successes + prior).
+// Beta  = (delivery_count - resolution_count) + 1 (failures + prior).
+func adjustPriorityWithConfidence(rng *rand.Rand, st *store.Store, pattern string, base SuggestionPriority) AdjustResult {
+	if st == nil {
+		return AdjustResult{Priority: base, Confidence: 0}
+	}
+	key := contextualPatternKey(pattern)
+	pref, err := st.UserPreference(key)
+	if err != nil || pref == nil || pref.DeliveryCount < 3 {
+		return AdjustResult{Priority: base, Confidence: 0}
+	}
+
+	alpha := float64(pref.ResolutionCount) + 1
+	beta := float64(pref.DeliveryCount-pref.ResolutionCount) + 1
+	sample := betaSample(rng, alpha, beta)
+
+	// Confidence: 1 - normalized Beta variance.
+	// Var(Beta(a,b)) = ab / ((a+b)^2 * (a+b+1)), max 0.25 at a=b=1.
+	ab := alpha + beta
+	variance := (alpha * beta) / (ab * ab * (ab + 1))
+	confidence := 1.0 - math.Min(variance*4, 1.0)
+
+	adjusted := base
+	switch {
+	case sample > 0.6 && base > PriorityCritical:
+		adjusted = base - 1
+	case sample < 0.3 && base < PrioritySuppressed:
+		adjusted = base + 1
+	}
+
+	return AdjustResult{Priority: adjusted, Confidence: confidence}
 }
 
 
@@ -425,7 +457,24 @@ func burstCapForCluster() int {
 	}
 }
 
-// applyGraduatedDemotion is a stub — pattern effectiveness data was removed in alfred v1.
-func applyGraduatedDemotion(_ *rand.Rand, _ *store.Store, _ string) bool {
-	return false
+// applyGraduatedDemotion probabilistically suppresses patterns with poor effectiveness.
+// Uses contextual key for per-(pattern, task_type, cluster) granularity.
+// Requires 5+ deliveries before applying demotion (data maturity).
+// Even the worst patterns get through ~10% of the time to allow recovery.
+func applyGraduatedDemotion(rng *rand.Rand, st *store.Store, pattern string) bool {
+	key := contextualPatternKey(pattern)
+	pref, err := st.UserPreference(key)
+	if err != nil || pref == nil {
+		return false
+	}
+	if pref.DeliveryCount < 5 {
+		return false
+	}
+	if pref.EffectivenessScore >= 0.3 {
+		return false
+	}
+	// Probabilistic suppression: worse scores → higher suppression probability.
+	// score=0.0 → 90% suppression, score=0.29 → 3% suppression.
+	suppressProb := (0.3 - pref.EffectivenessScore) / 0.3 * 0.9
+	return rng.Float64() < suppressProb
 }

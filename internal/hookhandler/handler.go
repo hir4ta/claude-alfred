@@ -65,6 +65,8 @@ func Run(eventName string) error {
 		output, err = handleQualityGate(input, "TaskCompleted")
 	case "PermissionRequest":
 		output, err = handlePermissionRequest(input)
+	case "Stop":
+		output, err = handleStop(input)
 	default:
 		// Unknown event: no-op.
 		return nil

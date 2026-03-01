@@ -49,36 +49,6 @@ func extractTestFailures(_ string) []string { return nil }
 // correlateWithRecentEdits is a stub (test correlation removed).
 func correlateWithRecentEdits(_ *sessiondb.SessionDB, _ []string) string { return "" }
 
-// --- Phase analysis helpers (moved from deleted playbook.go) ---
-
-// phaseDist returns the percentage distribution of phases in a sequence.
-func phaseDist(phases []string) map[string]float64 {
-	if len(phases) == 0 {
-		return nil
-	}
-	counts := make(map[string]int, len(phases))
-	for _, p := range phases {
-		counts[p]++
-	}
-	dist := make(map[string]float64, len(counts))
-	total := float64(len(phases))
-	for k, v := range counts {
-		dist[k] = float64(v) / total
-	}
-	return dist
-}
-
-// countPhaseTransitions counts A→B transitions in a phase sequence.
-func countPhaseTransitions(phases []string, from, to string) int {
-	count := 0
-	for i := 1; i < len(phases); i++ {
-		if phases[i-1] == from && phases[i] == to {
-			count++
-		}
-	}
-	return count
-}
-
 // --- Detection functions for data recording (moved from deleted stop_detection.go) ---
 
 // goTestFailRe matches Go test failure output lines.

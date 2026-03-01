@@ -10,8 +10,8 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
-// stateConsolidatedHandler consolidates stats + current_state + session_outlook + sessions + resume + skill_context + accuracy.
-// Routes based on the "detail" parameter: brief, standard (default), outlook, sessions, resume, skill, accuracy.
+// stateConsolidatedHandler consolidates stats + current_state + session_outlook + sessions + resume + skill_context.
+// Routes based on the "detail" parameter: brief, standard (default), outlook, sessions, resume, skill, preferences.
 func stateConsolidatedHandler(claudeHome string, st *store.Store) server.ToolHandlerFunc {
 	statsFn := withMetaHandler(statsHandler(claudeHome), st, "session")
 	currentStateFn := withMetaHandler(currentStateHandler(claudeHome), st, "session")
@@ -19,7 +19,6 @@ func stateConsolidatedHandler(claudeHome string, st *store.Store) server.ToolHan
 	sessionsFn := withMetaHandler(sessionsHandler(claudeHome), st, "session")
 	resumeFn := withMetaHandler(resumeHandler(st), st, "session")
 	skillFn := withMetaHandler(skillContextHandler(claudeHome), st, "session")
-	accuracyFn := withMetaHandler(accuracyHandler(st), st, "project")
 	preferencesFn := withMetaHandler(preferencesHandler(st), st, "project")
 
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -35,8 +34,6 @@ func stateConsolidatedHandler(claudeHome string, st *store.Store) server.ToolHan
 			return resumeFn(ctx, req)
 		case "skill":
 			return skillFn(ctx, req)
-		case "accuracy":
-			return accuracyFn(ctx, req)
 		case "preferences":
 			return preferencesFn(ctx, req)
 		default:
@@ -116,24 +113,14 @@ func planConsolidatedHandler(st *store.Store) server.ToolHandlerFunc {
 	}
 }
 
-// diagnoseConsolidatedHandler consolidates diagnose + fix.
-// If error_output is provided → diagnosis mode.
-// If file_path + finding_rule/message → fix mode.
+// diagnoseConsolidatedHandler routes error diagnosis requests.
 func diagnoseConsolidatedHandler(st *store.Store) server.ToolHandlerFunc {
 	diagnoseFn := withMetaHandler(diagnoseHandler(st), st, "session")
-	fixFn := withMetaHandler(fixHandler(), st, "project")
 
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		errorOutput := req.GetString("error_output", "")
-		findingRule := req.GetString("finding_rule", "")
-		message := req.GetString("message", "")
-		filePath := req.GetString("file_path", "")
-
-		if errorOutput == "" && filePath != "" && (findingRule != "" || message != "") {
-			return fixFn(ctx, req)
-		}
 		if errorOutput == "" {
-			return mcp.NewToolResultError("error_output or (file_path + finding_rule) is required"), nil
+			return mcp.NewToolResultError("error_output is required"), nil
 		}
 		return diagnoseFn(ctx, req)
 	}

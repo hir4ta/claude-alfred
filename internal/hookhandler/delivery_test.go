@@ -2,10 +2,13 @@ package hookhandler
 
 import (
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hir4ta/claude-alfred/internal/sessiondb"
+	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
 func newTestRNG() *rand.Rand {
@@ -268,4 +271,169 @@ func openDeliveryTestDB(t *testing.T) *sessiondb.SessionDB {
 	}
 	t.Cleanup(func() { _ = sdb.Destroy() })
 	return sdb
+}
+
+func openTestStore(t *testing.T) *store.Store {
+	t.Helper()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	os.Setenv("CLAUDE_ALFRED_DB", dbPath)
+	t.Cleanup(func() { os.Unsetenv("CLAUDE_ALFRED_DB") })
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() = %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	return st
+}
+
+func TestApplyGraduatedDemotion_NoData(t *testing.T) {
+	// Not parallel — reads contextualPatternKey which depends on package globals.
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	rng := newTestRNG()
+	if applyGraduatedDemotion(rng, st, "unknown-pattern") {
+		t.Error("applyGraduatedDemotion(no data) = true, want false")
+	}
+}
+
+func TestApplyGraduatedDemotion_InsufficientData(t *testing.T) {
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	rng := newTestRNG()
+	for range 3 {
+		_ = st.UpsertUserPreference("low-pattern", false, 0)
+	}
+	if applyGraduatedDemotion(rng, st, "low-pattern") {
+		t.Error("applyGraduatedDemotion(3 deliveries) = true, want false")
+	}
+}
+
+func TestApplyGraduatedDemotion_HighScore(t *testing.T) {
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	rng := newTestRNG()
+	for range 10 {
+		_ = st.UpsertUserPreference("good-pattern", true, 1.0)
+	}
+	for range 100 {
+		if applyGraduatedDemotion(rng, st, "good-pattern") {
+			t.Fatal("applyGraduatedDemotion(high score) = true, want false")
+		}
+	}
+}
+
+func TestApplyGraduatedDemotion_LowScore(t *testing.T) {
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	rng := newTestRNG()
+	for range 10 {
+		_ = st.UpsertUserPreference("bad-pattern", false, 0)
+	}
+	suppressed := 0
+	n := 1000
+	for range n {
+		if applyGraduatedDemotion(rng, st, "bad-pattern") {
+			suppressed++
+		}
+	}
+	if suppressed < 500 || suppressed > 950 {
+		t.Errorf("applyGraduatedDemotion(low score) suppressed %d/%d, want 500-950", suppressed, n)
+	}
+}
+
+func TestAdjustPriority_NoData(t *testing.T) {
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	rng := newTestRNG()
+	result := adjustPriorityWithConfidence(rng, st, "unknown", PriorityMedium)
+	if result.Priority != PriorityMedium {
+		t.Errorf("priority = %d, want %d (unchanged)", result.Priority, PriorityMedium)
+	}
+	if result.Confidence != 0 {
+		t.Errorf("confidence = %v, want 0 (no data)", result.Confidence)
+	}
+}
+
+func TestAdjustPriority_NilStore(t *testing.T) {
+	t.Parallel()
+	rng := newTestRNG()
+	result := adjustPriorityWithConfidence(rng, nil, "pattern", PriorityHigh)
+	if result.Priority != PriorityHigh {
+		t.Errorf("priority = %d, want %d (unchanged)", result.Priority, PriorityHigh)
+	}
+}
+
+func TestAdjustPriority_HighResolution(t *testing.T) {
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	for range 18 {
+		_ = st.UpsertUserPreference("great-pattern", true, 1.0)
+	}
+	for range 2 {
+		_ = st.UpsertUserPreference("great-pattern", false, 0)
+	}
+	boosted := 0
+	n := 100
+	for i := range n {
+		rng := rand.New(rand.NewPCG(uint64(i+1), 0))
+		result := adjustPriorityWithConfidence(rng, st, "great-pattern", PriorityMedium)
+		if result.Priority < PriorityMedium {
+			boosted++
+		}
+	}
+	if boosted < 50 {
+		t.Errorf("boosted %d/%d times, want majority", boosted, n)
+	}
+}
+
+func TestAdjustPriority_LowResolution(t *testing.T) {
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	for range 2 {
+		_ = st.UpsertUserPreference("poor-pattern", true, 1.0)
+	}
+	for range 18 {
+		_ = st.UpsertUserPreference("poor-pattern", false, 0)
+	}
+	demoted := 0
+	n := 100
+	for i := range n {
+		rng := rand.New(rand.NewPCG(uint64(i+1), 0))
+		result := adjustPriorityWithConfidence(rng, st, "poor-pattern", PriorityMedium)
+		if result.Priority > PriorityMedium {
+			demoted++
+		}
+	}
+	if demoted < 50 {
+		t.Errorf("demoted %d/%d times, want majority", demoted, n)
+	}
+}
+
+func TestAdjustPriority_Confidence(t *testing.T) {
+	ctxTaskType = ""
+	ctxUserCluster = ""
+	st := openTestStore(t)
+	rng := newTestRNG()
+	for range 3 {
+		_ = st.UpsertUserPreference("few-obs", true, 1.0)
+	}
+	fewResult := adjustPriorityWithConfidence(rng, st, "few-obs", PriorityMedium)
+
+	for range 50 {
+		_ = st.UpsertUserPreference("many-obs", true, 1.0)
+	}
+	manyResult := adjustPriorityWithConfidence(rng, st, "many-obs", PriorityMedium)
+
+	if manyResult.Confidence <= fewResult.Confidence {
+		t.Errorf("many observations confidence (%v) should exceed few observations (%v)",
+			manyResult.Confidence, fewResult.Confidence)
+	}
 }

@@ -1,7 +1,6 @@
 package mcpserver
 
 import (
-	"context"
 	"encoding/json"
 	"math"
 	"testing"
@@ -146,35 +145,3 @@ func TestEnrichAlertsFromSessionDB_Empty(t *testing.T) {
 	}
 }
 
-// TestFixHandler_Stub tests that the stub fix handler returns a reason message.
-func TestFixHandler_Stub(t *testing.T) {
-	t.Parallel()
-	handler := fixHandler()
-
-	req := mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "fix",
-			Arguments: map[string]any{
-				"file_path":    "/some/file.go",
-				"finding_rule": "some_rule",
-			},
-		},
-	}
-
-	result, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("fixHandler error = %v", err)
-	}
-	if result.IsError {
-		t.Fatal("fixHandler returned MCP error, want stub response")
-	}
-
-	text := result.Content[0].(mcp.TextContent).Text
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if parsed["reason"] == nil || parsed["reason"] == "" {
-		t.Error("expected non-empty reason in stub response")
-	}
-}

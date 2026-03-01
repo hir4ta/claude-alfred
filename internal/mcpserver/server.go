@@ -44,7 +44,7 @@ Hook-based briefings are delivered automatically every turn.
 ## When you need more detail from a briefing:
   knowledge — Search docs, decisions, and solutions
   guidance — Get alerts, recommendations, next steps
-  diagnose — Root cause analysis + fix patches for errors
+  diagnose — Root cause analysis for errors
 
 ## Session management:
   state — Session health, statistics, and predictions
@@ -69,17 +69,17 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 	)
 
 	s.AddTools(
-		// 1. state: Consolidated session state + sessions + resume + skill_context + accuracy.
+		// 1. state: Consolidated session state + sessions + resume + skill_context.
 		server.ServerTool{
 			Tool: mcp.NewTool("state",
-				mcp.WithDescription("Get session health, statistics, burst state, and trend predictions. Use when you need to assess current session progress, check health metrics, or predict potential issues. The 'detail' parameter controls depth: 'brief' returns stats only, 'standard' (default) returns a full snapshot including burst state and phase, 'outlook' adds health trends and risk predictions, 'sessions' lists recent sessions, 'resume' restores context from a previous session, 'skill' returns skill-specific context, 'accuracy' returns suggestion accuracy metrics."),
+				mcp.WithDescription("Get session health, statistics, burst state, and trend predictions. Use when you need to assess current session progress, check health metrics, or predict potential issues. The 'detail' parameter controls depth: 'brief' returns stats only, 'standard' (default) returns a full snapshot including burst state and phase, 'outlook' adds health trends and risk predictions, 'sessions' lists recent sessions, 'resume' restores context from a previous session, 'skill' returns skill-specific context."),
 				mcp.WithTitleAnnotation("Session State"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("detail",
-					mcp.Description("Level of detail: brief (stats), standard (default, full snapshot), outlook (health + phase + risk), sessions (list recent), resume (restore context), skill (skill-specific context), accuracy (suggestion metrics)"),
+					mcp.Description("Level of detail: brief (stats), standard (default, full snapshot), outlook (health + phase + risk), sessions (list recent), resume (restore context), skill (skill-specific context), preferences (user preferences)"),
 				),
 				mcp.WithString("session_id",
 					mcp.Description("Session ID (optional, defaults to latest)"),
@@ -191,11 +191,11 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 			Handler: withAlfredTracker(st, planConsolidatedHandler(st)),
 		},
 
-		// 5. diagnose: Consolidated diagnosis + fix.
+		// 5. diagnose: Error diagnosis.
 		server.ServerTool{
 			Tool: mcp.NewTool("diagnose",
-				mcp.WithDescription("Diagnose errors and generate concrete fix patches with before/after code and verification commands. Use when a tool produces an error you need to understand, or when code quality findings need automated fixes. Provide 'error_output' for error diagnosis, or 'file_path' with 'finding_rule' for code fix generation. Supports Go compile errors, test failure correlation, and AST-based code fixes."),
-				mcp.WithTitleAnnotation("Error Diagnosis & Fix"),
+				mcp.WithDescription("Diagnose errors with root cause analysis, stack frame extraction, and solution chain suggestions. Provide 'error_output' for error diagnosis. Supports Go compile errors, test failure correlation, and co-change file suggestions."),
+				mcp.WithTitleAnnotation("Error Diagnosis"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(true),
@@ -209,16 +209,7 @@ func New(claudeHome string, st *store.Store, emb *embedder.Embedder) *server.MCP
 				mcp.WithString("file_path",
 					mcp.Description("File path related to the error or containing the finding"),
 				),
-				mcp.WithString("finding_rule",
-					mcp.Description("Code quality rule identifier for fix generation"),
-				),
-				mcp.WithString("message",
-					mcp.Description("Finding message text (for fix generation when rule is not known)"),
-				),
-				mcp.WithNumber("line",
-					mcp.Description("Line number of the finding"),
-				),
-				mcp.WithString("format",
+					mcp.WithString("format",
 					mcp.Description("Response format: concise (summary + key data only) or detailed (default, full output)"),
 				),
 			),
