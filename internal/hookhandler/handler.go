@@ -175,11 +175,11 @@ func suggestedToolForPattern(pattern string) string {
 	}
 	switch base {
 	case "retry-loop", "explore-stuck", "edit-fail-spiral":
-		return "alfred_diagnose"
+		return "diagnose"
 	case "knowledge", "solution", "past-fix":
-		return "alfred_knowledge"
+		return "knowledge"
 	case "health-decline", "context-overload", "velocity-wall":
-		return "alfred_state"
+		return "state"
 	case "co-change", "blast-radius", "code-quality":
 		return "alfred_analyze"
 	default:

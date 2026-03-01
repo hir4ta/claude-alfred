@@ -376,9 +376,9 @@ func TestRenderTableAllLinesConsistent(t *testing.T) {
 	lines := []string{
 		"| ツール | 機能 |",
 		"|---|---|",
-		"| `alfred_stats` | セッション統計（ターン数、ツール頻度、経過時間） |",
-		"| `alfred_resume` | **セッション復帰**: 直近の要約、最後のやりとり、決定事項、変更ファイルをまとめて返却 |",
-		"| `alfred_recall` | **コンパクト前の履歴を FTS5 検索** で呼び戻し |",
+		"| `stats` | セッション統計（ターン数、ツール頻度、経過時間） |",
+		"| `resume` | **セッション復帰**: 直近の要約、最後のやりとり、決定事項、変更ファイルをまとめて返却 |",
+		"| `recall` | **コンパクト前の履歴を FTS5 検索** で呼び戻し |",
 	}
 
 	targetWidth := 90

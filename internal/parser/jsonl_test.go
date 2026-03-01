@@ -412,7 +412,7 @@ func TestParseAlfredResumeDefault(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b1",
-					"name": "mcp__claude-alfred__alfred_resume",
+					"name": "mcp__claude-alfred__resume",
 					"input": {}
 				}
 			]
@@ -426,8 +426,8 @@ func TestParseAlfredResumeDefault(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].ToolName != "mcp__claude-alfred__alfred_resume" {
-		t.Errorf("expected alfred_resume, got %q", events[0].ToolName)
+	if events[0].ToolName != "mcp__claude-alfred__resume" {
+		t.Errorf("expected resume, got %q", events[0].ToolName)
 	}
 	if events[0].ToolInput != "latest session" {
 		t.Errorf("expected 'latest session', got %q", events[0].ToolInput)
@@ -446,7 +446,7 @@ func TestParseAlfredResumeWithProject(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b2",
-					"name": "mcp__claude-alfred__alfred_resume",
+					"name": "mcp__claude-alfred__resume",
 					"input": {
 						"project": "claude-alfred"
 					}
@@ -479,7 +479,7 @@ func TestParseAlfredRecallWithQuery(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b3",
-					"name": "mcp__claude-alfred__alfred_recall",
+					"name": "mcp__claude-alfred__recall",
 					"input": {
 						"query": "authentication flow"
 					}
@@ -512,7 +512,7 @@ func TestParseAlfredPatternsWithQuery(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b4",
-					"name": "mcp__claude-alfred__alfred_patterns",
+					"name": "mcp__claude-alfred__patterns",
 					"input": {
 						"query": "error handling",
 						"type": "error_solution"
@@ -546,7 +546,7 @@ func TestParseAlfredStatsDefault(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b5",
-					"name": "mcp__claude-alfred__alfred_stats",
+					"name": "mcp__claude-alfred__stats",
 					"input": {}
 				}
 			]
@@ -577,7 +577,7 @@ func TestParseAlfredDecisionsWithSessionID(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b6",
-					"name": "mcp__claude-alfred__alfred_decisions",
+					"name": "mcp__claude-alfred__decisions",
 					"input": {
 						"session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 					}

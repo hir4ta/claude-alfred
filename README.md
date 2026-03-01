@@ -116,12 +116,12 @@ claude-alfred serve
 
 | Tool | Description |
 |------|-------------|
-| `alfred_state` | Session health, statistics, predictions, session list, context recovery, skill context, accuracy metrics (`detail`: brief/standard/outlook/sessions/resume/skill/accuracy) |
-| `alfred_knowledge` | Search past patterns, decisions, cross-project insights, and pre-compact history (`scope`: project/global/recall) |
-| `alfred_guidance` | Workflow recommendations, alerts, next steps, pending nudges (`focus`: all/alerts/recommendations/next_steps/pending) |
-| `alfred_plan` | Task estimation, progress tracking, strategic workflow planning (`mode`: estimate/progress/strategy) |
-| `alfred_diagnose` | Error diagnosis + concrete fix patches with before/after code and verification commands |
-| `alfred_feedback` | Rate suggestion quality (helpful/partially_helpful/not_helpful/misleading) to improve future relevance |
+| `state` | Session health, statistics, predictions, session list, context recovery, skill context, accuracy metrics (`detail`: brief/standard/outlook/sessions/resume/skill/accuracy) |
+| `knowledge` | Search past patterns, decisions, cross-project insights, and pre-compact history (`scope`: project/global/recall) |
+| `guidance` | Workflow recommendations, alerts, next steps, pending nudges (`focus`: all/alerts/recommendations/next_steps/pending) |
+| `plan` | Task estimation, progress tracking, strategic workflow planning (`mode`: estimate/progress/strategy) |
+| `diagnose` | Error diagnosis + concrete fix patches with before/after code and verification commands |
+| `feedback` | Rate suggestion quality (helpful/partially_helpful/not_helpful/misleading) to improve future relevance |
 
 All tools support `format=concise` for reduced token consumption (summary + key data only).
 
@@ -219,7 +219,7 @@ Working set (currently edited files, intent, task type, key decisions, git branc
 
 **Suggestion effectiveness tracking**:
 
-Nudge delivery and resolution are tracked across sessions with two-step pending verification (mark pending on resolution action → confirm on next tool success/failure) to reduce false positives. Implicit negative signals are recorded when 4+ tools elapse without resolution. Graduated demotion replaces binary suppression: Stage 1 (15+ deliveries, <15% rate → 50% frequency reduction), Stage 2 (20+, <10% → 80% reduction), Stage 3 (30+, <5% → full suppression). Auto-feedback is skipped when it contradicts explicit user feedback. Explicit feedback via `alfred_feedback` MCP tool is integrated into Thompson Sampling with KL regularization and 3-tier fallback (per-user → contextual → base pattern) for priority adjustment. Token cost estimation tracks relative cost per suggestion delivery. Per-user pattern effectiveness is tracked per project for personalized prioritization.
+Nudge delivery and resolution are tracked across sessions with two-step pending verification (mark pending on resolution action → confirm on next tool success/failure) to reduce false positives. Implicit negative signals are recorded when 4+ tools elapse without resolution. Graduated demotion replaces binary suppression: Stage 1 (15+ deliveries, <15% rate → 50% frequency reduction), Stage 2 (20+, <10% → 80% reduction), Stage 3 (30+, <5% → full suppression). Auto-feedback is skipped when it contradicts explicit user feedback. Explicit feedback via `feedback` MCP tool is integrated into Thompson Sampling with KL regularization and 3-tier fallback (per-user → contextual → base pattern) for priority adjustment. Token cost estimation tracks relative cost per suggestion delivery. Per-user pattern effectiveness is tracked per project for personalized prioritization.
 
 **Deep intent model**:
 
@@ -271,6 +271,6 @@ claude-alfred/
 
 ## Semantic Search
 
-Voyage AI (`voyage-4-large`, 2048 dimensions) powers `alfred_knowledge` and hook-based knowledge injection via vector semantic search. Set `VOYAGE_API_KEY` to enable.
+Voyage AI (`voyage-4-large`, 2048 dimensions) powers `knowledge` and hook-based knowledge injection via vector semantic search. Set `VOYAGE_API_KEY` to enable.
 
 Without `VOYAGE_API_KEY`, knowledge search falls back to FTS5 BM25 / LIKE — all features work, just without semantic matching. FTS5 uses phrase-first search for multi-word queries (higher precision), falling back to OR-based search, with title-match reordering for relevance.

@@ -153,7 +153,7 @@ func TestFixHandler_Stub(t *testing.T) {
 
 	req := mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
-			Name: "alfred_fix",
+			Name: "fix",
 			Arguments: map[string]any{
 				"file_path":    "/some/file.go",
 				"finding_rule": "some_rule",

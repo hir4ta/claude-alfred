@@ -117,9 +117,9 @@ func handlePostToolUseFailure(input []byte) (*HookOutput, error) {
 		return nil, nil
 	}
 
-	suggestion += "\n→ For root cause analysis: call alfred_diagnose with the error details."
+	suggestion += "\n→ For root cause analysis: call diagnose with the error details."
 	out := makeOutput("PostToolUseFailure", suggestion)
-	enrichOutput(out, "alfred_diagnose")
+	enrichOutput(out, "diagnose")
 	return out, nil
 }
 

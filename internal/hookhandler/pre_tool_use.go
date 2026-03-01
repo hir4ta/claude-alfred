@@ -86,7 +86,7 @@ func handlePreToolUse(input []byte) (*HookOutput, error) {
 
 	// Light mode: safety gates + auto-corrections only.
 	// Advisory intelligence is available on-demand via MCP tools
-	// (alfred_guidance, alfred_knowledge, alfred_diagnose).
+	// (guidance, knowledge, diagnose).
 	if safetyWarning != "" {
 		return makeOutput("PreToolUse", safetyWarning), nil
 	}

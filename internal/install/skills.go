@@ -20,17 +20,17 @@ description: >
   FAIL after a fix attempt, or any compilation/import error. Do NOT retry —
   invoke this skill first for root cause analysis and past resolution diffs.
 user-invocable: false
-allowed-tools: mcp__claude-alfred__alfred_state, mcp__claude-alfred__alfred_knowledge, mcp__claude-alfred__alfred_guidance, mcp__claude-alfred__alfred_diagnose
+allowed-tools: mcp__claude-alfred__state, mcp__claude-alfred__knowledge, mcp__claude-alfred__guidance, mcp__claude-alfred__diagnose
 ---
 
 Failure recovery advisor. Covers stuck loops, error recovery, and test failure debugging.
 
 ## Steps
 
-1. Call alfred_state with detail="skill", skill_name="alfred-recover" to get session health, recent failures, past solutions, and test correlations
+1. Call state with detail="skill", skill_name="alfred-recover" to get session health, recent failures, past solutions, and test correlations
 2. If a past resolution diff exists, present the exact fix
-3. If more detail needed, call alfred_knowledge with the error message or failing test name
-4. If the failure involves a specific file, call alfred_knowledge with scope="recall" to find what worked before
+3. If more detail needed, call knowledge with the error message or failing test name
+4. If the failure involves a specific file, call knowledge with scope="recall" to find what worked before
 
 ## Output
 
@@ -50,16 +50,16 @@ description: >
   or tasks. Quick health + quality gate that catches problems early and
   prevents bad commits. Do NOT skip before git operations.
 user-invocable: false
-allowed-tools: mcp__claude-alfred__alfred_state, mcp__claude-alfred__alfred_guidance, Bash, Read
+allowed-tools: mcp__claude-alfred__state, mcp__claude-alfred__guidance, Bash, Read
 ---
 
 Session health check and pre-commit quality gate.
 
 ## Steps
 
-1. Call alfred_state with detail="skill", skill_name="alfred-gate" to get health score, test/build status, unresolved failures, and alerts
+1. Call state with detail="skill", skill_name="alfred-gate" to get health score, test/build status, unresolved failures, and alerts
 2. If this is a pre-commit check, verify tests have been run and no active alerts exist
-3. Only call alfred_guidance with focus="alerts" separately if health < 0.7 and you need more detail
+3. Only call guidance with focus="alerts" separately if health < 0.7 and you need more detail
 
 ## Output
 
@@ -78,7 +78,7 @@ description: >
   Shows importers, test coverage, co-change history, anti-patterns, and
   architectural alignment.
 user-invocable: true
-allowed-tools: mcp__claude-alfred__alfred_state, mcp__claude-alfred__alfred_knowledge, mcp__claude-alfred__alfred_guidance, Read, Grep, Glob, Bash
+allowed-tools: mcp__claude-alfred__state, mcp__claude-alfred__knowledge, mcp__claude-alfred__guidance, Read, Grep, Glob, Bash
 context: fork
 agent: Explore
 ---
@@ -88,10 +88,10 @@ Impact analysis and change review.
 ## Steps
 
 1. Identify target files from the user's request or recent git diff
-2. Call alfred_state with detail="skill", skill_name="alfred-analyze" for modified files, test status, and patterns
+2. Call state with detail="skill", skill_name="alfred-analyze" for modified files, test status, and patterns
 3. Use Grep to find importers/references, Glob for related test files
-4. Call alfred_knowledge with type="decision" to check architectural constraints
-5. Call alfred_knowledge for known issues with these files
+4. Call knowledge with type="decision" to check architectural constraints
+5. Call knowledge for known issues with these files
 
 ## Output
 
@@ -113,7 +113,7 @@ description: >
   Shows expected tool count, success rate, workflow recommendation, health
   trend, and cascade risk.
 user-invocable: true
-allowed-tools: mcp__claude-alfred__alfred_plan, mcp__claude-alfred__alfred_state, mcp__claude-alfred__alfred_knowledge, mcp__claude-alfred__alfred_guidance
+allowed-tools: mcp__claude-alfred__plan, mcp__claude-alfred__state, mcp__claude-alfred__knowledge, mcp__claude-alfred__guidance
 context: fork
 agent: Explore
 ---
@@ -123,10 +123,10 @@ Task estimation and session prediction dashboard.
 ## Steps
 
 1. Determine task type from the user's description (bugfix, feature, refactor, research, review)
-2. Call alfred_plan with mode="estimate" and the task type for historical data
-3. Call alfred_state for real-time session snapshot including predictions
-4. Call alfred_state with detail="skill", skill_name="alfred-forecast" for health and phase data
-5. If health < 0.7, call alfred_guidance with focus="alerts" for anti-pattern details
+2. Call plan with mode="estimate" and the task type for historical data
+3. Call state for real-time session snapshot including predictions
+4. Call state with detail="skill", skill_name="alfred-forecast" for health and phase data
+5. If health < 0.7, call guidance with focus="alerts" for anti-pattern details
 
 ## Output
 
@@ -149,19 +149,19 @@ description: >
   truncated. Recovers the current task intent, working set files, recent
   decisions, and git branch state from session memory.
 user-invocable: false
-allowed-tools: mcp__claude-alfred__alfred_state, mcp__claude-alfred__alfred_knowledge
+allowed-tools: mcp__claude-alfred__state, mcp__claude-alfred__knowledge
 ---
 
 Automatic context recovery after compaction.
 
 ## Steps
 
-1. Call alfred_state with detail="skill", skill_name="alfred-context-recovery" to get working set, decisions, and session state
-2. If key details are missing, call alfred_knowledge with scope="recall" for:
+1. Call state with detail="skill", skill_name="alfred-context-recovery" to get working set, decisions, and session state
+2. If key details are missing, call knowledge with scope="recall" for:
    - Current task/goal
    - Files being actively edited
    - Recent decisions made
-3. Call alfred_knowledge with type="decision" to restore architectural context if working on a complex task
+3. Call knowledge with type="decision" to restore architectural context if working on a complex task
 
 ## Output
 

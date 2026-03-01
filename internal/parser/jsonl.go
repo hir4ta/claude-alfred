@@ -456,14 +456,15 @@ func extractAlfredToolSummary(toolName string, ti ToolInput) string {
 	}
 
 	// Default label based on tool name.
+	// Extract short name after last "__" separator (e.g. "mcp__claude-alfred__resume" → "resume").
 	shortName := toolName
-	if idx := strings.LastIndex(toolName, "alfred_"); idx >= 0 {
-		shortName = toolName[idx:]
+	if idx := strings.LastIndex(toolName, "__"); idx >= 0 {
+		shortName = toolName[idx+2:]
 	}
 	switch shortName {
-	case "alfred_resume":
+	case "resume":
 		return "latest session"
-	case "alfred_sessions":
+	case "sessions":
 		return "recent"
 	default:
 		return "latest"

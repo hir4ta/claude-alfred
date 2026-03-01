@@ -6,19 +6,19 @@ description: >
   truncated. Recovers the current task intent, working set files, recent
   decisions, and git branch state from session memory.
 user-invocable: false
-allowed-tools: mcp__claude-alfred__alfred_state, mcp__claude-alfred__alfred_knowledge
+allowed-tools: mcp__claude-alfred__state, mcp__claude-alfred__knowledge
 ---
 
 Automatic context recovery after compaction.
 
 ## Steps
 
-1. Call alfred_state with detail="skill", skill_name="alfred-context-recovery" to get working set, decisions, and session state
-2. If key details are missing, call alfred_knowledge with scope="recall" for:
+1. Call state with detail="skill", skill_name="alfred-context-recovery" to get working set, decisions, and session state
+2. If key details are missing, call knowledge with scope="recall" for:
    - Current task/goal
    - Files being actively edited
    - Recent decisions made
-3. Call alfred_knowledge with type="decision" to restore architectural context if working on a complex task
+3. Call knowledge with type="decision" to restore architectural context if working on a complex task
 
 ## Output
 

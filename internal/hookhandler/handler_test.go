@@ -12,10 +12,10 @@ func TestMakeOutput(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		event    string
-		context  string
-		wantNil  bool
+		name    string
+		event   string
+		context string
+		wantNil bool
 	}{
 		{name: "empty context returns nil", event: "Test", context: "", wantNil: true},
 		{name: "non-empty context returns output", event: "Test", context: "hello", wantNil: false},
@@ -310,10 +310,10 @@ func TestSuggestedToolForPattern_DefaultEmpty(t *testing.T) {
 		pattern string
 		want    string
 	}{
-		{"retry-loop", "alfred_diagnose"},
-		{"explore-stuck", "alfred_diagnose"},
-		{"knowledge", "alfred_knowledge"},
-		{"health-decline", "alfred_state"},
+		{"retry-loop", "diagnose"},
+		{"explore-stuck", "diagnose"},
+		{"knowledge", "knowledge"},
+		{"health-decline", "state"},
 		{"co-change", "alfred_analyze"},
 		{"session-context", ""},
 		{"task-briefing", ""},
@@ -349,8 +349,8 @@ func TestEnrichOutput_FirstActionableEntry(t *testing.T) {
 		}
 	}
 	ctx, _ := out.HookSpecificOutput["additionalContext"].(string)
-	if !contains(ctx, "[suggested: alfred_diagnose]") {
-		t.Errorf("expected alfred_diagnose from retry-loop, got: %q", ctx)
+	if !contains(ctx, "[suggested: diagnose]") {
+		t.Errorf("expected diagnose from retry-loop, got: %q", ctx)
 	}
 
 	// When no entry has a matching tool, no suggestion is appended.
@@ -375,7 +375,7 @@ func TestEnrichOutput(t *testing.T) {
 	t.Parallel()
 
 	// nil output is safe.
-	enrichOutput(nil, "alfred_diagnose")
+	enrichOutput(nil, "diagnose")
 
 	// Empty tool is a no-op.
 	out := makeOutput("PostToolUse", "some context")
@@ -386,9 +386,9 @@ func TestEnrichOutput(t *testing.T) {
 	}
 
 	// Non-empty tool appends suggestion.
-	enrichOutput(out, "alfred_diagnose")
+	enrichOutput(out, "diagnose")
 	ctx, _ = out.HookSpecificOutput["additionalContext"].(string)
-	want := "some context\n[suggested: alfred_diagnose]"
+	want := "some context\n[suggested: diagnose]"
 	if ctx != want {
 		t.Errorf("enrichOutput() = %q, want %q", ctx, want)
 	}
@@ -530,7 +530,6 @@ func TestPostCompactResume_WithWorkingSet(t *testing.T) {
 	}
 }
 
-
 func TestCaptureGitContext(t *testing.T) {
 	t.Parallel()
 
@@ -578,4 +577,3 @@ func TestFormatResumeContext_Nil(t *testing.T) {
 		t.Errorf("FormatResumeContext(empty) = %q, want empty", result)
 	}
 }
-

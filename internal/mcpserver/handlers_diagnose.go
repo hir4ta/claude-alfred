@@ -28,7 +28,7 @@ func diagnoseHandler(st *store.Store) server.ToolHandlerFunc {
 	}
 }
 
-// diagnosis is the structured output of alfred_diagnose.
+// diagnosis is the structured output of diagnose.
 type diagnosis struct {
 	FailureType   string            `json:"failure_type"`
 	RootCause     string            `json:"root_cause"`

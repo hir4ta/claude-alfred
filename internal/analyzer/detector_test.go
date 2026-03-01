@@ -550,8 +550,8 @@ func TestCompactAmnesiaFileList(t *testing.T) {
 			if !hasFile {
 				t.Errorf("Observation should contain overlapping file names, got: %s", a.Observation)
 			}
-			if !strings.Contains(a.Suggestion, "alfred_knowledge") {
-				t.Errorf("Suggestion should mention alfred_knowledge, got: %s", a.Suggestion)
+			if !strings.Contains(a.Suggestion, "knowledge") {
+				t.Errorf("Suggestion should mention knowledge, got: %s", a.Suggestion)
 			}
 			return
 		}
