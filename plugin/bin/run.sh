@@ -1,18 +1,18 @@
 #!/bin/sh
-# claude-buddy wrapper — auto-downloads binary on version mismatch.
-BUDDY_VERSION="0.16.0"
+# claude-alfred wrapper — auto-downloads binary on version mismatch.
+ALFRED_VERSION="0.16.0"
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUDDY_BIN="${BIN_DIR}/claude-buddy"
-VERSION_FILE="${BIN_DIR}/.buddy-version"
-LOCK_DIR="${BIN_DIR}/.buddy-download.lock"
-INSTALL_MARKER="${BIN_DIR}/.buddy-installed-${BUDDY_VERSION}"
-INSTALL_LOCK="${BIN_DIR}/.buddy-install.lock"
+BUDDY_BIN="${BIN_DIR}/claude-alfred"
+VERSION_FILE="${BIN_DIR}/.alfred-version"
+LOCK_DIR="${BIN_DIR}/.alfred-download.lock"
+INSTALL_MARKER="${BIN_DIR}/.alfred-installed-${ALFRED_VERSION}"
+INSTALL_LOCK="${BIN_DIR}/.alfred-install.lock"
 
 # --- helpers ----------------------------------------------------------------
 
 is_current() {
   [ -f "$BUDDY_BIN" ] && [ -f "$VERSION_FILE" ] && \
-    [ "$(cat "$VERSION_FILE" 2>/dev/null)" = "$BUDDY_VERSION" ]
+    [ "$(cat "$VERSION_FILE" 2>/dev/null)" = "$ALFRED_VERSION" ]
 }
 
 detect_platform() {
@@ -47,9 +47,9 @@ release_lock() { rm -rf "$LOCK_DIR"; }
 
 download_binary() {
   detect_platform
-  URL="https://github.com/hir4ta/claude-buddy/releases/download/v${BUDDY_VERSION}/claude-buddy_${OS}_${ARCH}.tar.gz"
-  TMP_TAR="${BIN_DIR}/.buddy-dl.$$.tar.gz"
-  TMP_EXTRACT="${BIN_DIR}/.buddy-dl.$$"
+  URL="https://github.com/hir4ta/claude-alfred/releases/download/v${ALFRED_VERSION}/claude-alfred_${OS}_${ARCH}.tar.gz"
+  TMP_TAR="${BIN_DIR}/.alfred-dl.$$.tar.gz"
+  TMP_EXTRACT="${BIN_DIR}/.alfred-dl.$$"
 
   # Download tarball.
   if ! curl -fsSL --retry 2 --max-time 60 "$URL" -o "$TMP_TAR" 2>/dev/null; then
@@ -59,13 +59,13 @@ download_binary() {
 
   # Extract to temp dir, then move atomically.
   mkdir -p "$TMP_EXTRACT"
-  if ! tar -xzf "$TMP_TAR" -C "$TMP_EXTRACT" claude-buddy 2>/dev/null; then
+  if ! tar -xzf "$TMP_TAR" -C "$TMP_EXTRACT" claude-alfred 2>/dev/null; then
     rm -f "$TMP_TAR"; rm -rf "$TMP_EXTRACT"
     return 1
   fi
-  chmod +x "${TMP_EXTRACT}/claude-buddy"
-  mv -f "${TMP_EXTRACT}/claude-buddy" "$BUDDY_BIN"
-  printf '%s' "$BUDDY_VERSION" > "$VERSION_FILE"
+  chmod +x "${TMP_EXTRACT}/claude-alfred"
+  mv -f "${TMP_EXTRACT}/claude-alfred" "$BUDDY_BIN"
+  printf '%s' "$ALFRED_VERSION" > "$VERSION_FILE"
   rm -f "$TMP_TAR"; rm -rf "$TMP_EXTRACT"
   return 0
 }
@@ -100,7 +100,7 @@ case "$1" in
   setup)
     # Explicit first-time setup (called from curl one-liner).
     if is_current; then
-      echo "claude-buddy ${BUDDY_VERSION} already installed"
+      echo "claude-alfred ${ALFRED_VERSION} already installed"
     else
       if acquire_lock; then
         download_binary || { release_lock; echo "Download failed." >&2; exit 1; }
@@ -113,7 +113,7 @@ case "$1" in
         done
         is_current || { echo "Download timed out." >&2; exit 1; }
       fi
-      echo "claude-buddy ${BUDDY_VERSION} installed"
+      echo "claude-alfred ${ALFRED_VERSION} installed"
     fi
     shift
     exec "$BUDDY_BIN" install "$@"
@@ -131,7 +131,7 @@ case "$1" in
   serve)
     # MCP server — no timeout, block until binary ready.
     if ! ensure_binary 60; then
-      echo "claude-buddy: binary not available. Run setup first." >&2
+      echo "claude-alfred: binary not available. Run setup first." >&2
       exit 1
     fi
     # Run install in background on first serve after download.
@@ -146,7 +146,7 @@ case "$1" in
     if [ ! -f "$INSTALL_MARKER" ] && mkdir "$INSTALL_LOCK" 2>/dev/null; then
       ( echo $$ > "$INSTALL_LOCK/pid"
         "$BUDDY_BIN" install >/dev/null 2>&1
-        printf '%s' "$BUDDY_VERSION" > "$INSTALL_MARKER"
+        printf '%s' "$ALFRED_VERSION" > "$INSTALL_MARKER"
         rm -rf "$INSTALL_LOCK" ) &
     fi
     exec "$BUDDY_BIN" serve
@@ -155,7 +155,7 @@ case "$1" in
   hook-handler)
     # Hooks have tight timeouts (1-8s). Try briefly, then degrade.
     if ! ensure_binary 3; then
-      echo '{"additionalContext":"[claude-buddy] Updating binary. Will be ready shortly."}'
+      echo '{"additionalContext":"[claude-alfred] Updating binary. Will be ready shortly."}'
       exit 0
     fi
     exec "$BUDDY_BIN" "$@"
@@ -165,12 +165,12 @@ case "$1" in
     if is_current; then
       exec "$BUDDY_BIN" version
     fi
-    echo "claude-buddy ${BUDDY_VERSION} (binary not yet downloaded)"
+    echo "claude-alfred ${ALFRED_VERSION} (binary not yet downloaded)"
     ;;
 
   *)
     if ! ensure_binary 30; then
-      echo "claude-buddy: binary not available. Run setup first." >&2
+      echo "claude-alfred: binary not available. Run setup first." >&2
       exit 1
     fi
     exec "$BUDDY_BIN" "$@"

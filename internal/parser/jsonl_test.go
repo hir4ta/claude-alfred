@@ -400,7 +400,7 @@ func TestParseTaskListOutputNoMatch(t *testing.T) {
 	}
 }
 
-func TestParseBuddyResumeDefault(t *testing.T) {
+func TestParseAlfredResumeDefault(t *testing.T) {
 	line := []byte(`{
 		"type": "assistant",
 		"uuid": "buddy-001",
@@ -412,7 +412,7 @@ func TestParseBuddyResumeDefault(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b1",
-					"name": "mcp__claude-alfred__buddy_resume",
+					"name": "mcp__claude-alfred__alfred_resume",
 					"input": {}
 				}
 			]
@@ -426,8 +426,8 @@ func TestParseBuddyResumeDefault(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].ToolName != "mcp__claude-alfred__buddy_resume" {
-		t.Errorf("expected buddy_resume, got %q", events[0].ToolName)
+	if events[0].ToolName != "mcp__claude-alfred__alfred_resume" {
+		t.Errorf("expected alfred_resume, got %q", events[0].ToolName)
 	}
 	if events[0].ToolInput != "latest session" {
 		t.Errorf("expected 'latest session', got %q", events[0].ToolInput)
@@ -446,7 +446,7 @@ func TestParseBuddyResumeWithProject(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id": "toolu_b2",
-					"name": "mcp__claude-alfred__buddy_resume",
+					"name": "mcp__claude-alfred__alfred_resume",
 					"input": {
 						"project": "claude-alfred"
 					}

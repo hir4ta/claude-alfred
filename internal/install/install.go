@@ -213,7 +213,7 @@ func cleanupLegacyInstall() {
 	}
 
 	// Remove legacy skills.
-	for _, skill := range buddySkills {
+	for _, skill := range alfredSkills {
 		skillDir := filepath.Join(home, ".claude", "skills", skill.Dir)
 		if _, err := os.Stat(skillDir); err == nil {
 			cleaned = true

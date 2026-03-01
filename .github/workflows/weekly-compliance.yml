@@ -25,7 +25,7 @@ jobs:
 
             ## Task
 
-            Check the claude-buddy plugin for compliance with the LATEST Claude Code best practices.
+            Check the claude-alfred plugin for compliance with the LATEST Claude Code best practices.
 
             ## Step 1: Fetch latest docs
 
@@ -43,7 +43,7 @@ jobs:
             - plugin/hooks/hooks.json
             - plugin/.claude-plugin/plugin.json
             - plugin/.mcp.json
-            - plugin/agents/buddy.md
+            - plugin/agents/alfred.md
             - All files matching plugin/skills/*/SKILL.md
 
             ## Step 3: Cross-reference

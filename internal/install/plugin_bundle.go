@@ -21,7 +21,7 @@ func Bundle(outputDir, version string) error {
 		filepath.Join(outputDir, "bin"),
 		filepath.Join(outputDir, "agents"),
 	}
-	for _, skill := range buddySkills {
+	for _, skill := range alfredSkills {
 		dirs = append(dirs, filepath.Join(outputDir, "skills", skill.Dir))
 	}
 	for _, d := range dirs {
@@ -74,7 +74,7 @@ func Bundle(outputDir, version string) error {
 	}
 
 	// 6. Write skills.
-	for _, skill := range buddySkills {
+	for _, skill := range alfredSkills {
 		p := filepath.Join(outputDir, "skills", skill.Dir, "SKILL.md")
 		if err := os.WriteFile(p, []byte(skill.Content), 0o644); err != nil {
 			return fmt.Errorf("write skill %s: %w", skill.Dir, err)
@@ -83,7 +83,7 @@ func Bundle(outputDir, version string) error {
 
 	// 7. Write agent.
 	agentPath := filepath.Join(outputDir, "agents", "alfred.md")
-	if err := os.WriteFile(agentPath, []byte(buddyAgentContent), 0o644); err != nil {
+	if err := os.WriteFile(agentPath, []byte(alfredAgentContent), 0o644); err != nil {
 		return fmt.Errorf("write alfred agent: %w", err)
 	}
 
@@ -94,7 +94,7 @@ func Bundle(outputDir, version string) error {
 	fmt.Printf("  - hooks.json (%d events)\n", hookCount)
 	fmt.Printf("  - .mcp.json\n")
 	fmt.Printf("  - bin/run.sh (guard + setup wrapper)\n")
-	fmt.Printf("  - %d skills\n", len(buddySkills))
+	fmt.Printf("  - %d skills\n", len(alfredSkills))
 	fmt.Printf("  - 1 agent (alfred)\n")
 	return nil
 }

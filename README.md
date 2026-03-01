@@ -1,4 +1,4 @@
-# claude-buddy
+# claude-alfred
 
 A proactive session companion for Claude Code — real-time anti-pattern detection, predictive health monitoring, causal failure diagnosis, automatic context recovery, AST-based code quality analysis with auto-fix, coverage-aware test correlation, adaptive personalization, and cross-project knowledge sharing. Works as a Claude Code plugin with hooks, MCP tools, skills, and agents.
 
@@ -7,14 +7,14 @@ A proactive session companion for Claude Code — real-time anti-pattern detecti
 **1. Add the plugin in Claude Code:**
 
 ```
-/plugin marketplace add hir4ta/claude-buddy
-/plugin install claude-buddy@claude-buddy
+/plugin marketplace add hir4ta/claude-alfred
+/plugin install claude-alfred@claude-alfred
 ```
 
 **2. Run initial setup in your terminal (one-time):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-buddy/main/setup.sh | sh
+curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-alfred/main/setup.sh | sh
 ```
 
 This downloads the binary and syncs all available sessions (JSONL parsing, pattern extraction, and embedding generation). Estimated time is shown before sync starts.
@@ -27,21 +27,21 @@ Set `VOYAGE_API_KEY` before running setup to enable vector-based knowledge searc
 
 ```bash
 export VOYAGE_API_KEY=your-api-key
-curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-buddy/main/setup.sh | sh
+curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-alfred/main/setup.sh | sh
 ```
 
 Already ran setup without the key? Just set the key and re-run — embeddings are generated incrementally.
 
-Setting `VOYAGE_API_KEY` before initial setup allows you to pre-build vector embeddings from your session data, giving buddy semantic search capabilities from the first conversation.
+Setting `VOYAGE_API_KEY` before initial setup allows you to pre-build vector embeddings from your session data, giving alfred semantic search capabilities from the first conversation.
 
 Uses `voyage-4-large` (2048 dimensions) for maximum retrieval accuracy.
 
 ### Building from source
 
 ```bash
-git clone https://github.com/hir4ta/claude-buddy
-cd claude-buddy
-go build -o claude-buddy .
+git clone https://github.com/hir4ta/claude-alfred
+cd claude-alfred
+go build -o claude-alfred .
 ```
 
 ## Upgrade
@@ -56,13 +56,13 @@ That's it. The binary is automatically downloaded on the next Claude Code restar
 
 ## Commands
 
-### `claude-buddy` / `claude-buddy watch`
+### `claude-alfred` / `claude-alfred watch`
 
 Monitor a Claude Code session in real-time. Run in a separate terminal or tmux pane.
 
 ```bash
 # Terminal 1
-claude-buddy
+claude-alfred
 
 # Terminal 2
 claude
@@ -94,82 +94,82 @@ claude
 
 ---
 
-### `claude-buddy browse`
+### `claude-alfred browse`
 
 Browse past session history with the same expand/collapse interface.
 
 ```bash
-claude-buddy browse
+claude-alfred browse
 ```
 
 ---
 
-### `claude-buddy serve`
+### `claude-alfred serve`
 
 Run as an MCP server (stdio) for Claude Code integration.
 
 ```bash
-claude-buddy serve
+claude-alfred serve
 ```
 
 **MCP Tools (6 consolidated):**
 
 | Tool | Description |
 |------|-------------|
-| `buddy_state` | Session health, statistics, predictions, session list, context recovery, skill context, accuracy metrics (`detail`: brief/standard/outlook/sessions/resume/skill/accuracy) |
-| `buddy_knowledge` | Search past patterns, decisions, cross-project insights, and pre-compact history (`scope`: project/global/recall) |
-| `buddy_guidance` | Workflow recommendations, alerts, next steps, pending nudges (`focus`: all/alerts/recommendations/next_steps/pending) |
-| `buddy_plan` | Task estimation, progress tracking, strategic workflow planning (`mode`: estimate/progress/strategy) |
-| `buddy_diagnose` | Error diagnosis + concrete fix patches with before/after code and verification commands |
-| `buddy_feedback` | Rate suggestion quality (helpful/partially_helpful/not_helpful/misleading) to improve future relevance |
+| `alfred_state` | Session health, statistics, predictions, session list, context recovery, skill context, accuracy metrics (`detail`: brief/standard/outlook/sessions/resume/skill/accuracy) |
+| `alfred_knowledge` | Search past patterns, decisions, cross-project insights, and pre-compact history (`scope`: project/global/recall) |
+| `alfred_guidance` | Workflow recommendations, alerts, next steps, pending nudges (`focus`: all/alerts/recommendations/next_steps/pending) |
+| `alfred_plan` | Task estimation, progress tracking, strategic workflow planning (`mode`: estimate/progress/strategy) |
+| `alfred_diagnose` | Error diagnosis + concrete fix patches with before/after code and verification commands |
+| `alfred_feedback` | Rate suggestion quality (helpful/partially_helpful/not_helpful/misleading) to improve future relevance |
 
 All tools support `format=concise` for reduced token consumption (summary + key data only).
 
 ---
 
-### `claude-buddy analyze [session_id]`
+### `claude-alfred analyze [session_id]`
 
 Session analysis report.
 
 ```bash
-claude-buddy analyze          # Latest session
-claude-buddy analyze de999fa4 # Specific session by ID prefix
+claude-alfred analyze          # Latest session
+claude-alfred analyze de999fa4 # Specific session by ID prefix
 ```
 
-### `claude-buddy uninstall`
+### `claude-alfred uninstall`
 
 Remove hooks and MCP server registration:
 
 ```bash
-claude-buddy uninstall
+claude-alfred uninstall
 ```
 
-### `claude-buddy plugin-bundle [output_dir]`
+### `claude-alfred plugin-bundle [output_dir]`
 
 Generate the plugin directory from Go source definitions. Used for development and CI verification.
 
 ```bash
-claude-buddy plugin-bundle ./plugin
+claude-alfred plugin-bundle ./plugin
 ```
 
 ## Plugin
 
-claude-buddy is distributed as a Claude Code plugin. The plugin provides:
+claude-alfred is distributed as a Claude Code plugin. The plugin provides:
 
 - **13 hooks**: SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, PreCompact, SessionEnd, SubagentStart, SubagentStop, Notification, TeammateIdle, TaskCompleted, PermissionRequest
-- **5 skills**: buddy-recover, buddy-gate, buddy-analyze, buddy-forecast, buddy-context-recovery
-- **1 agent**: buddy (persistent memory, session advisor)
+- **5 skills**: alfred-recover, alfred-gate, alfred-analyze, alfred-forecast, alfred-context-recovery
+- **1 agent**: alfred (persistent memory, session advisor)
 - **MCP server**: 6 consolidated tools for session analysis, feedback, and cross-project knowledge search
 
 ### Skills
 
 | Skill | Invocation | Description |
 |---|---|---|
-| buddy-recover | auto | Failure recovery: stuck loops, error resolution diffs, test debugging |
-| buddy-gate | auto | Session health check + pre-commit quality gate |
-| buddy-analyze | `/claude-buddy:buddy-analyze` | Blast radius analysis and change review (runs in forked context) |
-| buddy-forecast | `/claude-buddy:buddy-forecast` | Task estimation and session prediction dashboard (runs in forked context) |
-| buddy-context-recovery | auto | Restore working context after compaction |
+| alfred-recover | auto | Failure recovery: stuck loops, error resolution diffs, test debugging |
+| alfred-gate | auto | Session health check + pre-commit quality gate |
+| alfred-analyze | `/claude-alfred:alfred-analyze` | Blast radius analysis and change review (runs in forked context) |
+| alfred-forecast | `/claude-alfred:alfred-forecast` | Task estimation and session prediction dashboard (runs in forked context) |
+| alfred-context-recovery | auto | Restore working context after compaction |
 
 ## Hooks
 
@@ -211,7 +211,7 @@ Hooks actively monitor your session through Claude Code's lifecycle events:
 - **Test failure correlation**: Connects test failures to recently edited files via coverage map (function-level precision) with fallback to file-list heuristics
 - **Workflow guidance**: Learned playbooks from past sessions with concrete file names and test commands; suggests test-first approach for bugfix/refactor tasks
 - **Past knowledge surfacing**: Surfaces related decisions, error solutions, and resolution chains (tool sequences) from previous sessions
-- **Cross-project learning**: Patterns and decisions are synced to a global DB (`~/.claude-buddy/global.db`) for reuse across projects
+- **Cross-project learning**: Patterns and decisions are synced to a global DB (`~/.claude-alfred/global.db`) for reuse across projects
 
 **Automatic context recovery** (survives compaction):
 
@@ -219,7 +219,7 @@ Working set (currently edited files, intent, task type, key decisions, git branc
 
 **Suggestion effectiveness tracking**:
 
-Nudge delivery and resolution are tracked across sessions with two-step pending verification (mark pending on resolution action → confirm on next tool success/failure) to reduce false positives. Implicit negative signals are recorded when 4+ tools elapse without resolution. Graduated demotion replaces binary suppression: Stage 1 (15+ deliveries, <15% rate → 50% frequency reduction), Stage 2 (20+, <10% → 80% reduction), Stage 3 (30+, <5% → full suppression). Auto-feedback is skipped when it contradicts explicit user feedback. Explicit feedback via `buddy_feedback` MCP tool is integrated into Thompson Sampling with KL regularization and 3-tier fallback (per-user → contextual → base pattern) for priority adjustment. Token cost estimation tracks relative cost per suggestion delivery. Per-user pattern effectiveness is tracked per project for personalized prioritization.
+Nudge delivery and resolution are tracked across sessions with two-step pending verification (mark pending on resolution action → confirm on next tool success/failure) to reduce false positives. Implicit negative signals are recorded when 4+ tools elapse without resolution. Graduated demotion replaces binary suppression: Stage 1 (15+ deliveries, <15% rate → 50% frequency reduction), Stage 2 (20+, <10% → 80% reduction), Stage 3 (30+, <5% → full suppression). Auto-feedback is skipped when it contradicts explicit user feedback. Explicit feedback via `alfred_feedback` MCP tool is integrated into Thompson Sampling with KL regularization and 3-tier fallback (per-user → contextual → base pattern) for priority adjustment. Token cost estimation tracks relative cost per suggestion delivery. Per-user pattern effectiveness is tracked per project for personalized prioritization.
 
 **Deep intent model**:
 
@@ -232,14 +232,14 @@ Behavioral clustering (conservative/balanced/aggressive) based on read-write rat
 ## Architecture
 
 ```
-claude-buddy/
+claude-alfred/
 ├── main.go                    # Entry point + subcommand routing
 ├── plugin/                    # Claude Code plugin (generated by plugin-bundle)
 │   ├── .claude-plugin/        # Plugin manifest
 │   ├── hooks/                 # Hook definitions (14 events)
 │   ├── bin/                   # Guard + setup wrapper script
 │   ├── skills/                # 5 skills
-│   ├── agents/                # Buddy agent
+│   ├── agents/                # Alfred agent
 │   └── .mcp.json              # MCP server config
 ├── .claude-plugin/            # Marketplace manifest
 ├── internal/
@@ -271,6 +271,6 @@ claude-buddy/
 
 ## Semantic Search
 
-Voyage AI (`voyage-4-large`, 2048 dimensions) powers `buddy_knowledge` and hook-based knowledge injection via vector semantic search. Set `VOYAGE_API_KEY` to enable.
+Voyage AI (`voyage-4-large`, 2048 dimensions) powers `alfred_knowledge` and hook-based knowledge injection via vector semantic search. Set `VOYAGE_API_KEY` to enable.
 
 Without `VOYAGE_API_KEY`, knowledge search falls back to FTS5 BM25 / LIKE — all features work, just without semantic matching. FTS5 uses phrase-first search for multi-word queries (higher precision), falling back to OR-based search, with title-match reordering for relevance.

@@ -1,11 +1,11 @@
 ---
-name: buddy-analyze
+name: alfred-analyze
 description: >
   Analyze blast radius of planned changes and review recent modifications.
   Shows importers, test coverage, co-change history, anti-patterns, and
   architectural alignment.
 user-invocable: true
-allowed-tools: mcp__claude-buddy__buddy_state, mcp__claude-buddy__buddy_knowledge, mcp__claude-buddy__buddy_guidance, Read, Grep, Glob, Bash
+allowed-tools: mcp__claude-alfred__alfred_state, mcp__claude-alfred__alfred_knowledge, mcp__claude-alfred__alfred_guidance, Read, Grep, Glob, Bash
 context: fork
 agent: Explore
 ---
@@ -15,10 +15,10 @@ Impact analysis and change review.
 ## Steps
 
 1. Identify target files from the user's request or recent git diff
-2. Call buddy_state with detail="skill", skill_name="buddy-analyze" for modified files, test status, and patterns
+2. Call alfred_state with detail="skill", skill_name="alfred-analyze" for modified files, test status, and patterns
 3. Use Grep to find importers/references, Glob for related test files
-4. Call buddy_knowledge with type="decision" to check architectural constraints
-5. Call buddy_knowledge for known issues with these files
+4. Call alfred_knowledge with type="decision" to check architectural constraints
+5. Call alfred_knowledge for known issues with these files
 
 ## Output
 

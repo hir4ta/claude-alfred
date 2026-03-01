@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "claude-buddy": {
+    "claude-alfred": {
       "args": [
         "serve"
       ],

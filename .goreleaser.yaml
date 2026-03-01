@@ -1,7 +1,7 @@
 version: 2
 
 builds:
-  - binary: claude-buddy
+  - binary: claude-alfred
     goos:
       - darwin
       - linux

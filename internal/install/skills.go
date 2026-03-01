@@ -10,7 +10,7 @@ type skillDef struct {
 	Content string // SKILL.md content
 }
 
-var buddySkills = []skillDef{
+var alfredSkills = []skillDef{
 	{
 		Dir: "alfred-recover",
 		Content: `---
@@ -199,7 +199,7 @@ func removeSkills() {
 		return
 	}
 	skillsBase := filepath.Join(home, ".claude", "skills")
-	for _, skill := range buddySkills {
+	for _, skill := range alfredSkills {
 		_ = os.RemoveAll(filepath.Join(skillsBase, skill.Dir))
 	}
 	for _, dir := range deprecatedSkillDirs {

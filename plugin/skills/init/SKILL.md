@@ -7,7 +7,7 @@ user-invocable: true
 allowed-tools: Bash, AskUserQuestion
 ---
 
-Re-sync claude-buddy data (sessions, patterns, embeddings).
+Re-sync claude-alfred data (sessions, patterns, embeddings).
 
 Note: Binary updates happen automatically when the plugin is updated via /plugin.
 This skill is useful for:
@@ -18,7 +18,7 @@ This skill is useful for:
 
 1. Find the plugin installation directory:
    ```bash
-   find ~/.claude/plugins/cache -name "run.sh" -path "*/claude-buddy/*/bin/*" -type f 2>/dev/null | sort -V | tail -1
+   find ~/.claude/plugins/cache -name "run.sh" -path "*/claude-alfred/*/bin/*" -type f 2>/dev/null | sort -V | tail -1
    ```
 
 2. Count available sessions per sync range:
