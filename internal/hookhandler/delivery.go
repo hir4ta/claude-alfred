@@ -45,72 +45,37 @@ type DeliveryDecision struct {
 }
 
 // RouteDelivery decides how to deliver a suggestion based on:
-// 1. User's historical response rate for this pattern (effectiveness_score).
-// 2. Number of suggestions already delivered in this burst.
-// 3. Standard suppression check.
-// 4. Workflow boundary boost (phase transitions, commits, task switches).
+// 1. Flow state (productive/thrashing/stalled).
+// 2. Thompson Sampling on historical effectiveness.
+// 3. Burst suggestion cap.
 func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority SuggestionPriority) DeliveryDecision {
 	// Critical priority bypasses all flow checks and Thompson Sampling.
 	if priority == PriorityCritical {
 		return DeliveryDecision{Channel: ChannelImmediate, Priority: priority}
 	}
 
-	// Complexity gating: low-complexity tasks (delete, rename, format) only
-	// receive Critical and High suggestions. This prevents mechanical operations
-	// from being flooded with workflow and knowledge noise.
-	complexity := currentTaskComplexity(sdb)
-	if complexity == ComplexityLow && priority > PriorityHigh {
-		return DeliveryDecision{Channel: ChannelSuppress, Priority: priority}
-	}
-
 	// Graduated suppression based on multi-signal flow state.
 	flow := classifyFlowState(sdb)
 	switch flow {
 	case FlowProductive:
-		// Genuine productivity — only High+ gets through immediately.
 		if priority > PriorityHigh {
 			return DeliveryDecision{Channel: ChannelDefer, Priority: priority}
 		}
 	case FlowThrashing:
-		// Active but struggling — promote Medium warnings to immediate, suppress Low.
 		if priority == PriorityLow {
 			return DeliveryDecision{Channel: ChannelSuppress, Priority: priority}
 		}
 		if priority == PriorityMedium {
-			priority = PriorityHigh // promote warnings so they reach the user
-		}
-	case FlowFatigued:
-		// User ignoring suggestions — reduce to High only, 1 per burst.
-		if priority > PriorityHigh {
-			return DeliveryDecision{Channel: ChannelSuppress, Priority: priority}
-		}
-		if priority == PriorityHigh && getBurstSuggestionCount(sdb) >= 1 {
-			return DeliveryDecision{Channel: ChannelNudge, Priority: priority}
+			priority = PriorityHigh
 		}
 	case FlowStalled:
 		// Low velocity — deliver everything to help unstick.
-		// No suppression; fall through to normal routing.
 	default:
 		// FlowNormal — standard routing.
 	}
 
-	// Workflow boundary boost: promote Medium → High at phase transitions,
-	// commits, and task switches (52% engagement vs 31% mid-task).
-	if priority == PriorityMedium && isAtWorkflowBoundary(sdb) {
-		priority = PriorityHigh
-	}
-
-	// Apply graduated demotion before TS — probabilistically skip low-performing patterns.
-	rng := getSessionRNG(sdb)
-	if priority > PriorityHigh {
-		if st, err := store.OpenDefaultCached(); err == nil {
-			if applyGraduatedDemotion(rng, st, pattern) {
-				return DeliveryDecision{Channel: ChannelSuppress, Priority: PrioritySuppressed}
-			}
-		}
-	}
-
 	// Apply adaptive priority adjustment using Thompson Sampling.
+	rng := getSessionRNG(sdb)
 	var st *store.Store
 	if s, err := store.OpenDefaultCached(); err == nil {
 		st = s
@@ -119,7 +84,6 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 	ctxLastConfidence = result.Confidence
 	adjusted := result.Priority
 	if adjusted >= PrioritySuppressed {
-		// Never suppress High-priority suggestions — deliver as nudge instead.
 		if priority <= PriorityHigh {
 			adjusted = PriorityMedium
 		} else {
@@ -130,7 +94,6 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 	// Check burst suggestion count to prevent fatigue.
 	burstCount := getBurstSuggestionCount(sdb)
 	if adjusted <= PriorityHigh && burstCount >= burstCapForCluster() {
-		// Too many suggestions this burst — downgrade to nudge.
 		if adjusted == PriorityHigh {
 			adjusted = PriorityMedium
 		}
@@ -149,18 +112,6 @@ func RouteDelivery(sdb *sessiondb.SessionDB, pattern string, priority Suggestion
 	}
 }
 
-// isAtWorkflowBoundary checks and consumes the at_workflow_boundary flag.
-// The flag is set by recordPhase on phase transitions, git commits, and task switches.
-// It is consumed (cleared) after reading to ensure single-use per boundary event.
-func isAtWorkflowBoundary(sdb *sessiondb.SessionDB) bool {
-	val, _ := sdb.GetContext("at_workflow_boundary")
-	if val != "true" {
-		return false
-	}
-	_ = sdb.SetContext("at_workflow_boundary", "")
-	return true
-}
-
 // AdjustResult holds the priority adjustment decision along with the
 // confidence level of the underlying Thompson Sampling estimate.
 type AdjustResult struct {
@@ -176,8 +127,7 @@ func adjustPriorityWithConfidence(rng *rand.Rand, st *store.Store, pattern strin
 	if st == nil {
 		return AdjustResult{Priority: base, Confidence: 0}
 	}
-	key := contextualPatternKey(pattern)
-	pref, err := st.UserPreference(key)
+	pref, err := st.UserPreference(pattern)
 	if err != nil || pref == nil || pref.DeliveryCount < 3 {
 		return AdjustResult{Priority: base, Confidence: 0}
 	}
@@ -202,7 +152,6 @@ func adjustPriorityWithConfidence(rng *rand.Rand, st *store.Store, pattern strin
 
 	return AdjustResult{Priority: adjusted, Confidence: confidence}
 }
-
 
 // Deliver routes a suggestion through the appropriate channel.
 // For ChannelImmediate, the caller should include the returned string in the hook output.
@@ -264,42 +213,10 @@ func Deliver(sdb *sessiondb.SessionDB, pattern, level, observation, suggestion s
 	return ""
 }
 
-// contextualPatternKey builds a contextual key from (pattern, task_type, user_cluster).
-// This allows Thompson Sampling to learn that e.g. "workflow" suggestions are effective
-// during bugfix+conservative but not during feature+aggressive.
-// Velocity state and domain are intentionally excluded to increase data density per context.
-// Domain was previously included but caused sparse data — most patterns never accumulated
-// enough deliveries per (pattern, taskType, cluster, domain) tuple to learn effectively.
-func contextualPatternKey(pattern string) string {
-	taskType := currentTaskType()
-	cluster := currentUserCluster()
-	if taskType == "" && cluster == "" {
-		return pattern
-	}
-	if taskType == "" {
-		taskType = "unknown"
-	}
-	if cluster == "" {
-		cluster = "balanced"
-	}
-	return pattern + ":" + taskType + ":" + cluster
-}
-
-// currentTaskType reads the task_type from the current sessiondb.
-// Returns empty string if unavailable (called from short-lived hook process).
-func currentTaskType() string {
-	// Read from process-level cache set by the hook handler.
-	return ctxTaskType
-}
-
-// SetDeliveryContext caches task_type, domain, and user cluster for contextual Thompson Sampling.
+// SetDeliveryContext caches session context for delivery decisions.
 // Called once per hook invocation before any Deliver calls.
-// Velocity state is computed and cached for use by velocity wall detection,
-// but excluded from the contextual pattern key to increase data density.
 func SetDeliveryContext(sdb *sessiondb.SessionDB) {
 	ctxTaskType, _ = sdb.GetContext("task_type")
-	ctxCwd, _ = sdb.GetContext("cwd")
-	ctxDomain, _ = sdb.GetWorkingSet("domain")
 	vel := getFloat(sdb, "ewma_tool_velocity")
 	switch {
 	case vel > 8.0:
@@ -316,18 +233,11 @@ func SetDeliveryContext(sdb *sessiondb.SessionDB) {
 	}
 }
 
-// currentUserCluster returns the cached user cluster.
-func currentUserCluster() string {
-	return ctxUserCluster
-}
-
 // Process-level cache for contextual delivery (set once per hook invocation).
 var (
 	ctxTaskType       string
 	ctxVelocityState  string
 	ctxUserCluster    string
-	ctxDomain         string  // used by SetDeliveryContext for domain-aware features outside TS
-	ctxCwd            string  // project path for per-user pattern effectiveness lookup
 	ctxLastConfidence float64 // last confidence from adjustPriorityWithConfidence
 )
 
@@ -396,8 +306,7 @@ func patternSavingsNote(pattern string) string {
 	if err != nil {
 		return ""
 	}
-	key := contextualPatternKey(pattern)
-	pref, err := st.UserPreference(key)
+	pref, err := st.UserPreference(pattern)
 	if err != nil || pref == nil || pref.DeliveryCount < 5 {
 		return ""
 	}
@@ -451,7 +360,6 @@ func gammaSample(rng *rand.Rand, shape float64) float64 {
 	}
 }
 
-
 // burstCapForCluster returns the max suggestions per burst based on user cluster.
 // Conservative users accept more guidance (5), aggressive users prefer less (1).
 func burstCapForCluster() int {
@@ -465,24 +373,3 @@ func burstCapForCluster() int {
 	}
 }
 
-// applyGraduatedDemotion probabilistically suppresses patterns with poor effectiveness.
-// Uses contextual key for per-(pattern, task_type, cluster) granularity.
-// Requires 5+ deliveries before applying demotion (data maturity).
-// Even the worst patterns get through ~10% of the time to allow recovery.
-func applyGraduatedDemotion(rng *rand.Rand, st *store.Store, pattern string) bool {
-	key := contextualPatternKey(pattern)
-	pref, err := st.UserPreference(key)
-	if err != nil || pref == nil {
-		return false
-	}
-	if pref.DeliveryCount < 5 {
-		return false
-	}
-	if pref.EffectivenessScore >= 0.3 {
-		return false
-	}
-	// Probabilistic suppression: worse scores → higher suppression probability.
-	// score=0.0 → 90% suppression, score=0.29 → 3% suppression.
-	suppressProb := (0.3 - pref.EffectivenessScore) / 0.3 * 0.9
-	return rng.Float64() < suppressProb
-}

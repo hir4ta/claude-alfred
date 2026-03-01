@@ -49,20 +49,18 @@ func TestEwmaUpdate(t *testing.T) {
 func TestClassifyFlowState(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name       string
-		vel        string
-		errRate    string
-		acceptance string
-		streak     string
-		want       FlowState
+		name    string
+		vel     string
+		errRate string
+		streak  string
+		want    FlowState
 	}{
-		{"fresh session", "", "", "", "", FlowNormal},
-		{"productive", "8.0", "0.05", "", "5", FlowProductive},
-		{"productive needs streak", "8.0", "0.05", "", "1", FlowNormal},
-		{"thrashing", "8.0", "0.30", "", "0", FlowThrashing},
-		{"stalled", "1.5", "0.05", "", "0", FlowStalled},
-		{"fatigued", "5.0", "0.1", "0.05", "0", FlowFatigued},
-		{"normal mid velocity", "4.0", "0.1", "", "0", FlowNormal},
+		{"fresh session", "", "", "", FlowNormal},
+		{"productive", "8.0", "0.05", "5", FlowProductive},
+		{"productive needs streak", "8.0", "0.05", "1", FlowNormal},
+		{"thrashing", "8.0", "0.30", "0", FlowThrashing},
+		{"stalled", "1.5", "0.05", "0", FlowStalled},
+		{"normal mid velocity", "4.0", "0.1", "0", FlowNormal},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -73,9 +71,6 @@ func TestClassifyFlowState(t *testing.T) {
 			}
 			if tt.errRate != "" {
 				_ = sdb.SetContext("ewma_error_rate", tt.errRate)
-			}
-			if tt.acceptance != "" {
-				_ = sdb.SetContext("ewma_acceptance_rate", tt.acceptance)
 			}
 			if tt.streak != "" {
 				_ = sdb.SetContext("success_streak", tt.streak)
@@ -90,15 +85,14 @@ func TestClassifyFlowState(t *testing.T) {
 func TestFlowDetail(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name            string
-		vel             string
-		errRate         string
-		acceptance      string
-		streak          string
-		wantBudget      int
-		wantIncludeWhy  bool
-		wantCoChange    bool
-		wantMaxAlts     int
+		name           string
+		vel            string
+		errRate        string
+		streak         string
+		wantBudget     int
+		wantIncludeWhy bool
+		wantCoChange   bool
+		wantMaxAlts    int
 	}{
 		{
 			name:           "normal",
@@ -138,16 +132,6 @@ func TestFlowDetail(t *testing.T) {
 			wantMaxAlts:    5,
 		},
 		{
-			name:           "fatigued",
-			vel:            "5.0",
-			errRate:        "0.1",
-			acceptance:     "0.05",
-			wantBudget:     1500,
-			wantIncludeWhy: true,
-			wantCoChange:   false,
-			wantMaxAlts:    2,
-		},
-		{
 			name:           "fresh session defaults to normal",
 			wantBudget:     2000,
 			wantIncludeWhy: true,
@@ -164,9 +148,6 @@ func TestFlowDetail(t *testing.T) {
 			}
 			if tt.errRate != "" {
 				_ = sdb.SetContext("ewma_error_rate", tt.errRate)
-			}
-			if tt.acceptance != "" {
-				_ = sdb.SetContext("ewma_acceptance_rate", tt.acceptance)
 			}
 			if tt.streak != "" {
 				_ = sdb.SetContext("success_streak", tt.streak)

@@ -124,12 +124,6 @@ func (c *voyageClient) embedForStorage(ctx context.Context, text string) ([]floa
 	return vecs[0], nil
 }
 
-// isAvailable checks if the Voyage API is reachable with a minimal request.
-func (c *voyageClient) isAvailable(ctx context.Context) bool {
-	_, err := c.embed(ctx, []string{"test"}, "document")
-	return err == nil
-}
-
 // rerankRequest is the payload for the Voyage rerank API.
 type rerankRequest struct {
 	Query           string   `json:"query"`

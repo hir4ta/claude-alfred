@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/install"
 	"github.com/hir4ta/claude-alfred/internal/sessiondb"
 	"github.com/hir4ta/claude-alfred/internal/store"
@@ -60,15 +59,6 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 	if recovered := RecoverOrphanedSessions(in.SessionID, in.CWD); recovered > 0 {
 		fmt.Fprintf(os.Stderr, "[alfred] Recovered %d orphaned session(s)\n", recovered)
 	}
-
-	// Background initialization: embedder probe.
-	// Fire-and-forget — embedQuery() falls back to FTS5 when embedder_available != "true".
-	go func() {
-		if db, err := sessiondb.Open(in.SessionID); err == nil {
-			cacheEmbedderStatus(db)
-			db.Close()
-		}
-	}()
 
 	switch in.Source {
 	case "startup", "resume":
@@ -304,18 +294,6 @@ func inferTaskType(data *ResumeData) TaskType {
 	return TaskUnknown
 }
 
-// cacheEmbedderStatus probes the Voyage API once and stores the result in sessiondb.
-// Later hooks read the cached status to skip repeated availability checks.
-func cacheEmbedderStatus(sdb *sessiondb.SessionDB) {
-	emb := embedder.NewEmbedder()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if emb.EnsureAvailable(ctx) {
-		_ = sdb.SetContext("embedder_available", "true")
-	} else {
-		_ = sdb.SetContext("embedder_available", "false")
-	}
-}
 
 func handlePostCompactResume(sdb *sessiondb.SessionDB) (*HookOutput, error) {
 	var parts []string

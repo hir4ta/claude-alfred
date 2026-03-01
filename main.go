@@ -127,7 +127,10 @@ func runWatch() error {
 	// Open store for dashboard tabs (nil-safe if unavailable).
 	st, _ := store.OpenDefaultCached()
 
-	model := tui.NewModel(result.InitialEvents, result.EventCh, selected.SessionID, st)
+	// Best-effort embedder for hybrid docs search (nil-safe).
+	emb, _ := embedder.NewEmbedder()
+
+	model := tui.NewModel(result.InitialEvents, result.EventCh, selected.SessionID, st, emb)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
@@ -164,10 +167,10 @@ func runServe() error {
 	}
 	defer st.Close()
 
-	// Try to initialize embedder (graceful degradation if VOYAGE_API_KEY not set).
-	emb := embedder.NewEmbedder()
-	ctx := context.Background()
-	emb.EnsureAvailable(ctx)
+	emb, err := embedder.NewEmbedder()
+	if err != nil {
+		return fmt.Errorf("embedder: %w (set VOYAGE_API_KEY)", err)
+	}
 
 	s := mcpserver.New(claudeHome, st, emb)
 	return server.ServeStdio(s)
@@ -242,6 +245,6 @@ Commands:
   version       Show version
   help          Show this help
 
-Options:
-  VOYAGE_API_KEY  Enable vector search for pattern matching`)
+Requirements:
+  VOYAGE_API_KEY  Required for vector search (serve/install commands)`)
 }

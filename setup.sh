@@ -7,7 +7,7 @@
 #   2. Downloads the claude-alfred binary
 #   3. Syncs past sessions and generates embeddings
 #
-# To enable semantic search, set VOYAGE_API_KEY before running:
+# Requires VOYAGE_API_KEY for vector search:
 #   export VOYAGE_API_KEY=pa-xxx
 #   curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-alfred/main/setup.sh | sh
 
@@ -33,14 +33,14 @@ PLUGIN_DIR=$(dirname "$(dirname "$RUN_SH")")
 echo "Plugin found: $PLUGIN_DIR"
 echo ""
 
-# Voyage AI status.
-if [ -n "$VOYAGE_API_KEY" ]; then
-  echo "VOYAGE_API_KEY: set (semantic search enabled)"
-else
-  echo "VOYAGE_API_KEY: not set (text search fallback)"
-  echo "  To enable semantic search, set the key and re-run:"
-  echo "  export VOYAGE_API_KEY=pa-xxx && curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-alfred/main/setup.sh | sh"
+# Voyage AI check (required).
+if [ -z "$VOYAGE_API_KEY" ]; then
+  echo "Error: VOYAGE_API_KEY is required but not set." >&2
+  echo "  export VOYAGE_API_KEY=pa-xxx" >&2
+  echo "  Then re-run this setup script." >&2
+  exit 1
 fi
+echo "VOYAGE_API_KEY: set"
 echo ""
 
 # Show estimated time.

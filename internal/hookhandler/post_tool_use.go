@@ -332,21 +332,7 @@ func classifyPhase(toolName string, toolInput json.RawMessage) string {
 }
 
 // recordPhase maps a tool call to a workflow phase and records it in sessiondb.
-// It also detects phase transitions and sets the at_workflow_boundary flag.
 func recordPhase(sdb *sessiondb.SessionDB, toolName string, toolInput json.RawMessage) {
-	// Detect workflow boundaries from task/git events.
-	switch toolName {
-	case "Bash":
-		var bi struct {
-			Command string `json:"command"`
-		}
-		if json.Unmarshal(toolInput, &bi) == nil && isGitCommitCommand(bi.Command) {
-			_ = sdb.SetContext("at_workflow_boundary", "true")
-		}
-	case "TaskCreate", "TaskUpdate":
-		_ = sdb.SetContext("at_workflow_boundary", "true")
-	}
-
 	phase := classifyPhase(toolName, toolInput)
 	if phase == "" {
 		return
@@ -355,7 +341,6 @@ func recordPhase(sdb *sessiondb.SessionDB, toolName string, toolInput json.RawMe
 	// Detect phase transition: compare with previous recorded phase.
 	prevPhase, _ := sdb.GetContext("prev_phase")
 	if prevPhase != "" && prevPhase != phase {
-		_ = sdb.SetContext("at_workflow_boundary", "true")
 		_ = sdb.SetContext("coaching_phase_changed", "true")
 	}
 	_ = sdb.SetContext("prev_phase", phase)

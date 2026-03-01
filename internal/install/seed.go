@@ -72,8 +72,6 @@ func ApplySeed(st *store.Store, emb *embedder.Embedder, progress func(done, tota
 	done := 0
 	ctx := context.Background()
 
-	embAvailable := emb != nil && emb.Available()
-
 	for _, src := range sf.Sources {
 		for _, sec := range src.Sections {
 			doc := &store.DocRow{
@@ -99,7 +97,7 @@ func ApplySeed(st *store.Store, emb *embedder.Embedder, progress func(done, tota
 
 			// Generate embedding if missing (handles both new docs and
 			// dimension upgrades where old embeddings were cleared).
-			if embAvailable {
+			if emb != nil {
 				if _, err := st.GetEmbedding("docs", docID); err != nil {
 					embedText := sec.Path + "\n" + sec.Content
 					vec, err := emb.EmbedForStorage(ctx, embedText)

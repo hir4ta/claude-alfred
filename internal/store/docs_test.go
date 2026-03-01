@@ -135,29 +135,6 @@ func TestSearchDocsFTS(t *testing.T) {
 	}
 }
 
-func TestSearchDocsLIKE(t *testing.T) {
-	t.Parallel()
-	st := openTestStore(t)
-
-	doc := &DocRow{
-		URL:         "https://docs.example.com/mcp",
-		SectionPath: "MCP > Configuration",
-		Content:     "Configure MCP servers in .mcp.json or .claude/mcp.json.",
-		SourceType:  "docs",
-	}
-	if _, _, err := st.UpsertDoc(doc); err != nil {
-		t.Fatalf("UpsertDoc: %v", err)
-	}
-
-	results, err := st.SearchDocsLIKE("mcp.json", 10)
-	if err != nil {
-		t.Fatalf("SearchDocsLIKE: %v", err)
-	}
-	if len(results) == 0 {
-		t.Fatal("expected results for 'mcp.json'")
-	}
-}
-
 func TestGetDocsByIDs(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)

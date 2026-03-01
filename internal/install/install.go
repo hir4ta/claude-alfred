@@ -1,7 +1,6 @@
 package install
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -97,14 +96,12 @@ func CountSessions() error {
 	}
 
 	type output struct {
-		Sessions     int  `json:"sessions"`
-		EstMinutes   int  `json:"est_minutes"`
-		HasVoyageKey bool `json:"has_voyage_key"`
+		Sessions   int `json:"sessions"`
+		EstMinutes int `json:"est_minutes"`
 	}
 	out := output{
-		Sessions:     count,
-		EstMinutes:   est,
-		HasVoyageKey: os.Getenv("VOYAGE_API_KEY") != "",
+		Sessions:   count,
+		EstMinutes: est,
 	}
 	return json.NewEncoder(os.Stdout).Encode(out)
 }
@@ -543,15 +540,14 @@ func seedDocs() {
 	}
 	defer st.Close()
 
-	emb := embedder.NewEmbedder()
-	ctx := context.Background()
-	embAvailable := emb.EnsureAvailable(ctx)
-	if embAvailable {
-		fmt.Printf("✓ Embedder available (model: %s)\n", emb.Model())
-		fmt.Println("  First-time embedding may take up to 15 minutes")
-	} else {
-		fmt.Println("⚠ VOYAGE_API_KEY not set — seed docs will use FTS5 text search only")
+	emb, err := embedder.NewEmbedder()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✘ %v\n", err)
+		fmt.Fprintf(os.Stderr, "  Set VOYAGE_API_KEY to enable vector search (required).\n")
+		return
 	}
+	fmt.Printf("✓ Embedder available (model: %s)\n", emb.Model())
+	fmt.Println("  First-time embedding may take up to 15 minutes")
 
 	res, err := ApplySeed(st, emb, func(done, total int) {
 		renderProgress("Seeding docs", done, total)

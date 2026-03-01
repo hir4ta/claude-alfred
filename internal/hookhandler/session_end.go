@@ -212,7 +212,11 @@ func persistFeaturePreferences(sdb *sessiondb.SessionDB) {
 
 // syncToGlobalDB syncs patterns and decisions from the project store
 // to the global cross-project database, and updates the project fingerprint.
+// Requires ALFRED_CROSS_PROJECT=1 environment variable (opt-in).
 func syncToGlobalDB(sdb *sessiondb.SessionDB, cwd string) {
+	if os.Getenv("ALFRED_CROSS_PROJECT") != "1" {
+		return
+	}
 	if cwd == "" {
 		cwd, _ = sdb.GetContext("cwd")
 	}

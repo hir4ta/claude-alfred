@@ -116,7 +116,11 @@ func (m Model) viewDocs() string {
 		lines = append(lines, "  "+dimStyle.Render("Press / to search docs"))
 	}
 
-	// Results
+	// Results header with search method
+	if len(m.docsResults) > 0 {
+		lines = append(lines, "  "+dimStyle.Render(fmt.Sprintf("%d results (%s)", len(m.docsResults), m.docsMethod)))
+	}
+
 	if len(m.docsResults) == 0 && m.docsQuery != "" && !m.docsSearching {
 		lines = append(lines, "")
 		lines = append(lines, "  "+dimStyle.Render("No results found."))
@@ -131,8 +135,9 @@ func (m Model) viewDocs() string {
 		}
 
 		sourceTag := dimStyle.Render("["+doc.SourceType+"]")
+		score := dimStyle.Render(fmt.Sprintf("%.3f", doc.Score))
 		path := tabLabelStyle.Render(doc.SectionPath)
-		lines = append(lines, prefix+sourceTag+" "+path)
+		lines = append(lines, prefix+sourceTag+" "+score+" "+path)
 
 		if m.docsExpanded[i] {
 			content := doc.Content

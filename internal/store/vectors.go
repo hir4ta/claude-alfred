@@ -145,12 +145,10 @@ func (s *Store) HybridSearch(queryVec []float32, ftsQuery string, sourceType str
 	scores := make(map[int64]float64)
 
 	// Vector search.
-	if queryVec != nil {
-		matches, err := s.VectorSearch(queryVec, "docs", overRetrieve)
-		if err == nil {
-			for rank, m := range matches {
-				scores[m.SourceID] += 1.0 / float64(rrfK+rank+1)
-			}
+	matches, err := s.VectorSearch(queryVec, "docs", overRetrieve)
+	if err == nil {
+		for rank, m := range matches {
+			scores[m.SourceID] += 1.0 / float64(rrfK+rank+1)
 		}
 	}
 

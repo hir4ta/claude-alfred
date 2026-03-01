@@ -237,39 +237,6 @@ func (s *Store) matchDocsFTS(query string, sourceType string, limit int) ([]DocR
 	return docs, nil
 }
 
-// SearchDocsLIKE searches docs using LIKE as a last-resort fallback.
-func (s *Store) SearchDocsLIKE(query string, limit int) ([]DocRow, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-
-	rows, err := s.db.Query(`
-		SELECT id, url, section_path, content, content_hash, source_type, version, crawled_at, ttl_days
-		FROM docs
-		WHERE content LIKE ? OR section_path LIKE ?
-		ORDER BY crawled_at DESC
-		LIMIT ?`,
-		"%"+query+"%", "%"+query+"%", limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("store: search docs like: %w", err)
-	}
-	defer rows.Close()
-
-	var docs []DocRow
-	for rows.Next() {
-		var d DocRow
-		var version sql.NullString
-		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
-			&d.SourceType, &version, &d.CrawledAt, &d.TTLDays); err != nil {
-			continue
-		}
-		d.Version = version.String
-		docs = append(docs, d)
-	}
-	return docs, nil
-}
-
 // DeleteExpiredDocs removes docs whose TTL has expired.
 func (s *Store) DeleteExpiredDocs() (int64, error) {
 	res, err := s.db.Exec(`

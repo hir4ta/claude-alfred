@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -26,6 +27,9 @@ type crossProjectEntry struct {
 
 func crossProjectHandler() server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if os.Getenv("ALFRED_CROSS_PROJECT") != "1" {
+			return mcp.NewToolResultText("Cross-project search is disabled. Set ALFRED_CROSS_PROJECT=1 to enable."), nil
+		}
 		query := req.GetString("query", "")
 		if query == "" {
 			return mcp.NewToolResultError("query is required"), nil

@@ -2,54 +2,26 @@ package embedder
 
 import (
 	"context"
+	"fmt"
 	"os"
-	"sync"
 )
 
-// Embedder wraps a Voyage client with availability state.
-// When no API key is configured, all operations gracefully degrade (Available() returns false).
+// Embedder wraps a Voyage client for embedding and reranking operations.
+// VOYAGE_API_KEY is required; NewEmbedder returns an error if unset.
 type Embedder struct {
-	client    *voyageClient
-	available bool
-	mu        sync.RWMutex
+	client *voyageClient
 }
 
 // NewEmbedder creates an Embedder that reads the Voyage API key from VOYAGE_API_KEY.
-// If the key is empty, the embedder is inert — Available() will always return false.
-func NewEmbedder() *Embedder {
+// Returns an error if the key is not set.
+func NewEmbedder() (*Embedder, error) {
 	apiKey := os.Getenv("VOYAGE_API_KEY")
 	if apiKey == "" {
-		return &Embedder{}
+		return nil, fmt.Errorf("VOYAGE_API_KEY is required but not set")
 	}
 	return &Embedder{
 		client: newVoyageClient(apiKey),
-	}
-}
-
-// EnsureAvailable checks Voyage API availability and caches the result.
-func (e *Embedder) EnsureAvailable(ctx context.Context) bool {
-	if e.client == nil {
-		return false
-	}
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.available {
-		return true
-	}
-
-	if e.client.isAvailable(ctx) {
-		e.available = true
-	}
-	return e.available
-}
-
-// Available returns the cached availability status.
-func (e *Embedder) Available() bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.available
+	}, nil
 }
 
 // Dims returns the embedding dimensions.
@@ -64,33 +36,21 @@ func (e *Embedder) Model() string {
 
 // EmbedBatch generates embeddings for multiple texts.
 func (e *Embedder) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	if e.client == nil {
-		return nil, nil
-	}
 	return e.client.embed(ctx, texts, "document")
 }
 
 // EmbedForSearch generates a search query embedding.
 func (e *Embedder) EmbedForSearch(ctx context.Context, query string) ([]float32, error) {
-	if e.client == nil {
-		return nil, nil
-	}
 	return e.client.embedForSearch(ctx, query)
 }
 
 // EmbedForStorage generates a document embedding.
 func (e *Embedder) EmbedForStorage(ctx context.Context, text string) ([]float32, error) {
-	if e.client == nil {
-		return nil, nil
-	}
 	return e.client.embedForStorage(ctx, text)
 }
 
 // Rerank reorders documents by relevance to the query using the Voyage rerank API.
 // Returns results sorted by descending relevance score.
 func (e *Embedder) Rerank(ctx context.Context, query string, documents []string, topK int) ([]RerankResult, error) {
-	if e.client == nil {
-		return nil, nil
-	}
 	return e.client.rerank(ctx, query, documents, topK)
 }

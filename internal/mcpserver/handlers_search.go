@@ -71,9 +71,8 @@ func decisionsHandler(st *store.Store) server.ToolHandlerFunc {
 }
 
 // docsSearchHandler searches the docs knowledge base using hybrid search:
-// 1. Hybrid RRF (vector + FTS5 fusion) → over-retrieve 20 candidates
-// 2. Rerank top candidates via Voyage rerank API → return top 5
-// 3. LIKE fallback if hybrid returns nothing.
+// 1. Hybrid RRF (vector + FTS5 fusion) → over-retrieve candidates
+// 2. Rerank top candidates via Voyage rerank API → return top results
 func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		query := req.GetString("query", "")
@@ -86,14 +85,10 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 		}
 
 		var docs []store.DocRow
-		searchMethod := ""
+		searchMethod := "hybrid_rrf"
 
 		// Stage 1: Hybrid RRF search (vector + FTS5 combined).
-		var queryVec []float32
-		embAvailable := emb != nil && emb.Available()
-		if embAvailable {
-			queryVec, _ = emb.EmbedForSearch(ctx, query)
-		}
+		queryVec, _ := emb.EmbedForSearch(ctx, query)
 
 		// Adaptive over-retrieve: short queries are vague, need more candidates.
 		wordCount := len(strings.Fields(query))
@@ -129,14 +124,8 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 				docs = ordered
 			}
 
-			if queryVec != nil {
-				searchMethod = "hybrid_rrf"
-			} else {
-				searchMethod = "fts5"
-			}
-
-			// Stage 2: Rerank via Voyage rerank API (if available).
-			if embAvailable && len(docs) > limit {
+			// Stage 2: Rerank via Voyage rerank API.
+			if len(docs) > limit {
 				contents := make([]string, len(docs))
 				for i, d := range docs {
 					contents[i] = d.SectionPath + "\n" + d.Content
@@ -157,15 +146,6 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 			// Trim to requested limit.
 			if len(docs) > limit {
 				docs = docs[:limit]
-			}
-		}
-
-		// Fallback: LIKE search.
-		if len(docs) == 0 {
-			likeResults, err := st.SearchDocsLIKE(query, limit)
-			if err == nil && len(likeResults) > 0 {
-				docs = likeResults
-				searchMethod = "like"
 			}
 		}
 
@@ -223,12 +203,6 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 			"results":       allResults,
 			"docs_count":    len(docResults),
 			"search_method": searchMethod,
-		}
-		if searchMethod == "" && len(decisionResults) > 0 {
-			result["search_method"] = "decisions_only"
-		}
-		if searchMethod == "" && len(allResults) == 0 {
-			result["note"] = "No results found. Run /alfred-crawl to populate the knowledge base."
 		}
 		if maxAgeDays > 30 {
 			result["staleness_warning"] = fmt.Sprintf(

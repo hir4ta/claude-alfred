@@ -21,16 +21,16 @@ This downloads the binary, syncs all available sessions (JSONL parsing + embeddi
 
 **3. Restart Claude Code** to activate hooks and MCP tools.
 
-### Optional: Voyage AI for semantic search
+### Required: Voyage AI API key
 
-Set `VOYAGE_API_KEY` before running setup to enable vector-based knowledge search across sessions. Without it, search falls back to FTS5 BM25 / LIKE.
+`VOYAGE_API_KEY` is required for knowledge base embedding and semantic search. Set it before running setup:
 
 ```bash
 export VOYAGE_API_KEY=your-api-key
 curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-alfred/main/setup.sh | sh
 ```
 
-Uses `voyage-4-large` (2048 dimensions) for maximum retrieval accuracy.
+Cost is negligible (well under $1/month for typical usage). Uses `voyage-4-large` (1024 dimensions).
 
 ### Building from source
 
@@ -71,7 +71,7 @@ claude
 | **1:Activity** | Live event stream — user input, assistant responses, tool summaries, task progress |
 | **2:Knowledge** | Knowledge base statistics — total sections, source breakdown, freshness, latest version |
 | **3:Preferences** | User profile — cluster classification, EWMA metrics, feature usage |
-| **4:Docs** | Interactive documentation search — FTS5/LIKE search with expandable content |
+| **4:Docs** | Interactive documentation search — hybrid vector + FTS5 search with score display |
 
 **Key bindings:**
 
@@ -102,7 +102,7 @@ Run as an MCP server (stdio) for Claude Code integration.
 | Tool | Description |
 |------|-------------|
 | `state` | Session health, statistics, predictions, session list, context recovery, skill context, accuracy metrics, user preferences (`detail`: brief/standard/outlook/sessions/resume/skill/accuracy/preferences) |
-| `knowledge` | Search docs, decisions, cross-project insights, and pre-compact history (`scope`: project/global/recall) |
+| `knowledge` | Search docs (hybrid vector + FTS5), decisions, cross-project insights, and pre-compact history (`scope`: project/global/recall) |
 | `guidance` | Workflow recommendations, alerts, next steps, pending nudges (`focus`: all/alerts/recommendations/next_steps/pending) |
 | `plan` | Task estimation, progress tracking, strategic workflow planning (`mode`: estimate/progress/strategy) |
 | `diagnose` | Error diagnosis + concrete fix patches with before/after code and verification commands |
@@ -181,7 +181,7 @@ Hooks monitor sessions through Claude Code's lifecycle events with minimal overh
 
 **User profiling**: Behavioral clustering (conservative/balanced/aggressive) based on read-write ratio, test frequency, and session velocity. Profile influences detection thresholds and suggestion priorities.
 
-**Cross-project learning**: Patterns and decisions synced to global DB (`~/.claude-alfred/global.db`) for reuse across projects.
+**Cross-project learning**: Patterns and decisions synced to global DB (`~/.claude-alfred/global.db`) for reuse across projects. Opt-in via `ALFRED_CROSS_PROJECT=1` environment variable.
 
 ## Architecture
 
@@ -225,6 +225,4 @@ claude-alfred/
 
 ## Semantic Search
 
-Voyage AI (`voyage-4-large`, 2048 dimensions) powers `knowledge` and hook-based knowledge injection via vector semantic search. Set `VOYAGE_API_KEY` to enable.
-
-Without `VOYAGE_API_KEY`, knowledge search falls back to FTS5 BM25 / LIKE — all features work, just without semantic matching.
+Voyage AI (`voyage-4-large`, 1024 dimensions) powers `knowledge` search and TUI Docs tab via hybrid vector + FTS5 retrieval with Reciprocal Rank Fusion (RRF). `VOYAGE_API_KEY` is required for `serve` and `install` commands.

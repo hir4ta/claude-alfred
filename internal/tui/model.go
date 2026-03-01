@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"context"
 	"strconv"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hir4ta/claude-alfred/internal/analyzer"
+	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/parser"
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
@@ -73,17 +75,25 @@ type Model struct {
 	pfFeatures map[string]*store.UserPref
 
 	// Docs tab state
-	docsSearching bool
-	docsQuery     string
-	docsResults   []store.DocRow
-	docsCursor    int
-	docsExpanded  map[int]bool
-	docsScrollOff int
+	emb            *embedder.Embedder // nil-safe; enables hybrid vector+FTS5 search
+	docsSearching  bool
+	docsQuery      string
+	docsResults    []docsResult
+	docsMethod     string // "hybrid_rrf" or "FTS5"
+	docsCursor     int
+	docsExpanded   map[int]bool
+	docsScrollOff  int
+}
+
+// docsResult wraps a DocRow with its search score.
+type docsResult struct {
+	store.DocRow
+	Score float64
 }
 
 // NewModel creates a new TUI model with initial events pre-loaded.
-// st may be nil if the store is unavailable.
-func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.SessionEvent, sessionID string, st *store.Store) Model {
+// st may be nil if the store is unavailable. emb may be nil (FTS5-only search).
+func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.SessionEvent, sessionID string, st *store.Store, emb *embedder.Embedder) Model {
 	stats := analyzer.NewStats()
 	det := analyzer.NewDetector()
 	sc := analyzer.NewScoreCalculator()
@@ -155,6 +165,7 @@ func NewModel(initialEvents []parser.SessionEvent, eventCh <-chan parser.Session
 		inPlanMode:    inPlanMode,
 		awaitingAnswer: awaitingAnswer,
 		st:            st,
+		emb:           emb,
 		docsExpanded:  make(map[int]bool),
 	}
 }
@@ -531,17 +542,64 @@ func (m *Model) refreshPreferences() {
 	}
 }
 
-// executeDocsSearch runs a docs search with FTS5 → LIKE fallback.
+// executeDocsSearch runs a hybrid vector+FTS5 search (or FTS5-only if embedder is nil).
 func (m *Model) executeDocsSearch() {
 	if m.st == nil || m.docsQuery == "" {
 		m.docsResults = nil
 		return
 	}
-	results, err := m.st.SearchDocsFTS(m.docsQuery, "", 20)
-	if err != nil || len(results) == 0 {
-		results, _ = m.st.SearchDocsLIKE(m.docsQuery, 20)
+
+	// Try hybrid search with vector embedding.
+	var queryVec []float32
+	if m.emb != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		vec, err := m.emb.EmbedForSearch(ctx, m.docsQuery)
+		cancel()
+		if err == nil {
+			queryVec = vec
+		}
 	}
-	m.docsResults = results
+
+	if queryVec != nil {
+		m.docsMethod = "hybrid_rrf"
+	} else {
+		m.docsMethod = "FTS5"
+	}
+
+	matches, err := m.st.HybridSearch(queryVec, m.docsQuery, "", 20, 80)
+	if err != nil || len(matches) == 0 {
+		m.docsResults = nil
+		m.docsCursor = 0
+		m.docsExpanded = make(map[int]bool)
+		return
+	}
+
+	ids := make([]int64, len(matches))
+	scoreMap := make(map[int64]float64, len(matches))
+	for i, match := range matches {
+		ids[i] = match.DocID
+		scoreMap[match.DocID] = match.RRFScore
+	}
+
+	docs, err := m.st.GetDocsByIDs(ids)
+	if err != nil {
+		m.docsResults = nil
+		m.docsCursor = 0
+		m.docsExpanded = make(map[int]bool)
+		return
+	}
+
+	// Build results preserving RRF rank order.
+	docByID := make(map[int64]store.DocRow, len(docs))
+	for _, d := range docs {
+		docByID[d.ID] = d
+	}
+	m.docsResults = make([]docsResult, 0, len(ids))
+	for _, id := range ids {
+		if d, ok := docByID[id]; ok {
+			m.docsResults = append(m.docsResults, docsResult{DocRow: d, Score: scoreMap[id]})
+		}
+	}
 	m.docsCursor = 0
 	m.docsExpanded = make(map[int]bool)
 }

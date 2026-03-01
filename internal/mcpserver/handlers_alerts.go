@@ -29,7 +29,6 @@ type AlertEntry struct {
 type FlowMetrics struct {
 	ToolVelocity   float64 `json:"tool_velocity,omitempty"`
 	ErrorRate      float64 `json:"error_rate,omitempty"`
-	AcceptanceRate float64 `json:"acceptance_rate,omitempty"`
 }
 
 // PhaseCount represents a phase name with its occurrence count, for ordered output.
@@ -129,13 +128,6 @@ func enrichAlertsFromSessionDB(sdb *sessiondb.SessionDB, resp *AlertsResponse) {
 			hasMetrics = true
 		}
 	}
-	if accRate, _ := sdb.GetContext("ewma_acceptance_rate"); accRate != "" {
-		if v, err := strconv.ParseFloat(accRate, 64); err == nil {
-			fm.AcceptanceRate = v
-			hasMetrics = true
-		}
-	}
-
 	if hasMetrics {
 		resp.FlowMetrics = &fm
 	}

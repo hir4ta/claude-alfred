@@ -13,16 +13,7 @@ import (
 // EWMA smoothing factor: alpha=0.3 gives ~70% weight to history, 30% to latest.
 const ewmaAlpha = 0.3
 
-// ewmvK is the number of standard deviations for adaptive control limits.
-const ewmvK = 2.0
-
-// minEWMVSamples is the minimum events before EWMV-based detection kicks in.
-const minEWMVSamples = 8
-
 // ewmaUpdate computes the exponential weighted moving average.
-// Uses a sentinel of -1 to distinguish "never initialized" from "converged to 0".
-// Callers store "" (empty string) in sessiondb initially; getFloat returns 0,
-// so we use an explicit initialized flag via the caller instead.
 func ewmaUpdate(prev, value, alpha float64) float64 {
 	return alpha*value + (1-alpha)*prev
 }
@@ -49,35 +40,16 @@ func updateFlowMetrics(sdb *sessiondb.SessionDB, isFailure bool) {
 	newVel := ewmaUpdate(prevVel, velocity, ewmaAlpha)
 	_ = sdb.SetContext("ewma_tool_velocity", strconv.FormatFloat(newVel, 'f', 4, 64))
 
-	// Update EWMV (exponential weighted moving variance) for velocity.
-	velDev := velocity - prevVel // deviation from previous EWMA mean
-	prevVelVar := getFloat(sdb, "ewmv_velocity_var")
-	newVelVar := ewmaUpdate(prevVelVar, velDev*velDev, ewmaAlpha)
-	_ = sdb.SetContext("ewmv_velocity_var", strconv.FormatFloat(newVelVar, 'f', 6, 64))
-
-	// Velocity delta tracking: snapshot every 5 events, detect sudden drops.
+	// Wall detection: snapshot every 5 events, detect sudden drops.
 	flowEventCount := int(getFloat(sdb, "flow_event_count")) + 1
 	_ = sdb.SetContext("flow_event_count", strconv.Itoa(flowEventCount))
 	if flowEventCount%5 == 0 {
 		prevSnapshot := getFloat(sdb, "prev_velocity_snapshot")
 		_ = sdb.SetContext("prev_velocity_snapshot", strconv.FormatFloat(newVel, 'f', 4, 64))
-		if prevSnapshot > 0 {
+		if prevSnapshot > 5.0 {
 			delta := newVel - prevSnapshot
-			_ = sdb.SetContext("velocity_delta", strconv.FormatFloat(delta, 'f', 4, 64))
-
-			// Adaptive wall detection using EWMV control limits.
-			sigma := math.Sqrt(newVelVar)
-			if flowEventCount >= minEWMVSamples && sigma > 0.5 {
-				// Velocity dropped below mean - k*sigma AND dropped by 50%+.
-				lowerBound := newVel - ewmvK*sigma
-				if velocity < lowerBound && velocity < prevSnapshot*0.5 {
-					_ = sdb.SetContext("wall_detected", "true")
-				}
-			} else {
-				// Fallback: fixed threshold for early session.
-				if delta < -3.0 && prevSnapshot > 5.0 {
-					_ = sdb.SetContext("wall_detected", "true")
-				}
+			if delta < -3.0 {
+				_ = sdb.SetContext("wall_detected", "true")
 			}
 		}
 	}
@@ -90,45 +62,28 @@ func updateFlowMetrics(sdb *sessiondb.SessionDB, isFailure bool) {
 	prevErr := getFloat(sdb, "ewma_error_rate")
 	newErr := ewmaUpdate(prevErr, errVal, ewmaAlpha)
 	_ = sdb.SetContext("ewma_error_rate", strconv.FormatFloat(newErr, 'f', 4, 64))
-
-	// Update EWMV for error rate.
-	errDev := errVal - prevErr
-	prevErrVar := getFloat(sdb, "ewmv_error_var")
-	newErrVar := ewmaUpdate(prevErrVar, errDev*errDev, ewmaAlpha)
-	_ = sdb.SetContext("ewmv_error_var", strconv.FormatFloat(newErrVar, 'f', 6, 64))
 }
 
 // FlowState represents the session's current productivity state.
-// Used for graduated suggestion suppression instead of binary on/off.
 type FlowState int
 
 const (
 	// FlowNormal: deliver all suggestions at their base priority.
 	FlowNormal FlowState = iota
-	// FlowProductive: high velocity + low errors + success streak.
-	// Defer Medium and below; keep High and Critical.
+	// FlowProductive: high velocity + low errors → defer Medium and below.
 	FlowProductive
-	// FlowThrashing: high velocity but high error rate.
-	// User is active but struggling — promote warnings, suppress info.
+	// FlowThrashing: high velocity + high errors → promote warnings, suppress info.
 	FlowThrashing
 	// FlowStalled: low velocity. Deliver everything, especially next-step.
 	FlowStalled
-	// FlowFatigued: user ignoring suggestions. Reduce to Critical/High only.
-	FlowFatigued
 )
 
 // classifyFlowState determines the session's current flow state
-// from multiple signals: velocity, error rate, acceptance rate, and success streak.
+// from velocity, error rate, and success streak.
 func classifyFlowState(sdb *sessiondb.SessionDB) FlowState {
 	vel := getFloat(sdb, "ewma_tool_velocity")
 	errRate := getFloat(sdb, "ewma_error_rate")
-	acceptance := getFloat(sdb, "ewma_acceptance_rate")
 	streak := getInt(sdb, "success_streak")
-
-	// Fatigue overrides other states — user is ignoring suggestions.
-	if acceptance > 0 && acceptance < 0.1 {
-		return FlowFatigued
-	}
 
 	// High velocity + low errors + success streak = genuine productivity.
 	if vel > 5 && errRate < 0.1 && streak >= 3 {
@@ -149,7 +104,6 @@ func classifyFlowState(sdb *sessiondb.SessionDB) FlowState {
 }
 
 // FlowDetail controls content detail level based on the session's flow state.
-// Used to adapt verbosity, alternative count, and content inclusion dynamically.
 type FlowDetail struct {
 	Budget          int  // character budget for output
 	IncludeWhy      bool // whether to include WHY rationale in suggestions
@@ -165,8 +119,6 @@ func flowDetail(sdb *sessiondb.SessionDB) FlowDetail {
 		return FlowDetail{Budget: 800, IncludeWhy: false, IncludeCoChange: false, MaxAlternatives: 1}
 	case FlowStalled, FlowThrashing:
 		return FlowDetail{Budget: 3000, IncludeWhy: true, IncludeCoChange: true, MaxAlternatives: 5}
-	case FlowFatigued:
-		return FlowDetail{Budget: 1500, IncludeWhy: true, IncludeCoChange: false, MaxAlternatives: 2}
 	default: // FlowNormal
 		return FlowDetail{Budget: 2000, IncludeWhy: true, IncludeCoChange: true, MaxAlternatives: 3}
 	}
