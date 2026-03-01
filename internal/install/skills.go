@@ -220,6 +220,140 @@ Documentation crawler for the alfred knowledge base.
 - Re-running this skill updates existing docs and adds new ones
 `,
 	},
+	{
+		Dir: "alfred-audit",
+		Content: `---
+name: alfred-audit
+description: >
+  Review your project's Claude Code setup and suggest improvements.
+  Checks CLAUDE.md, hooks, skills, agents, rules, MCP, and memory
+  against best practices from the alfred knowledge base.
+user-invocable: true
+allowed-tools: Read, Glob, Grep, mcp__claude-alfred__knowledge, mcp__claude-alfred__state
+context: fork
+agent: general-purpose
+---
+
+Project setup reviewer and improvement advisor.
+
+## Steps
+
+1. Detect project root (look for .git or CLAUDE.md)
+2. Scan for Claude Code configuration:
+   - CLAUDE.md — exists? size? has Commands/Rules sections?
+   - .claude/hooks.json — exists? which events are hooked?
+   - .claude/skills/ — count and names
+   - .claude/agents/ — count and names
+   - .claude/rules/ — count and names
+   - .mcp.json or .claude/mcp.json — MCP servers configured?
+   - .claude/memory/ or MEMORY.md — memory in use?
+3. For each found configuration, Read the file and assess quality
+4. Call knowledge to get best practices for each feature area
+5. Compare current setup vs best practices
+6. Determine proficiency level (beginner/intermediate/advanced)
+
+## Output
+
+Report format:
+- **Level**: [Beginner/Intermediate/Advanced]
+- **Features in use**: [list]
+- **Missing features**: [list with brief explanation of value]
+- **Improvement suggestions**: [max 5, ordered by impact]
+  - For each: what to do, why it helps, one-line example
+
+Keep under 20 lines. Be specific and actionable.
+`,
+	},
+	{
+		Dir: "alfred-setup",
+		Content: `---
+name: alfred-setup
+description: >
+  Interactive wizard to set up Claude Code best practices for your project.
+  Creates CLAUDE.md, hooks, skills, and other configurations step by step.
+user-invocable: true
+allowed-tools: Read, Write, Edit, Glob, AskUserQuestion, mcp__claude-alfred__knowledge
+---
+
+Project setup wizard for Claude Code.
+
+## Steps
+
+1. Check current setup (same as alfred-audit step 1-2)
+2. For each missing configuration, ask the user if they want to set it up:
+   - AskUserQuestion with options for each feature
+
+3. If CLAUDE.md is missing or minimal:
+   - Detect project stack (look at package.json, go.mod, Cargo.toml, etc.)
+   - Call knowledge for CLAUDE.md best practices
+   - Generate a template CLAUDE.md with Commands and Rules sections
+   - Write it with user approval
+
+4. If hooks are not configured:
+   - Explain what hooks can do
+   - Offer common hook configurations (pre-commit lint, test on edit)
+
+5. If no skills exist:
+   - Explain what skills are
+   - Offer to create a starter skill template
+
+6. If no rules exist:
+   - Explain file-matched rules
+   - Offer to create rules for the project's main language
+
+## Output
+
+For each step, show what was created/modified and why.
+At the end, summarize the new setup and suggest next steps.
+`,
+	},
+	{
+		Dir: "alfred-learn",
+		Content: `---
+name: alfred-learn
+description: >
+  Tell alfred about your Claude Code preferences and working style.
+  Records preferences that influence future suggestions and briefings.
+user-invocable: true
+allowed-tools: AskUserQuestion, mcp__claude-alfred__feedback, mcp__claude-alfred__state
+---
+
+Preference recording for personalized advice.
+
+## Steps
+
+1. Call state with detail="brief" to get current session stats and user profile
+2. Ask the user about their preferences using AskUserQuestion:
+
+   Question 1: "How do you prefer to work with Claude Code?"
+   - "Plan first, then implement" (plan mode user)
+   - "Jump straight into coding" (direct mode)
+   - "Depends on the task" (adaptive)
+
+   Question 2: "How do you feel about automated suggestions?"
+   - "Show me everything — I'll filter" (aggressive)
+   - "Only important things" (balanced)
+   - "Minimal interruptions" (conservative)
+
+   Question 3: "Which features do you use most?"
+   - Options: hooks, skills, MCP tools, worktrees, agents, teams
+   - multiSelect: true
+
+3. Record each preference via feedback tool with appropriate pattern names:
+   - feedback pattern="workflow_preference" rating="helpful" comment="[selected option]"
+   - feedback pattern="suggestion_verbosity" rating="helpful" comment="[selected option]"
+
+## Output
+
+Confirm what was recorded:
+- Workflow style: [selection]
+- Suggestion level: [selection]
+- Primary features: [selections]
+- "These preferences will influence future alfred suggestions."
+
+Keep it brief — max 5 lines.
+`,
+	},
 }
 
 // deprecatedSkillDirs lists skill directories from previous versions that

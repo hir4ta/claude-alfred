@@ -517,12 +517,12 @@ func initialSync(sr syncRange) error {
 	}
 	clearLine()
 
-	var sessionCount, eventCount, patternCount int
+	var sessionCount, eventCount, docsCount int
 	st.DB().QueryRow("SELECT COUNT(*) FROM sessions").Scan(&sessionCount)
 	st.DB().QueryRow("SELECT COUNT(*) FROM events").Scan(&eventCount)
-	st.DB().QueryRow("SELECT COUNT(*) FROM patterns").Scan(&patternCount)
+	st.DB().QueryRow("SELECT COUNT(*) FROM docs").Scan(&docsCount)
 
-	fmt.Printf("✓ Synced sessions from %s (total: %d sessions, %d events, %d patterns)\n", sr.Label, sessionCount, eventCount, patternCount)
+	fmt.Printf("✓ Synced sessions from %s (total: %d sessions, %d events, %d docs)\n", sr.Label, sessionCount, eventCount, docsCount)
 	return nil
 }
 

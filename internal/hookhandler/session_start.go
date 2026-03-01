@@ -51,6 +51,9 @@ func handleSessionStart(input []byte) (*HookOutput, error) {
 	// Capture git context (branch, dirty files) for later hooks.
 	captureGitContext(sdb, in.CWD)
 
+	// Detect Claude Code feature usage and cache for later hooks/MCP.
+	CacheFeatureUsage(sdb, in.CWD)
+
 	// Recover orphaned session DBs from previous sessions that didn't get
 	// a clean SessionEnd. Extracts their knowledge before destroying them.
 	if recovered := RecoverOrphanedSessions(in.SessionID, in.CWD); recovered > 0 {
