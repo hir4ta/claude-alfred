@@ -77,7 +77,7 @@ func Run(args []string) error {
 	fmt.Println("\n✓ Installation complete!")
 	fmt.Println("\nIf you haven't set up the plugin yet:")
 	fmt.Println("  /plugin marketplace add hir4ta/claude-alfred")
-	fmt.Println("  /plugin install claude-alfred@claude-alfred")
+	fmt.Println("  /plugin install alfred@hir4ta/claude-alfred")
 
 	return nil
 }
@@ -252,8 +252,11 @@ func hasLegacyHooks() bool {
 
 // removeLegacyMCP silently removes the MCP server registered via `claude mcp add`.
 func removeLegacyMCP() {
-	cmd := exec.Command("claude", "mcp", "remove", "-s", "user", "claude-alfred")
-	_ = cmd.Run()
+	// Remove both old and new names.
+	for _, name := range []string{"claude-alfred", "alfred"} {
+		cmd := exec.Command("claude", "mcp", "remove", "-s", "user", name)
+		_ = cmd.Run()
+	}
 }
 
 // resolveBinPath returns the resolved absolute path of the current binary.
@@ -580,7 +583,7 @@ func ensurePathSymlink() {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return
 	}
-	linkPath := filepath.Join(binDir, "claude-alfred")
+	linkPath := filepath.Join(binDir, "alfred")
 
 	// Check if symlink already points to the right target.
 	if target, err := os.Readlink(linkPath); err == nil && target == exe {

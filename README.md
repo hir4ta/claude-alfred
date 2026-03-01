@@ -33,7 +33,7 @@ artifact he creates will reflect that.
 **2. Install the plugin:**
 
 ```
-/plugin install claude-alfred@hir4ta/claude-alfred
+/plugin install alfred@hir4ta/claude-alfred
 ```
 
 > Scope options: `--scope user` (default, personal), `--scope project` (shared via git), `--scope local` (gitignored).
@@ -53,22 +53,21 @@ Voyage AI is used for semantic search (`voyage-4-large`, 1024d). Cost ~$0.50/mon
 ```bash
 git clone https://github.com/hir4ta/claude-alfred
 cd claude-alfred
-go build -o claude-alfred .
+go build -o alfred .
 ```
 
 ### Plugin management
 
 ```
-/plugin                          # Interactive UI (Discover/Installed/Marketplaces/Errors tabs)
-/plugin update claude-alfred@... # Update to latest version
-/plugin disable claude-alfred@...# Temporarily disable
-/plugin uninstall claude-alfred@...# Remove completely
+/plugin                       # Interactive UI (Discover/Installed/Marketplaces/Errors tabs)
+/plugin update alfred@...     # Update to latest version
+/plugin disable alfred@...    # Temporarily disable
+/plugin uninstall alfred@...  # Remove completely
 ```
 
 ## Skills (16)
 
-Invoke with `/alfred:<skill-name>` in Claude Code. Each skill follows a
-structured workflow with constraint-typed steps (`[HOW]`/`[WHAT]`/`[Template]`/`[Guardrails]`).
+Invoke with `/alfred:<skill-name>` in Claude Code.
 
 ### Create — "Build it for me"
 
@@ -170,11 +169,11 @@ official Claude Code specifications.
 
 ## TUI (Optional)
 
-Run `claude-alfred` in a separate terminal to watch sessions live.
+Run `alfred` in a separate terminal to watch sessions live.
 
 ```bash
-claude-alfred          # Interactive session selector + live monitor
-claude-alfred browse   # Browse past session history
+alfred          # Interactive session selector + live monitor
+alfred browse   # Browse past session history
 ```
 
 **Key bindings:** `↑↓` navigate, `Enter` expand/collapse, `g/G` top/bottom, `?` help, `q` quit.
@@ -183,15 +182,15 @@ claude-alfred browse   # Browse past session history
 
 | Command | Description |
 |---------|-------------|
-| `claude-alfred` | Monitor active session (default) |
-| `claude-alfred browse` | Browse past session history |
-| `claude-alfred serve` | Run MCP server (stdio, used by plugin) |
-| `claude-alfred hook <Event>` | Handle hook events (used by plugin) |
-| `claude-alfred install` | Sync sessions + generate embeddings |
-| `claude-alfred uninstall` | Remove MCP server registration |
-| `claude-alfred analyze` | Session analysis report |
-| `claude-alfred plugin-bundle` | Regenerate plugin directory |
-| `claude-alfred version` | Show version |
+| `alfred` | Monitor active session (default) |
+| `alfred browse` | Browse past session history |
+| `alfred serve` | Run MCP server (stdio, used by plugin) |
+| `alfred hook <Event>` | Handle hook events (used by plugin) |
+| `alfred install` | Sync sessions + generate embeddings |
+| `alfred uninstall` | Remove MCP server registration |
+| `alfred analyze` | Session analysis report |
+| `alfred plugin-bundle` | Regenerate plugin directory |
+| `alfred version` | Show version |
 
 ## Dependencies
 

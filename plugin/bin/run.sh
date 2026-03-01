@@ -1,8 +1,8 @@
 #!/bin/sh
-# claude-alfred wrapper — auto-downloads binary on version mismatch.
-ALFRED_VERSION="0.23.0"
+# alfred wrapper — auto-downloads binary on version mismatch.
+ALFRED_VERSION="0.24.0"
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-ALFRED_BIN="${BIN_DIR}/claude-alfred"
+ALFRED_BIN="${BIN_DIR}/alfred"
 VERSION_FILE="${BIN_DIR}/.alfred-version"
 LOCK_DIR="${BIN_DIR}/.alfred-download.lock"
 INSTALL_MARKER="${BIN_DIR}/.alfred-installed-${ALFRED_VERSION}"
@@ -47,7 +47,7 @@ release_lock() { rm -rf "$LOCK_DIR"; }
 
 download_binary() {
   detect_platform
-  URL="https://github.com/hir4ta/claude-alfred/releases/download/v${ALFRED_VERSION}/claude-alfred_${OS}_${ARCH}.tar.gz"
+  URL="https://github.com/hir4ta/claude-alfred/releases/download/v${ALFRED_VERSION}/alfred_${OS}_${ARCH}.tar.gz"
   TMP_TAR="${BIN_DIR}/.alfred-dl.$$.tar.gz"
   TMP_EXTRACT="${BIN_DIR}/.alfred-dl.$$"
 
@@ -59,12 +59,12 @@ download_binary() {
 
   # Extract to temp dir, then move atomically.
   mkdir -p "$TMP_EXTRACT"
-  if ! tar -xzf "$TMP_TAR" -C "$TMP_EXTRACT" claude-alfred 2>/dev/null; then
+  if ! tar -xzf "$TMP_TAR" -C "$TMP_EXTRACT" alfred 2>/dev/null; then
     rm -f "$TMP_TAR"; rm -rf "$TMP_EXTRACT"
     return 1
   fi
-  chmod +x "${TMP_EXTRACT}/claude-alfred"
-  mv -f "${TMP_EXTRACT}/claude-alfred" "$ALFRED_BIN"
+  chmod +x "${TMP_EXTRACT}/alfred"
+  mv -f "${TMP_EXTRACT}/alfred" "$ALFRED_BIN"
   printf '%s' "$ALFRED_VERSION" > "$VERSION_FILE"
   rm -f "$TMP_TAR"; rm -rf "$TMP_EXTRACT"
   return 0
@@ -100,7 +100,7 @@ case "$1" in
   setup)
     # Explicit first-time setup (called from curl one-liner).
     if is_current; then
-      echo "claude-alfred ${ALFRED_VERSION} already installed"
+      echo "alfred ${ALFRED_VERSION} already installed"
     else
       if acquire_lock; then
         download_binary || { release_lock; echo "Download failed." >&2; exit 1; }
@@ -113,7 +113,7 @@ case "$1" in
         done
         is_current || { echo "Download timed out." >&2; exit 1; }
       fi
-      echo "claude-alfred ${ALFRED_VERSION} installed"
+      echo "alfred ${ALFRED_VERSION} installed"
     fi
     shift
     exec "$ALFRED_BIN" install "$@"
@@ -131,7 +131,7 @@ case "$1" in
   serve)
     # MCP server — no timeout, block until binary ready.
     if ! ensure_binary 60; then
-      echo "claude-alfred: binary not available. Run setup first." >&2
+      echo "alfred: binary not available. Run setup first." >&2
       exit 1
     fi
     # Run install in background on first serve after download.
@@ -164,12 +164,12 @@ case "$1" in
     if is_current; then
       exec "$ALFRED_BIN" version
     fi
-    echo "claude-alfred ${ALFRED_VERSION} (binary not yet downloaded)"
+    echo "alfred ${ALFRED_VERSION} (binary not yet downloaded)"
     ;;
 
   *)
     if ! ensure_binary 30; then
-      echo "claude-alfred: binary not available. Run setup first." >&2
+      echo "alfred: binary not available. Run setup first." >&2
       exit 1
     fi
     exec "$ALFRED_BIN" "$@"

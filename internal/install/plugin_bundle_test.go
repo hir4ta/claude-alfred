@@ -26,8 +26,8 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal(data, &m); err != nil {
 			t.Fatalf("parse plugin.json: %v", err)
 		}
-		if got := m["name"]; got != "claude-alfred" {
-			t.Errorf("name = %v, want claude-alfred", got)
+		if got := m["name"]; got != "alfred" {
+			t.Errorf("name = %v, want alfred", got)
 		}
 		if got := m["version"]; got != "0.15.0-test" {
 			t.Errorf("version = %v, want 0.15.0-test", got)
@@ -83,8 +83,8 @@ func TestBundle(t *testing.T) {
 		if !ok {
 			t.Fatal("mcpServers key missing")
 		}
-		if _, ok := servers["claude-alfred"]; !ok {
-			t.Error("claude-alfred server missing from .mcp.json")
+		if _, ok := servers["alfred"]; !ok {
+			t.Error("alfred server missing from .mcp.json")
 		}
 	})
 

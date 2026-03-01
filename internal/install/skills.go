@@ -14,15 +14,15 @@ var alfredSkills = []skillDef{
 	// ─── Create: 構築系 ─────────────────────────────────────────────────
 
 	{
-		Dir: "alfred-create-skill",
+		Dir: "create-skill",
 		Content: `---
-name: alfred-create-skill
+name: create-skill
 description: >
   Generate a new Claude Code skill file following latest best practices
   and the user's preferences.
 user-invocable: true
 argument-hint: "[skill-name]"
-allowed-tools: Read, Write, Glob, Agent, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Glob, Agent, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Create a new Claude Code skill.
@@ -45,7 +45,7 @@ Create a new Claude Code skill.
 6. **[HOW]** Apply user preferences (language, style) to the generated content
 7. **[HOW]** Write the file to .claude/skills/<name>/SKILL.md
 8. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the generated file in a separate context:
-   - Prompt: "Read .claude/skills/<name>/SKILL.md and validate against Claude Code skill spec. Check: (1) frontmatter has required name+description, (2) all steps have constraint type tags [HOW/WHAT/Template/Guardrails], (3) allowed-tools follows least privilege, (4) guardrails section exists with concrete prohibitions, (5) call mcp__claude-alfred__knowledge with query='Claude Code skill best practices' to verify against latest docs. Report PASS or list specific issues."
+   - Prompt: "Read .claude/skills/<name>/SKILL.md and validate against Claude Code skill spec. Check: (1) frontmatter has required name+description, (2) all steps have constraint type tags [HOW/WHAT/Template/Guardrails], (3) allowed-tools follows least privilege, (4) guardrails section exists with concrete prohibitions, (5) call mcp__alfred__knowledge with query='Claude Code skill best practices' to verify against latest docs. Report PASS or list specific issues."
    - If issues found: fix them and note what was corrected
 
 ## Template
@@ -86,15 +86,15 @@ allowed-tools: <comma-separated list>
 `,
 	},
 	{
-		Dir: "alfred-create-rule",
+		Dir: "create-rule",
 		Content: `---
-name: alfred-create-rule
+name: create-rule
 description: >
   Generate a new Claude Code rule file following latest best practices
   and the user's preferences.
 user-invocable: true
 argument-hint: "[rule-name]"
-allowed-tools: Read, Write, Glob, Agent, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Glob, Agent, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Create a new Claude Code rule.
@@ -113,7 +113,7 @@ Create a new Claude Code rule.
    - Concise: rules inject into context on every match — keep short
 6. **[HOW]** Write to .claude/rules/<name>.md
 7. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the generated file in a separate context:
-   - Prompt: "Read .claude/rules/<name>.md and validate against Claude Code rule spec. Check: (1) paths field has valid glob patterns, (2) instructions are actionable (no 'consider'/'try to'), (3) not duplicating CLAUDE.md content, (4) concise (under 20 lines), (5) call mcp__claude-alfred__knowledge with query='Claude Code rule best practices' to verify. Report PASS or list specific issues."
+   - Prompt: "Read .claude/rules/<name>.md and validate against Claude Code rule spec. Check: (1) paths field has valid glob patterns, (2) instructions are actionable (no 'consider'/'try to'), (3) not duplicating CLAUDE.md content, (4) concise (under 20 lines), (5) call mcp__alfred__knowledge with query='Claude Code rule best practices' to verify. Report PASS or list specific issues."
    - If issues found: fix them and note what was corrected
 
 ## Template
@@ -138,15 +138,15 @@ paths:
 `,
 	},
 	{
-		Dir: "alfred-create-hook",
+		Dir: "create-hook",
 		Content: `---
-name: alfred-create-hook
+name: create-hook
 description: >
   Generate Claude Code hook configuration and handler script following
   latest best practices and the user's preferences.
 user-invocable: true
 argument-hint: "[event-name]"
-allowed-tools: Read, Write, Edit, Glob, Agent, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Edit, Glob, Agent, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Create a new Claude Code hook.
@@ -167,7 +167,7 @@ Create a new Claude Code hook.
    - If PreToolUse: non-zero exit must have a clear, helpful error message
 6. **[HOW]** Write/update hooks configuration and handler script
 7. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the generated hook in a separate context:
-   - Prompt: "Read the generated hook config and handler script. Check: (1) timeout appropriate for event type (≤5s for PreToolUse), (2) matcher not overly broad, (3) handler script is executable, (4) PreToolUse hooks have clear error messages on failure, (5) call mcp__claude-alfred__knowledge with query='Claude Code hook best practices timeout matcher' to verify. Report PASS or list specific issues."
+   - Prompt: "Read the generated hook config and handler script. Check: (1) timeout appropriate for event type (≤5s for PreToolUse), (2) matcher not overly broad, (3) handler script is executable, (4) PreToolUse hooks have clear error messages on failure, (5) call mcp__alfred__knowledge with query='Claude Code hook best practices timeout matcher' to verify. Report PASS or list specific issues."
    - If issues found: fix them and note what was corrected
 
 ## Template (hooks.json entry)
@@ -200,15 +200,15 @@ Create a new Claude Code hook.
 `,
 	},
 	{
-		Dir: "alfred-create-agent",
+		Dir: "create-agent",
 		Content: `---
-name: alfred-create-agent
+name: create-agent
 description: >
   Generate a custom Claude Code agent definition following latest best
   practices and the user's preferences.
 user-invocable: true
 argument-hint: "[agent-name]"
-allowed-tools: Read, Write, Glob, Agent, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Glob, Agent, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Create a new custom agent.
@@ -229,7 +229,7 @@ Create a new custom agent.
    - model: explicit (sonnet for most, haiku for fast read-only, opus for complex)
 6. **[HOW]** Write to .claude/agents/<name>.md
 7. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the generated file in a separate context:
-   - Prompt: "Read .claude/agents/<name>.md and validate against Claude Code agent spec. Check: (1) frontmatter has name+description+tools+model, (2) description explains WHEN to delegate (not just what it does), (3) tools follow least privilege, (4) model is explicit, (5) call mcp__claude-alfred__knowledge with query='Claude Code custom agent definition best practices' to verify. Report PASS or list specific issues."
+   - Prompt: "Read .claude/agents/<name>.md and validate against Claude Code agent spec. Check: (1) frontmatter has name+description+tools+model, (2) description explains WHEN to delegate (not just what it does), (3) tools follow least privilege, (4) model is explicit, (5) call mcp__alfred__knowledge with query='Claude Code custom agent definition best practices' to verify. Report PASS or list specific issues."
    - If issues found: fix them and note what was corrected
 
 ## Template
@@ -265,15 +265,15 @@ maxTurns: 30
 `,
 	},
 	{
-		Dir: "alfred-create-mcp",
+		Dir: "create-mcp",
 		Content: `---
-name: alfred-create-mcp
+name: create-mcp
 description: >
   Configure a new MCP server in the project's .mcp.json following
   latest best practices.
 user-invocable: true
 argument-hint: "[server-name]"
-allowed-tools: Read, Write, Edit, Agent, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Edit, Agent, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Configure a new MCP server.
@@ -291,7 +291,7 @@ Configure a new MCP server.
    - Tool namespace: will be mcp__<server-name>__<tool-name>
 5. **[HOW]** Write/update .mcp.json
 6. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the generated config in a separate context:
-   - Prompt: "Read .mcp.json and validate the new MCP server entry. Check: (1) command path exists or is a known package, (2) no hardcoded API keys (must use env vars), (3) args array is valid, (4) call mcp__claude-alfred__knowledge with query='Claude Code MCP server configuration best practices' to verify. Report PASS or list specific issues."
+   - Prompt: "Read .mcp.json and validate the new MCP server entry. Check: (1) command path exists or is a known package, (2) no hardcoded API keys (must use env vars), (3) args array is valid, (4) call mcp__alfred__knowledge with query='Claude Code MCP server configuration best practices' to verify. Report PASS or list specific issues."
    - If issues found: fix them and note what was corrected
 
 ## Template
@@ -317,14 +317,14 @@ Configure a new MCP server.
 `,
 	},
 	{
-		Dir: "alfred-create-claude-md",
+		Dir: "create-claude-md",
 		Content: `---
-name: alfred-create-claude-md
+name: create-claude-md
 description: >
   Create or improve a project's CLAUDE.md from project structure analysis,
   best practices, and the user's preferences.
 user-invocable: true
-allowed-tools: Read, Write, Edit, Glob, Bash, Agent, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Edit, Glob, Bash, Agent, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Create or improve CLAUDE.md.
@@ -347,7 +347,7 @@ Create or improve CLAUDE.md.
    - No environment-specific paths
 7. **[HOW]** Write CLAUDE.md
 8. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the generated file in a separate context:
-   - Prompt: "Read CLAUDE.md and validate against Claude Code best practices. Check: (1) under 200 lines, (2) has Stack/Commands/Structure/Rules sections, (3) commands are copy-pasteable, (4) rules are actionable (no 'consider'/'try to'), (5) no README duplication, (6) call mcp__claude-alfred__knowledge with query='CLAUDE.md best practices structure' to verify. Report PASS or list specific issues."
+   - Prompt: "Read CLAUDE.md and validate against Claude Code best practices. Check: (1) under 200 lines, (2) has Stack/Commands/Structure/Rules sections, (3) commands are copy-pasteable, (4) rules are actionable (no 'consider'/'try to'), (5) no README duplication, (6) call mcp__alfred__knowledge with query='CLAUDE.md best practices structure' to verify. Report PASS or list specific issues."
    - If issues found: fix them and note what was corrected
 
 ## Template
@@ -390,14 +390,14 @@ Create or improve CLAUDE.md.
 `,
 	},
 	{
-		Dir: "alfred-create-memory",
+		Dir: "create-memory",
 		Content: `---
-name: alfred-create-memory
+name: create-memory
 description: >
   Set up project memory directory and MEMORY.md template for persistent
   context across conversations.
 user-invocable: true
-allowed-tools: Read, Write, Glob, Agent, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Glob, Agent, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Set up project memory.
@@ -414,7 +414,7 @@ Set up project memory.
    - No sensitive data (credentials, API keys)
 5. **[HOW]** Optionally create topic files in .claude/memory/ for detailed notes
 6. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the generated file in a separate context:
-   - Prompt: "Read the generated MEMORY.md and validate. Check: (1) under 200 lines, (2) organized by topic not chronologically, (3) no session-specific context, (4) no sensitive data, (5) call mcp__claude-alfred__knowledge with query='Claude Code memory best practices auto memory' to verify. Report PASS or list specific issues."
+   - Prompt: "Read the generated MEMORY.md and validate. Check: (1) under 200 lines, (2) organized by topic not chronologically, (3) no session-specific context, (4) no sensitive data, (5) call mcp__alfred__knowledge with query='Claude Code memory best practices auto memory' to verify. Report PASS or list specific issues."
    - If issues found: fix them and note what was corrected
 
 ## Template
@@ -451,15 +451,15 @@ Set up project memory.
 	// ─── Analyze: 分析系 ────────────────────────────────────────────────
 
 	{
-		Dir: "alfred-review",
+		Dir: "review",
 		Content: `---
-name: alfred-review
+name: review
 description: >
   Full Claude Code utilization report for your project. Analyzes CLAUDE.md,
   skills, rules, hooks, MCP servers, and session history. Returns
   improvement suggestions backed by best practices.
 user-invocable: true
-allowed-tools: mcp__claude-alfred__review, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: mcp__alfred__review, mcp__alfred__knowledge, mcp__alfred__preferences
 context: fork
 agent: general-purpose
 ---
@@ -496,14 +496,14 @@ Project utilization review.
 `,
 	},
 	{
-		Dir: "alfred-audit",
+		Dir: "audit",
 		Content: `---
-name: alfred-audit
+name: audit
 description: >
   Quick setup check against Claude Code best practices. Lighter than
   a full review — just checks configuration exists and is well-formed.
 user-invocable: true
-allowed-tools: Read, Glob, mcp__claude-alfred__review
+allowed-tools: Read, Glob, mcp__alfred__review
 context: fork
 agent: Explore
 ---
@@ -539,14 +539,14 @@ One-line suggestion for each missing item. Keep under 10 lines.
 	// ─── Learn: 学習系 ──────────────────────────────────────────────────
 
 	{
-		Dir: "alfred-learn",
+		Dir: "learn",
 		Content: `---
-name: alfred-learn
+name: learn
 description: >
   Tell alfred about your Claude Code preferences and working style.
   Records preferences that persist across all projects and sessions.
 user-invocable: true
-allowed-tools: AskUserQuestion, mcp__claude-alfred__preferences
+allowed-tools: AskUserQuestion, mcp__alfred__preferences
 ---
 
 Record your preferences.
@@ -580,14 +580,14 @@ Confirm: Category / Key = Value. "This will be applied in future create operatio
 `,
 	},
 	{
-		Dir: "alfred-preferences",
+		Dir: "preferences",
 		Content: `---
-name: alfred-preferences
+name: preferences
 description: >
   View all preferences alfred remembers about you. Shows coding style,
   workflow, communication, and tool preferences.
 user-invocable: true
-allowed-tools: mcp__claude-alfred__preferences
+allowed-tools: mcp__alfred__preferences
 ---
 
 View your recorded preferences.
@@ -613,14 +613,14 @@ If no preferences: "No preferences recorded yet. Use /alfred:learn to teach alfr
 `,
 	},
 	{
-		Dir: "alfred-update-docs",
+		Dir: "update-docs",
 		Content: `---
-name: alfred-update-docs
+name: update-docs
 description: >
   Crawl Claude Code documentation and ingest into the alfred knowledge
   base for semantic search. Updates existing docs and adds new ones.
 user-invocable: true
-allowed-tools: WebFetch, WebSearch, mcp__claude-alfred__ingest, mcp__claude-alfred__knowledge
+allowed-tools: WebFetch, WebSearch, mcp__alfred__ingest, mcp__alfred__knowledge
 context: fork
 agent: general-purpose
 ---
@@ -654,9 +654,9 @@ Documentation crawler for the knowledge base.
 	// ─── Update: 更新系 ─────────────────────────────────────────────────
 
 	{
-		Dir: "alfred-update",
+		Dir: "update",
 		Content: `---
-name: alfred-update
+name: update
 description: >
   Update an existing Claude Code configuration file (skill, rule, hook, agent,
   CLAUDE.md, memory) against latest best practices. Reads the current file,
@@ -664,7 +664,7 @@ description: >
   separate review context.
 user-invocable: true
 argument-hint: "<type> [name]  (e.g. skill my-skill, rule go-errors, claude-md)"
-allowed-tools: Read, Write, Edit, Glob, Agent, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences
+allowed-tools: Read, Write, Edit, Glob, Agent, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences
 ---
 
 Update an existing Claude Code configuration file.
@@ -700,7 +700,7 @@ Update an existing Claude Code configuration file.
    - Ask for approval before applying
 8. **[HOW]** Apply approved changes with Edit tool (preserve unchanged sections)
 9. **[WHAT] Independent Review** Spawn an Agent (subagent_type: "Explore") to review the updated file in a separate context:
-   - Prompt: "Read <file-path> and validate against Claude Code <type> spec. Compare with latest best practices via mcp__claude-alfred__knowledge. Check all quality criteria for this file type. Report PASS or list specific remaining issues."
+   - Prompt: "Read <file-path> and validate against Claude Code <type> spec. Compare with latest best practices via mcp__alfred__knowledge. Check all quality criteria for this file type. Report PASS or list specific remaining issues."
    - If issues found: present to user and offer to fix
 
 ## Guardrails
@@ -715,14 +715,14 @@ Update an existing Claude Code configuration file.
 	// ─── Power: 応用系 ──────────────────────────────────────────────────
 
 	{
-		Dir: "alfred-setup",
+		Dir: "setup",
 		Content: `---
-name: alfred-setup
+name: setup
 description: >
   Interactive wizard to set up Claude Code best practices for your project.
   Creates CLAUDE.md, hooks, skills, rules, and MCP configuration step by step.
 user-invocable: true
-allowed-tools: Read, Write, Edit, Glob, Bash, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__preferences, mcp__claude-alfred__review
+allowed-tools: Read, Write, Edit, Glob, Bash, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__preferences, mcp__alfred__review
 ---
 
 Project setup wizard.
@@ -746,14 +746,14 @@ Project setup wizard.
 `,
 	},
 	{
-		Dir: "alfred-migrate",
+		Dir: "migrate",
 		Content: `---
-name: alfred-migrate
+name: migrate
 description: >
   Compare your current Claude Code setup against latest best practices
   and generate migration suggestions. Shows what's outdated and how to update.
 user-invocable: true
-allowed-tools: Read, Glob, Bash, AskUserQuestion, mcp__claude-alfred__knowledge, mcp__claude-alfred__review, mcp__claude-alfred__preferences
+allowed-tools: Read, Glob, Bash, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__review, mcp__alfred__preferences
 context: fork
 agent: general-purpose
 ---
@@ -785,15 +785,15 @@ Setup migration advisor.
 `,
 	},
 	{
-		Dir: "alfred-explain",
+		Dir: "explain",
 		Content: `---
-name: alfred-explain
+name: explain
 description: >
   Explain any Claude Code feature with concrete examples. Covers hooks,
   skills, rules, agents, MCP, memory, worktrees, teams, and more.
 user-invocable: true
 argument-hint: "[feature-name]"
-allowed-tools: AskUserQuestion, mcp__claude-alfred__knowledge
+allowed-tools: AskUserQuestion, mcp__alfred__knowledge
 ---
 
 Claude Code feature explainer.
@@ -847,6 +847,23 @@ var deprecatedSkillDirs = []string{
 	"alfred-forecast",
 	"alfred-context-recovery",
 	"alfred-crawl",
+	// v0.23 era (alfred- prefix removed in v0.24)
+	"alfred-create-skill",
+	"alfred-create-rule",
+	"alfred-create-hook",
+	"alfred-create-agent",
+	"alfred-create-mcp",
+	"alfred-create-claude-md",
+	"alfred-create-memory",
+	"alfred-review",
+	"alfred-audit",
+	"alfred-learn",
+	"alfred-preferences",
+	"alfred-update-docs",
+	"alfred-update",
+	"alfred-setup",
+	"alfred-migrate",
+	"alfred-explain",
 }
 
 // removeSkills removes alfred skills from ~/.claude/skills/, including

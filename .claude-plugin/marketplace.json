@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "claude-alfred",
+      "name": "alfred",
       "source": "./plugin",
       "description": "Silent butler — best practice skills, preferences, independent review",
       "version": "0.23.0"

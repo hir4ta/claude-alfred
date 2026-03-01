@@ -1,7 +1,7 @@
 version: 2
 
 builds:
-  - binary: claude-alfred
+  - binary: alfred
     goos:
       - darwin
       - linux
@@ -13,7 +13,7 @@ builds:
 
 archives:
   - format: tar.gz
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "alfred_{{ .Os }}_{{ .Arch }}"
 
 changelog:
   sort: asc

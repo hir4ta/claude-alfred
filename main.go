@@ -63,11 +63,11 @@ func run() error {
 		return install.Bundle(outputDir, version)
 	case "hook":
 		if len(os.Args) < 3 {
-			return fmt.Errorf("usage: claude-alfred hook <EventName>")
+			return fmt.Errorf("usage: alfred hook <EventName>")
 		}
 		return runHook(os.Args[2])
 	case "version", "--version", "-v":
-		fmt.Printf("claude-alfred %s\n", version)
+		fmt.Printf("alfred %s\n", version)
 		return nil
 	case "help", "-h", "--help":
 		printUsage()
@@ -218,7 +218,7 @@ func printUsage() {
 	fmt.Println(`alfred - Your silent butler for Claude Code
 
 Usage:
-  claude-alfred [command]
+  alfred [command]
 
 Commands:
   watch          Monitor active Claude Code session in real-time (default)

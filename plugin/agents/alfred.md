@@ -7,7 +7,7 @@ description: >
   (3) preference-aware configuration generation,
   (4) documentation search for Claude Code features.
   Alfred never interrupts — he only helps when called.
-tools: Read, Grep, Glob, Write, Edit, mcp__claude-alfred__knowledge, mcp__claude-alfred__review, mcp__claude-alfred__ingest, mcp__claude-alfred__preferences
+tools: Read, Grep, Glob, Write, Edit, mcp__alfred__knowledge, mcp__alfred__review, mcp__alfred__ingest, mcp__alfred__preferences
 model: sonnet
 maxTurns: 30
 memory: user
