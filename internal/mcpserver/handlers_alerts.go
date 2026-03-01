@@ -38,7 +38,7 @@ type PhaseCount struct {
 	Count int    `json:"count"`
 }
 
-// AlertsResponse is the typed response for the buddy_alerts MCP tool.
+// AlertsResponse is the typed response for the alfred_alerts MCP tool.
 type AlertsResponse struct {
 	ActiveAlerts      []AlertEntry `json:"active_alerts"`
 	SessionHealth     float64      `json:"session_health"`

@@ -179,7 +179,7 @@ func formatEvent(ev parser.SessionEvent) string {
 		// alfred MCP tools shown as [tip]
 		if isAlfredTool(ev.ToolName) {
 			label := alignLabel(tipLabelStyle.Render("[tip]"), 5)
-			// Extract short tool name: "mcp__claude-alfred__buddy_tips" -> "buddy_tips"
+			// Extract short tool name: "mcp__claude-alfred__alfred_tips" -> "alfred_tips"
 			shortName := ev.ToolName
 			if idx := strings.LastIndex(shortName, "alfred_"); idx >= 0 {
 				shortName = shortName[idx:]

@@ -7,7 +7,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// FixResponse is the typed response for the buddy_fix MCP tool.
+// FixResponse is the typed response for the alfred_fix MCP tool.
 // Code quality fixers have been removed; this returns a stub response.
 type FixResponse struct {
 	Success  bool   `json:"success"`

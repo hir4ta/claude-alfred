@@ -393,7 +393,7 @@ func extractToolSummary(toolName string, inputRaw json.RawMessage) string {
 		return ""
 	}
 
-	// Buddy MCP tools get dedicated summary extraction.
+	// Alfred MCP tools get dedicated summary extraction.
 	if strings.Contains(toolName, "alfred_") {
 		return extractAlfredToolSummary(toolName, ti)
 	}
@@ -461,9 +461,9 @@ func extractAlfredToolSummary(toolName string, ti ToolInput) string {
 		shortName = toolName[idx:]
 	}
 	switch shortName {
-	case "buddy_resume":
+	case "alfred_resume":
 		return "latest session"
-	case "buddy_sessions":
+	case "alfred_sessions":
 		return "recent"
 	default:
 		return "latest"

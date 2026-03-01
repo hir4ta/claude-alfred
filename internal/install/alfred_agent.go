@@ -1,6 +1,6 @@
 package install
 
-const buddyAgentContent = `---
+const alfredAgentContent = `---
 name: alfred
 description: >
   Proactive session health monitor and recovery specialist. Use this agent:
