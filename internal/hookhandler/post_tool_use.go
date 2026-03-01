@@ -99,6 +99,9 @@ func handlePostToolUse(input []byte) (*HookOutput, error) {
 		_ = sdb.SetContext("awaiting_question_followup", "true")
 	}
 
+	// Track Claude Code feature usage for preference learning.
+	recordFeaturePreference(sdb, in.ToolName)
+
 	// Track test and build command execution for workflow guidance.
 	if in.ToolName == "Bash" {
 		var bi struct {
@@ -418,3 +421,25 @@ func hashInput(toolName string, toolInput json.RawMessage) uint64 {
 	return h.Sum64()
 }
 
+// recordFeaturePreference increments a per-session counter for Claude Code
+// feature usage. Collected counters are persisted to the store at SessionEnd.
+func recordFeaturePreference(sdb *sessiondb.SessionDB, toolName string) {
+	var key string
+	switch toolName {
+	case "EnterPlanMode":
+		key = "plan_mode"
+	case "EnterWorktree":
+		key = "worktree"
+	case "Agent":
+		key = "agent"
+	case "Skill":
+		key = "skill"
+	case "TeamCreate":
+		key = "team"
+	default:
+		return
+	}
+	cur, _ := sdb.GetContext("pref:" + key + "_count")
+	n, _ := strconv.Atoi(cur)
+	_ = sdb.SetContext("pref:"+key+"_count", strconv.Itoa(n+1))
+}

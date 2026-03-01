@@ -61,6 +61,7 @@ func persistSessionData(sessionID, cwd string) {
 	persistWorkflowSequence(sdb, sessionID)
 	persistSessionMetrics(sdb)
 	persistUserProfile(sdb)
+	persistFeaturePreferences(sdb)
 	syncToGlobalDB(sdb, cwd)
 	persistSessionMemory(sessionID, cwd)
 }
@@ -275,6 +276,23 @@ func persistUserProfile(sdb *sessiondb.SessionDB) {
 	}
 
 	// suggestion_follow_rate: feedbacks table removed in alfred v1.
+}
+
+// persistFeaturePreferences writes per-session feature usage counters
+// (collected by PostToolUse) to the persistent store.
+func persistFeaturePreferences(sdb *sessiondb.SessionDB) {
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		return
+	}
+	for _, key := range []string{"plan_mode", "worktree", "agent", "skill", "team"} {
+		countStr, _ := sdb.GetContext("pref:" + key + "_count")
+		count := 0
+		fmt.Sscanf(countStr, "%d", &count)
+		if count > 0 {
+			_ = st.UpsertUserPreference("feature_"+key, true, 0)
+		}
+	}
 }
 
 // syncToGlobalDB syncs patterns and decisions from the project store

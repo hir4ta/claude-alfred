@@ -335,3 +335,56 @@ func buildBriefing(st *store.Store, projectPath string) []briefingItem {
 
 	return items
 }
+
+// preferencesHandler returns the user's feature usage preferences and profile.
+func preferencesHandler(st *store.Store) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if st == nil {
+			return mcp.NewToolResultError("store not available"), nil
+		}
+
+		result := map[string]any{}
+
+		// 1. User cluster classification.
+		result["user_cluster"] = st.UserCluster()
+
+		// 2. Behavioral profile (EWMA metrics).
+		metrics, err := st.AllUserProfile()
+		if err == nil && len(metrics) > 0 {
+			profile := map[string]any{}
+			for _, m := range metrics {
+				profile[m.MetricName] = map[string]any{
+					"ewma_value":   m.EWMAValue,
+					"sample_count": m.SampleCount,
+				}
+			}
+			result["profile"] = profile
+		}
+
+		// 3. Feature usage effectiveness (cross-session).
+		featurePrefs := map[string]any{}
+		for _, key := range []string{"plan_mode", "worktree", "agent", "skill", "team"} {
+			if p, err := st.UserPreference("feature_" + key); err == nil && p != nil {
+				featurePrefs[key] = map[string]any{
+					"usage_count":   p.DeliveryCount,
+					"effectiveness": p.EffectivenessScore,
+				}
+			}
+		}
+		if len(featurePrefs) > 0 {
+			result["feature_usage"] = featurePrefs
+		}
+
+		// 4. Knowledge base stats.
+		total, bySource, lastCrawl, err := st.DocsStats()
+		if err == nil && total > 0 {
+			result["knowledge_base"] = map[string]any{
+				"total_docs":   total,
+				"by_source":    bySource,
+				"last_crawled": lastCrawl,
+			}
+		}
+
+		return marshalResult(result)
+	}
+}

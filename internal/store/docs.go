@@ -247,3 +247,15 @@ func (s *Store) DocsStats() (total int, bySource map[string]int, lastCrawl strin
 	s.db.QueryRow(`SELECT MAX(crawled_at) FROM docs`).Scan(&lastCrawl)
 	return total, bySource, lastCrawl, nil
 }
+
+// LatestChangelogVersion returns the most recent changelog version and its crawl time.
+// Returns empty strings if no changelog entries exist.
+func (s *Store) LatestChangelogVersion() (version string, crawledAt string, err error) {
+	err = s.db.QueryRow(
+		`SELECT COALESCE(version,''), crawled_at FROM docs WHERE source_type='changelog' ORDER BY crawled_at DESC LIMIT 1`,
+	).Scan(&version, &crawledAt)
+	if err != nil {
+		return "", "", nil // no rows is not an error
+	}
+	return version, crawledAt, nil
+}

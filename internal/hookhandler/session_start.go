@@ -186,6 +186,11 @@ func generateStartupBriefing(sdb *sessiondb.SessionDB, data *ResumeData, cwd str
 		parts = append(parts, note)
 	}
 
+	// 7. Knowledge base freshness check.
+	if note := checkDocsFreshness(); note != "" {
+		parts = append(parts, note)
+	}
+
 	if len(parts) == 0 {
 		return ""
 	}
@@ -214,6 +219,29 @@ func learningProgressNote(sdb *sessiondb.SessionDB) string {
 	default:
 		return ""
 	}
+}
+
+// checkDocsFreshness returns a reminder when the knowledge base hasn't been
+// refreshed recently. Returns "" when docs are fresh or not yet populated.
+func checkDocsFreshness() string {
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		return ""
+	}
+	total, bySource, lastCrawl, err := st.DocsStats()
+	if err != nil || total == 0 || lastCrawl == "" {
+		return ""
+	}
+	t, err := time.Parse("2006-01-02 15:04:05", lastCrawl)
+	if err != nil {
+		return ""
+	}
+	days := int(time.Since(t).Hours() / 24)
+	if days < 7 {
+		return ""
+	}
+	return fmt.Sprintf("Knowledge base last updated %dd ago (%d docs, %d changelog). Run /alfred-crawl to refresh.",
+		days, total, bySource["changelog"])
 }
 
 // recommendFirstAction analyzes resume data and produces a concrete "do this first" recommendation.

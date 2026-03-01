@@ -20,6 +20,7 @@ func stateConsolidatedHandler(claudeHome string, st *store.Store) server.ToolHan
 	resumeFn := withMetaHandler(resumeHandler(st), st, "session")
 	skillFn := withMetaHandler(skillContextHandler(claudeHome), st, "session")
 	accuracyFn := withMetaHandler(accuracyHandler(st), st, "project")
+	preferencesFn := withMetaHandler(preferencesHandler(st), st, "project")
 
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		detail := req.GetString("detail", "standard")
@@ -36,6 +37,8 @@ func stateConsolidatedHandler(claudeHome string, st *store.Store) server.ToolHan
 			return skillFn(ctx, req)
 		case "accuracy":
 			return accuracyFn(ctx, req)
+		case "preferences":
+			return preferencesFn(ctx, req)
 		default:
 			return currentStateFn(ctx, req)
 		}
