@@ -172,7 +172,7 @@ func runServe() error {
 }
 
 func runAnalyze() error {
-	fmt.Println("analyze command is being redesigned. Use /alfred:review via MCP instead.")
+	fmt.Println("analyze command is being redesigned. Use /alfred:inspect via MCP instead.")
 	return nil
 }
 
@@ -455,9 +455,10 @@ func autoHarvestIfStale(st *store.Store) {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	var failures int
 	for _, src := range sources {
 		for _, sec := range src.Sections {
-			st.UpsertDoc(&store.DocRow{
+			if _, _, err := st.UpsertDoc(&store.DocRow{
 				URL:         src.URL,
 				SectionPath: sec.Path,
 				Content:     sec.Content,
@@ -465,7 +466,12 @@ func autoHarvestIfStale(st *store.Store) {
 				Version:     src.Version,
 				CrawledAt:   now,
 				TTLDays:     30,
-			})
+			}); err != nil {
+				failures++
+				if failures > 3 {
+					return // database likely broken — stop trying
+				}
+			}
 		}
 	}
 }
