@@ -105,17 +105,19 @@ func ingestHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFu
 			}
 			resp.Ingested++
 
-			// Generate embedding for the new/updated doc.
-			embedText := sec.Path + "\n" + sec.Content
-			vec, err := emb.EmbedForStorage(ctx, embedText)
-			if err != nil {
-				resp.EmbedErrors++
-				continue
-			}
-			if err := st.InsertEmbedding("docs", docID, emb.Model(), vec); err != nil {
-				resp.EmbedErrors++
-			} else {
-				resp.Embedded++
+			// Generate embedding for the new/updated doc (skip when embedder unavailable).
+			if emb != nil {
+				embedText := sec.Path + "\n" + sec.Content
+				vec, err := emb.EmbedForStorage(ctx, embedText)
+				if err != nil {
+					resp.EmbedErrors++
+					continue
+				}
+				if err := st.InsertEmbedding("docs", docID, emb.Model(), vec); err != nil {
+					resp.EmbedErrors++
+				} else {
+					resp.Embedded++
+				}
 			}
 		}
 
