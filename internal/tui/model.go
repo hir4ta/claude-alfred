@@ -10,6 +10,12 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
+// Tab IDs
+const (
+	tabActivity  = 0
+	tabDecisions = 1
+)
+
 // TaskState tracks a single task's current state.
 type TaskState struct {
 	ID         string
@@ -45,6 +51,10 @@ type Model struct {
 
 	// Dashboard
 	st *store.Store // nil-safe
+
+	// Tabs
+	activeTab int            // tabActivity or tabDecisions
+	decisions []store.DecisionRow
 }
 
 // NewModel creates a new TUI model with initial events pre-loaded.
@@ -123,13 +133,26 @@ type newEventMsg parser.SessionEvent
 type sessionEndedMsg struct{}
 type tickMsg time.Time
 type animTickMsg time.Time
+type dbRefreshMsg []store.DecisionRow
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.waitForEvent(),
 		tickCmd(),
 		animTickCmd(),
+		m.dbRefreshCmd(),
 	)
+}
+
+// dbRefreshCmd loads decisions from the DB every 30 seconds.
+func (m Model) dbRefreshCmd() tea.Cmd {
+	return tea.Tick(30*time.Second, func(_ time.Time) tea.Msg {
+		if m.st == nil || m.sessionID == "" {
+			return dbRefreshMsg(nil)
+		}
+		rows, _ := m.st.GetDecisions(m.sessionID, "", 50)
+		return dbRefreshMsg(rows)
+	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -185,6 +208,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, m.waitForEvent()
 
+	case dbRefreshMsg:
+		if msg != nil {
+			m.decisions = []store.DecisionRow(msg)
+		}
+		return m, m.dbRefreshCmd()
+
 	case animTickMsg:
 		m.animFrame++
 		return m, animTickCmd()
@@ -205,8 +234,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			m.showHelp = true
 			return m, nil
+		case "1":
+			m.activeTab = tabActivity
+			return m, nil
+		case "2":
+			m.activeTab = tabDecisions
+			// Trigger immediate DB refresh when switching to Decisions tab.
+			if m.st != nil && m.sessionID != "" {
+				rows, _ := m.st.GetDecisions(m.sessionID, "", 50)
+				m.decisions = rows
+			}
+			return m, nil
+		case "tab":
+			if m.activeTab == tabActivity {
+				m.activeTab = tabDecisions
+				if m.st != nil && m.sessionID != "" {
+					rows, _ := m.st.GetDecisions(m.sessionID, "", 50)
+					m.decisions = rows
+				}
+			} else {
+				m.activeTab = tabActivity
+			}
+			return m, nil
 		}
-		return m.updateActivity(msg)
+		if m.activeTab == tabActivity {
+			return m.updateActivity(msg)
+		}
+		return m, nil
 	}
 
 	return m, nil

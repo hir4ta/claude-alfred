@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -34,8 +35,16 @@ func (m Model) View() string {
 	// Title area (always shown)
 	sections = append(sections, m.renderHeader())
 
-	// Activity view (single tab)
-	sections = append(sections, m.viewActivity())
+	// Tab bar
+	sections = append(sections, m.renderTabBar())
+
+	// Tab content
+	switch m.activeTab {
+	case tabDecisions:
+		sections = append(sections, m.viewDecisions())
+	default:
+		sections = append(sections, m.viewActivity())
+	}
 
 	// Bottom
 	sections = append(sections, m.renderSeparator())
@@ -45,6 +54,67 @@ func (m Model) View() string {
 	sections = append(sections, m.renderHelp())
 
 	return strings.Join(sections, "\n")
+}
+
+// renderTabBar renders the tab switcher row.
+func (m Model) renderTabBar() string {
+	tabs := []struct {
+		id    int
+		label string
+	}{
+		{tabActivity, "1:Activity"},
+		{tabDecisions, "2:Decisions"},
+	}
+
+	var parts []string
+	for _, t := range tabs {
+		if t.id == m.activeTab {
+			parts = append(parts, tabActiveStyle.Render(" "+t.label+" "))
+		} else {
+			parts = append(parts, tabInactiveStyle.Render(" "+t.label+" "))
+		}
+	}
+	return strings.Join(parts, tabSepStyle.Render("|"))
+}
+
+// viewDecisions renders the Decisions tab.
+func (m Model) viewDecisions() string {
+	if len(m.decisions) == 0 {
+		empty := dimStyle.Render("  No decisions recorded yet for this session.")
+		hint := dimStyle.Render("  Decisions are extracted after each response (requires ANTHROPIC_API_KEY).")
+		return "\n" + empty + "\n" + hint
+	}
+
+	var lines []string
+	lines = append(lines, m.renderLabeledSeparator(fmt.Sprintf("Decisions (%d)", len(m.decisions))))
+
+	w := m.width - 4
+	if w < 40 {
+		w = 40
+	}
+
+	for _, d := range m.decisions {
+		// Topic line
+		topic := decisionTopicStyle.Render("  ▸ " + truncate(d.Topic, w-6))
+		lines = append(lines, topic)
+
+		// Decision text
+		text := truncate(d.DecisionText, w-4)
+		lines = append(lines, dimStyle.Render("    "+text))
+
+		// File paths (if any)
+		if d.FilePaths != "" && d.FilePaths != "[]" {
+			var paths []string
+			if err := json.Unmarshal([]byte(d.FilePaths), &paths); err == nil && len(paths) > 0 {
+				fileStr := strings.Join(paths, ", ")
+				lines = append(lines, decisionFileStyle.Render("    → "+truncate(fileStr, w-6)))
+			}
+		}
+
+		lines = append(lines, "") // blank line between decisions
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // viewActivity renders the Activity tab (original watch view).
@@ -188,7 +258,7 @@ func (m Model) renderSeparator() string {
 }
 
 func (m Model) renderHelp() string {
-	return helpStyle.Render("  q: quit | \u2191\u2193: select | Enter: expand/collapse | ?: help")
+	return helpStyle.Render("  q: quit | \u2191\u2193: select | Enter: expand/collapse | 1/2/Tab: switch tab | ?: help")
 }
 
 
@@ -201,6 +271,7 @@ func (m Model) renderHelpOverlay() string {
 		{"Enter", "Expand / collapse event detail"},
 		{"g", "Jump to first event"},
 		{"G", "Jump to latest event"},
+		{"1 / 2 / Tab", "Switch tab (Activity / Decisions)"},
 		{"?", "Toggle this help"},
 		{"q / Ctrl+C", "Quit"},
 	}

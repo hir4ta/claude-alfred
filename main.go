@@ -237,6 +237,16 @@ func runHook(event string) error {
 		if ev.LastAssistantMessage != "" && ev.SessionID != "" {
 			extractAndSaveDecisions(st, ev.SessionID, ev.LastAssistantMessage)
 		}
+	case "SubagentStart":
+		if ev.SessionID != "" {
+			if ctx := buildCompactContext(st, ev.SessionID); ctx != "" {
+				fmt.Print(ctx)
+			}
+		}
+	case "PostToolUseFailure":
+		if ev.SessionID != "" && ev.ToolName != "" {
+			_ = st.RecordToolUse(ev.SessionID, ev.ToolName, false)
+		}
 	case "PostToolUse":
 		if ev.SessionID != "" && ev.ToolName != "" {
 			_ = st.RecordToolUse(ev.SessionID, ev.ToolName, !ev.ToolError)

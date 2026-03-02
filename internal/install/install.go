@@ -233,11 +233,13 @@ func alfredHookEntries(binPath string) map[string]any {
 	}
 
 	return map[string]any{
-		"SessionStart":     makeEntry("SessionStart", 5),
-		"PostToolUse":      makeEntry("PostToolUse", 3),
-		"SessionEnd":       makeEntry("SessionEnd", 8),
-		"UserPromptSubmit": makeEntry("UserPromptSubmit", 2),
-		"Stop":             makeAsyncEntry("Stop", 30),
+		"SessionStart":        makeEntry("SessionStart", 5),
+		"PostToolUse":         makeEntry("PostToolUse", 3),
+		"PostToolUseFailure":  makeEntry("PostToolUseFailure", 3),
+		"SessionEnd":          makeEntry("SessionEnd", 8),
+		"UserPromptSubmit":    makeEntry("UserPromptSubmit", 2),
+		"SubagentStart":       makeEntry("SubagentStart", 3),
+		"Stop":                makeAsyncEntry("Stop", 30),
 	}
 }
 

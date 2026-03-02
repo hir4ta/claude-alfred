@@ -128,3 +128,15 @@ func max(a, b int) int {
 	}
 	return b
 }
+
+// truncate shortens s to at most maxRunes runes, appending "…" if truncated.
+func truncate(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	if maxRunes < 1 {
+		return ""
+	}
+	return string(runes[:maxRunes-1]) + "…"
+}

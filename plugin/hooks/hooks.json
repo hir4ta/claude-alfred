@@ -12,6 +12,17 @@
         ]
       }
     ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook PostToolUseFailure",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [
@@ -41,6 +52,17 @@
             "async": true,
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook Stop",
             "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook SubagentStart",
+            "timeout": 3,
             "type": "command"
           }
         ]
