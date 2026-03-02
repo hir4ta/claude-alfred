@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -271,6 +272,43 @@ func (s *Store) GetFileReworkHotspots(projectPath string, minSessions int) ([]Fi
 			continue
 		}
 		result = append(result, fh)
+	}
+	return result, nil
+}
+
+// GetCoChangedFiles returns files frequently modified in the same sessions
+// as the given file (co-change analysis from events table).
+func (s *Store) GetCoChangedFiles(filePath string, limit int) ([]FileActivity, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	base := filepath.Base(filePath)
+	pat := "%" + base + "%"
+
+	rows, err := s.db.Query(`
+		SELECT e2.tool_input, 'co-change', COUNT(DISTINCT e2.session_id) AS sess_count
+		FROM events e1
+		JOIN events e2 ON e1.session_id = e2.session_id
+		WHERE e1.tool_name IN ('Write','Edit')
+		  AND e1.tool_input LIKE ?
+		  AND e2.tool_name IN ('Write','Edit')
+		  AND e2.tool_input != ''
+		  AND e2.tool_input NOT LIKE ?
+		GROUP BY e2.tool_input
+		ORDER BY sess_count DESC
+		LIMIT ?`, pat, pat, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: get co-changed files: %w", err)
+	}
+	defer rows.Close()
+
+	var result []FileActivity
+	for rows.Next() {
+		var fa FileActivity
+		if err := rows.Scan(&fa.Path, &fa.Action, &fa.Count); err != nil {
+			continue
+		}
+		result = append(result, fa)
 	}
 	return result, nil
 }
