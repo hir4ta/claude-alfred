@@ -122,14 +122,14 @@ func CountSessions() error {
 
 // alfredRulesVersion tracks the rules content version for safe upgrades.
 // Bump this when alfredRulesContent changes to trigger overwrites.
-const alfredRulesVersion = "3"
+const alfredRulesVersion = "4"
 
 // alfredRulesContent is the content written to ~/.claude/rules/alfred.md.
 // 静観型執事: alfred never interrupts. Tools are called on demand.
 // NOTE: Go raw string literals cannot contain backticks, so we use regular strings
 // with explicit newlines for the rules content.
 var alfredRulesContent = strings.Join([]string{
-	"<!-- alfred-rules-v3 -->",
+	"<!-- alfred-rules-v4 -->",
 	"# claude-alfred",
 	"",
 	"alfred is a silent butler for Claude Code.",
@@ -138,18 +138,22 @@ var alfredRulesContent = strings.Join([]string{
 	"## MCP Tools",
 	"",
 	"**knowledge** — search Claude Code docs and best practices",
-	"- Looking for how a Claude Code feature works",
-	"- Need architectural guidance or best practice reference",
+	"- USE when: Claude Code の機能・設定の使い方、ベストプラクティスを確認する",
+	"- DO NOT USE when: 一般プログラミングの質問、プロジェクト固有コードの質問",
+	"",
+	"**recall** — recall project context from past sessions",
+	"- USE when: ファイルの過去の変更理由・決定を調べる、プロジェクトの作業履歴を確認する",
 	"",
 	"**review** — analyze project's Claude Code utilization",
-	"- On-demand project health check",
-	"- Compare setup against best practices",
+	"- USE when: Claude Code 設定（rules, skills, hooks, MCP, CLAUDE.md）のレビュー・改善",
+	"- IMPORTANT: 設定ファイルを複数手動で読む前にまず review を実行すること",
+	"- DO NOT USE when: 特定ファイル1つの中身を確認するだけ",
 	"",
 	"**ingest** — store documentation in knowledge base",
-	"- After crawling new documentation pages",
+	"- USE when: ドキュメントページをクロールした後",
 	"",
 	"**preferences** — get/set user preferences",
-	"- Record or retrieve user workflow preferences",
+	"- USE when: ユーザーのワークフロー設定を記録・取得する",
 	"",
 }, "\n")
 

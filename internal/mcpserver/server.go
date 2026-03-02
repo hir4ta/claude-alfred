@@ -17,6 +17,11 @@ He never interrupts your work. When you need him, he's ready:
   review      — Analyze your project's Claude Code utilization
   ingest      — Store documentation with vector embeddings
   preferences — Get/set your preferences
+
+When to use alfred tools:
+- Claude Code の設定（rules, skills, hooks, MCP, CLAUDE.md）をレビュー・改善するとき → review を先に実行
+- Claude Code の機能やベストプラクティスを調べるとき → knowledge で検索
+- ファイルの過去の変更理由や作業履歴を調べるとき → recall で検索
 `
 
 // New creates a new MCP server with all tools registered.

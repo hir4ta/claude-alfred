@@ -331,8 +331,8 @@ var (
 )
 
 const (
-	reviewHint    = "alfred review tool is available for analyzing Claude Code configuration (skills, rules, hooks, MCP). Consider using it before manually reading files."
-	knowledgeHint = "alfred knowledge tool is available for searching Claude Code documentation and best practices."
+	reviewHint    = "alfred review tool is available for analyzing Claude Code configuration (skills, rules, hooks, MCP). Use it before manually reading multiple config files."
+	knowledgeHint = "alfred knowledge tool is available for searching Claude Code documentation and best practices. Use it before answering Claude Code questions from general knowledge."
 )
 
 // matchAlfredHint returns a context hint if the prompt matches known patterns,
