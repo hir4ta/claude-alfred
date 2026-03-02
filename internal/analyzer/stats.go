@@ -18,6 +18,10 @@ type Stats struct {
 	AssistantMsgCount int           // number of assistant text messages
 	LongestPause      time.Duration // longest gap between consecutive events
 	lastEventTime     time.Time     // previous event timestamp (unexported)
+
+	// Token estimation (rough heuristic)
+	InputChars  int // sum of user message rune counts
+	OutputChars int // sum of assistant message rune counts
 }
 
 // NewStats creates a Stats with initialized maps.
@@ -47,6 +51,7 @@ func (s *Stats) Update(ev parser.SessionEvent) {
 	switch ev.Type {
 	case parser.EventUserMessage:
 		s.TurnCount++
+		s.InputChars += len([]rune(ev.UserText))
 	case parser.EventToolUse:
 		s.ToolUseCount++
 		if ev.ToolName != "" {
@@ -54,6 +59,7 @@ func (s *Stats) Update(ev parser.SessionEvent) {
 		}
 	case parser.EventAssistantText:
 		s.AssistantMsgCount++
+		s.OutputChars += len([]rune(ev.AssistantText))
 	}
 }
 
@@ -101,6 +107,12 @@ func (s *Stats) TopTools(n int) []ToolCount {
 		n = len(counts)
 	}
 	return counts[:n]
+}
+
+// EstimatedTokens returns rough (inputTokens, outputTokens) estimates.
+// Heuristic: 1 token ≈ 4 chars. CJK text will be underestimated.
+func (s *Stats) EstimatedTokens() (in, out int) {
+	return s.InputChars / 4, s.OutputChars / 4
 }
 
 // ToolCount is a tool name with its use count.

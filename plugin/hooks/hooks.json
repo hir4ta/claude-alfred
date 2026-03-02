@@ -68,6 +68,18 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook SubagentStop",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

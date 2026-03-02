@@ -178,7 +178,18 @@ func (m Model) renderScoreLine() string {
 	if len(topParts) > 0 {
 		text += " | " + strings.Join(topParts, " ")
 	}
+	if inTok, outTok := m.stats.EstimatedTokens(); inTok > 0 || outTok > 0 {
+		text += fmt.Sprintf(" | ~%s↑ ~%s↓", formatTokens(inTok), formatTokens(outTok))
+	}
 	return dimStyle.Render(text)
+}
+
+// formatTokens formats a token count as a compact string (e.g. 3500 → "3.5kT", 800 → "800T").
+func formatTokens(n int) string {
+	if n >= 1000 {
+		return fmt.Sprintf("%.1fkT", float64(n)/1000)
+	}
+	return fmt.Sprintf("%dT", n)
 }
 
 func (m Model) renderTasks() string {

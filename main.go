@@ -243,6 +243,10 @@ func runHook(event string) error {
 				fmt.Print(ctx)
 			}
 		}
+	case "SubagentStop":
+		if ev.LastAssistantMessage != "" && ev.SessionID != "" {
+			extractAndSaveDecisions(st, ev.SessionID, ev.LastAssistantMessage)
+		}
 	case "PostToolUseFailure":
 		if ev.SessionID != "" && ev.ToolName != "" {
 			_ = st.RecordToolUse(ev.SessionID, ev.ToolName, false)
