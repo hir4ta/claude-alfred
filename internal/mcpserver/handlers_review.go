@@ -265,12 +265,12 @@ func reviewHooks(claudeHome string) map[string]any {
 		result["missing_recommended"] = missing
 	}
 
-	// Inspect Stop hook: needs async:true for non-blocking Haiku call.
+	// Inspect Stop hook: needs async:true for non-blocking decision extraction.
 	if stopEntries, ok := hooks["Stop"].([]any); ok {
 		if info := inspectAlfredHook(stopEntries); info != nil {
 			result["stop_hook"] = info
 			if async, _ := info["async"].(bool); !async {
-				result["stop_hook_warning"] = "Stop hook should have async:true for LLM decision extraction"
+				result["stop_hook_warning"] = "Stop hook should have async:true for decision extraction"
 			}
 		}
 	}

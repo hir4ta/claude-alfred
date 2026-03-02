@@ -1,7 +1,9 @@
 package store
 
 import (
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -317,6 +319,156 @@ func TestSearchDecisionsFTS(t *testing.T) {
 	}
 	if len(results) != 0 {
 		t.Errorf("expected 0 results for empty query, got %d", len(results))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ExtractDecisions (rule-based keyword matching)
+// ---------------------------------------------------------------------------
+
+func TestExtractDecisions_English(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		text    string
+		wantMin int
+		wantSub string
+	}{
+		{"decided to", "I decided to use SQLite for local storage.", 1, "decided to use SQLite"},
+		{"opted for", "We opted for WAL mode for concurrent access.", 1, "opted for WAL"},
+		{"going with", "Going with embedded storage instead of client-server.", 1, "Going with embedded"},
+		{"instead of", "Using channels instead of mutexes for synchronization.", 1, "instead of"},
+		{"switched to", "Switched to bubbletea from termbox.", 1, "Switched to bubbletea"},
+		{"replaced with", "The old parser was replaced with a streaming JSON approach.", 1, "replaced with"},
+		{"will use", "We will use Go 1.25 for this project.", 1, "will use Go"},
+		{"recommend using", "I recommend using FTS5 for full-text search.", 1, "recommend using FTS5"},
+		{"approach:", "Approach: use hybrid vector + FTS5 with RRF.", 1, "Approach"},
+		{"let's go with", "Let's go with option B for simplicity.", 1, "go with option B"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			decisions := ExtractDecisions(tc.text, "2025-01-01T00:00:00Z")
+			if len(decisions) < tc.wantMin {
+				t.Fatalf("ExtractDecisions(%q) = %d decisions, want >= %d", tc.text, len(decisions), tc.wantMin)
+			}
+			if !strings.Contains(decisions[0].DecisionText, tc.wantSub) {
+				t.Errorf("decision_text = %q, want substring %q", decisions[0].DecisionText, tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestExtractDecisions_Japanese(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		text    string
+		wantMin int
+		wantSub string
+	}{
+		{"にしました", "SQLiteをデータベースにしました。", 1, "SQLite"},
+		{"にします", "WALモードにします。", 1, "WAL"},
+		{"を選択", "FTS5を選択しました。", 1, "FTS5"},
+		{"を採用", "Bubble Teaを採用します。", 1, "Bubble Tea"},
+		{"を使うことに", "fsnotifyを使うことにしました。", 1, "fsnotify"},
+		{"に変更", "スキーマをV2に変更しました。", 1, "に変更"},
+		{"に切り替え", "WALモードに切り替えました。", 1, "に切り替え"},
+		{"ではなく", "mutexではなくchannelを使います。", 1, "ではなく"},
+		{"の代わりに", "termboxの代わりにbubbletea。", 1, "の代わりに"},
+		{"方式で", "ハイブリッド方式で検索します。", 1, "方式で"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			decisions := ExtractDecisions(tc.text, "2025-01-01T00:00:00Z")
+			if len(decisions) < tc.wantMin {
+				t.Fatalf("ExtractDecisions(%q) = %d decisions, want >= %d", tc.text, len(decisions), tc.wantMin)
+			}
+			if !strings.Contains(decisions[0].DecisionText, tc.wantSub) {
+				t.Errorf("decision_text = %q, want substring %q", decisions[0].DecisionText, tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestExtractDecisions_MultipleKeywords(t *testing.T) {
+	t.Parallel()
+	text := "I decided to use SQLite. We opted for WAL mode. Going with embedded storage."
+	decisions := ExtractDecisions(text, "2025-01-01T00:00:00Z")
+	if len(decisions) < 3 {
+		t.Fatalf("expected >= 3 decisions, got %d: %+v", len(decisions), decisions)
+	}
+}
+
+func TestExtractDecisions_FilePaths(t *testing.T) {
+	t.Parallel()
+	text := "I decided to put the schema in `internal/store/schema.go` and logic in internal/store/store.go."
+	decisions := ExtractDecisions(text, "2025-01-01T00:00:00Z")
+	if len(decisions) == 0 {
+		t.Fatal("expected at least one decision")
+	}
+
+	var paths []string
+	if err := json.Unmarshal([]byte(decisions[0].FilePaths), &paths); err != nil {
+		t.Fatalf("parse file_paths: %v", err)
+	}
+	if len(paths) < 2 {
+		t.Fatalf("expected >= 2 file paths, got %d: %v", len(paths), paths)
+	}
+}
+
+func TestExtractDecisions_NoKeywords(t *testing.T) {
+	t.Parallel()
+	text := "Here is the code you requested. It creates a simple HTTP server."
+	decisions := ExtractDecisions(text, "2025-01-01T00:00:00Z")
+	if len(decisions) != 0 {
+		t.Errorf("expected 0 decisions, got %d: %+v", len(decisions), decisions)
+	}
+}
+
+func TestExtractDecisions_EmptyText(t *testing.T) {
+	t.Parallel()
+	decisions := ExtractDecisions("", "2025-01-01T00:00:00Z")
+	if decisions != nil {
+		t.Errorf("expected nil for empty text, got %+v", decisions)
+	}
+}
+
+func TestExtractDecisions_TopicTruncation(t *testing.T) {
+	t.Parallel()
+	// Build a sentence that triggers a keyword and exceeds 80 runes.
+	long := "I decided to " + strings.Repeat("implement a very elaborate system ", 5)
+	decisions := ExtractDecisions(long, "2025-01-01T00:00:00Z")
+	if len(decisions) == 0 {
+		t.Fatal("expected at least one decision")
+	}
+	if runeLen := len([]rune(decisions[0].Topic)); runeLen > 80 {
+		t.Errorf("topic rune length = %d, want <= 80", runeLen)
+	}
+}
+
+func TestExtractDecisions_CapsAt5(t *testing.T) {
+	t.Parallel()
+	var sentences []string
+	for i := 0; i < 8; i++ {
+		sentences = append(sentences, "I decided to do thing number something")
+	}
+	text := strings.Join(sentences, ". ") + "."
+	decisions := ExtractDecisions(text, "2025-01-01T00:00:00Z")
+	if len(decisions) > 5 {
+		t.Errorf("expected <= 5 decisions (capped), got %d", len(decisions))
+	}
+}
+
+func TestExtractDecisions_Deduplication(t *testing.T) {
+	t.Parallel()
+	text := "I decided to use SQLite.\nI decided to use SQLite.\nI decided to use SQLite."
+	decisions := ExtractDecisions(text, "2025-01-01T00:00:00Z")
+	if len(decisions) != 1 {
+		t.Errorf("expected 1 deduplicated decision, got %d", len(decisions))
 	}
 }
 

@@ -239,8 +239,8 @@ func alfredHookEntries(binPath string) map[string]any {
 		"SessionEnd":          makeEntry("SessionEnd", 8),
 		"UserPromptSubmit":    makeEntry("UserPromptSubmit", 2),
 		"SubagentStart":       makeEntry("SubagentStart", 3),
-		"SubagentStop":        makeAsyncEntry("SubagentStop", 30),
-		"Stop":                makeAsyncEntry("Stop", 30),
+		"SubagentStop":        makeAsyncEntry("SubagentStop", 5),
+		"Stop":                makeAsyncEntry("Stop", 5),
 	}
 }
 

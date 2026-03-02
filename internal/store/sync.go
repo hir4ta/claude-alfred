@@ -148,7 +148,7 @@ func (s *Store) SyncSession(jsonlPath string) error {
 					return err
 				}
 
-				// Decision extraction moved to Stop hook (LLM-based via Haiku).
+				// Decision extraction moved to Stop hook (rule-based keyword matching).
 
 			case parser.EventTaskCreate, parser.EventTaskUpdate:
 				if _, err := s.InsertEvent(&EventRow{

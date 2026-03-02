@@ -81,7 +81,7 @@ func (m Model) renderTabBar() string {
 func (m Model) viewDecisions() string {
 	if len(m.decisions) == 0 {
 		empty := dimStyle.Render("  No decisions recorded yet for this session.")
-		hint := dimStyle.Render("  Decisions are extracted after each response (requires ALFRED_API_KEY).")
+		hint := dimStyle.Render("  Decisions are extracted after each response.")
 		return "\n" + empty + "\n" + hint
 	}
 

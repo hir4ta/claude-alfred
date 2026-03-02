@@ -31,21 +31,14 @@ curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-alfred/main/install.s
 This downloads the binary, registers hooks/MCP/skills in Claude Code, and
 syncs your session history. Restart Claude Code after installation.
 
-**API keys** (both optional):
+**API key** (optional):
 
 ```bash
 export VOYAGE_API_KEY=your-key       # Semantic search (Voyage AI voyage-4-large)
-export ALFRED_API_KEY=your-key       # LLM decision extraction (claude-haiku)
 ```
 
-> **Note:** `ALFRED_API_KEY` is an **Anthropic API key** — the same key you'd set as
-> `ANTHROPIC_API_KEY`. Alfred uses its own variable name to avoid conflicts with Claude
-> Code's own auth, which also reads `ANTHROPIC_API_KEY`. If both are set at the same
-> time, Claude Code warns about an auth conflict.
-
 Voyage AI `voyage-4-large` (1024d). Cost ~$0.50/month. Without `VOYAGE_API_KEY`, Alfred
-falls back to FTS5 keyword search. Without `ALFRED_API_KEY`, decision extraction is
-skipped.
+falls back to FTS5 keyword search.
 
 ## Uninstall
 
@@ -114,7 +107,7 @@ automatically — you don't call them directly.
 │  SessionStart  (project + CLAUDE.md ingest)      │
 │  PostToolUse / PostToolUseFailure (tool stats)   │
 │  SubagentStart → subagent context injection      │
-│  Stop / SubagentStop → LLM decision extraction   │
+│  Stop / SubagentStop → decision extraction         │
 │  UserPromptSubmit → past decisions context    ↑  │
 │  SessionEnd                                   │  │
 │                                               │  │
@@ -140,8 +133,8 @@ automatically — you don't call them directly.
 | `PostToolUseFailure` | After tool fails | Record tool failure |
 | `UserPromptSubmit` | User sends prompt | Inject past decisions about referenced files |
 | `SubagentStart` | Subagent spawned | Inject compact context (recent decisions + files) |
-| `Stop` | Assistant stops responding | Extract decisions from response via LLM (async) |
-| `SubagentStop` | Subagent finishes | Extract decisions from subagent response via LLM (async) |
+| `Stop` | Assistant stops responding | Extract decisions from response (async) |
+| `SubagentStop` | Subagent finishes | Extract decisions from subagent response (async) |
 | `SessionEnd` | Session closes | Finalize session statistics |
 
 **Independent Review** — `/alfred:prepare` and `/alfred:polish` spawn an Explore

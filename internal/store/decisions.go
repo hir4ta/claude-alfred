@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -18,6 +19,154 @@ type DecisionRow struct {
 	Reasoning      string
 	FilePaths      string // JSON array
 	CompactSegment int
+}
+
+// Decision keywords indicating a design choice was made.
+var decisionKeywords = []string{
+	// English — selection
+	"decided to",
+	"chosen to",
+	"going with",
+	"opted for",
+	"will use",
+	"went with",
+	"i'll use",
+	"let's use",
+	"let's go with",
+	// English — approach
+	"approach:",
+	"strategy:",
+	"the approach is",
+	"the strategy is",
+	"the plan is",
+	// English — comparison
+	"instead of",
+	"rather than",
+	"better suited",
+	"more appropriate",
+	// English — change
+	"switched to",
+	"switched from",
+	"changed to",
+	"replaced with",
+	"moved to",
+	"migrated to",
+	"refactored to",
+	"converted to",
+	// English — recommendation
+	"recommend using",
+
+	// Japanese — selection
+	"にしました",
+	"にします",
+	"を選択",
+	"を採用",
+	"を使うことに",
+	"を使います",
+	"を選びました",
+	"で行きます",
+	// Japanese — approach
+	"方式で",
+	"方針として",
+	"アプローチで",
+	// Japanese — change
+	"に変更",
+	"に切り替え",
+	"に移行",
+	"に置き換え",
+	"をやめて",
+	// Japanese — comparison
+	"ではなく",
+	"の代わりに",
+}
+
+// fencedCodeBlockRe matches markdown fenced code blocks (triple backticks).
+var fencedCodeBlockRe = regexp.MustCompile("(?s)```.*?```")
+
+// ExtractDecisions extracts design decisions from assistant text using
+// keyword pattern matching. No LLM is used — fast and deterministic.
+func ExtractDecisions(assistantText string, timestamp string) []DecisionRow {
+	if assistantText == "" {
+		return nil
+	}
+
+	// Strip markdown code blocks to avoid false positives from code comments.
+	stripped := fencedCodeBlockRe.ReplaceAllString(assistantText, "")
+
+	sentences := splitSentences(stripped)
+
+	filePaths := ExtractFilePaths(assistantText)
+	filePathsJSON, _ := json.Marshal(filePaths)
+	if filePaths == nil {
+		filePathsJSON = []byte("[]")
+	}
+
+	var decisions []DecisionRow
+	seen := make(map[string]bool)
+
+	for _, sentence := range sentences {
+		trimmed := strings.TrimSpace(sentence)
+		if trimmed == "" {
+			continue
+		}
+
+		lower := strings.ToLower(trimmed)
+		matched := false
+		for _, kw := range decisionKeywords {
+			if strings.Contains(lower, kw) || strings.Contains(trimmed, kw) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+
+		if seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+
+		topic := trimmed
+		if runes := []rune(topic); len(runes) > 80 {
+			topic = string(runes[:80])
+		}
+
+		decisions = append(decisions, DecisionRow{
+			Timestamp:    timestamp,
+			Topic:        topic,
+			DecisionText: trimmed,
+			FilePaths:    string(filePathsJSON),
+		})
+	}
+
+	if len(decisions) > 5 {
+		decisions = decisions[:5]
+	}
+	return decisions
+}
+
+// splitSentences splits text on ".", "。", and "\n".
+func splitSentences(text string) []string {
+	var result []string
+	current := strings.Builder{}
+
+	for _, r := range text {
+		switch r {
+		case '.', '。', '\n':
+			s := strings.TrimSpace(current.String())
+			if s != "" {
+				result = append(result, s)
+			}
+			current.Reset()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	if s := strings.TrimSpace(current.String()); s != "" {
+		result = append(result, s)
+	}
+	return result
 }
 
 // Regex patterns for extracting file paths from text.

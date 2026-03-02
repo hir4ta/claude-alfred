@@ -51,7 +51,7 @@
           {
             "async": true,
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook Stop",
-            "timeout": 30,
+            "timeout": 5,
             "type": "command"
           }
         ]
@@ -74,7 +74,7 @@
           {
             "async": true,
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook SubagentStop",
-            "timeout": 30,
+            "timeout": 5,
             "type": "command"
           }
         ]

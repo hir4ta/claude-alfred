@@ -15,7 +15,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/install"
-	"github.com/hir4ta/claude-alfred/internal/llm"
 	"github.com/hir4ta/claude-alfred/internal/mcpserver"
 	"github.com/hir4ta/claude-alfred/internal/store"
 	"github.com/hir4ta/claude-alfred/internal/tui"
@@ -395,42 +394,17 @@ func containsAny(s string, words []string) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Stop hook: LLM-based decision extraction (async, silent)
+// Stop hook: rule-based decision extraction (async, silent)
 // ---------------------------------------------------------------------------
 
-// extractAndSaveDecisions calls Haiku to extract design decisions from the
-// last assistant message and saves them to the database.
-// Silently returns on any error (butler never complains).
+// extractAndSaveDecisions extracts design decisions from the last assistant
+// message using keyword pattern matching and saves them to the database.
 func extractAndSaveDecisions(st *store.Store, sessionID, assistantText string) {
-	llmClient, err := llm.NewClient()
-	if err != nil {
-		return // ALFRED_API_KEY not set — graceful skip
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	decisions, err := llmClient.ExtractDecisions(ctx, assistantText)
-	if err != nil || len(decisions) == 0 {
-		return
-	}
-
 	ts := time.Now().UTC().Format(time.RFC3339)
+	decisions := store.ExtractDecisions(assistantText, ts)
 	for _, d := range decisions {
-		filePaths := "[]"
-		if len(d.FilePaths) > 0 {
-			if b, err := json.Marshal(d.FilePaths); err == nil {
-				filePaths = string(b)
-			}
-		}
-		_ = st.InsertDecision(&store.DecisionRow{
-			SessionID:    sessionID,
-			Timestamp:    ts,
-			Topic:        d.Topic,
-			DecisionText: d.Decision,
-			Reasoning:    d.Reasoning,
-			FilePaths:    filePaths,
-		})
+		d.SessionID = sessionID
+		_ = st.InsertDecision(&d)
 	}
 }
 
@@ -611,8 +585,6 @@ Commands:
   help           Show this help
 
 Environment:
-  ALFRED_API_KEY     Optional. Enables LLM-based decision extraction via Haiku.
-                     Without it, decision extraction is silently skipped.
   VOYAGE_API_KEY     Optional. Enables semantic vector search (hybrid RRF + reranking).
                      Without it, search falls back to FTS5-only.`)
 }

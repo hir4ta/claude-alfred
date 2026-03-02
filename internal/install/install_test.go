@@ -275,7 +275,7 @@ func TestAlfredHookEntries_AsyncEvents(t *testing.T) {
 
 	entries := alfredHookEntries("/usr/local/bin/claude-alfred")
 
-	// Stop and SubagentStop must be async:true for non-blocking LLM calls.
+	// Stop and SubagentStop must be async:true for non-blocking decision extraction.
 	asyncRequired := []string{"Stop", "SubagentStop"}
 	for _, event := range asyncRequired {
 		entry, ok := entries[event]
