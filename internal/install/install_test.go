@@ -270,6 +270,54 @@ func TestAlfredHookEntries(t *testing.T) {
 	}
 }
 
+func TestAlfredHookEntries_AsyncEvents(t *testing.T) {
+	t.Parallel()
+
+	entries := alfredHookEntries("/usr/local/bin/claude-alfred")
+
+	// Stop and SubagentStop must be async:true for non-blocking LLM calls.
+	asyncRequired := []string{"Stop", "SubagentStop"}
+	for _, event := range asyncRequired {
+		entry, ok := entries[event]
+		if !ok {
+			t.Errorf("%s: entry missing", event)
+			continue
+		}
+		list, ok := entry.([]any)
+		if !ok || len(list) == 0 {
+			t.Errorf("%s: entry is not a non-empty list", event)
+			continue
+		}
+		m := list[0].(map[string]any)
+		hooks := m["hooks"].([]any)
+		hook := hooks[0].(map[string]any)
+		async, _ := hook["async"].(bool)
+		if !async {
+			t.Errorf("%s: async = false, want true", event)
+		}
+	}
+
+	// Other events must NOT be async (they need to run synchronously).
+	syncRequired := []string{"SessionStart", "PostToolUse", "PostToolUseFailure", "SessionEnd", "UserPromptSubmit", "SubagentStart"}
+	for _, event := range syncRequired {
+		entry, ok := entries[event]
+		if !ok {
+			t.Errorf("%s: entry missing", event)
+			continue
+		}
+		list, ok := entry.([]any)
+		if !ok || len(list) == 0 {
+			continue
+		}
+		m := list[0].(map[string]any)
+		hooks := m["hooks"].([]any)
+		hook := hooks[0].(map[string]any)
+		if async, _ := hook["async"].(bool); async {
+			t.Errorf("%s: async = true, want false (should be synchronous)", event)
+		}
+	}
+}
+
 func TestIsAlfredHookEntry(t *testing.T) {
 	t.Parallel()
 

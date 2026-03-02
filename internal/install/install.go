@@ -366,16 +366,14 @@ func RemoveHooks() error {
 		return nil // no hooks section
 	}
 
-	// Current + legacy event names to clean up.
+	// Current active events + legacy event names that may exist in older installations.
 	events := []string{
-		// Current (静観型執事)
-		"SessionStart", "PostToolUse", "SessionEnd",
-		// Legacy (removed in v1 reset)
-		"PreToolUse", "PostToolUseFailure",
-		"UserPromptSubmit", "PreCompact",
-		"SubagentStart", "SubagentStop", "Notification",
+		// Current (静観型執事 — all 8 registered events)
+		"SessionStart", "PostToolUse", "PostToolUseFailure", "SessionEnd",
+		"UserPromptSubmit", "SubagentStart", "SubagentStop", "Stop",
+		// Legacy (removed in previous versions — kept here for clean uninstall)
+		"PreToolUse", "PreCompact", "Notification",
 		"TeammateIdle", "TaskCompleted", "PermissionRequest",
-		"Stop",
 	}
 	changed := false
 	for _, event := range events {

@@ -386,7 +386,7 @@ func reviewMCP(projectPath string) map[string]any {
 // Improvement suggestions
 // ---------------------------------------------------------------------------
 
-func formatReviewSuggestions(report map[string]any) []string {
+func formatReviewSuggestions(report map[string]any) {
 	var suggestions []string
 
 	// CLAUDE.md checks
@@ -439,8 +439,6 @@ func formatReviewSuggestions(report map[string]any) []string {
 		report["suggestion_count"] = 0
 		report["summary"] = "Good setup! CLAUDE.md, skills, rules, and hooks are all configured."
 	}
-
-	return suggestions
 }
 
 // ---------------------------------------------------------------------------

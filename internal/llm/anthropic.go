@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 )
 
 const (
 	defaultAnthropicAPI = "https://api.anthropic.com/v1/messages"
-	anthropicModel      = "claude-haiku-4-5-20251001"
-	anthropicVersion    = "2023-06-01"
+	// anthropicModel is the Haiku model used for decision extraction.
+	// Verify this model ID periodically: https://docs.anthropic.com/en/docs/about-claude/models
+	// Last verified: 2026-03
+	anthropicModel   = "claude-haiku-4-5-20251001"
+	anthropicVersion = "2023-06-01"
 )
 
 type anthropicClient struct {
@@ -24,11 +26,9 @@ type anthropicClient struct {
 
 func newAnthropicClient(apiKey string) *anthropicClient {
 	return &anthropicClient{
-		apiKey:  apiKey,
-		baseURL: defaultAnthropicAPI,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
+		apiKey:     apiKey,
+		baseURL:    defaultAnthropicAPI,
+		httpClient: &http.Client{}, // timeout is controlled by the caller's context
 	}
 }
 

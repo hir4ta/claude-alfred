@@ -129,6 +129,142 @@ func TestGetDecisions(t *testing.T) {
 	}
 }
 
+func TestSearchDecisionsByFile(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	_, err = s.DB().Exec(`INSERT INTO sessions (id, project_path, project_name, jsonl_path) VALUES ('s1', '/tmp', 'test', '/tmp/t.jsonl')`)
+	if err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	decisions := []*DecisionRow{
+		{
+			SessionID:    "s1",
+			Timestamp:    "2025-01-01T00:00:00Z",
+			Topic:        "store package design",
+			DecisionText: "use SQLite for persistence",
+			FilePaths:    `["internal/store/store.go", "internal/store/decisions.go"]`,
+		},
+		{
+			SessionID:    "s1",
+			Timestamp:    "2025-01-02T00:00:00Z",
+			Topic:        "unrelated decision",
+			DecisionText: "use bubbletea for TUI",
+			FilePaths:    `["internal/tui/model.go"]`,
+		},
+	}
+	for _, d := range decisions {
+		if err := s.InsertDecision(d); err != nil {
+			t.Fatalf("InsertDecision: %v", err)
+		}
+	}
+
+	// Should find by basename match.
+	results, err := s.SearchDecisionsByFile("internal/store/store.go", 10)
+	if err != nil {
+		t.Fatalf("SearchDecisionsByFile: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for store.go, got %d", len(results))
+	}
+	if results[0].Topic != "store package design" {
+		t.Errorf("topic = %q, want 'store package design'", results[0].Topic)
+	}
+
+	// Basename-only path should also match.
+	results, err = s.SearchDecisionsByFile("decisions.go", 10)
+	if err != nil {
+		t.Fatalf("SearchDecisionsByFile (basename): %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 result for decisions.go, got %d", len(results))
+	}
+
+	// Non-existent file returns empty.
+	results, err = s.SearchDecisionsByFile("nonexistent.go", 10)
+	if err != nil {
+		t.Fatalf("SearchDecisionsByFile (missing): %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for missing file, got %d", len(results))
+	}
+}
+
+func TestSearchDecisionsByDirectory(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	_, err = s.DB().Exec(`INSERT INTO sessions (id, project_path, project_name, jsonl_path) VALUES ('s1', '/tmp', 'test', '/tmp/t.jsonl')`)
+	if err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	decisions := []*DecisionRow{
+		{
+			SessionID:    "s1",
+			Timestamp:    "2025-01-01T00:00:00Z",
+			Topic:        "store design",
+			DecisionText: "use SQLite",
+			FilePaths:    `["internal/store/store.go"]`,
+		},
+		{
+			SessionID:    "s1",
+			Timestamp:    "2025-01-02T00:00:00Z",
+			Topic:        "TUI design",
+			DecisionText: "use bubbletea",
+			FilePaths:    `["internal/tui/model.go"]`,
+		},
+		{
+			SessionID:    "s1",
+			Timestamp:    "2025-01-03T00:00:00Z",
+			Topic:        "another store file",
+			DecisionText: "decisions table schema",
+			FilePaths:    `["internal/store/decisions.go"]`,
+		},
+	}
+	for _, d := range decisions {
+		if err := s.InsertDecision(d); err != nil {
+			t.Fatalf("InsertDecision: %v", err)
+		}
+	}
+
+	// Should match files under internal/store/.
+	results, err := s.SearchDecisionsByDirectory("internal/store", 10)
+	if err != nil {
+		t.Fatalf("SearchDecisionsByDirectory: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results for internal/store, got %d", len(results))
+	}
+
+	// Should match only tui files.
+	results, err = s.SearchDecisionsByDirectory("internal/tui", 10)
+	if err != nil {
+		t.Fatalf("SearchDecisionsByDirectory (tui): %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 result for internal/tui, got %d", len(results))
+	}
+
+	// LIKE-special characters in directory path should not cause SQL errors.
+	results, err = s.SearchDecisionsByDirectory("internal/store_%special", 10)
+	if err != nil {
+		t.Fatalf("SearchDecisionsByDirectory (special chars): %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for non-existent dir, got %d", len(results))
+	}
+}
+
 func TestSearchDecisionsFTS(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(filepath.Join(dir, "test.db"))

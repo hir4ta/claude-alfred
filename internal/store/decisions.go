@@ -216,10 +216,13 @@ func (s *Store) SearchDecisionsByDirectory(dirPath string, limit int) ([]Decisio
 	if limit <= 0 {
 		limit = 3
 	}
-	// Use full directory path for LIKE to avoid matching same-named dirs elsewhere.
+	// Use full directory path in the LIKE pattern to avoid matching same-named dirs
+	// in unrelated parts of the tree (e.g. "store" vs "some/other/store").
+	// file_paths is a JSON array like ["internal/store/file.go"], so the leading %
+	// skips past the opening bracket and path prefix.
 	dirPrefix := strings.TrimRight(dirPath, "/") + "/"
 	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(dirPrefix)
-	pat := escaped + "%"
+	pat := "%" + escaped + "%"
 
 	dbRows, err := s.db.Query(`
 		SELECT d.id, d.session_id, COALESCE(d.event_id,0), d.timestamp, d.topic,

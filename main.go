@@ -234,7 +234,9 @@ func runHook(event string) error {
 			}
 		}
 	case "Stop":
-		if ev.LastAssistantMessage != "" && ev.SessionID != "" {
+		// StopHookActive is set when the Stop hook itself triggered a new Claude response,
+		// preventing infinite re-entry loops.
+		if !ev.StopHookActive && ev.LastAssistantMessage != "" && ev.SessionID != "" {
 			extractAndSaveDecisions(st, ev.SessionID, ev.LastAssistantMessage)
 		}
 	case "SubagentStart":

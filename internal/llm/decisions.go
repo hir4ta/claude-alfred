@@ -32,13 +32,16 @@ No decisions found? Return []. Output ONLY valid JSON, no markdown fences.`
 // Returns nil on any error (graceful degradation).
 func (c *Client) ExtractDecisions(ctx context.Context, assistantText string) ([]Decision, error) {
 	// Skip short messages — unlikely to contain decisions.
-	if len(assistantText) < 100 {
+	// Use rune count for correct CJK handling.
+	runes := []rune(assistantText)
+	if len(runes) < 100 {
 		return nil, nil
 	}
 
 	// Truncate very long messages to stay within Haiku's input budget.
-	if len(assistantText) > 30000 {
-		assistantText = assistantText[:30000]
+	// Slice by rune to avoid splitting multi-byte UTF-8 sequences.
+	if len(runes) > 30000 {
+		assistantText = string(runes[:30000])
 	}
 
 	text, err := c.client.chat(ctx, decisionSystemPrompt, assistantText, 1024)

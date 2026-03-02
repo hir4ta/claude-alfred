@@ -145,12 +145,15 @@ func (m Model) Init() tea.Cmd {
 }
 
 // dbRefreshCmd loads decisions from the DB every 30 seconds.
+// Captures only the needed fields to avoid holding a stale copy of the full Model.
 func (m Model) dbRefreshCmd() tea.Cmd {
+	st := m.st
+	sessionID := m.sessionID
 	return tea.Tick(30*time.Second, func(_ time.Time) tea.Msg {
-		if m.st == nil || m.sessionID == "" {
+		if st == nil || sessionID == "" {
 			return dbRefreshMsg(nil)
 		}
-		rows, _ := m.st.GetDecisions(m.sessionID, "", 50)
+		rows, _ := st.GetDecisions(sessionID, "", 50)
 		return dbRefreshMsg(rows)
 	})
 }

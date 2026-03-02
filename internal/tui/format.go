@@ -122,13 +122,6 @@ func breakLine(s string, width int) []string {
 	return lines
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // truncate shortens s to at most maxRunes runes, appending "…" if truncated.
 func truncate(s string, maxRunes int) string {
 	runes := []rune(s)
