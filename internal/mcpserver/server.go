@@ -20,8 +20,9 @@ He never interrupts your work. When you need him, he's ready:
   ingest      — Store documentation with vector embeddings
 
 When to use alfred tools:
-- Claude Code の設定（rules, skills, hooks, MCP, CLAUDE.md）をレビュー・改善するとき → review を先に実行
-- Claude Code の機能やベストプラクティスを調べるとき → knowledge で検索
+- Reviewing or auditing .claude/ configuration (agents, skills, rules, hooks, MCP) → call review first
+- Creating or modifying .claude/ configuration files → call knowledge for best practices first
+- Looking up how a Claude Code feature works → call knowledge
 `
 
 // defaultClaudeHome returns the default Claude Code configuration directory.
