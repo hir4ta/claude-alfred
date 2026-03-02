@@ -11,7 +11,6 @@ import (
 
 	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/store"
-	"github.com/hir4ta/claude-alfred/internal/watcher"
 )
 
 // settingsPathFunc returns the path to ~/.claude/settings.json.
@@ -94,30 +93,6 @@ func Run(args []string) error {
 	fmt.Println("\n✓ Installation complete!")
 	fmt.Println("  Restart Claude Code to activate.")
 	return nil
-}
-
-// CountSessions outputs total session count and estimated sync time as JSON.
-func CountSessions() error {
-	sessions, err := listAllSessions()
-	if err != nil {
-		return err
-	}
-
-	count := len(sessions)
-	est := (count + 119) / 120 // ~0.5s per session ≈ 120 sessions/min, round up
-	if est < 1 && count > 0 {
-		est = 1
-	}
-
-	type output struct {
-		Sessions   int `json:"sessions"`
-		EstMinutes int `json:"est_minutes"`
-	}
-	out := output{
-		Sessions:   count,
-		EstMinutes: est,
-	}
-	return json.NewEncoder(os.Stdout).Encode(out)
 }
 
 // alfredRulesVersion tracks the rules content version for safe upgrades.
@@ -405,11 +380,6 @@ func RemoveHooks() error {
 	}
 
 	return os.WriteFile(settingsPath, append(out, '\n'), 0o644)
-}
-
-func listAllSessions() ([]watcher.SessionInfo, error) {
-	claudeHome := watcher.DefaultClaudeHome()
-	return watcher.ListSessions(claudeHome)
 }
 
 func initialSync(sr syncRange) error {

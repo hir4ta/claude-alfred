@@ -40,18 +40,12 @@ func run() error {
 	switch cmd {
 	case "watch":
 		return runWatch()
-	case "browse":
-		return runBrowse()
 	case "serve":
 		return runServe()
 	case "install":
 		return install.Run(os.Args[2:])
-	case "count-sessions":
-		return install.CountSessions()
 	case "uninstall":
 		return install.Uninstall()
-	case "analyze":
-		return runAnalyze()
 	case "crawl-seed":
 		output := "internal/install/seed_docs.json"
 		if len(os.Args) > 2 {
@@ -138,24 +132,6 @@ func runWatch() error {
 	return nil
 }
 
-func runBrowse() error {
-	claudeHome := watcher.DefaultClaudeHome()
-
-	sessions, err := watcher.ListSessions(claudeHome)
-	if err != nil {
-		return fmt.Errorf("failed to list sessions: %w", err)
-	}
-
-	model := tui.NewBrowseModel(sessions)
-	p := tea.NewProgram(model, tea.WithAltScreen())
-
-	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("TUI error: %w", err)
-	}
-
-	return nil
-}
-
 func runServe() error {
 	claudeHome := watcher.DefaultClaudeHome()
 
@@ -169,11 +145,6 @@ func runServe() error {
 
 	s := mcpserver.New(claudeHome, st, emb)
 	return server.ServeStdio(s)
-}
-
-func runAnalyze() error {
-	fmt.Println("analyze command is being redesigned. Use /alfred:inspect via MCP instead.")
-	return nil
 }
 
 // hookEvent is the minimal structure of a Claude Code hook stdin payload.
@@ -633,12 +604,10 @@ Usage:
 
 Commands:
   watch          Monitor active Claude Code session in real-time (default)
-  browse         Browse past session history
   serve          Run as MCP server (stdio) for Claude Code integration
   hook           Handle silent hook events (no output)
   install        Set up alfred (skills, hooks, MCP, rules, DB sync)
   uninstall      Remove alfred completely (hooks, MCP, skills, rules, DB, binary)
-  analyze        Project analysis report
   crawl-seed     Crawl official docs and generate seed_docs.json
   plugin-bundle  Generate plugin directory from Go sources
   version        Show version

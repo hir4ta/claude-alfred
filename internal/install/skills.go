@@ -17,8 +17,9 @@ var alfredSkills = []skillDef{
 		Content: `---
 name: configure
 description: >
-  Generate or update Claude Code configuration files (skill, rule, hook,
-  agent, MCP server, CLAUDE.md, or memory) following latest best practices.
+  Create or polish a single Claude Code configuration file (skill, rule, hook,
+  agent, MCP server, CLAUDE.md, or memory) with independent review.
+  For project-wide setup, use /alfred:setup instead.
 user-invocable: true
 argument-hint: "<type> [name]"
 allowed-tools: Read, Write, Edit, Glob, Bash, Agent, AskUserQuestion, mcp__alfred__knowledge
@@ -112,8 +113,9 @@ The butler tends to the estate's configuration — whether building new or polis
 		Content: `---
 name: setup
 description: >
-  Set up Claude Code best practices for your project, or explain any
-  Claude Code feature with examples.
+  Project-wide Claude Code setup wizard, or explain any Claude Code feature
+  with examples. Scans the whole project and guides multi-file configuration.
+  For single-file work, use /alfred:configure instead.
 user-invocable: true
 argument-hint: "[feature | --wizard]"
 allowed-tools: Read, Write, Edit, Glob, Bash, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__review

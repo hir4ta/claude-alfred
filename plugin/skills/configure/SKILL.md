@@ -1,8 +1,9 @@
 ---
 name: configure
 description: >
-  Generate or update Claude Code configuration files (skill, rule, hook,
-  agent, MCP server, CLAUDE.md, or memory) following latest best practices.
+  Create or polish a single Claude Code configuration file (skill, rule, hook,
+  agent, MCP server, CLAUDE.md, or memory) with independent review.
+  For project-wide setup, use /alfred:setup instead.
 user-invocable: true
 argument-hint: "<type> [name]"
 allowed-tools: Read, Write, Edit, Glob, Bash, Agent, AskUserQuestion, mcp__alfred__knowledge

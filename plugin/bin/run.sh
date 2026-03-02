@@ -1,6 +1,6 @@
 #!/bin/sh
 # alfred wrapper — auto-downloads binary on version mismatch.
-ALFRED_VERSION="0.29.0"
+ALFRED_VERSION="0.29.1"
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 ALFRED_BIN="${BIN_DIR}/alfred"
 VERSION_FILE="${BIN_DIR}/.alfred-version"
@@ -117,15 +117,6 @@ case "$1" in
     fi
     shift
     exec "$ALFRED_BIN" install "$@"
-    ;;
-
-  count-sessions)
-    # Quick session count — no sync, just directory scan.
-    if ! ensure_binary 30; then
-      echo '{"error":"binary not available"}' >&2
-      exit 1
-    fi
-    exec "$ALFRED_BIN" count-sessions
     ;;
 
   serve)

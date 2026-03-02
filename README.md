@@ -72,8 +72,8 @@ Invoke with `/alfred:<skill-name>` in Claude Code.
 
 | Skill | What it does |
 |-------|-------------|
-| `/alfred:configure <type> [name]` | Create or update config files (skill, rule, hook, agent, MCP, CLAUDE.md, memory) with independent review |
-| `/alfred:setup` | Interactive setup wizard — project analysis + guided configuration |
+| `/alfred:configure <type> [name]` | Create or polish a single config file (skill, rule, hook, agent, MCP, CLAUDE.md, memory) with independent review |
+| `/alfred:setup` | Project-wide setup wizard — scan and configure multiple files, or explain any Claude Code feature |
 | `/alfred:harvest [--force]` | Refresh knowledge base from Claude Code documentation |
 
 `/alfred:configure` ends with an **independent review** — a separate Explore
@@ -143,7 +143,6 @@ Run `alfred` in a separate terminal to watch sessions live.
 
 ```bash
 alfred          # Interactive session selector + live monitor
-alfred browse   # Browse past session history
 ```
 
 **Key bindings:** `↑↓` navigate, `Enter` expand/collapse, `g/G` top/bottom,

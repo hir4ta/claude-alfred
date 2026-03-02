@@ -78,3 +78,70 @@ func TestWrapTextASCII(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "0m"},
+		{30 * time.Second, "0m"},
+		{5 * time.Minute, "5m"},
+		{59 * time.Minute, "59m"},
+		{60 * time.Minute, "1h"},
+		{90 * time.Minute, "1h30m"},
+		{2 * time.Hour, "2h"},
+		{25 * time.Hour, "1d1h"},
+		{48 * time.Hour, "2d"},
+		{8 * 24 * time.Hour, "1w1d"},
+		{14 * 24 * time.Hour, "2w"},
+	}
+	for _, tt := range tests {
+		got := formatDuration(tt.d)
+		if got != tt.want {
+			t.Errorf("formatDuration(%v) = %q, want %q", tt.d, got, tt.want)
+		}
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		maxRunes int
+		want     string
+	}{
+		{"short", "hello", 10, "hello"},
+		{"exact", "hello", 5, "hello"},
+		{"over", "hello world", 6, "hello…"},
+		{"empty", "", 5, ""},
+		{"max zero", "hello", 0, ""},
+		{"CJK truncation", "あいうえお", 4, "あいう…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncate(tt.s, tt.maxRunes)
+			if got != tt.want {
+				t.Errorf("truncate(%q, %d) = %q, want %q", tt.s, tt.maxRunes, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTruncateID(t *testing.T) {
+	tests := []struct {
+		s    string
+		want string
+	}{
+		{"abcdefghij", "abcdefgh"},
+		{"short", "short"},
+		{"abcdefgh", "abcdefgh"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := truncateID(tt.s)
+		if got != tt.want {
+			t.Errorf("truncateID(%q) = %q, want %q", tt.s, got, tt.want)
+		}
+	}
+}

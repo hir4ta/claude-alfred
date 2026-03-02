@@ -242,15 +242,6 @@ case "$1" in
     exec "$ALFRED_BIN" install "$@"
     ;;
 
-  count-sessions)
-    # Quick session count — no sync, just directory scan.
-    if ! ensure_binary 30; then
-      echo '{"error":"binary not available"}' >&2
-      exit 1
-    fi
-    exec "$ALFRED_BIN" count-sessions
-    ;;
-
   serve)
     # MCP server — no timeout, block until binary ready.
     if ! ensure_binary 60; then
