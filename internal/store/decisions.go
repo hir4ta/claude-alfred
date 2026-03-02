@@ -56,7 +56,7 @@ func ExtractDecisions(assistantText string, userText string, timestamp string) [
 		topic = string([]rune(topic)[:100])
 	}
 
-	filePaths := extractFilePaths(assistantText)
+	filePaths := ExtractFilePaths(assistantText)
 	filePathsJSON, _ := json.Marshal(filePaths)
 
 	var decisions []DecisionRow
@@ -122,8 +122,8 @@ func splitSentences(text string) []string {
 	return result
 }
 
-// extractFilePaths extracts file paths from text using regex patterns.
-func extractFilePaths(text string) []string {
+// ExtractFilePaths extracts file paths from text using regex patterns.
+func ExtractFilePaths(text string) []string {
 	seen := make(map[string]bool)
 	var paths []string
 

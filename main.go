@@ -185,7 +185,7 @@ type hookEvent struct {
 }
 
 // runHook handles hook events. Most are silent data collection;
-// UserPromptSubmit may emit additionalContext to nudge toward alfred tools.
+// UserPromptSubmit may emit additionalContext with project memory and tool hints.
 func runHook(event string) error {
 	var ev hookEvent
 	if err := json.NewDecoder(os.Stdin).Decode(&ev); err != nil {
@@ -193,10 +193,19 @@ func runHook(event string) error {
 		return nil
 	}
 
-	// UserPromptSubmit does not need store access — handle early.
 	if event == "UserPromptSubmit" {
-		if hint := matchAlfredHint(promptText(ev.Prompt)); hint != "" {
-			fmt.Print(hint)
+		prompt := promptText(ev.Prompt)
+		var parts []string
+
+		if hint := matchAlfredHint(prompt); hint != "" {
+			parts = append(parts, hint)
+		}
+		if ctx := buildProjectContext(prompt); ctx != "" {
+			parts = append(parts, ctx)
+		}
+
+		if len(parts) > 0 {
+			fmt.Print(strings.Join(parts, "\n"))
 		}
 		return nil
 	}
@@ -224,8 +233,49 @@ func runHook(event string) error {
 }
 
 // ---------------------------------------------------------------------------
-// UserPromptSubmit: alfred tool hint
+// UserPromptSubmit: project context + alfred tool hint
 // ---------------------------------------------------------------------------
+
+// buildProjectContext returns past decision context for files mentioned in the prompt.
+// Returns empty string if no relevant decisions found (butler stays quiet).
+func buildProjectContext(prompt string) string {
+	paths := store.ExtractFilePaths(prompt)
+	if len(paths) == 0 {
+		return ""
+	}
+
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		return ""
+	}
+
+	var hints []string
+	for _, p := range paths {
+		if len(hints) >= 3 {
+			break
+		}
+		decisions, err := st.SearchDecisionsByFile(p, 2)
+		if err != nil || len(decisions) == 0 {
+			continue
+		}
+		for _, d := range decisions {
+			hints = append(hints, d.DecisionText)
+		}
+	}
+
+	if len(hints) == 0 {
+		return ""
+	}
+
+	// Truncate each hint to keep total context reasonable.
+	for i, h := range hints {
+		if len(h) > 150 {
+			hints[i] = h[:147] + "..."
+		}
+	}
+
+	return "Past decisions about referenced files: " + strings.Join(hints, " | ")
+}
 
 // promptText extracts the user's message from the hook payload.
 // Handles both object form {"message":"text"} and plain string.
