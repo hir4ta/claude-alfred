@@ -163,10 +163,7 @@ func runServe() error {
 	}
 	defer st.Close()
 
-	emb, err := embedder.NewEmbedder()
-	if err != nil {
-		return fmt.Errorf("embedder: %w (set VOYAGE_API_KEY)", err)
-	}
+	emb, _ := embedder.NewEmbedder() // nil when VOYAGE_API_KEY is unset; graceful FTS5-only fallback
 
 	s := mcpserver.New(claudeHome, st, emb)
 	return server.ServeStdio(s)
@@ -330,6 +327,7 @@ Commands:
   version        Show version
   help           Show this help
 
-Requirements:
-  VOYAGE_API_KEY  Required for vector search (serve/install commands)`)
+Environment:
+  VOYAGE_API_KEY  Optional. Enables semantic vector search (hybrid RRF + reranking).
+                  Without it, search falls back to FTS5-only.`)
 }
