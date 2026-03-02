@@ -35,11 +35,16 @@ syncs your session history. Restart Claude Code after installation.
 
 ```bash
 export VOYAGE_API_KEY=your-key       # Semantic search (Voyage AI voyage-4-large)
-export ANTHROPIC_API_KEY=your-key    # LLM decision extraction (claude-haiku)
+export ALFRED_API_KEY=your-key       # LLM decision extraction (claude-haiku)
 ```
 
+> **Note:** `ALFRED_API_KEY` is an **Anthropic API key** — the same key you'd set as
+> `ANTHROPIC_API_KEY`. Alfred uses its own variable name to avoid conflicts with Claude
+> Code's own auth, which also reads `ANTHROPIC_API_KEY`. If both are set at the same
+> time, Claude Code warns about an auth conflict.
+
 Voyage AI `voyage-4-large` (1024d). Cost ~$0.50/month. Without `VOYAGE_API_KEY`, Alfred
-falls back to FTS5 keyword search. Without `ANTHROPIC_API_KEY`, decision extraction is
+falls back to FTS5 keyword search. Without `ALFRED_API_KEY`, decision extraction is
 skipped.
 
 ## Uninstall

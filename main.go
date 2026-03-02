@@ -404,7 +404,7 @@ func containsAny(s string, words []string) bool {
 func extractAndSaveDecisions(st *store.Store, sessionID, assistantText string) {
 	llmClient, err := llm.NewClient()
 	if err != nil {
-		return // ANTHROPIC_API_KEY not set — graceful skip
+		return // ALFRED_API_KEY not set — graceful skip
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -611,7 +611,7 @@ Commands:
   help           Show this help
 
 Environment:
-  ANTHROPIC_API_KEY  Optional. Enables LLM-based decision extraction via Haiku.
+  ALFRED_API_KEY     Optional. Enables LLM-based decision extraction via Haiku.
                      Without it, decision extraction is silently skipped.
   VOYAGE_API_KEY     Optional. Enables semantic vector search (hybrid RRF + reranking).
                      Without it, search falls back to FTS5-only.`)

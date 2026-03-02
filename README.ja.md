@@ -34,11 +34,16 @@ curl -fsSL https://raw.githubusercontent.com/hir4ta/claude-alfred/main/install.s
 
 ```bash
 export VOYAGE_API_KEY=your-key       # セマンティック検索（Voyage AI voyage-4-large）
-export ANTHROPIC_API_KEY=your-key    # LLM による Decision 抽出（claude-haiku）
+export ALFRED_API_KEY=your-key       # LLM による Decision 抽出（claude-haiku）
 ```
 
+> **Note:** `ALFRED_API_KEY` にセットするのは **Anthropic の API キー**（通常 `ANTHROPIC_API_KEY`
+> として使うもの）。名前を変えているのは Claude Code 本体との競合を避けるため。
+> Claude Code も `ANTHROPIC_API_KEY` を認証に使うため、両方が同時に設定されると
+> auth conflict の警告が出る。
+
 Voyage AI `voyage-4-large`（1024d）。月額約 $0.50。`VOYAGE_API_KEY` 未設定時は FTS5
-キーワード検索にフォールバック。`ANTHROPIC_API_KEY` 未設定時は Decision 抽出をスキップ。
+キーワード検索にフォールバック。`ALFRED_API_KEY` 未設定時は Decision 抽出をスキップ。
 
 ## アンインストール
 
