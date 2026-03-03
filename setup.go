@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
 
 	"github.com/hir4ta/claude-alfred/internal/embedder"
@@ -46,6 +47,7 @@ type setupModel struct {
 	err       error
 	result    install.SeedResult
 
+	spinner  spinner.Model
 	progress progress.Model
 	cancel   context.CancelFunc // cancels the ApplySeed goroutine
 }
@@ -62,17 +64,23 @@ func newSetupModel() setupModel {
 		progress.WithDefaultBlend(),
 		progress.WithWidth(40),
 	)
+	s := spinner.New(spinner.WithSpinner(spinner.Dot))
+	s.Style = dimStyle
 	return setupModel{
 		phase:     phaseInit,
 		startTime: time.Now(),
+		spinner:   s,
 		progress:  p,
 	}
 }
 
 func (m setupModel) Init() tea.Cmd {
-	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
+	return tea.Batch(
+		m.spinner.Tick,
+		tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		}),
+	)
 }
 
 func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -118,6 +126,14 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return tickMsg(t)
 		})
 
+	case spinner.TickMsg:
+		if m.phase == phaseInit || m.phase == phaseSeeding {
+			sm, cmd := m.spinner.Update(msg)
+			m.spinner = sm
+			return m, cmd
+		}
+		return m, nil
+
 	case progress.FrameMsg:
 		pm, cmd := m.progress.Update(msg)
 		m.progress = pm
@@ -130,19 +146,21 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m setupModel) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString("\n  " + titleStyle.Render("alfred setup") + "\n\n")
+	b.WriteString("\n  " + titleStyle.Render("⚡ alfred setup") + "\n\n")
+
+	elapsed := time.Since(m.startTime).Round(time.Second)
 
 	// Phase 1: Seeding docs.
 	switch {
 	case m.phase == phaseInit:
-		b.WriteString("  Seeding docs " + dimStyle.Render("waiting...") + "\n")
+		b.WriteString("  [1/2] Seeding docs " + m.spinner.View() + "\n")
 	case m.phase == phaseSeeding:
-		b.WriteString(fmt.Sprintf("  Seeding docs %s %d/%d\n",
-			dimStyle.Render("·····"),
+		b.WriteString(fmt.Sprintf("  [1/2] Seeding docs %s %d/%d\n",
+			dimStyle.Render("···"),
 			m.docsDone, m.docsTotal))
 	default:
-		b.WriteString(fmt.Sprintf("  Seeding docs %s %d/%d %s\n",
-			dimStyle.Render("·····"),
+		b.WriteString(fmt.Sprintf("  [1/2] Seeding docs %s %d/%d %s\n",
+			dimStyle.Render("···"),
 			m.docsTotal, m.docsTotal,
 			doneStyle.Render("✓")))
 	}
@@ -152,17 +170,24 @@ func (m setupModel) View() tea.View {
 	case m.phase < phaseEmbedding:
 		// not started yet
 	case m.phase == phaseEmbedding:
-		b.WriteString(fmt.Sprintf("  Generating embeddings ··· %d/%d\n",
+		var pct float64
+		if m.embedTot > 0 {
+			pct = float64(m.embedDone) / float64(m.embedTot) * 100
+		}
+		b.WriteString(fmt.Sprintf("  [2/2] Generating embeddings %s %d/%d\n",
+			dimStyle.Render("···"),
 			m.embedDone, m.embedTot))
-		b.WriteString("  " + m.progress.View() + "\n")
+		b.WriteString(fmt.Sprintf("        %s %s\n",
+			m.progress.View(),
+			dimStyle.Render(fmt.Sprintf("%.0f%%", pct))))
 	default:
-		b.WriteString(fmt.Sprintf("  Generating embeddings ··· %d/%d %s\n",
+		b.WriteString(fmt.Sprintf("  [2/2] Generating embeddings %s %d/%d %s\n",
+			dimStyle.Render("···"),
 			m.embedTot, m.embedTot,
 			doneStyle.Render("✓")))
 	}
 
-	// Elapsed time.
-	elapsed := time.Since(m.startTime).Round(time.Second)
+	// Footer.
 	b.WriteString("\n")
 
 	if m.phase == phaseDone {
@@ -176,8 +201,8 @@ func (m setupModel) View() tea.View {
 		b.WriteString(fmt.Sprintf("  %s %v\n\n",
 			errStyle.Render("✗ Error:"), m.err))
 	} else {
-		b.WriteString(fmt.Sprintf("  %s %s\n",
-			dimStyle.Render("Elapsed:"), elapsed))
+		b.WriteString(fmt.Sprintf("  %s\n",
+			dimStyle.Render(fmt.Sprintf("%s elapsed", elapsed))))
 	}
 
 	return tea.NewView(b.String())
