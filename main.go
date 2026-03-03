@@ -94,9 +94,6 @@ Usage:
 Commands:
   serve          Run as MCP server (stdio) for Claude Code integration
   setup          Initialize knowledge base (seed docs + generate embeddings)
-  hook           Handle silent hook events (no output)
-  crawl-seed     Crawl official docs and generate seed_docs.json
-  plugin-bundle  Generate plugin directory from Go sources
   version        Show version
   help           Show this help
 
