@@ -60,17 +60,21 @@ const embedBatchSize = 50
 // ApplySeed loads the embedded seed data into the store's docs table and generates embeddings.
 // Two-phase approach: Phase 1 upserts all docs, Phase 2 batch-embeds via Voyage API.
 func ApplySeed(ctx context.Context, st *store.Store, emb *embedder.Embedder, progress *SeedProgress) (SeedResult, error) {
-	if emb == nil {
-		return SeedResult{}, fmt.Errorf("seed: embedder is required")
-	}
-
 	sf, err := LoadEmbedded()
 	if err != nil {
 		return SeedResult{}, err
 	}
+	return ApplySeedData(ctx, st, emb, sf, progress)
+}
 
-	if len(sf.Sources) == 0 {
-		return SeedResult{}, nil // empty seed (dev build)
+// ApplySeedData applies the given seed data into the store and generates embeddings.
+func ApplySeedData(ctx context.Context, st *store.Store, emb *embedder.Embedder, sf *SeedFile, progress *SeedProgress) (SeedResult, error) {
+	if emb == nil {
+		return SeedResult{}, fmt.Errorf("seed: embedder is required")
+	}
+
+	if sf == nil || len(sf.Sources) == 0 {
+		return SeedResult{}, nil
 	}
 
 	// Count total sections.

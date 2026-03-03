@@ -1,5 +1,5 @@
 {
-  "description": "Silent butler hooks — auto-ingest, config access reminder, prompt detection",
+  "description": "Silent butler hooks — auto-import, config access reminder, prompt detection",
   "hooks": {
     "PreToolUse": [
       {

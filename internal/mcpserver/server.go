@@ -17,12 +17,13 @@ He never interrupts your work. When you need him, he's ready:
 
   knowledge   — Search Claude Code docs and best practices
   review      — Analyze your project's Claude Code utilization
-  ingest      — Store documentation with vector embeddings
+  suggest     — Suggest .claude/ config changes based on recent code changes
 
 When to use alfred tools:
 - Reviewing or auditing .claude/ configuration (agents, skills, rules, hooks, MCP) → call review first
 - Creating or modifying .claude/ configuration files → call knowledge for best practices first
 - Looking up how a Claude Code feature works → call knowledge
+- After code changes, check if .claude/ config needs updating → call suggest
 
 Do NOT review or create .claude/ configuration by only reading files.
 alfred's knowledge base has current best practices not in your training data.
@@ -68,20 +69,13 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 		},
 
 		server.ServerTool{
-			Tool: mcp.NewTool("ingest",
-				mcp.WithDescription("Ingest documentation sections into the knowledge base. Stores sections with vector embeddings for semantic search."),
-				mcp.WithTitleAnnotation("Document Ingestion"),
-				mcp.WithReadOnlyHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(true),
-				mcp.WithString("url", mcp.Required(), mcp.Description("Source URL of the documentation page")),
-				mcp.WithArray("sections", mcp.Required(), mcp.Description("Array of {path, content} objects representing document sections"),
-				objectItems("path", "content"),
+			Tool: mcp.NewTool("suggest",
+				mcp.WithDescription("Suggest .claude/ configuration changes based on recent code changes. Analyzes git diff and cross-references with current project setup."),
+				mcp.WithTitleAnnotation("Config Suggestions"),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithString("project_path", mcp.Description("Project root path (cwd)")),
 			),
-				mcp.WithString("source_type", mcp.Description("Document type: docs (default), changelog, engineering")),
-				mcp.WithString("version", mcp.Description("CLI version (for changelog entries)")),
-				mcp.WithNumber("ttl_days", mcp.Description("Time-to-live in days (default: 7)")),
-			),
-			Handler: ingestHandler(st, emb),
+			Handler: suggestHandler(defaultClaudeHome()),
 		},
 	)
 

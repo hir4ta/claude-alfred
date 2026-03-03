@@ -17,7 +17,8 @@ CALL FIRST when:
 - Evaluating CLAUDE.md quality or looking for improvements
 - Checking overall Claude Code setup health for a project
 
-## ingest — Store documentation in knowledge base
+## suggest — Suggest .claude/ config changes based on code changes
 
 USE when:
-- Ingesting crawled documentation into the knowledge base
+- After code changes, to check if .claude/ configuration needs updating
+- When reviewing whether project setup is still aligned with current code

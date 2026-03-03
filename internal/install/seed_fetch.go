@@ -21,98 +21,103 @@ const (
 
 var httpClient = &http.Client{Timeout: fetchTimeout}
 
-// CrawlSeed fetches all documentation sources and writes a seed JSON file.
-func CrawlSeed(outputPath string) error {
+// CrawlProgress provides callbacks for crawl progress reporting.
+type CrawlProgress struct {
+	OnDocsPage func(done, total int)
+	OnBlogPost func(done, total int)
+}
+
+// Crawl fetches all documentation sources and returns the seed data.
+func Crawl(progress *CrawlProgress) (*SeedFile, error) {
 	sf := &SeedFile{
 		CrawledAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
 	// 1. Fetch and crawl Claude Code docs.
-	fmt.Println("Fetching docs index from llms.txt...")
 	urls, err := fetchDocsIndex()
 	if err != nil {
-		return fmt.Errorf("fetch docs index: %w", err)
+		return nil, fmt.Errorf("fetch docs index: %w", err)
 	}
-	fmt.Printf("Found %d documentation pages\n", len(urls))
 
-	var docsOK, docsFail int
+	var docsFail int
 	for i, pageURL := range urls {
-		fmt.Printf("\r  Crawling docs [%d/%d]", i+1, len(urls))
+		if progress != nil && progress.OnDocsPage != nil {
+			progress.OnDocsPage(i+1, len(urls))
+		}
 		src, err := crawlDocsPage(pageURL)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\n  Warning: %s: %v\n", pageURL, err)
 			docsFail++
 			continue
 		}
 		if len(src.Sections) > 0 {
 			sf.Sources = append(sf.Sources, *src)
-			docsOK++
 		}
 	}
-	fmt.Printf("\r  Docs: %d OK, %d failed\n", docsOK, docsFail)
 
 	// 2. Fetch changelog (v2.x only).
-	fmt.Println("Fetching changelog...")
 	body, err := fetchPage(changelogURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  Warning: changelog fetch failed: %v\n", err)
-	} else {
+	if err == nil {
 		clSources := crawlChangelog(body)
 		sf.Sources = append(sf.Sources, clSources...)
-		totalVersions := 0
-		for _, s := range clSources {
-			totalVersions += len(s.Sections)
-		}
-		fmt.Printf("  Changelog: %d versions extracted\n", totalVersions)
 	}
 
 	// 3. Fetch engineering blog posts.
-	fmt.Println("Fetching engineering blog index...")
 	blogURLs, err := fetchBlogIndex()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  Warning: blog index fetch failed: %v\n", err)
-	} else {
-		fmt.Printf("Found %d blog posts\n", len(blogURLs))
-		var blogOK, blogFail int
+	if err == nil {
 		for i, blogURL := range blogURLs {
-			fmt.Printf("\r  Crawling blog [%d/%d]", i+1, len(blogURLs))
+			if progress != nil && progress.OnBlogPost != nil {
+				progress.OnBlogPost(i+1, len(blogURLs))
+			}
 			src, err := crawlBlogPost(blogURL)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "\n  Warning: %s: %v\n", blogURL, err)
-				blogFail++
 				continue
 			}
 			if len(src.Sections) > 0 {
 				sf.Sources = append(sf.Sources, *src)
-				blogOK++
 			}
 		}
-		fmt.Printf("\r  Blog: %d OK, %d failed\n", blogOK, blogFail)
 	}
 
-	// 4. Write output.
+	if docsFail > len(urls)/5 {
+		return sf, fmt.Errorf("too many doc failures (%d/%d); check network or site structure", docsFail, len(urls))
+	}
+	return sf, nil
+}
+
+// CrawlSeed fetches all documentation sources and writes a seed JSON file.
+func CrawlSeed(outputPath string) error {
+	fmt.Println("Fetching docs index from llms.txt...")
+	sf, err := Crawl(&CrawlProgress{
+		OnDocsPage: func(done, total int) {
+			fmt.Printf("\r  Crawling docs [%d/%d]", done, total)
+		},
+		OnBlogPost: func(done, total int) {
+			fmt.Printf("\r  Crawling blog [%d/%d]", done, total)
+		},
+	})
+	if sf == nil {
+		return err
+	}
+
 	totalSections := 0
 	for _, src := range sf.Sources {
 		totalSections += len(src.Sections)
 	}
 
-	data, err := json.MarshalIndent(sf, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal seed: %w", err)
+	data, jsonErr := json.MarshalIndent(sf, "", "  ")
+	if jsonErr != nil {
+		return fmt.Errorf("marshal seed: %w", jsonErr)
 	}
 	data = append(data, '\n')
 
-	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
-		return fmt.Errorf("write seed file: %w", err)
+	if writeErr := os.WriteFile(outputPath, data, 0o644); writeErr != nil {
+		return fmt.Errorf("write seed file: %w", writeErr)
 	}
 
 	fmt.Printf("\n✓ Seed data written to %s (%d sources, %d sections, %.1f KB)\n",
 		outputPath, len(sf.Sources), totalSections, float64(len(data))/1024)
 
-	if docsFail > len(urls)/5 {
-		return fmt.Errorf("too many doc failures (%d/%d); check network or site structure", docsFail, len(urls))
-	}
-	return nil
+	return err // may contain crawl warning
 }
 
 // fetchPage performs an HTTP GET and returns the response body as a string.

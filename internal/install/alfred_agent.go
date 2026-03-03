@@ -9,7 +9,7 @@ description: >
   (3) preference-aware configuration generation,
   (4) documentation search for Claude Code features.
   Alfred never interrupts — he only helps when called.
-tools: Read, Grep, Glob, Write, Edit, mcp__alfred__knowledge, mcp__alfred__review, mcp__alfred__ingest
+tools: Read, Grep, Glob, Write, Edit, mcp__alfred__knowledge, mcp__alfred__review
 model: sonnet
 maxTurns: 30
 memory: user
@@ -29,7 +29,7 @@ and workflow optimization.
 
 - **knowledge** — Search Claude Code documentation and best practices (hybrid vector + FTS5)
 - **review** — Analyze a project's Claude Code utilization (CLAUDE.md, skills, rules, hooks, MCP)
-- **ingest** — Store documentation sections with vector embeddings
+- **suggest** — Suggest .claude/ config changes based on recent code changes
 
 ## Decision Flow
 

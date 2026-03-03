@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/mark3labs/mcp-go/server"
 
@@ -12,8 +13,12 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
-// version is set at build time via ldflags (-X main.version=...).
-var version = "dev"
+// Build info set at build time via ldflags.
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -33,6 +38,8 @@ func run() error {
 		return runServe()
 	case "setup":
 		return runSetup()
+	case "harvest":
+		return runHarvest()
 	case "crawl-seed":
 		output := "internal/install/seed_docs.json"
 		if len(os.Args) > 2 {
@@ -51,7 +58,7 @@ func run() error {
 		}
 		return runHook(os.Args[2])
 	case "version", "--version", "-v":
-		fmt.Printf("alfred %s\n", version)
+		printVersion()
 		return nil
 	case "help", "-h", "--help":
 		printUsage()
@@ -85,6 +92,32 @@ func runServe() error {
 	return server.ServeStdio(s)
 }
 
+func printVersion() {
+	c, d := commit, date
+	if c == "unknown" {
+		// Fallback for dev builds: read VCS info from Go build info.
+		if bi, ok := debug.ReadBuildInfo(); ok {
+			for _, s := range bi.Settings {
+				switch s.Key {
+				case "vcs.revision":
+					if len(s.Value) > 7 {
+						c = s.Value[:7]
+					} else {
+						c = s.Value
+					}
+				case "vcs.time":
+					d = s.Value
+				}
+			}
+		}
+	}
+	if c != "unknown" {
+		fmt.Printf("alfred %s (%s %s)\n", version, c, d)
+	} else {
+		fmt.Printf("alfred %s\n", version)
+	}
+}
+
 func printUsage() {
 	fmt.Println(`alfred - Your silent butler for Claude Code
 
@@ -94,6 +127,7 @@ Usage:
 Commands:
   serve          Run as MCP server (stdio) for Claude Code integration
   setup          Initialize knowledge base (seed docs + generate embeddings)
+  harvest        Refresh knowledge base (crawl + embed fresh docs)
   version        Show version
   help           Show this help
 

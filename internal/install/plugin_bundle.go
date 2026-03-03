@@ -12,7 +12,7 @@ import (
 const runCmd = `"${CLAUDE_PLUGIN_ROOT}/bin/run.sh"`
 
 // alfredHookEntries returns the hook configuration for plugin distribution.
-// SessionStart: CLAUDE.md auto-ingest.
+// SessionStart: CLAUDE.md auto-import.
 // PreToolUse: .claude/ config access reminder.
 // UserPromptSubmit: Claude Code config keyword detection.
 func alfredHookEntries(binPath string) map[string]any {
@@ -96,7 +96,7 @@ func Bundle(outputDir, version string) error {
 
 	// 3. Write hooks.json — commands invoke the guard/setup wrapper.
 	hooksJSON := map[string]any{
-		"description": "Silent butler hooks — auto-ingest, config access reminder, prompt detection",
+		"description": "Silent butler hooks — auto-import, config access reminder, prompt detection",
 		"hooks":       alfredHookEntries(runCmd),
 	}
 	if err := writeJSON(filepath.Join(outputDir, "hooks", "hooks.json"), hooksJSON); err != nil {
