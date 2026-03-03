@@ -38,11 +38,25 @@ func debugf(format string, args ...any) {
 }
 
 // hookEvent is the minimal structure of a Claude Code hook stdin payload.
+// Fields are populated depending on the event type:
+//   - SessionStart: ProjectPath
+//   - PreToolUse:   ProjectPath, ToolName, ToolInput
+//   - UserPromptSubmit: ProjectPath, Prompt
 type hookEvent struct {
-	ProjectPath string `json:"cwd"`
+	ProjectPath string         `json:"cwd"`
+	ToolName    string         `json:"tool_name"`
+	ToolInput   map[string]any `json:"tool_input"`
+	Prompt      string         `json:"prompt"`
 }
 
-// runHook handles hook events. Only SessionStart is active (CLAUDE.md auto-ingest).
+// configReminder is the additionalContext message injected when Claude Code
+// accesses configuration files or the user's prompt mentions them.
+const configReminder = `This task involves Claude Code configuration. alfred's MCP tools have specialized, up-to-date knowledge:
+- knowledge: Best practices for .claude/ files, CLAUDE.md, hooks, skills, rules, agents, MCP
+- review: Project-wide .claude/ configuration audit
+Call these BEFORE reading or modifying configuration files directly.`
+
+// runHook handles hook events.
 func runHook(event string) error {
 	debugf("hook event=%s", event)
 	var ev hookEvent
@@ -62,9 +76,76 @@ func runHook(event string) error {
 			}
 			ingestProjectClaudeMD(st, ev.ProjectPath)
 		}
+	case "PreToolUse":
+		handlePreToolUse(&ev)
+	case "UserPromptSubmit":
+		handleUserPromptSubmit(&ev)
 	}
 
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// PreToolUse: .claude/ config access reminder
+// ---------------------------------------------------------------------------
+
+// isClaudeConfigPath reports whether path refers to a Claude Code configuration
+// file or directory (.claude/, CLAUDE.md, MEMORY.md, .mcp.json).
+func isClaudeConfigPath(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.Contains(lower, ".claude/") ||
+		strings.Contains(lower, "claude.md") ||
+		strings.Contains(lower, "memory.md") ||
+		strings.Contains(lower, ".mcp.json")
+}
+
+// shouldRemind reports whether a tool's input targets Claude Code configuration.
+// Checks file_path (Read/Edit/Write), path (Grep/Glob), and pattern (Glob).
+func shouldRemind(toolInput map[string]any) bool {
+	for _, key := range []string{"file_path", "path", "pattern"} {
+		if v, ok := toolInput[key]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				if isClaudeConfigPath(s) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// handlePreToolUse emits a reminder when Claude accesses .claude/ config files.
+func handlePreToolUse(ev *hookEvent) {
+	if !shouldRemind(ev.ToolInput) {
+		return
+	}
+	debugf("PreToolUse: reminding about alfred for %v", ev.ToolInput)
+	fmt.Print(configReminder)
+}
+
+// ---------------------------------------------------------------------------
+// UserPromptSubmit: Claude Code config keyword detection
+// ---------------------------------------------------------------------------
+
+// shouldRemindPrompt reports whether the user's prompt mentions Claude Code
+// configuration paths (.claude, CLAUDE.md, MEMORY.md, .mcp.json).
+func shouldRemindPrompt(prompt string) bool {
+	lower := strings.ToLower(prompt)
+	for _, term := range []string{".claude", "claude.md", "memory.md", ".mcp.json"} {
+		if strings.Contains(lower, term) {
+			return true
+		}
+	}
+	return false
+}
+
+// handleUserPromptSubmit emits a reminder when the user mentions config paths.
+func handleUserPromptSubmit(ev *hookEvent) {
+	if !shouldRemindPrompt(ev.Prompt) {
+		return
+	}
+	debugf("UserPromptSubmit: reminding about alfred for prompt")
+	fmt.Print(configReminder)
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,10 @@ When to use alfred tools:
 - Reviewing or auditing .claude/ configuration (agents, skills, rules, hooks, MCP) → call review first
 - Creating or modifying .claude/ configuration files → call knowledge for best practices first
 - Looking up how a Claude Code feature works → call knowledge
+
+Do NOT review or create .claude/ configuration by only reading files.
+alfred's knowledge base has current best practices not in your training data.
+Always: alfred tools first → then read/edit files.
 `
 
 // defaultClaudeHome returns the default Claude Code configuration directory.

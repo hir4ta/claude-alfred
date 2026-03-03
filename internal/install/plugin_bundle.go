@@ -12,7 +12,9 @@ import (
 const runCmd = `"${CLAUDE_PLUGIN_ROOT}/bin/run.sh"`
 
 // alfredHookEntries returns the hook configuration for plugin distribution.
-// Only SessionStart is registered.
+// SessionStart: CLAUDE.md auto-ingest.
+// PreToolUse: .claude/ config access reminder.
+// UserPromptSubmit: Claude Code config keyword detection.
 func alfredHookEntries(binPath string) map[string]any {
 	return map[string]any{
 		"SessionStart": []any{
@@ -22,6 +24,29 @@ func alfredHookEntries(binPath string) map[string]any {
 						"type":    "command",
 						"command": binPath + " hook SessionStart",
 						"timeout": 5,
+					},
+				},
+			},
+		},
+		"PreToolUse": []any{
+			map[string]any{
+				"matcher": "Read|Glob|Grep|Edit|Write",
+				"hooks": []any{
+					map[string]any{
+						"type":    "command",
+						"command": binPath + " hook PreToolUse",
+						"timeout": 3,
+					},
+				},
+			},
+		},
+		"UserPromptSubmit": []any{
+			map[string]any{
+				"hooks": []any{
+					map[string]any{
+						"type":    "command",
+						"command": binPath + " hook UserPromptSubmit",
+						"timeout": 3,
 					},
 				},
 			},
@@ -71,7 +96,7 @@ func Bundle(outputDir, version string) error {
 
 	// 3. Write hooks.json — commands invoke the guard/setup wrapper.
 	hooksJSON := map[string]any{
-		"description": "Silent butler hooks — CLAUDE.md auto-ingest on session start",
+		"description": "Silent butler hooks — auto-ingest, config access reminder, prompt detection",
 		"hooks":       alfredHookEntries(runCmd),
 	}
 	if err := writeJSON(filepath.Join(outputDir, "hooks", "hooks.json"), hooksJSON); err != nil {

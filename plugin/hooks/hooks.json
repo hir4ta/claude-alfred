@@ -1,12 +1,35 @@
 {
-  "description": "Silent butler hooks — CLAUDE.md auto-ingest on session start",
+  "description": "Silent butler hooks — auto-ingest, config access reminder, prompt detection",
   "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook PreToolUse",
+            "timeout": 3,
+            "type": "command"
+          }
+        ],
+        "matcher": "Read|Glob|Grep|Edit|Write"
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook SessionStart",
             "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook UserPromptSubmit",
+            "timeout": 3,
             "type": "command"
           }
         ]
