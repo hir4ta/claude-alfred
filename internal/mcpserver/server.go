@@ -16,17 +16,17 @@ const serverInstructions = `alfred is your silent butler for Claude Code.
 He never interrupts your work. When you need him, he's ready:
 
   knowledge   — Search Claude Code docs and best practices
-  review      — Analyze your project's Claude Code utilization
-  suggest     — Suggest .claude/ config changes based on recent code changes
+  review      — Deep audit of .claude/ config: reads file contents, checks sizes, cross-references with best practices
+  suggest     — Reads git diff content, detects change patterns, suggests specific config updates with best practices
 
 When to use alfred tools:
-- Reviewing or auditing .claude/ configuration (agents, skills, rules, hooks, MCP) → call review first
+- Reviewing or auditing .claude/ configuration → call review first (reads file contents, checks skill sizes and structure, validates rules, cross-references with knowledge base)
 - Creating or modifying .claude/ configuration files → call knowledge for best practices first
 - Looking up how a Claude Code feature works → call knowledge
-- After code changes, check if .claude/ config needs updating → call suggest
+- After code changes, check if .claude/ config needs updating → call suggest (reads diff content, detects patterns like new APIs/deps/tests)
 
 Do NOT review or create .claude/ configuration by only reading files.
-alfred's knowledge base has current best practices not in your training data.
+review and suggest cross-reference your config against best practices from the knowledge base — information not in your training data.
 Always: alfred tools first → then read/edit files.
 `
 
@@ -60,22 +60,22 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 
 		server.ServerTool{
 			Tool: mcp.NewTool("review",
-				mcp.WithDescription("Analyze your project's Claude Code utilization. Checks CLAUDE.md, skills, rules, hooks, MCP servers, and session history. Returns improvement suggestions."),
+				mcp.WithDescription("Deep audit of .claude/ configuration against best practices. Reads file contents, checks skill sizes and structure, validates rules, and cross-references findings with the knowledge base. Returns structured suggestions with severity levels and documentation references."),
 				mcp.WithTitleAnnotation("Project Review"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithString("project_path", mcp.Description("Project root path (cwd)")),
 			),
-			Handler: reviewHandler(defaultClaudeHome()),
+			Handler: reviewHandler(defaultClaudeHome(), st, emb),
 		},
 
 		server.ServerTool{
 			Tool: mcp.NewTool("suggest",
-				mcp.WithDescription("Suggest .claude/ configuration changes based on recent code changes. Analyzes git diff and cross-references with current project setup."),
+				mcp.WithDescription("Analyze recent code changes and suggest specific .claude/ configuration updates. Reads git diff content to detect change patterns (new APIs, dependencies, tests, migrations), cross-references with current config and best practices from the knowledge base."),
 				mcp.WithTitleAnnotation("Config Suggestions"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithString("project_path", mcp.Description("Project root path (cwd)")),
 			),
-			Handler: suggestHandler(defaultClaudeHome()),
+			Handler: suggestHandler(defaultClaudeHome(), st, emb),
 		},
 	)
 

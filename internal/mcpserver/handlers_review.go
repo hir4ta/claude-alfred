@@ -9,9 +9,12 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/hir4ta/claude-alfred/internal/embedder"
+	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
-func reviewHandler(claudeHome string) server.ToolHandlerFunc {
+func reviewHandler(claudeHome string, st *store.Store, _ *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 
@@ -24,7 +27,7 @@ func reviewHandler(claudeHome string) server.ToolHandlerFunc {
 
 		// 2. Check .claude/ directory (skills, rules, agents)
 		report["skills"] = reviewSkills(projectPath)
-		report["rules"] = reviewDir(projectPath, ".claude", "rules")
+		report["rules"] = reviewRules(projectPath)
 		report["agents"] = reviewDir(projectPath, ".claude", "agents")
 
 		// 3. Check hooks in settings.json
@@ -33,8 +36,13 @@ func reviewHandler(claudeHome string) server.ToolHandlerFunc {
 		// 4. Check MCP servers
 		report["mcp_servers"] = reviewMCP(projectPath)
 
-		// Generate improvement suggestions.
-		formatReviewSuggestions(report)
+		// Generate improvement suggestions with KB cross-reference.
+		suggestions := generateReviewSuggestions(report, st)
+		report["suggestions"] = suggestions
+		report["suggestion_count"] = len(suggestions)
+		if len(suggestions) == 0 {
+			report["summary"] = "Good setup! CLAUDE.md, skills, rules, and hooks are all configured."
+		}
 
 		return marshalResult(report)
 	}
@@ -95,17 +103,21 @@ func extractH2Sections(content string) []string {
 }
 
 // ---------------------------------------------------------------------------
-// Skills analysis (with frontmatter validation)
+// Skills analysis (with deep content inspection)
 // ---------------------------------------------------------------------------
 
 // skillInfo holds parsed metadata for a single skill.
 type skillInfo struct {
-	Name          string `json:"name"`
-	HasName       bool   `json:"has_name"`
-	HasDesc       bool   `json:"has_description"`
-	HasTrigger    bool   `json:"has_trigger"`
-	HasAllowed    bool   `json:"has_allowed_tools"`
-	UserInvocable bool   `json:"user_invocable"`
+	Name          string   `json:"name"`
+	HasName       bool     `json:"has_name"`
+	HasDesc       bool     `json:"has_description"`
+	HasTrigger    bool     `json:"has_trigger"`
+	HasAllowed    bool     `json:"has_allowed_tools"`
+	UserInvocable bool    `json:"user_invocable"`
+	BodyLines     int      `json:"body_lines"`
+	SizeWarning   string   `json:"size_warning,omitempty"`
+	HasSupport    bool     `json:"has_support_files"`
+	AllowedTools  []string `json:"allowed_tools,omitempty"`
 }
 
 func reviewSkills(projectPath string) map[string]any {
@@ -131,7 +143,33 @@ func reviewSkills(projectPath string) map[string]any {
 			if err != nil {
 				continue
 			}
-			fm := parseSKILLFrontmatter(string(data))
+			content := string(data)
+			fm := parseSKILLFrontmatter(content)
+
+			// Count body lines (after frontmatter).
+			bodyLines := countBodyLines(content)
+
+			// Parse allowed-tools into a slice.
+			var allowedTools []string
+			if raw := fm["allowed-tools"]; raw != "" {
+				for _, t := range strings.Split(raw, ",") {
+					t = strings.TrimSpace(t)
+					if t != "" {
+						allowedTools = append(allowedTools, t)
+					}
+				}
+			}
+
+			// Check for support files (anything besides SKILL.md in the skill dir).
+			hasSupport := false
+			skillDirEntries, _ := os.ReadDir(filepath.Join(dir, e.Name()))
+			for _, se := range skillDirEntries {
+				if se.Name() != "SKILL.md" {
+					hasSupport = true
+					break
+				}
+			}
+
 			si := skillInfo{
 				Name:          e.Name(),
 				HasName:       fm["name"] != "",
@@ -139,7 +177,15 @@ func reviewSkills(projectPath string) map[string]any {
 				HasTrigger:    fm["trigger"] != "",
 				HasAllowed:    fm["allowed-tools"] != "",
 				UserInvocable: fm["user-invocable"] == "true",
+				BodyLines:     bodyLines,
+				HasSupport:    hasSupport,
+				AllowedTools:  allowedTools,
 			}
+
+			if bodyLines > 150 {
+				si.SizeWarning = "skill body exceeds 150 lines; consider splitting into support files"
+			}
+
 			skills = append(skills, si)
 			names = append(names, e.Name())
 			if !si.HasName || !si.HasDesc {
@@ -161,6 +207,22 @@ func reviewSkills(projectPath string) map[string]any {
 		result["invalid_skills"] = invalid
 	}
 	return result
+}
+
+// countBodyLines counts lines after YAML frontmatter (--- delimited).
+func countBodyLines(content string) int {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return countLines(content)
+	}
+	// Find closing ---.
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			body := strings.Join(lines[i+1:], "\n")
+			return countLines(strings.TrimSpace(body))
+		}
+	}
+	return countLines(content)
 }
 
 // parseSKILLFrontmatter extracts YAML frontmatter fields from SKILL.md content.
@@ -202,6 +264,76 @@ func parseSKILLFrontmatter(content string) map[string]string {
 		if key != "" {
 			result[key] = val
 		}
+	}
+	return result
+}
+
+// ---------------------------------------------------------------------------
+// Rules analysis (with content inspection)
+// ---------------------------------------------------------------------------
+
+type ruleInfo struct {
+	Name        string `json:"name"`
+	Lines       int    `json:"lines"`
+	HasGlob     bool   `json:"has_glob"`
+	SizeWarning string `json:"size_warning,omitempty"`
+}
+
+func reviewRules(projectPath string) map[string]any {
+	result := map[string]any{"count": 0}
+	if projectPath == "" {
+		return result
+	}
+
+	dir := filepath.Join(projectPath, ".claude", "rules")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return result
+	}
+
+	var names []string
+	var details []ruleInfo
+
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		names = append(names, e.Name())
+
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+
+		content := string(data)
+		lines := countLines(content)
+		hasGlob := false
+
+		// Check for glob frontmatter.
+		fm := parseSKILLFrontmatter(content) // reuse YAML frontmatter parser
+		if fm["globs"] != "" || fm["glob"] != "" {
+			hasGlob = true
+		}
+
+		ri := ruleInfo{
+			Name:    e.Name(),
+			Lines:   lines,
+			HasGlob: hasGlob,
+		}
+		if lines < 3 {
+			ri.SizeWarning = "rule is too short to be useful"
+		} else if lines > 100 {
+			ri.SizeWarning = "rule exceeds 100 lines; consider splitting"
+		}
+		details = append(details, ri)
+	}
+
+	result["count"] = len(names)
+	if len(names) > 0 {
+		result["items"] = names
+	}
+	if len(details) > 0 {
+		result["rule_details"] = details
 	}
 	return result
 }
@@ -254,7 +386,7 @@ func reviewHooks(claudeHome string) map[string]any {
 }
 
 // ---------------------------------------------------------------------------
-// Directory listing (rules, agents)
+// Directory listing (agents only — rules now uses reviewRules)
 // ---------------------------------------------------------------------------
 
 func reviewDir(projectPath, base, sub string) map[string]any {
@@ -325,58 +457,154 @@ func reviewMCP(projectPath string) map[string]any {
 }
 
 // ---------------------------------------------------------------------------
-// Improvement suggestions
+// Structured suggestions with KB cross-reference
 // ---------------------------------------------------------------------------
 
-func formatReviewSuggestions(report map[string]any) {
-	var suggestions []string
+// kbQueries maps suggestion categories to FTS5 queries for best practices.
+var kbQueries = map[string]string{
+	"claude_md": "CLAUDE.md best practices project instructions sections",
+	"skills":    "skills SKILL.md frontmatter allowed-tools support files",
+	"rules":     "rules coding standards configuration best practices",
+	"hooks":     "hooks lifecycle events configuration automation",
+}
 
-	// CLAUDE.md checks
+func generateReviewSuggestions(report map[string]any, st *store.Store) []Suggestion {
+	var suggestions []Suggestion
+
+	// CLAUDE.md checks.
 	claudeMD, _ := report["claude_md"].(map[string]any)
 	if exists, _ := claudeMD["exists"].(bool); !exists {
-		suggestions = append(suggestions, "Create a CLAUDE.md file to give Claude Code project-specific instructions")
+		suggestions = append(suggestions, Suggestion{
+			Severity: "warning",
+			Category: "claude_md",
+			Message:  "Create a CLAUDE.md file to give Claude Code project-specific instructions",
+		})
 	} else {
 		if w, _ := claudeMD["size_warning"].(string); w != "" {
-			suggestions = append(suggestions, "CLAUDE.md is "+w)
+			suggestions = append(suggestions, Suggestion{
+				Severity: "info",
+				Category: "claude_md",
+				Message:  "CLAUDE.md is " + w,
+			})
 		}
 		if keySections, ok := claudeMD["key_sections"].(map[string]bool); ok {
 			if !keySections["commands"] {
-				suggestions = append(suggestions, "CLAUDE.md: Add a ## Commands section listing common build/test commands")
+				suggestions = append(suggestions, Suggestion{
+					Severity: "warning",
+					Category: "claude_md",
+					Message:  "CLAUDE.md: Add a ## Commands section listing common build/test commands",
+				})
 			}
 		}
 	}
 
-	// Skills checks
+	// Skills checks.
 	skills, _ := report["skills"].(map[string]any)
 	if count, _ := skills["count"].(int); count == 0 {
-		suggestions = append(suggestions, "Add custom skills (.claude/skills/) to automate repetitive workflows")
-	} else if invalid, ok := skills["invalid_skills"].([]string); ok && len(invalid) > 0 {
-		suggestions = append(suggestions, "Skills missing name or description in frontmatter: "+strings.Join(invalid, ", "))
-	}
-
-	// Rules checks
-	rules, _ := report["rules"].(map[string]any)
-	if count, _ := rules["count"].(int); count == 0 {
-		suggestions = append(suggestions, "Add rules (.claude/rules/) to enforce coding standards automatically")
-	}
-
-	// Hooks checks
-	hooks, _ := report["hooks"].(map[string]any)
-	if count, _ := hooks["count"].(int); count == 0 {
-		suggestions = append(suggestions, "Configure hooks for automated checks (tests, linting) on tool use")
+		suggestions = append(suggestions, Suggestion{
+			Severity: "info",
+			Category: "skills",
+			Message:  "Add custom skills (.claude/skills/) to automate repetitive workflows",
+		})
 	} else {
-		if missing, ok := hooks["missing_recommended"].([]string); ok && len(missing) > 0 {
-			suggestions = append(suggestions, "Missing recommended alfred hook events: "+strings.Join(missing, ", "))
+		if invalid, ok := skills["invalid_skills"].([]string); ok && len(invalid) > 0 {
+			suggestions = append(suggestions, Suggestion{
+				Severity: "warning",
+				Category: "skills",
+				Message:  "Skills missing name or description in frontmatter: " + strings.Join(invalid, ", "),
+				Affected: invalid,
+			})
+		}
+		// Deep skill checks.
+		if details, ok := skills["skill_details"].([]skillInfo); ok {
+			for _, si := range details {
+				if si.SizeWarning != "" {
+					suggestions = append(suggestions, Suggestion{
+						Severity: "warning",
+						Category: "skills",
+						Message:  "Skill '" + si.Name + "': " + si.SizeWarning,
+						Affected: []string{".claude/skills/" + si.Name + "/SKILL.md"},
+					})
+				}
+			}
 		}
 	}
 
-	if len(suggestions) > 0 {
-		report["suggestions"] = suggestions
-		report["suggestion_count"] = len(suggestions)
+	// Rules checks.
+	rules, _ := report["rules"].(map[string]any)
+	if count, _ := rules["count"].(int); count == 0 {
+		suggestions = append(suggestions, Suggestion{
+			Severity: "info",
+			Category: "rules",
+			Message:  "Add rules (.claude/rules/) to enforce coding standards automatically",
+		})
 	} else {
-		report["suggestions"] = []string{}
-		report["suggestion_count"] = 0
-		report["summary"] = "Good setup! CLAUDE.md, skills, rules, and hooks are all configured."
+		if details, ok := rules["rule_details"].([]ruleInfo); ok {
+			for _, ri := range details {
+				if ri.SizeWarning != "" {
+					suggestions = append(suggestions, Suggestion{
+						Severity: "warning",
+						Category: "rules",
+						Message:  "Rule '" + ri.Name + "': " + ri.SizeWarning,
+						Affected: []string{".claude/rules/" + ri.Name},
+					})
+				}
+			}
+		}
+	}
+
+	// Hooks checks.
+	hooks, _ := report["hooks"].(map[string]any)
+	if count, _ := hooks["count"].(int); count == 0 {
+		suggestions = append(suggestions, Suggestion{
+			Severity: "info",
+			Category: "hooks",
+			Message:  "Configure hooks for automated checks (tests, linting) on tool use",
+		})
+	} else {
+		if missing, ok := hooks["missing_recommended"].([]string); ok && len(missing) > 0 {
+			suggestions = append(suggestions, Suggestion{
+				Severity: "warning",
+				Category: "hooks",
+				Message:  "Missing recommended alfred hook events: " + strings.Join(missing, ", "),
+			})
+		}
+	}
+
+	// Enrich suggestions with KB best practices.
+	enrichWithKB(suggestions, st)
+
+	return suggestions
+}
+
+// enrichWithKB attaches best practice snippets from the knowledge base to suggestions.
+func enrichWithKB(suggestions []Suggestion, st *store.Store) {
+	if st == nil || len(suggestions) == 0 {
+		return
+	}
+
+	// Query KB once per category that has suggestions.
+	categories := map[string]bool{}
+	for _, s := range suggestions {
+		categories[s.Category] = true
+	}
+
+	cache := map[string]*KBSnippet{}
+	for cat := range categories {
+		q, ok := kbQueries[cat]
+		if !ok {
+			continue
+		}
+		if snippets := queryKB(st, q, 1); len(snippets) > 0 {
+			cache[cat] = &snippets[0]
+		}
+	}
+
+	// Attach cached snippets to suggestions.
+	for i := range suggestions {
+		if bp, ok := cache[suggestions[i].Category]; ok {
+			suggestions[i].BestPractice = bp
+		}
 	}
 }
 

@@ -11,18 +11,23 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/hir4ta/claude-alfred/internal/embedder"
+	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
+const maxDiffBytes = 32 * 1024 // 32 KB limit for diff content
+
 // suggestHandler returns a handler that analyzes recent code changes and
-// suggests .claude/ configuration updates.
-func suggestHandler(claudeHome string) server.ToolHandlerFunc {
+// suggests .claude/ configuration updates with KB cross-reference.
+func suggestHandler(claudeHome string, st *store.Store, _ *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 		if projectPath == "" {
 			return mcp.NewToolResultError("project_path is required"), nil
 		}
 
-		// Collect git diff information.
+		// Collect git diff information (file names + content).
 		diff := collectDiff(projectPath)
 		if diff.err != "" {
 			return mcp.NewToolResultError(diff.err), nil
@@ -30,7 +35,7 @@ func suggestHandler(claudeHome string) server.ToolHandlerFunc {
 		if len(diff.files) == 0 {
 			return marshalResult(map[string]any{
 				"project_path": projectPath,
-				"suggestions":  []string{},
+				"suggestions":  []Suggestion{},
 				"summary":      "no recent changes detected",
 			})
 		}
@@ -38,8 +43,11 @@ func suggestHandler(claudeHome string) server.ToolHandlerFunc {
 		// Analyze current .claude/ config.
 		config := analyzeConfig(projectPath, claudeHome)
 
-		// Generate suggestions.
-		suggestions := generateSuggestions(diff, config)
+		// Detect change patterns from diff content.
+		patterns := detectChangePatterns(diff)
+
+		// Generate suggestions with KB cross-reference.
+		suggestions := generateSuggestSuggestions(diff, config, patterns, st)
 
 		result := map[string]any{
 			"project_path":     projectPath,
@@ -49,6 +57,9 @@ func suggestHandler(claudeHome string) server.ToolHandlerFunc {
 			"suggestion_count": len(suggestions),
 		}
 
+		if len(patterns) > 0 {
+			result["change_patterns"] = patterns
+		}
 		if len(suggestions) == 0 {
 			result["summary"] = "no configuration changes suggested for the recent diff"
 		}
@@ -62,10 +73,11 @@ func suggestHandler(claudeHome string) server.ToolHandlerFunc {
 // ---------------------------------------------------------------------------
 
 type diffInfo struct {
-	scope string   // "staged", "unstaged", or "recent_commits"
-	files []string // changed file paths
-	dirs  []string // unique top-level directories touched
-	err   string
+	scope   string   // "staged", "unstaged", or "recent_commits"
+	files   []string // changed file paths
+	dirs    []string // unique top-level directories touched
+	content string   // actual diff content (truncated to maxDiffBytes)
+	err     string
 }
 
 func collectDiff(projectPath string) diffInfo {
@@ -78,13 +90,19 @@ func collectDiff(projectPath string) diffInfo {
 
 	// Try staged changes first, then unstaged, then recent commits.
 	if files := gitDiffFiles(projectPath, "--cached"); len(files) > 0 {
-		return buildDiffInfo("staged", files)
+		di := buildDiffInfo("staged", files)
+		di.content = gitDiffContent(projectPath, "--cached")
+		return di
 	}
 	if files := gitDiffFiles(projectPath); len(files) > 0 {
-		return buildDiffInfo("unstaged", files)
+		di := buildDiffInfo("unstaged", files)
+		di.content = gitDiffContent(projectPath)
+		return di
 	}
 	if files := gitLogFiles(projectPath, 10); len(files) > 0 {
-		return buildDiffInfo("recent_commits", files)
+		di := buildDiffInfo("recent_commits", files)
+		di.content = gitLogContent(projectPath, 10)
+		return di
 	}
 	return diffInfo{}
 }
@@ -123,6 +141,33 @@ func gitLogFiles(projectPath string, n int) []string {
 		}
 	}
 	return files
+}
+
+func gitDiffContent(projectPath string, args ...string) string {
+	cmdArgs := append([]string{"diff"}, args...)
+	cmd := exec.Command("git", cmdArgs...)
+	cmd.Dir = projectPath
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	if len(out) > maxDiffBytes {
+		return string(out[:maxDiffBytes]) + "\n[diff truncated at 32KB]"
+	}
+	return string(out)
+}
+
+func gitLogContent(projectPath string, n int) string {
+	cmd := exec.Command("git", "log", "-p", "--format=format:%H", "-"+strconv.Itoa(n))
+	cmd.Dir = projectPath
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	if len(out) > maxDiffBytes {
+		return string(out[:maxDiffBytes]) + "\n[diff truncated at 32KB]"
+	}
+	return string(out)
 }
 
 func buildDiffInfo(scope string, files []string) diffInfo {
@@ -211,19 +256,149 @@ func readHookEvents(claudeHome string) []string {
 }
 
 // ---------------------------------------------------------------------------
-// Suggestion generation
+// Change pattern detection
 // ---------------------------------------------------------------------------
 
-func generateSuggestions(diff diffInfo, config configState) []string {
-	var s []string
+type changePattern struct {
+	Type        string   `json:"type"`
+	Description string   `json:"description"`
+	Files       []string `json:"files,omitempty"`
+}
+
+func detectChangePatterns(diff diffInfo) []changePattern {
+	var patterns []changePattern
+
+	// 1. New API endpoints.
+	if containsAny(diff.content,
+		"http.HandleFunc", "http.Handle(", "mux.Handle",
+		"router.Handle", "gin.GET", "gin.POST",
+		"app.get(", "app.post(", "app.put(",
+		"@app.route", "@router.",
+		"e.GET(", "e.POST(") {
+		patterns = append(patterns, changePattern{
+			Type:        "new_api_endpoints",
+			Description: "New API endpoints or routes detected in diff",
+		})
+	}
+
+	// 2. Dependency changes.
+	depFiles := []string{"go.mod", "go.sum", "package.json", "package-lock.json",
+		"requirements.txt", "pyproject.toml", "Cargo.toml", "Cargo.lock"}
+	for _, f := range diff.files {
+		for _, dep := range depFiles {
+			if f == dep {
+				patterns = append(patterns, changePattern{
+					Type:        "dependency_changes",
+					Description: "Project dependencies changed",
+					Files:       []string{f},
+				})
+				goto depsChecked
+			}
+		}
+	}
+depsChecked:
+
+	// 3. New test functions.
+	if containsAny(diff.content,
+		"+func Test", "+\tfunc Test",
+		"+describe(", "+it(",
+		"+def test_", "+class Test") {
+		patterns = append(patterns, changePattern{
+			Type:        "new_tests",
+			Description: "New test functions added",
+		})
+	}
+
+	// 4. Config file changes (dotenv, docker, config dirs).
+	for _, f := range diff.files {
+		base := filepath.Base(f)
+		isDotEnv := len(base) > 1 && base[0] == '.' && strings.Contains(strings.ToLower(base[1:]), "env")
+		isConfig := strings.Contains(f, "config") ||
+			base == "docker-compose.yml" || base == "Dockerfile"
+		if isDotEnv || isConfig {
+			patterns = append(patterns, changePattern{
+				Type:        "config_changes",
+				Description: "Configuration files changed",
+				Files:       []string{f},
+			})
+			break
+		}
+	}
+
+	// 5. Database/migration changes.
+	if containsAny(diff.content, "CREATE TABLE", "ALTER TABLE", "DROP TABLE") {
+		patterns = append(patterns, changePattern{
+			Type:        "database_changes",
+			Description: "Database schema changes detected",
+		})
+	} else {
+		for _, f := range diff.files {
+			if strings.Contains(f, "migration") || strings.Contains(f, "migrate") {
+				patterns = append(patterns, changePattern{
+					Type:        "database_changes",
+					Description: "Migration files changed",
+					Files:       []string{f},
+				})
+				break
+			}
+		}
+	}
+
+	// 6. New packages/directories.
+	newDirs := detectNewDirsInDiff(diff)
+	if len(newDirs) > 0 {
+		patterns = append(patterns, changePattern{
+			Type:        "new_packages",
+			Description: "New packages or directories added",
+			Files:       newDirs,
+		})
+	}
+
+	return patterns
+}
+
+// detectNewDirsInDiff finds new directories by checking for added file markers in diff.
+func detectNewDirsInDiff(diff diffInfo) []string {
+	newDirs := map[string]bool{}
+	for _, f := range diff.files {
+		parts := strings.SplitN(f, "/", 3)
+		if len(parts) >= 2 {
+			dir := parts[0] + "/" + parts[1]
+			newDirs[dir] = true
+		}
+	}
+	var result []string
+	for dir := range newDirs {
+		if strings.Contains(diff.content, "+++ b/"+dir) {
+			result = append(result, dir)
+		}
+	}
+	return result
+}
+
+// ---------------------------------------------------------------------------
+// Suggestion generation with KB cross-reference
+// ---------------------------------------------------------------------------
+
+// suggestKBQueries maps pattern types to FTS5 queries.
+var suggestKBQueries = map[string]string{
+	"new_api_endpoints":  "CLAUDE.md API routes documentation structure",
+	"dependency_changes": "CLAUDE.md dependencies stack section",
+	"new_tests":          "rules testing conventions best practices",
+	"config_changes":     "CLAUDE.md configuration environment setup",
+	"database_changes":   "CLAUDE.md database schema migrations",
+	"new_packages":       "CLAUDE.md structure packages organization",
+}
+
+func generateSuggestSuggestions(diff diffInfo, config configState, patterns []changePattern, st *store.Store) []Suggestion {
+	var suggestions []Suggestion
 
 	// Categorize changed files.
 	var (
-		configFiles  []string // .claude/ files
-		testFiles    []string
-		ciFiles      []string
-		docFiles     []string
-		sourceFiles  []string
+		configFiles []string
+		testFiles   []string
+		ciFiles     []string
+		sourceFiles []string
 	)
 
 	for _, f := range diff.files {
@@ -234,16 +409,18 @@ func generateSuggestions(diff diffInfo, config configState) []string {
 			testFiles = append(testFiles, f)
 		case strings.HasPrefix(f, ".github/"):
 			ciFiles = append(ciFiles, f)
-		case strings.HasSuffix(f, ".md"):
-			docFiles = append(docFiles, f)
-		default:
+		case !strings.HasSuffix(f, ".md"):
 			sourceFiles = append(sourceFiles, f)
 		}
 	}
 
-	// 1. CLAUDE.md checks
+	// 1. CLAUDE.md checks.
 	if !config.hasClaudeMD && len(sourceFiles) > 0 {
-		s = append(s, "Create CLAUDE.md — source files changed but no CLAUDE.md exists to guide Claude Code")
+		suggestions = append(suggestions, Suggestion{
+			Severity: "warning",
+			Category: "claude_md",
+			Message:  "Create CLAUDE.md -- source files changed but no CLAUDE.md exists to guide Claude Code",
+		})
 	}
 
 	if config.hasClaudeMD {
@@ -255,42 +432,154 @@ func generateSuggestions(diff diffInfo, config configState) []string {
 			}
 		}
 
-		// New packages/directories might need structure update
 		if hasNewDirs(diff, config) {
-			s = append(s, "Update CLAUDE.md ## Structure — new directories detected in diff")
+			suggestions = append(suggestions, Suggestion{
+				Severity: "info",
+				Category: "claude_md",
+				Message:  "Update CLAUDE.md ## Structure -- new directories detected in diff",
+			})
 		}
 
-		// CI changes might affect commands
 		if len(ciFiles) > 0 && hasCmdSection {
-			s = append(s, "Review CLAUDE.md ## Commands — CI workflow files changed")
+			suggestions = append(suggestions, Suggestion{
+				Severity: "info",
+				Category: "claude_md",
+				Message:  "Review CLAUDE.md ## Commands -- CI workflow files changed",
+			})
 		}
 	}
 
-	// 2. Test pattern changes
+	// 2. Test pattern changes.
 	if len(testFiles) > 0 && !hasRule(config, "test") {
-		s = append(s, "Consider adding .claude/rules/ for testing conventions — test files changed")
+		suggestions = append(suggestions, Suggestion{
+			Severity: "info",
+			Category: "rules",
+			Message:  "Consider adding .claude/rules/ for testing conventions -- test files changed",
+		})
 	}
 
-	// 3. .claude/ config files changed
+	// 3. .claude/ config files changed.
 	for _, f := range configFiles {
 		switch {
 		case strings.Contains(f, "skills/"):
-			s = append(s, "Skill file changed: "+f+" — verify frontmatter (name, description) is complete")
+			suggestions = append(suggestions, Suggestion{
+				Severity: "info",
+				Category: "skills",
+				Message:  "Skill file changed: " + f + " -- verify frontmatter (name, description) is complete",
+				Affected: []string{f},
+			})
 		case strings.Contains(f, "rules/"):
-			s = append(s, "Rule file changed: "+f+" — verify rule is clear and actionable")
+			suggestions = append(suggestions, Suggestion{
+				Severity: "info",
+				Category: "rules",
+				Message:  "Rule file changed: " + f + " -- verify rule is clear and actionable",
+				Affected: []string{f},
+			})
 		}
 	}
 
-	// 4. New file types that might need rules
+	// 4. New file types that might need rules.
 	exts := uniqueExtensions(sourceFiles)
 	for _, ext := range exts {
 		if !hasRuleForExt(config, ext) && isSignificantExt(ext) {
-			s = append(s, "New "+ext+" files detected — consider adding .claude/rules/ for "+extLanguage(ext)+" conventions")
+			suggestions = append(suggestions, Suggestion{
+				Severity: "info",
+				Category: "rules",
+				Message:  "New " + ext + " files detected -- consider adding .claude/rules/ for " + extLanguage(ext) + " conventions",
+			})
 		}
 	}
 
-	return s
+	// 5. Pattern-based suggestions.
+	for _, p := range patterns {
+		if s := patternToSuggestion(p, config); s != nil {
+			suggestions = append(suggestions, *s)
+		}
+	}
+
+	// Enrich with KB best practices.
+	enrichSuggestWithKB(suggestions, patterns, st)
+
+	return suggestions
 }
+
+func patternToSuggestion(p changePattern, config configState) *Suggestion {
+	if !config.hasClaudeMD {
+		return nil
+	}
+	switch p.Type {
+	case "dependency_changes":
+		return &Suggestion{
+			Severity: "info",
+			Category: "claude_md",
+			Message:  "Dependencies changed -- consider updating CLAUDE.md ## Stack",
+		}
+	case "database_changes":
+		return &Suggestion{
+			Severity: "info",
+			Category: "claude_md",
+			Message:  "Database schema or migrations changed -- update CLAUDE.md with schema info",
+		}
+	case "new_api_endpoints":
+		return &Suggestion{
+			Severity: "info",
+			Category: "claude_md",
+			Message:  "New API endpoints detected -- consider documenting in CLAUDE.md",
+		}
+	}
+	return nil
+}
+
+// enrichSuggestWithKB attaches KB snippets based on change patterns and categories.
+func enrichSuggestWithKB(suggestions []Suggestion, patterns []changePattern, st *store.Store) {
+	if st == nil || len(suggestions) == 0 {
+		return
+	}
+
+	cache := map[string]*KBSnippet{}
+
+	// Query KB for each pattern type.
+	for _, p := range patterns {
+		q, ok := suggestKBQueries[p.Type]
+		if !ok {
+			continue
+		}
+		if _, cached := cache[p.Type]; cached {
+			continue
+		}
+		if snippets := queryKB(st, q, 1); len(snippets) > 0 {
+			cache[p.Type] = &snippets[0]
+		}
+	}
+
+	// Query for common suggestion categories.
+	categoryQueries := map[string]string{
+		"claude_md": "CLAUDE.md best practices sections",
+		"rules":     "rules coding standards configuration",
+		"skills":    "skills configuration best practices",
+	}
+	for _, s := range suggestions {
+		if _, ok := cache[s.Category]; ok {
+			continue
+		}
+		if q, ok := categoryQueries[s.Category]; ok {
+			if snippets := queryKB(st, q, 1); len(snippets) > 0 {
+				cache[s.Category] = &snippets[0]
+			}
+		}
+	}
+
+	// Attach to suggestions.
+	for i := range suggestions {
+		if bp, ok := cache[suggestions[i].Category]; ok {
+			suggestions[i].BestPractice = bp
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 func hasNewDirs(diff diffInfo, config configState) bool {
 	if !config.hasClaudeMD {
