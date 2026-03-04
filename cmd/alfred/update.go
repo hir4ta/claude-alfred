@@ -12,7 +12,10 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-const modulePath = "github.com/hir4ta/claude-alfred/cmd/alfred"
+const (
+	modulePath  = "github.com/hir4ta/claude-alfred"
+	installPath = "github.com/hir4ta/claude-alfred/cmd/alfred"
+)
 
 // showVersion prints a styled version display.
 func showVersion() {
@@ -192,7 +195,7 @@ func checkLatestVersion() tea.Msg {
 }
 
 func doInstall() tea.Msg {
-	cmd := exec.Command("go", "install", modulePath+"@latest")
+	cmd := exec.Command("go", "install", installPath+"@latest")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return installDoneMsg{err: fmt.Errorf("%w: %s", err, out)}
 	}
