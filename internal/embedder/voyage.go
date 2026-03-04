@@ -15,8 +15,8 @@ const (
 	voyageAPI       = "https://api.voyageai.com/v1/embeddings"
 	voyageRerankAPI = "https://api.voyageai.com/v1/rerank"
 	voyageModel     = "voyage-4-large"
-	voyageRerankMod = "rerank-2.5-lite"
-	voyageDims      = 1024
+	voyageRerankMod = "rerank-2.5"
+	voyageDims      = 2048
 )
 
 // voyageClient is an HTTP client for the Voyage AI embedding API.

@@ -5,12 +5,10 @@ import (
 	"strconv"
 )
 
-// schemaVersion 3 = 完全受動型（知識ベース特化）.
-// Changes from V2:
-//   - sessions, events, compact_events, decisions, tool_failures tables removed
-//   - decisions_fts virtual table removed
-//   - Only docs, docs_fts, embeddings remain
-const schemaVersion = 3
+// schemaVersion 4 = 冗長インデックス削除 + embedding 2048d 化.
+// Changes from V3:
+//   - Removed redundant idx_embeddings_source (UNIQUE constraint already creates implicit index)
+const schemaVersion = 4
 
 const ddl = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -30,8 +28,6 @@ CREATE TABLE IF NOT EXISTS embeddings (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (source, source_id)
 );
-CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source, source_id);
-
 -- ==========================================================
 -- Docs knowledge base
 -- ==========================================================
@@ -106,6 +102,7 @@ var legacyTriggers = []string{
 }
 
 var legacyIndexes = []string{
+	"idx_embeddings_source",
 	"idx_wseq_task",
 	"idx_cochange_a",
 	"idx_live_phases_session",

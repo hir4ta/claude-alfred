@@ -44,8 +44,8 @@ func TestNewEmbedder_WithKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEmbedder() error: %v", err)
 	}
-	if e.Dims() != 1024 {
-		t.Errorf("Dims() = %d, want 1024", e.Dims())
+	if e.Dims() != 2048 {
+		t.Errorf("Dims() = %d, want 2048", e.Dims())
 	}
 	if e.Model() != "voyage-4-large" {
 		t.Errorf("Model() = %q, want %q", e.Model(), "voyage-4-large")
