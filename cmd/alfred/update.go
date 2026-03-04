@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,7 +16,7 @@ import (
 )
 
 const (
-	modulePath  = "github.com/hir4ta/claude-alfred"
+	githubRepo  = "hir4ta/claude-alfred"
 	installPath = "github.com/hir4ta/claude-alfred/cmd/alfred"
 )
 
@@ -64,12 +67,12 @@ type (
 )
 
 type updateModel struct {
-	phase      updatePhase
-	current    string
-	latest     string
-	err        error
-	spinner    spinner.Model
-	startTime  time.Time
+	phase     updatePhase
+	current   string
+	latest    string
+	err       error
+	spinner   spinner.Model
+	startTime time.Time
 }
 
 func newUpdateModel() updateModel {
@@ -106,7 +109,7 @@ func (m updateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		m.phase = updateInstalling
-		return m, doInstall
+		return m, doInstall(m.latest)
 
 	case installDoneMsg:
 		if msg.err != nil {
@@ -177,29 +180,82 @@ func (m updateModel) View() tea.View {
 	return tea.NewView(b.String())
 }
 
+// checkLatestVersion fetches the latest release tag from GitHub API.
+// This is more reliable than go list -m which depends on the Go module proxy.
 func checkLatestVersion() tea.Msg {
-	cmd := exec.Command("go", "list", "-m", "-json", modulePath+"@latest")
-	out, err := cmd.Output()
+	url := "https://api.github.com/repos/" + githubRepo + "/releases/latest"
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return latestVersionMsg{err: fmt.Errorf("failed to check latest version: %w", err)}
 	}
-	var info struct {
-		Version string `json:"Version"`
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return latestVersionMsg{err: fmt.Errorf("failed to check latest version: %w", err)}
 	}
-	if err := json.Unmarshal(out, &info); err != nil {
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return latestVersionMsg{err: fmt.Errorf("failed to check latest version: HTTP %d", resp.StatusCode)}
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return latestVersionMsg{err: fmt.Errorf("failed to parse version info: %w", err)}
 	}
-	// Strip "v" prefix for consistency.
-	ver := strings.TrimPrefix(info.Version, "v")
+
+	ver := strings.TrimPrefix(release.TagName, "v")
 	return latestVersionMsg{version: ver}
 }
 
-func doInstall() tea.Msg {
-	cmd := exec.Command("go", "install", installPath+"@latest")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return installDoneMsg{err: fmt.Errorf("%w: %s", err, out)}
+// doInstall installs the specified version via go install, then regenerates
+// the plugin bundle at the installed location so skills, rules, hooks, and
+// run.sh are updated to match the new binary.
+func doInstall(version string) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("go", "install", installPath+"@v"+version)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return installDoneMsg{err: fmt.Errorf("%w: %s", err, out)}
+		}
+
+		// Regenerate plugin bundle at installed location (best-effort).
+		if root := findInstalledPluginRoot(); root != "" {
+			cmd = exec.Command("alfred", "plugin-bundle", root)
+			cmd.Run()
+		}
+
+		return installDoneMsg{}
 	}
-	return installDoneMsg{}
+}
+
+// findInstalledPluginRoot reads ~/.claude/plugins/installed_plugins.json
+// and returns the installPath for the alfred plugin.
+func findInstalledPluginRoot() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".claude", "plugins", "installed_plugins.json"))
+	if err != nil {
+		return ""
+	}
+	var manifest struct {
+		Plugins map[string][]struct {
+			InstallPath string `json:"installPath"`
+		} `json:"plugins"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return ""
+	}
+	for key, entries := range manifest.Plugins {
+		if strings.Contains(key, "alfred") && len(entries) > 0 {
+			return entries[0].InstallPath
+		}
+	}
+	return ""
 }
 
 func runUpdate() error {
