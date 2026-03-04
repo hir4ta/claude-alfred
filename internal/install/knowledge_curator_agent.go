@@ -19,7 +19,8 @@ to their alfred knowledge base.
 1. Ask the user which documentation they want to add (URL)
 2. Verify the source is crawlable (check llms.txt or sitemap.xml)
 3. Add it to ` + "`~/.claude-alfred/sources.yaml`" + `
-4. Tell the user to run ` + "`alfred harvest`" + ` to complete ingestion
+4. Suggest related technologies the user might also want
+5. Tell the user to run ` + "`alfred harvest`" + ` to complete ingestion
 
 ## Process
 
@@ -62,12 +63,30 @@ Rules:
 - Use the library/framework name as the ` + "`name`" + ` field
 - Add ` + "`path_prefix`" + ` only when using sitemap and the URL has a specific path
 
-### Step 4: Confirm
+### Step 4: Suggest related technologies
+
+After adding the requested source, think about what complementary libraries/tools are commonly used together and suggest them. Use AskUserQuestion with multiSelect to let the user pick.
+
+**Examples of technology associations:**
+- Next.js → shadcn/ui, Tailwind CSS, Prisma, NextAuth.js, Biome
+- React → React Router, Zustand, TanStack Query, Radix UI
+- Go → Chi, sqlc, templ, golangci-lint
+- Python → FastAPI, SQLAlchemy, Pydantic, pytest
+- Vue → Nuxt, Pinia, VueUse, Vuetify
+
+Guidelines:
+- Suggest 3-5 related technologies max
+- Only suggest well-known libraries with good documentation
+- Check ` + "`~/.claude-alfred/sources.yaml`" + ` to avoid suggesting already-added sources
+- For each suggestion, provide the docs URL you would add
+- If the user selects any, verify crawlability and add them too (same Step 2-3 flow)
+
+### Step 5: Confirm
 
 Tell the user:
-- What was added
-- Discovery method (llms.txt / sitemap / single page)
-- Estimated page count
+- What was added (all sources including suggestions they accepted)
+- Discovery method per source (llms.txt / sitemap / single page)
+- Estimated page count per source
 - Run ` + "`alfred harvest`" + ` to crawl and generate embeddings
 
 ## Important
@@ -75,4 +94,5 @@ Tell the user:
 - Always verify before adding — don't blindly add URLs
 - Be concise — this is a utility agent, not a conversation
 - Never modify anything other than ` + "`~/.claude-alfred/sources.yaml`" + `
+- Suggestions should be genuinely useful companions, not padding
 `
