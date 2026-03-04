@@ -69,7 +69,7 @@ func CrawlCustomSources(sources []CustomSource, progress *CrawlCustomProgress) [
 				progress.OnPage(j+1, len(urls))
 			}
 
-			ss, err := crawlCustomPage(pageURL, src.Name)
+			ss, err := crawlCustomPage(pageURL)
 			if err != nil {
 				continue
 			}
@@ -185,7 +185,7 @@ func filterByPrefix(urls []string, prefix string) []string {
 }
 
 // crawlCustomPage fetches a page and splits into sections.
-func crawlCustomPage(pageURL, sourceName string) (*SeedSource, error) {
+func crawlCustomPage(pageURL string) (*SeedSource, error) {
 	// Try .md version first.
 	mdURL := pageURL
 	if !strings.HasSuffix(mdURL, ".md") {
