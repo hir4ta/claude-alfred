@@ -26,6 +26,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder, ar *autoRefreshe
 		if limit < 1 {
 			limit = 5
 		}
+		sourceType := req.GetString("source_type", "")
 
 		var docs []store.DocRow
 		searchMethod := "hybrid_rrf"
@@ -50,7 +51,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder, ar *autoRefreshe
 				overRetrieve = 20
 			}
 
-			hybridMatches, _ := st.HybridSearch(queryVec, query, "", overRetrieve, overRetrieve)
+			hybridMatches, _ := st.HybridSearch(queryVec, query, sourceType, overRetrieve, overRetrieve)
 
 			if len(hybridMatches) > 0 {
 				ids := make([]int64, len(hybridMatches))
@@ -100,7 +101,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder, ar *autoRefreshe
 			}
 		} else {
 			// FTS5-only fallback (no embedder available).
-			docs, _ = st.SearchDocsFTS(query, "", limit)
+			docs, _ = st.SearchDocsFTS(query, sourceType, limit)
 		}
 
 		// Build response with freshness metadata.

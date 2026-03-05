@@ -64,6 +64,7 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithString("query", mcp.Description("Search query"), mcp.Required()),
 				mcp.WithNumber("limit", mcp.Description("Maximum results (default: 5)")),
+				mcp.WithString("source_type", mcp.Description("Filter by source type: docs, custom, spec, or empty for all")),
 			),
 			Handler: docsSearchHandler(st, emb, ar),
 		},
