@@ -1,15 +1,13 @@
 # alfred MCP Tools
 
-alfred's knowledge base contains Claude Code docs, best practices, AND user's custom technology documentation.
+alfred's knowledge base contains Claude Code docs and best practices.
 Do NOT proceed with .claude/ configuration tasks by only reading files.
 
 ## knowledge — Search docs and best practices
 
-**Auto-consult on every user prompt:** If the user's question or task likely relates to a technology or library in the knowledge base, call knowledge BEFORE responding. This includes:
+**Auto-consult on every user prompt:** If the user's question or task likely relates to Claude Code, call knowledge BEFORE responding. This includes:
 - Claude Code features (hooks, skills, rules, agents, MCP, memory, CLAUDE.md)
 - Creating, modifying, or reviewing `.claude/` configuration files
-- Any technology the user has added to their knowledge base (check `~/.claude-alfred/sources.yaml` for registered sources)
-- API usage, framework patterns, or library-specific questions
 
 When in doubt, call knowledge — it's fast and the cost of missing relevant context is higher than an extra search.
 

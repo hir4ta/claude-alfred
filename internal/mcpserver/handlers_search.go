@@ -16,7 +16,7 @@ import (
 // docsSearchHandler searches the docs knowledge base using hybrid search:
 // 1. Hybrid RRF (vector + FTS5 fusion) → over-retrieve candidates
 // 2. Rerank top candidates via Voyage rerank API → return top results
-func docsSearchHandler(st *store.Store, emb *embedder.Embedder, ar *autoRefresher) server.ToolHandlerFunc {
+func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		query := req.GetString("query", "")
 		if query == "" {
@@ -144,12 +144,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder, ar *autoRefreshe
 		}
 		if maxAgeDays > 30 {
 			result["staleness_warning"] = fmt.Sprintf(
-				"Results include docs from %d days ago. Run 'alfred harvest' to refresh.", maxAgeDays)
-		}
-
-		// Trigger background auto-refresh for stale custom sources.
-		if ar != nil {
-			go ar.checkAndRefresh()
+				"Results include docs from %d days ago. Run 'alfred setup' to refresh.", maxAgeDays)
 		}
 
 		return marshalResult(result)

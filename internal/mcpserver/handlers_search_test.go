@@ -11,7 +11,7 @@ import (
 func TestKnowledgeHandler_LimitDefault(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := docsSearchHandler(st, nil, nil)
+	handler := docsSearchHandler(st, nil)
 
 	// Insert several docs.
 	for i := range 8 {
@@ -47,7 +47,7 @@ func TestKnowledgeHandler_LimitDefault(t *testing.T) {
 func TestKnowledgeHandler_LimitNegativeDefaultsTo5(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := docsSearchHandler(st, nil, nil)
+	handler := docsSearchHandler(st, nil)
 
 	doc := &store.DocRow{
 		URL:         "https://example.com/neg",
@@ -75,7 +75,7 @@ func TestKnowledgeHandler_LimitNegativeDefaultsTo5(t *testing.T) {
 func TestKnowledgeHandler_CustomLimit(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := docsSearchHandler(st, nil, nil)
+	handler := docsSearchHandler(st, nil)
 
 	for i := range 5 {
 		doc := &store.DocRow{
@@ -107,7 +107,7 @@ func TestKnowledgeHandler_CustomLimit(t *testing.T) {
 func TestKnowledgeHandler_VersionAndFreshness(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := docsSearchHandler(st, nil, nil)
+	handler := docsSearchHandler(st, nil)
 
 	// Doc with version and recent crawledAt.
 	recentTime := time.Now().Add(-2 * 24 * time.Hour).Format(time.RFC3339)
@@ -151,7 +151,7 @@ func TestKnowledgeHandler_VersionAndFreshness(t *testing.T) {
 func TestKnowledgeHandler_StalenessWarning(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := docsSearchHandler(st, nil, nil)
+	handler := docsSearchHandler(st, nil)
 
 	// Doc crawled 60 days ago (> 30 day threshold).
 	oldTime := time.Now().Add(-60 * 24 * time.Hour).Format(time.RFC3339)
@@ -183,7 +183,7 @@ func TestKnowledgeHandler_StalenessWarning(t *testing.T) {
 func TestKnowledgeHandler_CrawledAtSQLiteFormat(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := docsSearchHandler(st, nil, nil)
+	handler := docsSearchHandler(st, nil)
 
 	// Doc with SQLite datetime format (not RFC3339).
 	doc := &store.DocRow{
@@ -221,7 +221,7 @@ func TestKnowledgeHandler_CrawledAtSQLiteFormat(t *testing.T) {
 func TestKnowledgeHandler_NoVersionOmitted(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := docsSearchHandler(st, nil, nil)
+	handler := docsSearchHandler(st, nil)
 
 	doc := &store.DocRow{
 		URL:         "https://example.com/noversion",

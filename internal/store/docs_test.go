@@ -2,9 +2,7 @@ package store
 
 import (
 	"path/filepath"
-	"sort"
 	"testing"
-	"time"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -262,135 +260,6 @@ func TestContentHashOf(t *testing.T) {
 	}
 }
 
-func TestStaleCustomSources(t *testing.T) {
-	t.Parallel()
-
-	freshTime := time.Now().UTC().Format(time.RFC3339)
-	staleTime := time.Now().Add(-8 * 24 * time.Hour).UTC().Format(time.RFC3339)
-	maxAge := 7 * 24 * time.Hour
-
-	t.Run("all stale", func(t *testing.T) {
-		t.Parallel()
-		st := openTestStore(t)
-		_, _, err := st.UpsertDoc(&DocRow{
-			URL: "https://react.dev/docs", SectionPath: "Intro",
-			Content: "React docs", SourceType: "custom", CrawledAt: staleTime,
-		})
-		if err != nil {
-			t.Fatalf("UpsertDoc: %v", err)
-		}
-		_, _, err = st.UpsertDoc(&DocRow{
-			URL: "https://go.dev/docs", SectionPath: "Intro",
-			Content: "Go docs", SourceType: "custom", CrawledAt: staleTime,
-		})
-		if err != nil {
-			t.Fatalf("UpsertDoc: %v", err)
-		}
-
-		urlToName := map[string]string{
-			"https://react.dev": "react",
-			"https://go.dev":    "go",
-		}
-		got, err := st.StaleCustomSources(urlToName, maxAge)
-		if err != nil {
-			t.Fatalf("StaleCustomSources = _, %v", err)
-		}
-		sort.Strings(got)
-		if len(got) != 2 {
-			t.Fatalf("StaleCustomSources = %v, want 2 names", got)
-		}
-		if got[0] != "go" || got[1] != "react" {
-			t.Errorf("StaleCustomSources = %v, want [go react]", got)
-		}
-	})
-
-	t.Run("some stale some fresh", func(t *testing.T) {
-		t.Parallel()
-		st := openTestStore(t)
-		_, _, err := st.UpsertDoc(&DocRow{
-			URL: "https://react.dev/docs", SectionPath: "Intro",
-			Content: "React docs", SourceType: "custom", CrawledAt: staleTime,
-		})
-		if err != nil {
-			t.Fatalf("UpsertDoc: %v", err)
-		}
-		_, _, err = st.UpsertDoc(&DocRow{
-			URL: "https://go.dev/docs", SectionPath: "Intro",
-			Content: "Go docs", SourceType: "custom", CrawledAt: freshTime,
-		})
-		if err != nil {
-			t.Fatalf("UpsertDoc: %v", err)
-		}
-
-		urlToName := map[string]string{
-			"https://react.dev": "react",
-			"https://go.dev":    "go",
-		}
-		got, err := st.StaleCustomSources(urlToName, maxAge)
-		if err != nil {
-			t.Fatalf("StaleCustomSources = _, %v", err)
-		}
-		if len(got) != 1 || got[0] != "react" {
-			t.Errorf("StaleCustomSources = %v, want [react]", got)
-		}
-	})
-
-	t.Run("all fresh", func(t *testing.T) {
-		t.Parallel()
-		st := openTestStore(t)
-		_, _, err := st.UpsertDoc(&DocRow{
-			URL: "https://react.dev/docs", SectionPath: "Intro",
-			Content: "React docs", SourceType: "custom", CrawledAt: freshTime,
-		})
-		if err != nil {
-			t.Fatalf("UpsertDoc: %v", err)
-		}
-
-		urlToName := map[string]string{"https://react.dev": "react"}
-		got, err := st.StaleCustomSources(urlToName, maxAge)
-		if err != nil {
-			t.Fatalf("StaleCustomSources = _, %v", err)
-		}
-		if len(got) != 0 {
-			t.Errorf("StaleCustomSources = %v, want empty", got)
-		}
-	})
-
-	t.Run("empty DB", func(t *testing.T) {
-		t.Parallel()
-		st := openTestStore(t)
-		urlToName := map[string]string{"https://react.dev": "react"}
-		got, err := st.StaleCustomSources(urlToName, maxAge)
-		if err != nil {
-			t.Fatalf("StaleCustomSources = _, %v", err)
-		}
-		if len(got) != 0 {
-			t.Errorf("StaleCustomSources = %v, want empty", got)
-		}
-	})
-
-	t.Run("RFC3339 time format", func(t *testing.T) {
-		t.Parallel()
-		st := openTestStore(t)
-		_, _, err := st.UpsertDoc(&DocRow{
-			URL: "https://example.com/docs", SectionPath: "A",
-			Content: "test", SourceType: "custom",
-			CrawledAt: "2020-01-01T00:00:00Z",
-		})
-		if err != nil {
-			t.Fatalf("UpsertDoc: %v", err)
-		}
-
-		urlToName := map[string]string{"https://example.com": "example"}
-		got, err := st.StaleCustomSources(urlToName, maxAge)
-		if err != nil {
-			t.Fatalf("StaleCustomSources = _, %v", err)
-		}
-		if len(got) != 1 || got[0] != "example" {
-			t.Errorf("StaleCustomSources = %v, want [example]", got)
-		}
-	})
-}
 
 func TestSeedDocsCount(t *testing.T) {
 	t.Parallel()

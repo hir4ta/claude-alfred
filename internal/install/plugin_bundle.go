@@ -144,8 +144,7 @@ func Bundle(outputDir, version string) error {
 
 	// 7. Write agents.
 	agents := map[string]string{
-		"alfred.md":            alfredAgentContent,
-		"knowledge-curator.md": knowledgeCuratorAgentContent,
+		"alfred.md": alfredAgentContent,
 	}
 	for name, content := range agents {
 		p := filepath.Join(outputDir, "agents", name)

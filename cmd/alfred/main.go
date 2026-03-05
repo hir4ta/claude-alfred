@@ -39,14 +39,6 @@ func run() error {
 		return runServe()
 	case "setup":
 		return runSetup()
-	case "harvest":
-		sourceName := ""
-		for i, arg := range os.Args[2:] {
-			if arg == "--source" && i+1 < len(os.Args[2:]) {
-				sourceName = os.Args[2+i+1]
-			}
-		}
-		return runHarvest(sourceName)
 	case "update":
 		return runUpdate()
 	case "crawl-seed":
@@ -155,7 +147,6 @@ Usage:
 Commands:
   serve          Run as MCP server (stdio) for Claude Code integration
   setup          Initialize knowledge base (seed docs + generate embeddings)
-  harvest        Refresh knowledge base (crawl + embed fresh docs)
   update         Update alfred to the latest version
   version        Show version
   help           Show this help
