@@ -21,6 +21,7 @@ He never interrupts your work. When you need him, he's ready:
   butler-init   — Initialize spec for a new development task (creates .alfred/specs/ files + DB sync)
   butler-update — Record decisions, knowledge, task progress to active spec (auto DB sync)
   butler-status — Get current task state for context restoration after compact/new session
+  butler-review — 3-layer knowledge-powered code review (spec + knowledge + best practices)
 
 When to use alfred tools:
 - Reviewing or auditing .claude/ configuration → call review first (reads file contents, checks skill sizes and structure, validates rules, cross-references with knowledge base)
@@ -30,6 +31,7 @@ When to use alfred tools:
 - Starting a new development task → call butler-init to create spec
 - Making design decisions or discovering knowledge → call butler-update to record
 - Starting/resuming a session → call butler-status to check active task
+- Reviewing code changes against spec, knowledge, and best practices → call butler-review
 
 Do NOT review or create .claude/ configuration by only reading files.
 review and suggest cross-reference your config against best practices from the knowledge base — information not in your training data.
@@ -114,6 +116,16 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 			),
 			Handler: butlerStatusHandler(),
+		},
+
+		server.ServerTool{
+			Tool: mcp.NewTool("butler-review",
+				mcp.WithDescription("3-layer knowledge-powered code review. Layer 1: checks changes against active spec (decisions, requirements scope). Layer 2: semantic search against accumulated knowledge (past bugs, dead ends). Layer 3: best practices from documentation sources."),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
+				mcp.WithString("focus", mcp.Description("Optional focus area for the review (e.g., 'auth logic', 'error handling')")),
+			),
+			Handler: butlerReviewHandler(st, emb),
 		},
 	)
 
