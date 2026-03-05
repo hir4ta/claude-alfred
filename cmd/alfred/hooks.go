@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hir4ta/claude-alfred/internal/spec"
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
@@ -75,6 +77,13 @@ func runHook(event string) error {
 				return nil
 			}
 			ingestProjectClaudeMD(st, ev.ProjectPath)
+
+			// Inject butler-protocol context if active spec exists
+			injectButlerContext(ev.ProjectPath)
+		}
+	case "PreCompact":
+		if ev.ProjectPath != "" {
+			handlePreCompact(ev.ProjectPath)
 		}
 	case "PreToolUse":
 		handlePreToolUse(&ev)
@@ -215,4 +224,76 @@ func ingestProjectClaudeMD(st *store.Store, projectPath string) {
 		})
 	}
 	debugf("ingestProjectClaudeMD: %d sections from %s", len(sections), claudeMD)
+}
+
+// ---------------------------------------------------------------------------
+// PreCompact: butler-protocol session persistence
+// ---------------------------------------------------------------------------
+
+// handlePreCompact saves session state before context compaction.
+// This is the core of compact resilience — capturing context that would
+// otherwise be lost during summarization.
+func handlePreCompact(projectPath string) {
+	taskSlug, err := spec.ReadActive(projectPath)
+	if err != nil {
+		debugf("PreCompact: no active spec, skipping")
+		return
+	}
+
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	if !sd.Exists() {
+		debugf("PreCompact: spec dir missing for %s", taskSlug)
+		return
+	}
+
+	// Add compact marker to session.md
+	marker := fmt.Sprintf("\n## Compact Marker [%s]\nAuto-saved before compaction. Context above this point may be summarized.\n",
+		time.Now().Format("2006-01-02 15:04:05"))
+	if err := sd.AppendFile(spec.FileSession, marker); err != nil {
+		debugf("PreCompact: append marker error: %v", err)
+		return
+	}
+
+	// Sync session.md to DB (without embedder — hook is short-lived)
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		debugf("PreCompact: DB open error: %v", err)
+		return
+	}
+	if err := spec.SyncSingleFile(context.Background(), sd, spec.FileSession, st, nil); err != nil {
+		debugf("PreCompact: sync error: %v", err)
+		return
+	}
+
+	debugf("PreCompact: saved session for %s", taskSlug)
+
+	// Output context for Claude to see after compact
+	fmt.Fprintf(os.Stdout, "Butler Protocol: session state saved for task '%s'. After compact, call butler-status to restore full context.\n", taskSlug)
+}
+
+// ---------------------------------------------------------------------------
+// SessionStart: butler-protocol context injection
+// ---------------------------------------------------------------------------
+
+// injectButlerContext outputs session.md content to stdout when an active
+// butler-protocol spec exists, so Claude Code can restore context after
+// compact or session restart.
+func injectButlerContext(projectPath string) {
+	taskSlug, err := spec.ReadActive(projectPath)
+	if err != nil {
+		return // no active spec — silently skip
+	}
+
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	if !sd.Exists() {
+		return
+	}
+
+	session, err := sd.ReadFile(spec.FileSession)
+	if err != nil || session == "" {
+		return
+	}
+
+	fmt.Fprintf(os.Stdout, "\n--- Butler Protocol: Active Task '%s' ---\n%s\n--- End Butler Protocol ---\n", taskSlug, session)
+	debugf("SessionStart: injected butler context for %s", taskSlug)
 }

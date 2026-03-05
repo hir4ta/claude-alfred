@@ -1,5 +1,5 @@
 {
-  "description": "Silent butler hooks — auto-import, config access reminder, prompt detection",
+  "description": "Silent butler hooks — auto-import, config access reminder, prompt detection, butler-protocol session persistence",
   "hooks": {
     "PreToolUse": [
       {
@@ -11,6 +11,17 @@
           }
         ],
         "matcher": "Read|Glob|Grep|Edit|Write"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook PreCompact",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
       }
     ],
     "SessionStart": [
