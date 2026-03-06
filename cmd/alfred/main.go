@@ -53,6 +53,11 @@ func run() error {
 			outputDir = os.Args[2]
 		}
 		return install.Bundle(outputDir, version)
+	case "pane":
+		if len(os.Args) < 3 {
+			return fmt.Errorf("usage: alfred pane <spec|decisions|git>")
+		}
+		return runPane(os.Args[2])
 	case "hook":
 		if len(os.Args) < 3 {
 			return fmt.Errorf("usage: alfred hook <EventName>")
@@ -147,6 +152,7 @@ Usage:
 Commands:
   serve          Run as MCP server (stdio) for Claude Code integration
   setup          Initialize knowledge base (seed docs + generate embeddings)
+  pane <type>    Run a monitoring pane (spec, decisions, git)
   update         Update alfred to the latest version
   version        Show version
   help           Show this help
