@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -157,6 +158,94 @@ func TestSplitMarkdownSections(t *testing.T) {
 				if got[i].Content == "" {
 					t.Errorf("section[%d].Content is empty", i)
 				}
+			}
+		})
+	}
+}
+
+func TestRotateCompactMarkers(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		content    string
+		maxMarkers int
+		wantCount  int
+	}{
+		{
+			name:       "no markers",
+			content:    "# Session\n## Status\nactive\n",
+			maxMarkers: 3,
+			wantCount:  0,
+		},
+		{
+			name:       "under limit",
+			content:    "# Session\n## Compact Marker [2026-01-01]\nfirst\n---\n## Compact Marker [2026-01-02]\nsecond\n---\n",
+			maxMarkers: 3,
+			wantCount:  2,
+		},
+		{
+			name:       "at limit",
+			content:    "pre\n## Compact Marker [1]\na\n## Compact Marker [2]\nb\n## Compact Marker [3]\nc\n",
+			maxMarkers: 3,
+			wantCount:  3,
+		},
+		{
+			name:       "over limit trims oldest",
+			content:    "pre\n## Compact Marker [1]\na\n## Compact Marker [2]\nb\n## Compact Marker [3]\nc\n## Compact Marker [4]\nd\n",
+			maxMarkers: 3,
+			wantCount:  3,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := rotateCompactMarkers(tt.content, tt.maxMarkers)
+			gotCount := strings.Count(result, "## Compact Marker [")
+			if gotCount != tt.wantCount {
+				t.Errorf("rotateCompactMarkers() has %d markers, want %d\nresult:\n%s", gotCount, tt.wantCount, result)
+			}
+		})
+	}
+}
+
+func TestRotateCompactMarkersKeepsNewest(t *testing.T) {
+	t.Parallel()
+	content := "# Session\npre\n## Compact Marker [old]\nold data\n## Compact Marker [mid]\nmid data\n## Compact Marker [new]\nnew data\n## Compact Marker [newest]\nnewest data\n"
+	result := rotateCompactMarkers(content, 2)
+
+	if !strings.Contains(result, "## Compact Marker [newest]") {
+		t.Error("should keep newest marker")
+	}
+	if !strings.Contains(result, "## Compact Marker [new]") {
+		t.Error("should keep second newest marker")
+	}
+	if strings.Contains(result, "## Compact Marker [old]") {
+		t.Error("should have removed old marker")
+	}
+	if !strings.Contains(result, "# Session") {
+		t.Error("should preserve pre-marker content")
+	}
+}
+
+func TestExtractFirstLines(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		content string
+		n       int
+		want    string
+	}{
+		{"empty", "", 3, ""},
+		{"headers only", "# Title\n## Section\n", 3, ""},
+		{"mixed", "# Title\nLine one\n## H2\nLine two\nLine three\nLine four\n", 2, "Line one | Line two"},
+		{"skip comments", "<!-- comment -->\nReal line\n", 3, "Real line"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := extractFirstLines(tt.content, tt.n)
+			if got != tt.want {
+				t.Errorf("extractFirstLines() = %q, want %q", got, tt.want)
 			}
 		})
 	}

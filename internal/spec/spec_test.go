@@ -126,6 +126,150 @@ func TestInitRejectsOverwrite(t *testing.T) {
 	}
 }
 
+func TestActiveStateYAML(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Init first task
+	_, err := Init(tmp, "task-one", "First task")
+	if err != nil {
+		t.Fatalf("Init(task-one): %v", err)
+	}
+
+	// Verify YAML format
+	state, err := ReadActiveState(tmp)
+	if err != nil {
+		t.Fatalf("ReadActiveState: %v", err)
+	}
+	if state.Primary != "task-one" {
+		t.Errorf("Primary = %q, want %q", state.Primary, "task-one")
+	}
+	if len(state.Tasks) != 1 {
+		t.Fatalf("len(Tasks) = %d, want 1", len(state.Tasks))
+	}
+
+	// Init second task — should add to list and become primary
+	_, err = Init(tmp, "task-two", "Second task")
+	if err != nil {
+		t.Fatalf("Init(task-two): %v", err)
+	}
+	state, err = ReadActiveState(tmp)
+	if err != nil {
+		t.Fatalf("ReadActiveState after second init: %v", err)
+	}
+	if state.Primary != "task-two" {
+		t.Errorf("Primary = %q, want %q", state.Primary, "task-two")
+	}
+	if len(state.Tasks) != 2 {
+		t.Fatalf("len(Tasks) = %d, want 2", len(state.Tasks))
+	}
+
+	// ReadActive should return primary
+	slug, err := ReadActive(tmp)
+	if err != nil {
+		t.Fatalf("ReadActive: %v", err)
+	}
+	if slug != "task-two" {
+		t.Errorf("ReadActive() = %q, want %q", slug, "task-two")
+	}
+}
+
+func TestSwitchActive(t *testing.T) {
+	tmp := t.TempDir()
+	Init(tmp, "alpha", "")
+	Init(tmp, "beta", "")
+
+	if err := SwitchActive(tmp, "alpha"); err != nil {
+		t.Fatalf("SwitchActive(alpha): %v", err)
+	}
+	slug, _ := ReadActive(tmp)
+	if slug != "alpha" {
+		t.Errorf("ReadActive() = %q, want %q", slug, "alpha")
+	}
+
+	// Switch to nonexistent should fail
+	if err := SwitchActive(tmp, "nope"); err == nil {
+		t.Error("SwitchActive(nope) should fail")
+	}
+}
+
+func TestRemoveTask(t *testing.T) {
+	tmp := t.TempDir()
+	Init(tmp, "keep", "")
+	Init(tmp, "remove-me", "")
+
+	// Remove non-primary
+	allGone, err := RemoveTask(tmp, "remove-me")
+	if err != nil {
+		t.Fatalf("RemoveTask(remove-me): %v", err)
+	}
+	if allGone {
+		t.Error("allGone should be false — 'keep' still exists")
+	}
+	state, _ := ReadActiveState(tmp)
+	if len(state.Tasks) != 1 {
+		t.Errorf("len(Tasks) = %d, want 1", len(state.Tasks))
+	}
+
+	// Spec dir should be removed
+	sd := &SpecDir{ProjectPath: tmp, TaskSlug: "remove-me"}
+	if sd.Exists() {
+		t.Error("spec dir for 'remove-me' should be removed")
+	}
+
+	// Remove last task
+	allGone, err = RemoveTask(tmp, "keep")
+	if err != nil {
+		t.Fatalf("RemoveTask(keep): %v", err)
+	}
+	if !allGone {
+		t.Error("allGone should be true — no tasks left")
+	}
+}
+
+func TestRemovePrimaryPromotes(t *testing.T) {
+	tmp := t.TempDir()
+	Init(tmp, "first", "")
+	Init(tmp, "second", "")
+
+	// primary is "second" (most recently init'd). Switch to "first".
+	SwitchActive(tmp, "first")
+
+	// Remove primary "first" — "second" should be promoted
+	_, err := RemoveTask(tmp, "first")
+	if err != nil {
+		t.Fatalf("RemoveTask(first): %v", err)
+	}
+	slug, _ := ReadActive(tmp)
+	if slug != "second" {
+		t.Errorf("ReadActive() = %q, want %q after primary removal", slug, "second")
+	}
+}
+
+func TestLegacyActiveFormat(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Write legacy format manually
+	os.MkdirAll(SpecsDir(tmp), 0o755)
+	legacy := "task: old-task\nstarted_at: 2026-01-01T00:00:00Z\n"
+	os.WriteFile(ActivePath(tmp), []byte(legacy), 0o644)
+
+	slug, err := ReadActive(tmp)
+	if err != nil {
+		t.Fatalf("ReadActive(legacy): %v", err)
+	}
+	if slug != "old-task" {
+		t.Errorf("ReadActive() = %q, want %q", slug, "old-task")
+	}
+
+	state, err := ReadActiveState(tmp)
+	if err != nil {
+		t.Fatalf("ReadActiveState(legacy): %v", err)
+	}
+	if len(state.Tasks) != 1 || state.Tasks[0].StartedAt != "2026-01-01T00:00:00Z" {
+		t.Errorf("legacy state not parsed correctly: %+v", state)
+	}
+}
+
 func TestSpecDirExists(t *testing.T) {
 	tmp := t.TempDir()
 	sd := &SpecDir{ProjectPath: tmp, TaskSlug: "nonexistent"}

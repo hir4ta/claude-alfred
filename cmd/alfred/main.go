@@ -58,6 +58,8 @@ func run() error {
 			return fmt.Errorf("usage: alfred pane <spec|decisions|git>")
 		}
 		return runPane(os.Args[2])
+	case "embed-async":
+		return runEmbedAsync()
 	case "hook":
 		if len(os.Args) < 3 {
 			return fmt.Errorf("usage: alfred hook <EventName>")

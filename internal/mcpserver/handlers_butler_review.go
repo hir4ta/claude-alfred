@@ -17,9 +17,21 @@ import (
 
 type reviewFinding struct {
 	Layer    string `json:"layer"`              // "spec" | "knowledge" | "best_practice"
-	Severity string `json:"severity"`           // "info" | "warning"
+	Severity string `json:"severity"`           // "critical" | "warning" | "info"
 	Message  string `json:"message"`
 	Source   string `json:"source,omitempty"`
+}
+
+// severityRank returns a numeric rank for sorting (higher = more severe).
+func severityRank(s string) int {
+	switch s {
+	case "critical":
+		return 3
+	case "warning":
+		return 2
+	default:
+		return 1
+	}
 }
 
 // butlerReviewHandler performs a 3-layer knowledge-powered code review.
@@ -59,6 +71,9 @@ func butlerReviewHandler(st *store.Store, emb *embedder.Embedder) server.ToolHan
 
 		// Layer 3: Best Practices Review (FTS search)
 		findings = append(findings, reviewAgainstBestPractices(st, diff, focus)...)
+
+		// Deduplicate findings by (source, message prefix).
+		findings = deduplicateFindings(findings)
 
 		return marshalResult(map[string]any{
 			"diff_lines":     len(strings.Split(diff, "\n")),
@@ -131,7 +146,7 @@ func reviewAgainstSpec(sd *spec.SpecDir, diff string) []reviewFinding {
 			if strings.Contains(strings.ToLower(knowledge), "dead end") {
 				findings = append(findings, reviewFinding{
 					Layer:    "spec",
-					Severity: "warning",
+					Severity: "critical",
 					Message:  "Knowledge base contains dead end entries. Review before repeating failed approaches.",
 					Source:   sd.FilePath(spec.FileKnowledge),
 				})
@@ -142,6 +157,21 @@ func reviewAgainstSpec(sd *spec.SpecDir, diff string) []reviewFinding {
 	// Check out-of-scope — extract scope items and check diff for potential violations.
 	requirements, err := sd.ReadFile(spec.FileRequirements)
 	if err == nil && strings.Contains(requirements, "## Out of Scope") {
+		outOfScopeItems := extractOutOfScopeItems(requirements)
+		if len(outOfScopeItems) > 0 {
+			diffLower := strings.ToLower(diff)
+			for _, item := range outOfScopeItems {
+				itemLower := strings.ToLower(item)
+				if strings.Contains(diffLower, itemLower) {
+					findings = append(findings, reviewFinding{
+						Layer:    "spec",
+						Severity: "critical",
+						Message:  fmt.Sprintf("Possible out-of-scope change detected: %q is listed as out of scope.", item),
+						Source:   sd.FilePath(spec.FileRequirements),
+					})
+				}
+			}
+		}
 		findings = append(findings, reviewFinding{
 			Layer:    "spec",
 			Severity: "info",
@@ -207,13 +237,12 @@ func extractDecisionExcerpts(decisions, diff string) []string {
 	return excerpts
 }
 
-// reviewAgainstKnowledge performs semantic search for related spec knowledge.
+// reviewAgainstKnowledge performs semantic search across all knowledge sources.
 func reviewAgainstKnowledge(ctx context.Context, st *store.Store, emb *embedder.Embedder, diff, focus string) []reviewFinding {
 	var findings []reviewFinding
 
 	query := focus
 	if query == "" {
-		// Extract meaningful content from diff (skip headers, use added lines).
 		query = extractDiffContent(diff, 500)
 	}
 	if query == "" {
@@ -225,7 +254,8 @@ func reviewAgainstKnowledge(ctx context.Context, st *store.Store, emb *embedder.
 		return findings
 	}
 
-	matches, err := st.HybridSearch(queryVec, query, "spec", 3, 12)
+	// Search all source_types (not just "spec") for broader knowledge coverage.
+	matches, err := st.HybridSearch(queryVec, query, "", 3, 12)
 	if err != nil || len(matches) == 0 {
 		return findings
 	}
@@ -239,11 +269,40 @@ func reviewAgainstKnowledge(ctx context.Context, st *store.Store, emb *embedder.
 		return findings
 	}
 
-	for _, doc := range docs {
+	// Build content list for reranking.
+	contents := make([]string, len(docs))
+	for i, doc := range docs {
+		contents[i] = doc.Content
+	}
+
+	// Rerank and apply threshold (top-3, score >= 0.3).
+	reranked, err := emb.Rerank(ctx, query, contents, 3)
+	if err != nil {
+		// Fallback: use top-3 from hybrid search without reranking.
+		limit := min(3, len(docs))
+		for _, doc := range docs[:limit] {
+			findings = append(findings, reviewFinding{
+				Layer:    "knowledge",
+				Severity: "info",
+				Message:  fmt.Sprintf("Related knowledge: %s", truncate(doc.SectionPath, 100)),
+				Source:   doc.URL,
+			})
+		}
+		return findings
+	}
+
+	for _, r := range reranked {
+		if r.RelevanceScore < 0.3 {
+			continue
+		}
+		if r.Index < 0 || r.Index >= len(docs) {
+			continue
+		}
+		doc := docs[r.Index]
 		findings = append(findings, reviewFinding{
 			Layer:    "knowledge",
 			Severity: "info",
-			Message:  fmt.Sprintf("Related spec knowledge: %s", truncate(doc.SectionPath, 100)),
+			Message:  fmt.Sprintf("Related knowledge (score %.2f): %s", r.RelevanceScore, truncate(doc.SectionPath, 100)),
 			Source:   doc.URL,
 		})
 	}
@@ -275,6 +334,62 @@ func reviewAgainstBestPractices(st *store.Store, diff string, focus string) []re
 	}
 
 	return findings
+}
+
+// extractOutOfScopeItems extracts bullet items from the "## Out of Scope" section.
+func extractOutOfScopeItems(requirements string) []string {
+	inSection := false
+	var items []string
+	for _, line := range strings.Split(requirements, "\n") {
+		if strings.HasPrefix(line, "## Out of Scope") {
+			inSection = true
+			continue
+		}
+		if inSection && strings.HasPrefix(line, "## ") {
+			break
+		}
+		if inSection {
+			trimmed := strings.TrimSpace(line)
+			trimmed = strings.TrimPrefix(trimmed, "- ")
+			trimmed = strings.TrimSpace(trimmed)
+			if trimmed != "" {
+				items = append(items, trimmed)
+			}
+		}
+	}
+	return items
+}
+
+// deduplicateFindings removes duplicate findings by (source, message prefix).
+// When duplicates exist, keeps the one with the highest severity.
+func deduplicateFindings(findings []reviewFinding) []reviewFinding {
+	type key struct {
+		source     string
+		messageKey string
+	}
+	best := make(map[key]reviewFinding)
+	var order []key
+	for _, f := range findings {
+		// Use first 80 chars of message as dedup key.
+		mk := f.Message
+		if len(mk) > 80 {
+			mk = mk[:80]
+		}
+		k := key{source: f.Source, messageKey: mk}
+		if existing, ok := best[k]; ok {
+			if severityRank(f.Severity) > severityRank(existing.Severity) {
+				best[k] = f
+			}
+		} else {
+			best[k] = f
+			order = append(order, k)
+		}
+	}
+	result := make([]reviewFinding, 0, len(order))
+	for _, k := range order {
+		result = append(result, best[k])
+	}
+	return result
 }
 
 // extractDiffContent extracts added lines from a diff for use as a search query.

@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/spec"
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
+
+// execCommand is a variable so tests can stub it out.
+var execCommand = exec.Command
 
 // debugWriter is set when ALFRED_DEBUG is non-empty.
 // Log file: ~/.claude-alfred/debug.log
@@ -257,6 +262,13 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 	var contextSnapshot string
 	if transcriptPath != "" {
 		contextSnapshot = extractTranscriptContext(transcriptPath)
+	} else {
+		fmt.Fprintf(os.Stderr, "[alfred] warning: transcript_path is empty — session context will not be captured\n")
+		debugf("PreCompact: transcript_path is empty")
+	}
+	if contextSnapshot == "" && transcriptPath != "" {
+		fmt.Fprintf(os.Stderr, "[alfred] warning: could not extract context from transcript\n")
+		debugf("PreCompact: empty context from transcript %s", transcriptPath)
 	}
 
 	// Build compact marker with extracted context.
@@ -272,8 +284,11 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 	}
 	marker.WriteString("---\n")
 
-	if err := sd.AppendFile(spec.FileSession, marker.String()); err != nil {
-		debugf("PreCompact: append marker error: %v", err)
+	// Read current session.md to rotate compact markers (keep max 3).
+	session, _ := sd.ReadFile(spec.FileSession)
+	rotated := rotateCompactMarkers(session+marker.String(), 3)
+	if err := sd.WriteFile(spec.FileSession, rotated); err != nil {
+		debugf("PreCompact: write session error: %v", err)
 		return
 	}
 
@@ -288,7 +303,134 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 		return
 	}
 
+	// Emit spec-aware compaction instructions to stdout.
+	emitCompactionInstructions(sd, taskSlug)
+
+	// Async embedding generation for session.md.
+	asyncEmbedSession(sd)
+
 	debugf("PreCompact: saved session for %s (context: %d bytes)", taskSlug, len(contextSnapshot))
+}
+
+// rotateCompactMarkers keeps only the last maxMarkers compact markers in session.md.
+func rotateCompactMarkers(content string, maxMarkers int) string {
+	const markerPrefix = "## Compact Marker ["
+
+	// Split content into pre-marker content and markers.
+	lines := strings.Split(content, "\n")
+	var preMarkerLines []string
+	var markers []string
+	var currentMarker strings.Builder
+	inMarker := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, markerPrefix) {
+			if inMarker {
+				markers = append(markers, currentMarker.String())
+				currentMarker.Reset()
+			}
+			inMarker = true
+			currentMarker.WriteString(line + "\n")
+		} else if inMarker {
+			currentMarker.WriteString(line + "\n")
+		} else {
+			preMarkerLines = append(preMarkerLines, line)
+		}
+	}
+	if inMarker {
+		markers = append(markers, currentMarker.String())
+	}
+
+	// Keep only the last maxMarkers.
+	if len(markers) > maxMarkers {
+		markers = markers[len(markers)-maxMarkers:]
+	}
+
+	var result strings.Builder
+	result.WriteString(strings.Join(preMarkerLines, "\n"))
+	for _, m := range markers {
+		result.WriteString(m)
+	}
+	return result.String()
+}
+
+// emitCompactionInstructions outputs spec-aware instructions to stdout
+// so Claude Code preserves key context during compaction.
+func emitCompactionInstructions(sd *spec.SpecDir, taskSlug string) {
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("[Butler Protocol] Active task: %s\n", taskSlug))
+	buf.WriteString("Preserve the following during compaction:\n")
+
+	if req, err := sd.ReadFile(spec.FileRequirements); err == nil {
+		summary := extractFirstLines(req, 3)
+		if summary != "" {
+			buf.WriteString("Requirements: " + summary + "\n")
+		}
+	}
+	if design, err := sd.ReadFile(spec.FileDesign); err == nil {
+		summary := extractFirstLines(design, 3)
+		if summary != "" {
+			buf.WriteString("Design: " + summary + "\n")
+		}
+	}
+	if session, err := sd.ReadFile(spec.FileSession); err == nil {
+		// Extract current position (line after "## Current Position" header).
+		lines := strings.Split(session, "\n")
+		for i, line := range lines {
+			if strings.HasPrefix(line, "## Current Position") {
+				for j := i + 1; j < len(lines); j++ {
+					pos := strings.TrimSpace(lines[j])
+					if pos != "" {
+						buf.WriteString("Current position: " + pos + "\n")
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+
+	fmt.Fprint(os.Stdout, buf.String())
+	debugf("PreCompact: emitted compaction instructions for %s", taskSlug)
+}
+
+// extractFirstLines returns the first n non-empty, non-header lines of content.
+func extractFirstLines(content string, n int) string {
+	var lines []string
+	for line := range strings.SplitSeq(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "<!--") {
+			continue
+		}
+		lines = append(lines, line)
+		if len(lines) >= n {
+			break
+		}
+	}
+	return strings.Join(lines, " | ")
+}
+
+// asyncEmbedSession spawns a background process to generate embeddings for session.md.
+func asyncEmbedSession(sd *spec.SpecDir) {
+	exe, err := os.Executable()
+	if err != nil {
+		debugf("asyncEmbedSession: executable path error: %v", err)
+		return
+	}
+
+	cmd := execCommand(exe, "embed-async",
+		"--project", sd.ProjectPath,
+		"--task", sd.TaskSlug,
+		"--file", string(spec.FileSession))
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		debugf("asyncEmbedSession: start error: %v", err)
+		return
+	}
+	// Detach — don't wait for completion.
+	go func() { _ = cmd.Wait() }()
+	debugf("asyncEmbedSession: spawned pid=%d for %s/%s", cmd.Process.Pid, sd.TaskSlug, spec.FileSession)
 }
 
 // transcriptEntry represents a single line from the Claude Code conversation JSONL.
@@ -475,31 +617,46 @@ func injectButlerContext(projectPath, source string) {
 	}
 
 	if source == "compact" {
-		// After compact: inject all spec files for full context recovery.
-		// This is the critical path — Claude has lost most conversation context.
-		var buf strings.Builder
-		buf.WriteString(fmt.Sprintf("\n--- Butler Protocol: Recovering Task '%s' (post-compact) ---\n", taskSlug))
-		buf.WriteString("Read these spec files to restore full context:\n\n")
+		// Adaptive recovery: count compact markers to decide injection depth.
+		session, _ := sd.ReadFile(spec.FileSession)
+		compactCount := strings.Count(session, "## Compact Marker [")
 
-		// Recovery order: session → requirements → design → tasks → decisions → knowledge
-		recoveryOrder := []spec.SpecFile{
-			spec.FileSession,
-			spec.FileRequirements,
-			spec.FileDesign,
-			spec.FileTasks,
-			spec.FileDecisions,
-			spec.FileKnowledge,
-		}
-		for _, f := range recoveryOrder {
-			content, err := sd.ReadFile(f)
-			if err != nil || strings.TrimSpace(content) == "" {
-				continue
+		var buf strings.Builder
+		buf.WriteString(fmt.Sprintf("\n--- Butler Protocol: Recovering Task '%s' (post-compact #%d) ---\n", taskSlug, compactCount))
+
+		if compactCount <= 1 {
+			// First compact: inject all 6 spec files for full context recovery.
+			buf.WriteString("Full context recovery (first compact):\n\n")
+			recoveryOrder := []spec.SpecFile{
+				spec.FileSession,
+				spec.FileRequirements,
+				spec.FileDesign,
+				spec.FileTasks,
+				spec.FileDecisions,
+				spec.FileKnowledge,
 			}
-			buf.WriteString(fmt.Sprintf("### %s\n%s\n\n", f, content))
+			for _, f := range recoveryOrder {
+				content, err := sd.ReadFile(f)
+				if err != nil || strings.TrimSpace(content) == "" {
+					continue
+				}
+				buf.WriteString(fmt.Sprintf("### %s\n%s\n\n", f, content))
+			}
+		} else {
+			// Subsequent compacts: inject only session.md + tasks.md (lightweight).
+			buf.WriteString("Lightweight recovery (use butler-status or knowledge tool for full spec):\n\n")
+			for _, f := range []spec.SpecFile{spec.FileSession, spec.FileTasks} {
+				content, err := sd.ReadFile(f)
+				if err != nil || strings.TrimSpace(content) == "" {
+					continue
+				}
+				buf.WriteString(fmt.Sprintf("### %s\n%s\n\n", f, content))
+			}
 		}
+
 		buf.WriteString("--- End Butler Protocol ---\n")
 		fmt.Fprint(os.Stdout, buf.String())
-		debugf("SessionStart(compact): injected full butler context for %s", taskSlug)
+		debugf("SessionStart(compact#%d): injected butler context for %s", compactCount, taskSlug)
 	} else {
 		// Normal startup/resume: inject session.md only (lightweight).
 		session, err := sd.ReadFile(spec.FileSession)
@@ -509,4 +666,38 @@ func injectButlerContext(projectPath, source string) {
 		fmt.Fprintf(os.Stdout, "\n--- Butler Protocol: Active Task '%s' ---\n%s\n--- End Butler Protocol ---\n", taskSlug, session)
 		debugf("SessionStart(%s): injected session context for %s", source, taskSlug)
 	}
+}
+
+// runEmbedAsync is the entry point for the embed-async subcommand.
+// It generates embeddings for a single spec file. Called as a background process by asyncEmbedSession.
+func runEmbedAsync() error {
+	var projectPath, taskSlug, fileName string
+	for i := 2; i < len(os.Args)-1; i++ {
+		switch os.Args[i] {
+		case "--project":
+			projectPath = os.Args[i+1]
+		case "--task":
+			taskSlug = os.Args[i+1]
+		case "--file":
+			fileName = os.Args[i+1]
+		}
+	}
+	if projectPath == "" || taskSlug == "" || fileName == "" {
+		return fmt.Errorf("usage: alfred embed-async --project PATH --task SLUG --file FILE")
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
+
+	emb, err := embedder.NewEmbedder()
+	if err != nil {
+		return fmt.Errorf("embedder: %w", err)
+	}
+
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	sf := spec.SpecFile(fileName)
+	return spec.SyncSingleFile(context.Background(), sd, sf, st, emb)
 }

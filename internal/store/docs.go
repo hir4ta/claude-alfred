@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
@@ -83,6 +84,21 @@ func (s *Store) UpsertDoc(doc *DocRow) (id int64, changed bool, err error) {
 		).Scan(&id)
 	}
 	return id, true, nil
+}
+
+// DeleteDocsByURLPrefix removes all docs (and their embeddings) whose URL starts with the given prefix.
+func (s *Store) DeleteDocsByURLPrefix(ctx context.Context, prefix string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM embeddings WHERE source = 'docs' AND source_id IN (SELECT id FROM docs WHERE url LIKE ? || '%')`, prefix)
+	if err != nil {
+		return fmt.Errorf("delete embeddings: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`DELETE FROM docs WHERE url LIKE ? || '%'`, prefix)
+	if err != nil {
+		return fmt.Errorf("delete docs: %w", err)
+	}
+	return nil
 }
 
 // GetDocsByIDs retrieves multiple docs by their IDs.

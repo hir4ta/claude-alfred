@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -174,6 +176,81 @@ func butlerStatusHandler() server.ToolHandlerFunc {
 			// Use the file name without extension as key.
 			key := string(f[:len(f)-len(".md")])
 			result[key] = content
+		}
+
+		return marshalResult(result)
+	}
+}
+
+// butlerSwitchHandler switches the primary active task.
+func butlerSwitchHandler() server.ToolHandlerFunc {
+	return func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		projectPath := req.GetString("project_path", "")
+		if projectPath == "" {
+			return mcp.NewToolResultError("project_path is required"), nil
+		}
+		taskSlug := req.GetString("task_slug", "")
+		if taskSlug == "" {
+			return mcp.NewToolResultError("task_slug is required"), nil
+		}
+
+		// Record switch-away in the old primary's session.md
+		oldSlug, _ := spec.ReadActive(projectPath)
+		if oldSlug != "" && oldSlug != taskSlug {
+			oldSD := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: oldSlug}
+			if oldSD.Exists() {
+				_ = oldSD.AppendFile(spec.FileSession, fmt.Sprintf("\n## Switched away\nSwitched to %s\n", taskSlug))
+			}
+		}
+
+		if err := spec.SwitchActive(projectPath, taskSlug); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("switch failed: %v", err)), nil
+		}
+
+		result := map[string]any{"primary": taskSlug}
+		if state, err := spec.ReadActiveState(projectPath); err == nil {
+			slugs := make([]string, 0, len(state.Tasks))
+			for _, t := range state.Tasks {
+				slugs = append(slugs, t.Slug)
+			}
+			result["all_tasks"] = strings.Join(slugs, ", ")
+		}
+
+		return marshalResult(result)
+	}
+}
+
+// butlerDeleteHandler removes a task's spec and updates _active.md.
+func butlerDeleteHandler(st *store.Store) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		projectPath := req.GetString("project_path", "")
+		if projectPath == "" {
+			return mcp.NewToolResultError("project_path is required"), nil
+		}
+		taskSlug := req.GetString("task_slug", "")
+		if taskSlug == "" {
+			return mcp.NewToolResultError("task_slug is required"), nil
+		}
+
+		allGone, err := spec.RemoveTask(projectPath, taskSlug)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("delete failed: %v", err)), nil
+		}
+
+		// Remove spec docs from DB (URL uses filepath.Base, matching AllSections format).
+		if st != nil {
+			projectBase := filepath.Base(projectPath)
+			st.DeleteDocsByURLPrefix(ctx, fmt.Sprintf("spec://%s/%s/", projectBase, taskSlug))
+		}
+
+		result := map[string]any{
+			"deleted":    taskSlug,
+			"all_gone":   allGone,
+			"db_cleaned": st != nil,
+		}
+		if !allGone {
+			newPrimary, _ := spec.ReadActive(projectPath)
+			result["new_primary"] = newPrimary
 		}
 
 		return marshalResult(result)

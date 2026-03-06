@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // validSlug matches URL-safe task identifiers: lowercase letters, digits, hyphens.
@@ -45,6 +47,18 @@ type Section struct {
 	File    SpecFile
 	Content string
 	URL     string
+}
+
+// ActiveTask represents a task entry in _active.md.
+type ActiveTask struct {
+	Slug      string `yaml:"slug"`
+	StartedAt string `yaml:"started_at"`
+}
+
+// ActiveState represents the YAML content of _active.md.
+type ActiveState struct {
+	Primary string       `yaml:"primary"`
+	Tasks   []ActiveTask `yaml:"tasks"`
 }
 
 // RootDir returns the .alfred/ directory path.
@@ -183,10 +197,26 @@ Task just initialized.
 		}
 	}
 
-	// Write _active.md
-	active := fmt.Sprintf("task: %s\nstarted_at: %s\n", taskSlug, time.Now().UTC().Format(time.RFC3339))
-	if err := os.WriteFile(ActivePath(projectPath), []byte(active), 0o644); err != nil {
-		return nil, fmt.Errorf("write _active.md: %w", err)
+	// Write or update _active.md
+	now := time.Now().UTC().Format(time.RFC3339)
+	state, _ := readActiveState(projectPath) // ignore error — file may not exist
+	if state == nil {
+		state = &ActiveState{}
+	}
+	state.Primary = taskSlug
+	// Avoid duplicate entries if slug already exists in tasks list (e.g., spec dir was manually deleted).
+	alreadyListed := false
+	for _, t := range state.Tasks {
+		if t.Slug == taskSlug {
+			alreadyListed = true
+			break
+		}
+	}
+	if !alreadyListed {
+		state.Tasks = append(state.Tasks, ActiveTask{Slug: taskSlug, StartedAt: now})
+	}
+	if err := writeActiveState(projectPath, state); err != nil {
+		return nil, err
 	}
 
 	return sd, nil
@@ -217,18 +247,129 @@ func (s *SpecDir) AppendFile(f SpecFile, content string) error {
 	return err
 }
 
-// ReadActive reads the task slug from _active.md.
+// ReadActive reads the primary task slug from _active.md.
+// Supports both legacy format ("task: slug") and new YAML format.
 func ReadActive(projectPath string) (string, error) {
+	state, err := readActiveState(projectPath)
+	if err != nil {
+		return "", err
+	}
+	if state.Primary == "" {
+		return "", fmt.Errorf("no primary task in _active.md")
+	}
+	return state.Primary, nil
+}
+
+// ReadActiveState reads the full active state from _active.md.
+func ReadActiveState(projectPath string) (*ActiveState, error) {
+	return readActiveState(projectPath)
+}
+
+// readActiveState reads and parses _active.md, supporting both legacy and YAML formats.
+func readActiveState(projectPath string) (*ActiveState, error) {
 	data, err := os.ReadFile(ActivePath(projectPath))
 	if err != nil {
-		return "", fmt.Errorf("read _active.md: %w", err)
+		return nil, fmt.Errorf("read _active.md: %w", err)
 	}
+
+	// Try YAML first
+	var state ActiveState
+	if err := yaml.Unmarshal(data, &state); err == nil && state.Primary != "" {
+		return &state, nil
+	}
+
+	// Legacy format: "task: slug\nstarted_at: time"
+	var slug, startedAt string
 	for line := range strings.SplitSeq(string(data), "\n") {
-		if slug, ok := strings.CutPrefix(line, "task: "); ok {
-			return slug, nil
+		if s, ok := strings.CutPrefix(line, "task: "); ok {
+			slug = s
+		}
+		if s, ok := strings.CutPrefix(line, "started_at: "); ok {
+			startedAt = s
 		}
 	}
-	return "", fmt.Errorf("no task field in _active.md")
+	if slug == "" {
+		return nil, fmt.Errorf("no task field in _active.md")
+	}
+	return &ActiveState{
+		Primary: slug,
+		Tasks:   []ActiveTask{{Slug: slug, StartedAt: startedAt}},
+	}, nil
+}
+
+// writeActiveState writes the active state as YAML to _active.md.
+func writeActiveState(projectPath string, state *ActiveState) error {
+	if err := os.MkdirAll(SpecsDir(projectPath), 0o755); err != nil {
+		return fmt.Errorf("create specs dir: %w", err)
+	}
+	data, err := yaml.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("marshal _active.md: %w", err)
+	}
+	if err := os.WriteFile(ActivePath(projectPath), data, 0o644); err != nil {
+		return fmt.Errorf("write _active.md: %w", err)
+	}
+	return nil
+}
+
+// SwitchActive changes the primary task to the given slug.
+func SwitchActive(projectPath, taskSlug string) error {
+	state, err := readActiveState(projectPath)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, t := range state.Tasks {
+		if t.Slug == taskSlug {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("task %q not found in _active.md", taskSlug)
+	}
+	state.Primary = taskSlug
+	return writeActiveState(projectPath, state)
+}
+
+// RemoveTask removes a task from _active.md and its spec directory.
+// If the removed task was primary, the next task becomes primary.
+// Returns true if _active.md was also removed (no tasks left).
+func RemoveTask(projectPath, taskSlug string) (bool, error) {
+	state, err := readActiveState(projectPath)
+	if err != nil {
+		return false, err
+	}
+
+	filtered := state.Tasks[:0]
+	for _, t := range state.Tasks {
+		if t.Slug != taskSlug {
+			filtered = append(filtered, t)
+		}
+	}
+	if len(filtered) == len(state.Tasks) {
+		return false, fmt.Errorf("task %q not found in _active.md", taskSlug)
+	}
+
+	// Remove spec directory
+	sd := &SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	if sd.Exists() {
+		if err := os.RemoveAll(sd.Dir()); err != nil {
+			return false, fmt.Errorf("remove spec dir: %w", err)
+		}
+	}
+
+	if len(filtered) == 0 {
+		// No tasks left — remove _active.md
+		os.Remove(ActivePath(projectPath))
+		return true, nil
+	}
+
+	state.Tasks = filtered
+	if state.Primary == taskSlug {
+		state.Primary = filtered[0].Slug
+	}
+	return false, writeActiveState(projectPath, state)
 }
 
 // AllSections returns all spec files as Sections with content and URL.

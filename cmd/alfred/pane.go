@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/hir4ta/claude-alfred/internal/spec"
 )
 
 // Everforest Dark palette — muted, earthy tones.
@@ -46,16 +47,15 @@ func paneTick() tea.Cmd {
 // --- Helpers ---
 
 func readActiveSlug() string {
-	data, err := os.ReadFile(filepath.Join(".alfred", "specs", "_active.md"))
+	cwd, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if s, ok := strings.CutPrefix(line, "task: "); ok {
-			return s
-		}
+	slug, err := spec.ReadActive(cwd)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return slug
 }
 
 func specFilePath(slug, file string) string {

@@ -21,6 +21,8 @@ He never interrupts your work. When you need him, he's ready:
   butler-init   — Initialize spec for a new development task (creates .alfred/specs/ files + DB sync)
   butler-update — Record decisions, knowledge, task progress to active spec (auto DB sync)
   butler-status — Get current task state for context restoration after compact/new session
+  butler-switch — Switch the primary active task (for multi-task workflows)
+  butler-delete — Delete a completed or abandoned task spec
   butler-review — 3-layer knowledge-powered code review (spec + knowledge + best practices)
 
 When to use alfred tools:
@@ -115,6 +117,24 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 			),
 			Handler: butlerStatusHandler(),
+		},
+
+		server.ServerTool{
+			Tool: mcp.NewTool("butler-switch",
+				mcp.WithDescription("Switch the primary active task. Use when working on multiple tasks and you want to change which spec is active for butler-update and session hooks."),
+				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
+				mcp.WithString("task_slug", mcp.Description("Task slug to switch to (must already exist)"), mcp.Required()),
+			),
+			Handler: butlerSwitchHandler(),
+		},
+
+		server.ServerTool{
+			Tool: mcp.NewTool("butler-delete",
+				mcp.WithDescription("Delete a task's spec directory and remove it from the knowledge DB. Use to clean up completed or abandoned tasks."),
+				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
+				mcp.WithString("task_slug", mcp.Description("Task slug to delete"), mcp.Required()),
+			),
+			Handler: butlerDeleteHandler(st),
 		},
 
 		server.ServerTool{
