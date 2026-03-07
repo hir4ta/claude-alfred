@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -15,10 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-const (
-	githubRepo  = "hir4ta/claude-alfred"
-	installPath = "github.com/hir4ta/claude-alfred/cmd/alfred"
-)
+const githubRepo = "hir4ta/claude-alfred"
 
 // showVersion prints a styled version display.
 func showVersion() {
@@ -70,6 +68,7 @@ type updateModel struct {
 	phase     updatePhase
 	current   string
 	latest    string
+	method    string // "brew", "download", "go"
 	err       error
 	spinner   spinner.Model
 	startTime time.Time
@@ -181,7 +180,6 @@ func (m updateModel) View() tea.View {
 }
 
 // checkLatestVersion fetches the latest release tag from GitHub API.
-// This is more reliable than go list -m which depends on the Go module proxy.
 func checkLatestVersion() tea.Msg {
 	url := "https://api.github.com/repos/" + githubRepo + "/releases/latest"
 	req, err := http.NewRequest("GET", url, nil)
@@ -211,23 +209,108 @@ func checkLatestVersion() tea.Msg {
 	return latestVersionMsg{version: ver}
 }
 
-// doInstall installs the specified version via go install, then regenerates
-// the plugin bundle at the installed location so skills, rules, hooks, and
-// run.sh are updated to match the new binary.
+// doInstall updates alfred using the best available method:
+// 1. Homebrew (if installed via brew)
+// 2. Direct download from GitHub Releases
+// 3. go install (fallback if Go is available)
 func doInstall(version string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("go", "install", installPath+"@v"+version)
+		// Try Homebrew first.
+		if isBrewInstalled() {
+			cmd := exec.Command("brew", "upgrade", "alfred")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				// brew upgrade fails if already latest or not installed via brew.
+				// Try reinstall as fallback.
+				cmd = exec.Command("brew", "install", "hir4ta/alfred/alfred")
+				if out2, err2 := cmd.CombinedOutput(); err2 != nil {
+					debugf("brew install failed: %s / %s", out, out2)
+					// Fall through to direct download.
+				} else {
+					regenPluginBundle()
+					return installDoneMsg{}
+				}
+			} else {
+				regenPluginBundle()
+				return installDoneMsg{}
+			}
+		}
+
+		// Direct download from GitHub Releases.
+		if err := downloadRelease(version); err == nil {
+			regenPluginBundle()
+			return installDoneMsg{}
+		}
+
+		// Fallback: go install (if Go is available).
+		goPath, err := exec.LookPath("go")
+		if err == nil {
+			cmd := exec.Command(goPath, "install",
+				"github.com/hir4ta/claude-alfred/cmd/alfred@v"+version)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return installDoneMsg{err: fmt.Errorf("%w: %s", err, out)}
+			}
+			regenPluginBundle()
+			return installDoneMsg{}
+		}
+
+		return installDoneMsg{err: fmt.Errorf("no install method available (tried brew, download, go install)")}
+	}
+}
+
+// isBrewInstalled checks if the current alfred binary was installed via Homebrew.
+func isBrewInstalled() bool {
+	brewPrefix, err := exec.Command("brew", "--prefix").Output()
+	if err != nil {
+		return false
+	}
+	selfPath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(selfPath)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(resolved, strings.TrimSpace(string(brewPrefix)))
+}
+
+// downloadRelease downloads the alfred binary from GitHub Releases.
+func downloadRelease(version string) error {
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+	url := fmt.Sprintf("https://github.com/%s/releases/download/v%s/alfred_%s_%s.tar.gz",
+		githubRepo, version, goos, goarch)
+
+	cacheDir := filepath.Join(os.Getenv("HOME"), ".alfred", "bin")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return err
+	}
+
+	// Use curl or wget.
+	if curlPath, err := exec.LookPath("curl"); err == nil {
+		cmd := exec.Command("sh", "-c",
+			fmt.Sprintf("%s -sSfL '%s' | tar xz -C '%s' alfred", curlPath, url, cacheDir))
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return installDoneMsg{err: fmt.Errorf("%w: %s", err, out)}
+			return fmt.Errorf("download failed: %w: %s", err, out)
 		}
-
-		// Regenerate plugin bundle at installed location (best-effort).
-		if root := findInstalledPluginRoot(); root != "" {
-			cmd = exec.Command("alfred", "plugin-bundle", root)
-			cmd.Run()
+		return nil
+	}
+	if wgetPath, err := exec.LookPath("wget"); err == nil {
+		cmd := exec.Command("sh", "-c",
+			fmt.Sprintf("%s -qO- '%s' | tar xz -C '%s' alfred", wgetPath, url, cacheDir))
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("download failed: %w: %s", err, out)
 		}
+		return nil
+	}
+	return fmt.Errorf("curl or wget not found")
+}
 
-		return installDoneMsg{}
+// regenPluginBundle regenerates the plugin bundle at the installed location (best-effort).
+func regenPluginBundle() {
+	if root := findInstalledPluginRoot(); root != "" {
+		cmd := exec.Command("alfred", "plugin-bundle", root)
+		cmd.Run()
 	}
 }
 

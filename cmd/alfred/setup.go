@@ -146,7 +146,7 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m setupModel) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString("\n  " + titleStyle.Render("⚡ alfred setup") + "\n\n")
+	b.WriteString("\n  " + titleStyle.Render("⚡ alfred init") + "\n\n")
 
 	elapsed := time.Since(m.startTime).Round(time.Second)
 

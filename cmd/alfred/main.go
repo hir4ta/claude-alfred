@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -37,7 +38,10 @@ func run() error {
 	switch cmd {
 	case "serve":
 		return runServe()
+	case "init":
+		return runSetup()
 	case "setup":
+		// Legacy alias for "init".
 		return runSetup()
 	case "update":
 		return runUpdate()
@@ -64,8 +68,13 @@ func run() error {
 		if len(os.Args) < 3 {
 			return fmt.Errorf("usage: alfred hook <EventName>")
 		}
-		return runHook(os.Args[2])
+		return runHookWithGuard(os.Args[2])
 	case "version", "--version", "-v":
+		// --short flag for machine-readable version (used by run.sh).
+		if slices.Contains(os.Args[1:], "--short") {
+			fmt.Println(resolvedVersion())
+			return nil
+		}
 		showVersion()
 		return nil
 	case "help", "-h", "--help":
@@ -78,6 +87,25 @@ func run() error {
 		}
 		return fmt.Errorf("unknown command: %s", cmd)
 	}
+}
+
+// runHookWithGuard adds a TTY guard so users don't accidentally run hook commands.
+func runHookWithGuard(event string) error {
+	if stdinIsTTY() {
+		fmt.Fprintln(os.Stderr, "This command is called by Claude Code hooks and is not meant to be run manually.")
+		fmt.Fprintln(os.Stderr, "Hooks are configured automatically when you install the plugin.")
+		return nil
+	}
+	return runHook(event)
+}
+
+// stdinIsTTY reports whether stdin is a terminal (not a pipe or redirect).
+func stdinIsTTY() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func runServe() error {
@@ -93,7 +121,7 @@ func runServe() error {
 	}
 
 	if count, _ := st.SeedDocsCount(); count == 0 {
-		fmt.Fprintln(os.Stderr, "Warning: no seed docs found. Run 'alfred setup' to initialize.")
+		fmt.Fprintln(os.Stderr, "Warning: no seed docs found. Run 'alfred init' to initialize.")
 	}
 
 	s := mcpserver.New(st, emb)
@@ -152,12 +180,14 @@ Usage:
   alfred [command]
 
 Commands:
-  serve          Run as MCP server (stdio) for Claude Code integration
-  setup          Initialize knowledge base (seed docs + generate embeddings)
-  pane <type>    Run a monitoring pane (spec, decisions, git)
+  init           Initialize knowledge base (seed docs + generate embeddings)
   update         Update alfred to the latest version
+  pane <type>    Run a monitoring pane (spec, decisions, git)
   version        Show version
   help           Show this help
+
+Install:
+  brew install hir4ta/alfred/alfred
 
 Environment:
   VOYAGE_API_KEY     Required. Enables semantic vector search with Voyage AI.`)

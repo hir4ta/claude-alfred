@@ -18,7 +18,36 @@ He works silently in the background — surfacing relevant knowledge, catching s
 
 ## Getting Started
 
-### 1. Add the plugin
+### 1. Install alfred
+
+**Homebrew (recommended):**
+
+```bash
+brew install hir4ta/alfred/alfred
+```
+
+**Or download automatically** — if you skip this step, the plugin will download the binary on first use.
+
+<details>
+<summary>Other install methods</summary>
+
+**From source (requires Go 1.25+):**
+
+```bash
+go install github.com/hir4ta/claude-alfred/cmd/alfred@latest
+```
+
+**Build from repo:**
+
+```bash
+git clone https://github.com/hir4ta/claude-alfred
+cd claude-alfred
+go install ./cmd/alfred
+```
+
+</details>
+
+### 2. Add the plugin
 
 In Claude Code:
 
@@ -27,14 +56,6 @@ In Claude Code:
 ```
 
 This installs skills, rules, hooks, agents, and MCP configuration.
-
-### 2. Install the binary
-
-```bash
-go install github.com/hir4ta/claude-alfred/cmd/alfred@latest
-```
-
-Compiles the MCP server and hook handler binary. First build takes 30-60 seconds for dependencies.
 
 ### 3. Set API key
 
@@ -47,20 +68,12 @@ Semantic search uses [Voyage AI](https://voyageai.com/) for embeddings and reran
 ### 4. Initialize the knowledge base
 
 ```bash
-alfred setup
+alfred init
 ```
 
 Ingests 1,400+ official documentation sections into SQLite and generates Voyage AI embeddings. Shows TUI progress.
 
 Restart Claude Code to finish setup.
-
-### Build from source
-
-```bash
-git clone https://github.com/hir4ta/claude-alfred
-cd claude-alfred
-go install ./cmd/alfred
-```
 
 ## Updating
 
@@ -80,7 +93,7 @@ Exit Claude Code, then:
 alfred update
 ```
 
-Checks for the latest version and runs `go install` automatically.
+Auto-detects the best update method: Homebrew → direct download → `go install`.
 
 ### 3. Restart Claude Code
 
@@ -143,11 +156,9 @@ Run automatically during Claude Code lifecycle. No user action needed.
 
 | Command | Description |
 |---------|-------------|
-| `serve` | Start MCP server (stdio) |
-| `setup` | Initialize knowledge base (TUI progress, seed + embedding generation) |
-| `hook <Event>` | Hook handler (called by Claude Code) |
+| `init` | Initialize knowledge base (TUI progress, seed + embedding generation) |
+| `update` | Update to latest version (Homebrew / download / go install) |
 | `pane <type>` | Monitoring pane (`spec` / `decisions` / `git`) with Zellij layout |
-| `update` | Update to latest version (TUI progress) |
 | `version` | Show version |
 
 ## Architecture

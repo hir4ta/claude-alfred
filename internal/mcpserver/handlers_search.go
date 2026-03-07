@@ -144,7 +144,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 		}
 		if maxAgeDays > 30 {
 			result["staleness_warning"] = fmt.Sprintf(
-				"Results include docs from %d days ago. Run 'alfred setup' to refresh.", maxAgeDays)
+				"Results include docs from %d days ago. Run 'alfred init' to refresh.", maxAgeDays)
 		}
 
 		return marshalResult(result)
