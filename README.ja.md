@@ -58,25 +58,12 @@ Claude Code を再起動すれば完了。
 
 ## アップデート
 
-### 1. プラグインを更新
-
-Claude Code 内で
-
-```
-/plugin update alfred
-```
-
-### 2. バイナリを更新
-
-Claude Code を終了し、ターミナルで
-
 ```bash
-brew upgrade hir4ta/alfred/alfred
+alfred update
 ```
 
-### 3. Claude Code を再起動
-
-更新完了。
+バイナリ（Homebrew または直接ダウンロード）とプラグインバンドルを自動で更新する。
+更新後、Claude Code を再起動すれば完了。
 
 ## スキル (6)
 

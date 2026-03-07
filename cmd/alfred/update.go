@@ -216,12 +216,16 @@ func checkLatestVersion() tea.Msg {
 func doInstall(version string) tea.Cmd {
 	return func() tea.Msg {
 		// Try Homebrew first.
+		// Skip auto-update to avoid transient formula.jws.json download errors
+		// when HOMEBREW_DOWNLOAD_CONCURRENCY is high.
 		if isBrewInstalled() {
 			cmd := exec.Command("brew", "upgrade", "hir4ta/alfred/alfred")
+			cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
 			if out, err := cmd.CombinedOutput(); err != nil {
 				// brew upgrade fails if already latest or not installed via brew.
 				// Try reinstall as fallback.
 				cmd = exec.Command("brew", "install", "hir4ta/alfred/alfred")
+				cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1")
 				if out2, err2 := cmd.CombinedOutput(); err2 != nil {
 					debugf("brew install failed: %s / %s", out, out2)
 					// Fall through to direct download.

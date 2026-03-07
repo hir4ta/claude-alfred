@@ -58,25 +58,12 @@ Restart Claude Code to finish setup.
 
 ## Updating
 
-### 1. Update the plugin
-
-In Claude Code
-
-```
-/plugin update alfred
-```
-
-### 2. Update the binary
-
-Exit Claude Code, then
-
 ```bash
-brew upgrade hir4ta/alfred/alfred
+alfred update
 ```
 
-### 3. Restart Claude Code
-
-Done.
+Updates both the binary (via Homebrew or direct download) and the plugin bundle automatically.
+Restart Claude Code after updating.
 
 ## Skills (6)
 
