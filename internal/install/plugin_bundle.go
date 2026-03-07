@@ -105,7 +105,6 @@ func Bundle(outputDir, version string) error {
 		"repository":  "https://github.com/hir4ta/claude-alfred",
 		"license":     "MIT",
 		"keywords":    []string{"alfred", "best-practices", "workflow", "compaction", "spec", "documentation"},
-		"category":    "productivity",
 	}
 	if err := writeJSON(filepath.Join(outputDir, ".claude-plugin", "plugin.json"), pluginJSON); err != nil {
 		return fmt.Errorf("write plugin.json: %w", err)

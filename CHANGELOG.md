@@ -20,7 +20,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Rules改善: alfred-protocol (Compact Marker format), alfred (spec tool docs)
 
 ### Added
-- Plugin category field (`productivity`) in plugin.json
 - Code-reviewer agent model setting in settings.json
 - VOYAGE_API_KEY env passthrough in .mcp.json
 - README: Spec File Templates, Troubleshooting section, environment variables table
