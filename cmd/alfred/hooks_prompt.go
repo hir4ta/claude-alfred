@@ -245,6 +245,7 @@ func handleUserPromptSubmit(ev *hookEvent) {
 		}
 	}
 	ftsQuery := strings.Join(ftsTerms, " OR ")
+	// Retrieve 8 candidates: enough diversity for scoring, but bounded to keep hook fast.
 	allDocs, ftsErr := st.SearchDocsFTS(ftsQuery, "", 8)
 	if ftsErr != nil {
 		debugf("UserPromptSubmit: FTS keyword search failed: %v", ftsErr)
@@ -309,10 +310,7 @@ func handleUserPromptSubmit(ev *hookEvent) {
 	var buf strings.Builder
 	buf.WriteString("Relevant best practices from alfred knowledge base:\n")
 	for _, c := range candidates {
-		snippet := c.doc.Content
-		if len(snippet) > 300 {
-			snippet = snippet[:300] + "..."
-		}
+		snippet := safeSnippet(c.doc.Content, 300)
 		fmt.Fprintf(&buf, "- [%s] %s\n", c.doc.SectionPath, snippet)
 	}
 	emitAdditionalContext("UserPromptSubmit", buf.String())

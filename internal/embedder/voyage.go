@@ -104,8 +104,26 @@ func (e *voyageError) Error() string {
 	return fmt.Sprintf("embedder: voyage returned %d: %s", e.status, e.detail)
 }
 
+// isVoyageTransient reports whether a 400-status error detail indicates a transient
+// Voyage-side model failure (e.g. "Request to model ... failed") rather than a
+// client validation error. Uses multiple patterns for resilience against API wording changes.
+func isVoyageTransient(detail string) bool {
+	lower := strings.ToLower(detail)
+	for _, pattern := range []string{
+		"request to model",    // current Voyage transient error pattern
+		"model is overloaded", // potential future pattern
+		"temporarily",         // generic transient indicator
+		"try again",           // generic retry suggestion
+	} {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
 // embed sends an embedding request to the Voyage API with retry on transient errors.
-// Retries up to 3 times on 400 (transient model failures) and 5xx errors.
+// Retries up to 3 times with exponential backoff on 429, 5xx, and transient 400 errors.
 func (c *voyageClient) embed(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
 	body := voyageRequest{
 		Input:           texts,
@@ -121,7 +139,8 @@ func (c *voyageClient) embed(ctx context.Context, texts []string, inputType stri
 	var lastErr error
 	for attempt := range 3 {
 		if attempt > 0 {
-			delay := time.Duration(attempt) * 2 * time.Second
+			// Exponential backoff: 2s, 4s (1<<attempt seconds).
+			delay := time.Duration(1<<attempt) * time.Second
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -135,18 +154,21 @@ func (c *voyageClient) embed(ctx context.Context, texts []string, inputType stri
 		}
 		lastErr = err
 
-		// Retry on 429 and 5xx. For 400, only retry Voyage-specific
-		// transient errors ("Request to model ... failed").
-		// Don't retry on 401, 403, 404, 422, etc.
+		// Retry on transient errors only:
+		// - 429 (rate limit): always retry
+		// - 5xx (server error): always retry
+		// - 400 with specific Voyage transient patterns: retry
+		// Don't retry on 401 (auth), 403 (forbidden), 404, 422 (validation), etc.
 		var ve *voyageError
 		if errors.As(err, &ve) {
-			if ve.status == 429 || ve.status >= 500 {
+			switch {
+			case ve.status == 429, ve.status >= 500:
 				continue
-			}
-			if ve.status == 400 && strings.Contains(ve.detail, "Request to model") {
+			case ve.status == 400 && isVoyageTransient(ve.detail):
 				continue
+			default:
+				return nil, err
 			}
-			return nil, err
 		}
 	}
 	return nil, lastErr

@@ -2110,3 +2110,59 @@ func TestProactiveHintsForNextSteps(t *testing.T) {
 		})
 	}
 }
+
+func TestSafeSnippet(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input    string
+		maxRunes int
+		want     string
+	}{
+		{"short", 10, "short"},
+		{"abcdefghij", 5, "abcde..."},
+		{"", 5, ""},
+		{"日本語テスト", 3, "日本語..."},
+		{"日本語テスト", 10, "日本語テスト"},
+		// Ensure multi-byte characters are not split mid-rune.
+		{"🎉🎊🎈🎁", 2, "🎉🎊..."},
+		// Preserves newlines (unlike truncateStr).
+		{"line1\nline2\nline3", 11, "line1\nline2..."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			got := safeSnippet(tt.input, tt.maxRunes)
+			if got != tt.want {
+				t.Errorf("safeSnippet(%q, %d) = %q, want %q", tt.input, tt.maxRunes, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEnforceSessionSizeLimit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("under limit unchanged", func(t *testing.T) {
+		t.Parallel()
+		content := "# Session: test\n\n## Status\nactive\n"
+		got := enforceSessionSizeLimit(content)
+		if got != content {
+			t.Error("content under limit should be unchanged")
+		}
+	})
+
+	t.Run("removes oldest marker", func(t *testing.T) {
+		t.Parallel()
+		marker1 := "## Compact Marker [2026-01-01 00:00:00]\nOld context\n"
+		marker2 := "## Compact Marker [2026-01-02 00:00:00]\nNew context\n"
+		content := "# Session: test\n\n" + marker1 + marker2
+
+		got := removeOldestCompactMarker(content)
+		if strings.Contains(got, "2026-01-01") {
+			t.Error("oldest marker should be removed")
+		}
+		if !strings.Contains(got, "2026-01-02") {
+			t.Error("newer marker should be preserved")
+		}
+	})
+}

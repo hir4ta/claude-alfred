@@ -183,6 +183,16 @@ func truncateStr(s string, maxLen int) string {
 	return string(runes[:maxLen]) + "..."
 }
 
+// safeSnippet truncates content to maxRunes runes (UTF-8 safe).
+// Unlike truncateStr, it preserves newlines and does not trim whitespace.
+func safeSnippet(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "..."
+}
+
 // readFileTail reads the last n bytes of a file.
 func readFileTail(path string, n int64) ([]byte, error) {
 	f, err := os.Open(path)

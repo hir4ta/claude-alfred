@@ -13,6 +13,11 @@ import (
 // ---------------------------------------------------------------------------
 
 // Decision confidence scoring constants.
+// Both values are 0.4: a sentence with ONLY a decision keyword (no rationale,
+// no alternative comparison, no architecture terms) is at the exact threshold.
+// Any positive signal (rationale +0.25, alternative +0.3, arch term +0.15) pushes it above;
+// any negative signal (backtick -0.15, hedge -0.1) drops it below. This design ensures
+// only decisions with supporting evidence survive.
 const (
 	// decisionBaseScore is the starting confidence for having a decision keyword.
 	decisionBaseScore = 0.4
@@ -183,6 +188,8 @@ func checkTranscriptFormat(lines []string) bool {
 // extractDecisionsFromTranscript scans the transcript for meaningful design decisions
 // from the assistant. Uses keyword matching + structured pattern detection + trivial filtering.
 func extractDecisionsFromTranscript(transcriptPath string) []string {
+	// Read last 64KB of transcript — enough for ~50-100 conversation turns.
+	// Larger values increase memory/CPU without meaningfully improving recall.
 	data, err := readFileTail(transcriptPath, 64*1024)
 	if err != nil {
 		return nil

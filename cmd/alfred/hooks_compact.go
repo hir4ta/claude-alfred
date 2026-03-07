@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -55,8 +56,9 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 	// Get modified files from git.
 	modifiedFiles := getModifiedFiles(projectPath)
 
-	// Build activeContext session.md with rich context.
+	// Build activeContext session.md with rich context, then enforce size limit.
 	session := buildActiveContextSession(sd, taskSlug, txCtx, decisions, modifiedFiles, customInstructions)
+	session = enforceSessionSizeLimit(session)
 	if err := sd.WriteFile(spec.FileSession, session); err != nil {
 		debugf("PreCompact: write session error: %v", err)
 		return
@@ -212,7 +214,13 @@ func asyncEmbedSession(sd *spec.SpecDir) {
 }
 
 // getModifiedFiles returns a list of files modified in the current git working tree.
+// Returns nil if git is not available (non-git project).
 func getModifiedFiles(projectPath string) []string {
+	// Check git availability before running commands.
+	if _, err := exec.LookPath("git"); err != nil {
+		debugf("getModifiedFiles: git not found in PATH")
+		return nil
+	}
 	cmd := execCommand("git", "diff", "--name-only", "HEAD")
 	cmd.Dir = projectPath
 	out, err := cmd.Output()
@@ -441,5 +449,45 @@ func buildActiveContextSession(sd *spec.SpecDir, taskSlug string, txCtx *transcr
 	buf.WriteString("---\n\n")
 
 	return rotateCompactMarkers(buf.String(), 3)
+}
+
+// maxSessionBytes is the upper size limit for session.md (512KB).
+// Long-running tasks accumulate compact markers and context snapshots; beyond
+// this size the file becomes unwieldy and costly for spec injection.
+const maxSessionBytes = 512 * 1024
+
+// enforceSessionSizeLimit trims session.md if it exceeds maxSessionBytes by
+// removing the oldest compact markers until it fits.
+func enforceSessionSizeLimit(content string) string {
+	if len(content) <= maxSessionBytes {
+		return content
+	}
+	// Progressively remove oldest compact markers until within limit.
+	for len(content) > maxSessionBytes {
+		prev := content
+		content = removeOldestCompactMarker(content)
+		if content == prev {
+			break // no more markers to remove
+		}
+	}
+	return content
+}
+
+// removeOldestCompactMarker removes the first (oldest) compact marker section.
+func removeOldestCompactMarker(content string) string {
+	const markerPrefix = "## Compact Marker ["
+	start := strings.Index(content, markerPrefix)
+	if start < 0 {
+		return content
+	}
+	// Find the end of this marker section (next ## heading or EOF).
+	rest := content[start+len(markerPrefix):]
+	end := strings.Index(rest, "\n## ")
+	if end < 0 {
+		// Last marker — remove everything from start.
+		return strings.TrimRight(content[:start], "\n")
+	}
+	// +1 for the \n before ##.
+	return content[:start] + content[start+len(markerPrefix)+end+1:]
 }
 

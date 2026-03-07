@@ -209,6 +209,8 @@ func SanitizeFTS5Query(query string) string {
 	if len(filtered) == 0 {
 		return ""
 	}
+	// Single short words get prefix expansion for broader recall.
+	// Range [3,6]: <3 is too short (noise), >6 is specific enough without wildcard.
 	if len(filtered) == 1 && len(filtered[0]) >= 3 && len(filtered[0]) <= 6 {
 		return filtered[0] + "*"
 	}

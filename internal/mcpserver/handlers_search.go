@@ -15,13 +15,16 @@ import (
 
 // Search tuning constants.
 const (
-	// overRetrieveMulti is the candidate multiplier for multi-word queries.
+	// overRetrieveMulti (4x) is the candidate multiplier for multi-word queries.
+	// Multi-word queries are more specific, so fewer candidates suffice for reranking.
 	overRetrieveMulti = 4
-	// overRetrieveSingle is the candidate multiplier for single-word queries.
+	// overRetrieveSingle (6x) is the candidate multiplier for single-word queries.
+	// Single-word queries are vague, so over-retrieve more to let the reranker pick well.
 	overRetrieveSingle = 6
-	// overRetrieveMin is the minimum number of candidates to retrieve.
+	// overRetrieveMin ensures at least 20 candidates for very small result sets.
 	overRetrieveMin = 20
-	// stalenessWarningDays is the age threshold for showing a staleness warning.
+	// stalenessWarningDays (30) is the age threshold for showing a freshness warning.
+	// Claude Code docs are typically re-crawled every 1-2 weeks; 30 days signals stale data.
 	stalenessWarningDays = 30
 )
 
@@ -45,8 +48,13 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 
 		// Try embedding the query for hybrid search (requires VOYAGE_API_KEY).
 		var queryVec []float32
+		var embedWarning string
 		if emb != nil {
-			queryVec, _ = emb.EmbedForSearch(ctx, query)
+			var embedErr error
+			queryVec, embedErr = emb.EmbedForSearch(ctx, query)
+			if embedErr != nil {
+				embedWarning = fmt.Sprintf("vector embedding failed, using FTS-only: %v", embedErr)
+			}
 		}
 
 		if queryVec != nil {
@@ -65,7 +73,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 
 			hybridMatches, err := st.HybridSearch(queryVec, query, sourceType, overRetrieve, overRetrieve)
 			if err != nil {
-				_ = err // hybrid search unavailable; results may be incomplete
+				embedWarning = fmt.Sprintf("hybrid search degraded: %v", err)
 			}
 
 			if len(hybridMatches) > 0 {
@@ -118,7 +126,8 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 				}
 			}
 		} else {
-			// FTS5-only fallback (no embedder available).
+			// FTS5-only fallback (no embedder available or embed failed).
+			searchMethod = "fts5_only"
 			var ftsErr error
 			docs, ftsErr = st.SearchDocsFTS(query, sourceType, limit)
 			if ftsErr != nil {
@@ -167,6 +176,9 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 		if maxAgeDays > stalenessWarningDays {
 			result["staleness_warning"] = fmt.Sprintf(
 				"Results include docs from %d days ago. Run 'alfred init' to refresh.", maxAgeDays)
+		}
+		if embedWarning != "" {
+			result["warning"] = embedWarning
 		}
 
 		return marshalResult(result)

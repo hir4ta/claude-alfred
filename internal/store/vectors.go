@@ -32,10 +32,13 @@ func (s *Store) GetEmbedding(source string, sourceID int64) ([]float32, error) {
 }
 
 // minSimilarity is the cosine similarity threshold below which candidates are discarded.
+// 0.3 is intentionally permissive: the reranker (Voyage rerank-2.5) handles precision,
+// so the vector search stage optimizes for recall. Lowering risks noise; raising misses edge cases.
 const minSimilarity = 0.3
 
 // maxVectorCandidates caps the number of embeddings loaded into memory per search.
-// At 2048 dims × 4 bytes × 10000 rows ≈ 80 MB — a reasonable upper bound.
+// At 2048 dims × 4 bytes × 10000 rows ≈ 80 MB — a reasonable upper bound for the
+// expected knowledge base size (~1000-5000 docs). Beyond this, consider sqlite-vec.
 const maxVectorCandidates = 10000
 
 // VectorSearch performs a generic vector search on a given source table.
@@ -59,7 +62,7 @@ func (s *Store) VectorSearch(queryVec []float32, source string, limit int) ([]Ve
 		var sourceID int64
 		var blob []byte
 		if err := rows.Scan(&sourceID, &blob); err != nil {
-			continue
+			continue // skip malformed rows; query itself succeeded
 		}
 		vec := deserializeFloat32(blob)
 		sim := cosineSimilarity(queryVec, vec)

@@ -39,8 +39,8 @@ func TestKnowledgeHandler_LimitDefault(t *testing.T) {
 	if docsCount > 5 {
 		t.Errorf("docs_count = %v, want <= 5 (default limit)", docsCount)
 	}
-	if method, _ := m["search_method"].(string); method != "hybrid_rrf" {
-		t.Errorf("search_method = %q, want hybrid_rrf (FTS fallback)", method)
+	if method, _ := m["search_method"].(string); method != "fts5_only" {
+		t.Errorf("search_method = %q, want fts5_only (no embedder)", method)
 	}
 }
 

@@ -215,10 +215,7 @@ func proactiveHintsForNextSteps(session string) string {
 	var buf strings.Builder
 	buf.WriteString("\n### Proactive: Relevant knowledge for your Next Steps\n")
 	for _, d := range docs {
-		snippet := d.Content
-		if len(snippet) > 200 {
-			snippet = snippet[:200] + "..."
-		}
+		snippet := safeSnippet(d.Content, 200)
 		fmt.Fprintf(&buf, "- [%s] %s\n", d.SectionPath, snippet)
 	}
 	debugf("SessionStart: proactive injection for next steps keywords=%v, docs=%d", matched, len(docs))
@@ -259,7 +256,7 @@ func runEmbedAsync() error {
 	sf := spec.SpecFile(fileName)
 
 	// Timeout prevents zombie process if Voyage API is unresponsive.
-	// 30s accommodates 3 retries with exponential backoff (0 + 2s + 4s = 6s wait + API calls).
+	// 30s accommodates 3 retries with exponential backoff (0 + 2s + 4s = 6s wait + 3 API calls ~8s each).
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

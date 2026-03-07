@@ -78,11 +78,12 @@ Invoke with `/alfred:<skill>` in Claude Code.
 | `/alfred:plan <task-slug>` | Alfred Protocol — interactively generate a spec for compact-resilient development |
 | `/alfred:review [focus]` | 3-layer knowledge-powered code review (spec + knowledge + best practices) |
 
-## Agent (1)
+## Agents (2)
 
 | Agent | Description |
 |-------|-------------|
 | `alfred` | Claude Code configuration and best practices support |
+| `code-reviewer` | Read-only code reviewer — cross-checks against spec and knowledge base |
 
 ## MCP Tools (3)
 
@@ -170,6 +171,10 @@ Set `ALFRED_DEBUG=1` to output debug logs to `~/.claude-alfred/debug.log`.
 | [go-sqlite3](https://github.com/ncruces/go-sqlite3) | SQLite driver (pure Go, WASM) |
 | [bubbletea](https://github.com/charmbracelet/bubbletea) | TUI framework (setup screen) |
 | [Voyage AI](https://voyageai.com/) | Embedding + rerank (voyage-4-large, 2048d) |
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## License
 

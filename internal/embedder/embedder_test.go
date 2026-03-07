@@ -340,3 +340,29 @@ func TestRerank_ErrorDetail(t *testing.T) {
 		t.Errorf("error %q should contain 'bad rerank'", err.Error())
 	}
 }
+
+func TestIsVoyageTransient(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		detail string
+		want   bool
+	}{
+		{"Request to model voyage-4-large failed", true},
+		{"request to model failed with timeout", true},
+		{"Model is overloaded, please retry", true},
+		{"Service temporarily unavailable", true},
+		{"Please try again later", true},
+		{"invalid input: text too long", false},
+		{"authentication failed", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.detail, func(t *testing.T) {
+			t.Parallel()
+			got := isVoyageTransient(tt.detail)
+			if got != tt.want {
+				t.Errorf("isVoyageTransient(%q) = %v, want %v", tt.detail, got, tt.want)
+			}
+		})
+	}
+}
