@@ -101,6 +101,28 @@ func (s *Store) DeleteDocsByURLPrefix(ctx context.Context, prefix string) error 
 	return nil
 }
 
+// DeleteExpiredDocs removes docs whose TTL has expired based on crawled_at + ttl_days.
+// Returns the number of deleted rows.
+func (s *Store) DeleteExpiredDocs(ctx context.Context) (int64, error) {
+	// Delete associated embeddings first.
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM embeddings WHERE source = 'docs' AND source_id IN (
+			SELECT id FROM docs WHERE ttl_days > 0
+			AND datetime(crawled_at, '+' || ttl_days || ' days') < datetime('now')
+		)`)
+	if err != nil {
+		return 0, fmt.Errorf("store: delete expired embeddings: %w", err)
+	}
+
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM docs WHERE ttl_days > 0
+		AND datetime(crawled_at, '+' || ttl_days || ' days') < datetime('now')`)
+	if err != nil {
+		return 0, fmt.Errorf("store: delete expired docs: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // GetDocsByIDs retrieves multiple docs by their IDs.
 func (s *Store) GetDocsByIDs(ids []int64) ([]DocRow, error) {
 	if len(ids) == 0 {

@@ -8,7 +8,7 @@ Works silently in the background — surfacing relevant knowledge, catching scop
 
 ## What alfred does
 
-**Proactive Knowledge Injection** — Automatically surfaces relevant best practices from a 1,400+ document knowledge base when you're working on Claude Code configuration, architecture decisions, or any topic covered by the docs.
+**Proactive Knowledge Injection** — Automatically surfaces relevant best practices from an extensive document knowledge base when you're working on Claude Code configuration, architecture decisions, or any topic covered by the docs.
 
 **Alfred Protocol** — Structured spec management resilient to Compact and session loss. Saves requirements, design, decisions, and session state to `.alfred/specs/`, with automatic context preservation and recovery.
 
@@ -42,7 +42,7 @@ export VOYAGE_API_KEY=your-key  # Add to ~/.zshrc or equivalent
 ```
 
 [Voyage AI](https://voyageai.com/) enables high-precision semantic search with embedding + reranking.
-Cost is near-zero: embedding 1,400+ docs costs ~$0.01, and each search query costs fractions of a cent.
+Cost is near-zero: embedding docs costs ~$0.01, and each search query costs fractions of a cent.
 
 Without Voyage AI, alfred still works using FTS5 keyword search — no API key needed to run.
 
@@ -52,7 +52,7 @@ Without Voyage AI, alfred still works using FTS5 keyword search — no API key n
 alfred init    # Requires VOYAGE_API_KEY for embedding generation
 ```
 
-Ingests 1,400+ official documentation sections into SQLite and generates Voyage AI embeddings. Shows TUI progress.
+Ingests official documentation sections into SQLite, generates Voyage AI embeddings, and cleans up expired docs. Shows TUI progress.
 
 Restart Claude Code to finish setup.
 
@@ -109,9 +109,8 @@ Run automatically during Claude Code lifecycle. No user action needed.
 
 | Command | Description |
 |---------|-------------|
-| `init` | Initialize knowledge base (TUI progress, seed + embedding generation) |
+| `init` | Initialize knowledge base (TUI progress, seed + embedding generation + TTL cleanup) |
 | `update` | Update to latest version (Homebrew / download / go install) |
-| `pane <type>` | Monitoring pane (`spec` / `decisions` / `git`) with Zellij layout |
 | `version` | Show version |
 
 ## Architecture

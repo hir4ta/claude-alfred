@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -219,6 +220,11 @@ func runSetup() error {
 		return fmt.Errorf("failed to open store: %w", err)
 	}
 	defer st.Close()
+
+	// Clean up expired docs before seeding new ones.
+	if n, err := st.DeleteExpiredDocs(context.Background()); err == nil && n > 0 {
+		fmt.Fprintf(os.Stderr, "  Cleaned up %d expired docs\n", n)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -218,13 +218,19 @@ func getModifiedFiles(projectPath string) []string {
 		// Fallback: try unstaged only.
 		cmd = execCommand("git", "diff", "--name-only")
 		cmd.Dir = projectPath
-		out, _ = cmd.Output()
+		out, err = cmd.Output()
+		if err != nil {
+			debugf("git diff unstaged: %v", err)
+		}
 	}
 
 	// Also include staged files.
 	cmd2 := execCommand("git", "diff", "--cached", "--name-only")
 	cmd2.Dir = projectPath
-	staged, _ := cmd2.Output()
+	staged, err := cmd2.Output()
+	if err != nil {
+		debugf("git diff cached: %v", err)
+	}
 
 	seen := make(map[string]bool)
 	var files []string

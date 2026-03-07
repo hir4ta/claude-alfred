@@ -23,7 +23,7 @@ He works silently in the background, and provides powerful tools when needed:
   spec           — Unified spec management (action: init/update/status/switch/delete)
 
 When to use alfred tools:
-- ANY question about Claude Code features, behavior, or best practices → call knowledge FIRST
+- Questions specifically about Claude Code configuration or best practices → call knowledge FIRST
   (hooks, skills, rules, agents, plugins, MCP, CLAUDE.md, memory, permissions, settings, compaction)
 - Evaluating or auditing .claude/ configuration → call config-review
 - Creating or modifying .claude/ configuration files → call knowledge for best practices, THEN make changes
@@ -31,7 +31,7 @@ When to use alfred tools:
 - Making design decisions → call spec with action=update
 - Starting/resuming a session → call spec with action=status
 
-IMPORTANT: knowledge contains 1,400+ curated Claude Code docs with hybrid search.
+IMPORTANT: knowledge contains extensive curated Claude Code docs with hybrid search.
 Always prefer knowledge over web search or guessing for Claude Code topics.
 config-review cross-references your config against best practices from the knowledge base.
 `
@@ -67,6 +67,7 @@ Do NOT use for: general programming questions, project-specific code, non-Claude
 Example queries: "SessionStart hook best practices", "skill frontmatter options", "MCP tool annotations", "CLAUDE.md size guidelines".`),
 				mcp.WithTitleAnnotation("Knowledge Search"),
 				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("query", mcp.Description("Search query"), mcp.Required()),
 				mcp.WithNumber("limit", mcp.Description("Maximum results (default: 5)")),
@@ -83,6 +84,7 @@ Checks: CLAUDE.md quality, skills (size/frontmatter), rules (path scoping), hook
 Requires project_path to locate .claude/ directory. If omitted, uses current working directory.`),
 				mcp.WithTitleAnnotation("Config Review"),
 				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("project_path", mcp.Description("Project root path (cwd)")),
 			),

@@ -8,31 +8,33 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 // execCommand is a variable so tests can stub it out.
 var execCommand = exec.Command
 
-// debugWriter is set when ALFRED_DEBUG is non-empty.
+// debugWriter is set lazily on first debugf() call when ALFRED_DEBUG is non-empty.
 // Log file: ~/.claude-alfred/debug.log
 var debugWriter io.Writer
-
-func init() {
-	if os.Getenv("ALFRED_DEBUG") == "" {
-		return
-	}
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".claude-alfred")
-	_ = os.MkdirAll(dir, 0755)
-	f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
-	debugWriter = f
-}
+var debugOnce sync.Once
+var debugEnabled = os.Getenv("ALFRED_DEBUG") != ""
 
 func debugf(format string, args ...any) {
+	if !debugEnabled {
+		return
+	}
+	debugOnce.Do(func() {
+		home, _ := os.UserHomeDir()
+		dir := filepath.Join(home, ".claude-alfred")
+		_ = os.MkdirAll(dir, 0755)
+		f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return
+		}
+		debugWriter = f
+	})
 	if debugWriter == nil {
 		return
 	}

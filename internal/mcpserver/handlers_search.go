@@ -13,6 +13,18 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
+// Search tuning constants.
+const (
+	// overRetrieveMulti is the candidate multiplier for multi-word queries.
+	overRetrieveMulti = 4
+	// overRetrieveSingle is the candidate multiplier for single-word queries.
+	overRetrieveSingle = 6
+	// overRetrieveMin is the minimum number of candidates to retrieve.
+	overRetrieveMin = 20
+	// stalenessWarningDays is the age threshold for showing a staleness warning.
+	stalenessWarningDays = 30
+)
+
 // docsSearchHandler searches the docs knowledge base using hybrid search:
 // 1. Hybrid RRF (vector + FTS5 fusion) → over-retrieve candidates
 // 2. Rerank top candidates via Voyage rerank API → return top results
@@ -43,12 +55,12 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 
 			// Adaptive over-retrieve: short queries are vague, need more candidates.
 			wordCount := len(strings.Fields(query))
-			overRetrieve := limit * 4
+			overRetrieve := limit * overRetrieveMulti
 			if wordCount <= 1 {
-				overRetrieve = limit * 6
+				overRetrieve = limit * overRetrieveSingle
 			}
-			if overRetrieve < 20 {
-				overRetrieve = 20
+			if overRetrieve < overRetrieveMin {
+				overRetrieve = overRetrieveMin
 			}
 
 			hybridMatches, _ := st.HybridSearch(queryVec, query, sourceType, overRetrieve, overRetrieve)
@@ -142,7 +154,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 			"docs_count":    len(docResults),
 			"search_method": searchMethod,
 		}
-		if maxAgeDays > 30 {
+		if maxAgeDays > stalenessWarningDays {
 			result["staleness_warning"] = fmt.Sprintf(
 				"Results include docs from %d days ago. Run 'alfred init' to refresh.", maxAgeDays)
 		}

@@ -12,6 +12,14 @@ import (
 // Decision extraction from transcript
 // ---------------------------------------------------------------------------
 
+// Decision confidence scoring constants.
+const (
+	// decisionBaseScore is the starting confidence for having a decision keyword.
+	decisionBaseScore = 0.4
+	// decisionMinConfidence is the minimum score to keep a decision.
+	decisionMinConfidence = 0.4
+)
+
 // trivialVerbs are verbs that follow decision keywords but indicate
 // routine actions rather than real design decisions.
 var trivialVerbs = []string{
@@ -79,7 +87,7 @@ var architectureTerms = []string{
 // a sentence represents a real design decision vs an implementation action.
 func scoreDecisionConfidence(sentence string) float64 {
 	lower := strings.ToLower(sentence)
-	score := 0.4 // base score for having a decision keyword
+	score := decisionBaseScore // base score for having a decision keyword
 
 	// Rationale clause: strong positive signal.
 	for _, marker := range rationaleMarkers {
@@ -279,7 +287,7 @@ func extractDecisionsFromTranscript(transcriptPath string) []string {
 			sentence := strings.TrimSpace(text[start : idx+end])
 			if len(sentence) > 10 && len(sentence) < 300 && !isTrivialDecision(sentence) {
 				conf := scoreDecisionConfidence(sentence)
-				if conf >= 0.4 {
+				if conf >= decisionMinConfidence {
 					decisions = append(decisions, scoredDecision{sentence, conf})
 				}
 			}

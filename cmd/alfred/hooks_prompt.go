@@ -16,6 +16,16 @@ var openStore = func() (*store.Store, error) {
 	return store.OpenDefaultCached()
 }
 
+// Scoring thresholds for knowledge injection.
+const (
+	// relevanceThreshold is the minimum score for a doc to be injected.
+	relevanceThreshold = 0.40
+	// highConfidenceThreshold triggers injection of a second result.
+	highConfidenceThreshold = 0.65
+	// singleKeywordDampen reduces confidence when only one keyword matched.
+	singleKeywordDampen = 0.7
+)
+
 // ---------------------------------------------------------------------------
 // Architecture note: Hook vs MCP knowledge injection
 //
@@ -142,7 +152,7 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 
 	// Dampen single-keyword confidence: one keyword alone is weak signal.
 	if len(matchedKeywords) == 1 {
-		keywordScore *= 0.7
+		keywordScore *= singleKeywordDampen
 	}
 
 	// Secondary signal: content token coverage in doc.
@@ -248,12 +258,12 @@ func handleUserPromptSubmit(ev *hookEvent) {
 	var candidates []scored
 	for _, doc := range uniqueDocs {
 		s := scoreRelevance(matched, promptLower, doc)
-		if s >= 0.40 {
+		if s >= relevanceThreshold {
 			candidates = append(candidates, scored{doc, s})
 		}
 	}
 	if len(candidates) == 0 {
-		debugf("UserPromptSubmit: no relevant matches (all below 0.40 threshold)")
+		debugf("UserPromptSubmit: no relevant matches (all below %.2f threshold)", relevanceThreshold)
 		return
 	}
 
@@ -263,7 +273,7 @@ func handleUserPromptSubmit(ev *hookEvent) {
 
 	// Confidence-based injection: 1 result by default, 2 if top score is high.
 	maxResults := 1
-	if len(candidates) > 1 && candidates[0].score >= 0.65 {
+	if len(candidates) > 1 && candidates[0].score >= highConfidenceThreshold {
 		maxResults = 2
 	}
 	if len(candidates) > maxResults {
