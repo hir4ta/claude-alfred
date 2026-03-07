@@ -199,18 +199,13 @@ func asyncEmbedSession(sd *spec.SpecDir) {
 		"--file", string(spec.FileSession))
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+	// Detach the child process so it runs independently.
+	// The hook handler exits shortly after; the OS reparents the child to init.
+	// No goroutine needed — cmd.Wait() is intentionally not called.
 	if err := cmd.Start(); err != nil {
 		debugf("asyncEmbedSession: start error: %v", err)
 		return
 	}
-	// Wait in background and log result.
-	go func() {
-		if err := cmd.Wait(); err != nil {
-			debugf("asyncEmbedSession: pid=%d error: %v", cmd.Process.Pid, err)
-		} else {
-			debugf("asyncEmbedSession: pid=%d completed", cmd.Process.Pid)
-		}
-	}()
 	debugf("asyncEmbedSession: spawned pid=%d for %s/%s", cmd.Process.Pid, sd.TaskSlug, spec.FileSession)
 }
 

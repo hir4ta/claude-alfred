@@ -17,6 +17,25 @@ var openStore = func() (*store.Store, error) {
 }
 
 // ---------------------------------------------------------------------------
+// Architecture note: Hook vs MCP knowledge injection
+//
+// UserPromptSubmit hook (this file):
+//   - Passive/proactive: fires automatically on every prompt
+//   - Lightweight: FTS5 only, no Voyage API calls
+//   - Scope: injects up to 2 short snippets (300 chars each)
+//   - Purpose: surface relevant context BEFORE Claude starts working
+//
+// MCP "knowledge" tool (mcpserver/handlers_search.go):
+//   - Active: called explicitly by Claude or user
+//   - Heavyweight: hybrid vector + FTS5 + Voyage rerank
+//   - Scope: returns full search results with scores
+//   - Purpose: deep research when Claude needs detailed information
+//
+// These are complementary, not redundant. The hook primes Claude with
+// lightweight hints; the MCP tool provides deep answers on demand.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // PreToolUse: .claude/ config access reminder
 // ---------------------------------------------------------------------------
 
@@ -49,6 +68,9 @@ func shouldRemind(toolInput map[string]any) bool {
 // Uses hookSpecificOutput with permissionDecision "allow" to inject the reminder
 // as feedback while letting the tool call proceed.
 func handlePreToolUse(ev *hookEvent) {
+	if len(ev.ToolInput) == 0 {
+		return
+	}
 	if !shouldRemind(ev.ToolInput) {
 		return
 	}

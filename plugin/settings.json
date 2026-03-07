@@ -1,11 +1,1 @@
-{
-  "permissions": {
-    "allow": [
-      "mcp__alfred__knowledge",
-      "mcp__alfred__config-review",
-      "mcp__alfred__config-suggest",
-      "mcp__alfred__spec",
-      "mcp__alfred__code-review"
-    ]
-  }
-}
+{}

@@ -172,18 +172,9 @@ func Bundle(outputDir, version string) error {
 		}
 	}
 
-	// 9. Write settings.json — default permissions for MCP tools and hooks.
-	settingsJSON := map[string]any{
-		"permissions": map[string]any{
-			"allow": []string{
-				"mcp__alfred__knowledge",
-				"mcp__alfred__config-review",
-				"mcp__alfred__config-suggest",
-				"mcp__alfred__spec",
-				"mcp__alfred__code-review",
-			},
-		},
-	}
+	// 9. Write settings.json — plugin settings (currently only "agent" key is
+	// supported by Claude Code; permissions are not honored in plugin settings).
+	settingsJSON := map[string]any{}
 	if err := writeJSON(filepath.Join(outputDir, "settings.json"), settingsJSON); err != nil {
 		return fmt.Errorf("write settings.json: %w", err)
 	}

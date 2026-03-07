@@ -40,8 +40,12 @@ Always: alfred tools first → then read/edit files.
 `
 
 // defaultClaudeHome returns the default Claude Code configuration directory.
+// Returns empty string if home directory cannot be determined.
 func defaultClaudeHome() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
 	return filepath.Join(home, ".claude")
 }
 
