@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -912,7 +913,7 @@ func TestHandlePreCompactIntegration(t *testing.T) {
 
 	// Capture stdout (emitCompactionInstructions writes there).
 	output := captureStdout(t, func() {
-		handlePreCompact(dir, transcriptPath, "focus on search feature")
+		handlePreCompact(context.Background(),dir, transcriptPath, "focus on search feature")
 	})
 
 	// Verify session.md was written.
@@ -1075,7 +1076,7 @@ func TestHandlePreCompactNoSpec(t *testing.T) {
 	stubExecCommand(t, "")
 
 	output := captureStdout(t, func() {
-		handlePreCompact(dir, "", "")
+		handlePreCompact(context.Background(),dir, "", "")
 	})
 
 	// Should produce no output (graceful no-op).
@@ -1274,7 +1275,7 @@ func TestExtractTextContent(t *testing.T) {
 func TestHandleUserPromptSubmitEarlyReturns(t *testing.T) {
 	// Test config reminder path.
 	output := captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: ".claude/hooks.json を確認して"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: ".claude/hooks.json を確認して"})
 	})
 	if !strings.Contains(output, "alfred") {
 		t.Error("config path prompt should trigger reminder")
@@ -1282,7 +1283,7 @@ func TestHandleUserPromptSubmitEarlyReturns(t *testing.T) {
 
 	// Test short prompt (< 10 runes).
 	output = captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: "hook?"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "hook?"})
 	})
 	if output != "" {
 		t.Errorf("short prompt should produce no output, got %q", output)
@@ -1290,7 +1291,7 @@ func TestHandleUserPromptSubmitEarlyReturns(t *testing.T) {
 
 	// Test unrelated prompt (keyword filter rejects).
 	output = captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: "Fix the login bug in the authentication service please"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "Fix the login bug in the authentication service please"})
 	})
 	if output != "" {
 		t.Errorf("unrelated prompt should produce no output, got %q", output)
@@ -1298,7 +1299,7 @@ func TestHandleUserPromptSubmitEarlyReturns(t *testing.T) {
 
 	// Test empty prompt.
 	output = captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: ""})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: ""})
 	})
 	if output != "" {
 		t.Errorf("empty prompt should produce no output, got %q", output)
@@ -1356,7 +1357,7 @@ func TestHandleUserPromptSubmitFTSPath(t *testing.T) {
 
 	// English prompt about hooks should find relevant docs and inject knowledge.
 	output := captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events in Claude Code?"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events in Claude Code?"})
 	})
 	if !strings.Contains(output, "Relevant best practices") {
 		t.Errorf("FTS path should inject knowledge, got %q", output)
@@ -1381,7 +1382,7 @@ func TestHandleUserPromptSubmitFTSNoResults(t *testing.T) {
 	t.Cleanup(func() { openStore = origOpen })
 
 	output := captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events?"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events?"})
 	})
 	if output != "" {
 		t.Errorf("empty DB should produce no output, got %q", output)
@@ -1413,7 +1414,7 @@ func TestHandleUserPromptSubmitFTSLowRelevance(t *testing.T) {
 
 	// Prompt about hooks, but only auth docs exist — should be below relevance threshold (0.55).
 	output := captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events?"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events?"})
 	})
 	if strings.Contains(output, "Authentication") {
 		t.Errorf("irrelevant doc should be filtered by relevance scoring (threshold 0.55), got %q", output)
@@ -1445,7 +1446,7 @@ func TestHandleUserPromptSubmitWordBoundary(t *testing.T) {
 
 	// "webhook" should NOT match — word boundary prevents "hook" substring match.
 	output := captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: "set up a webhook for GitHub notifications to track deployments"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "set up a webhook for GitHub notifications to track deployments"})
 	})
 	if output != "" {
 		t.Errorf("webhook prompt should not trigger injection, got %q", output)
@@ -1468,7 +1469,7 @@ func TestHandleUserPromptSubmitConfigReminder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(t, func() {
-				handleUserPromptSubmit(&hookEvent{Prompt: tt.prompt})
+				handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: tt.prompt})
 			})
 			gotReminder := strings.Contains(output, "alfred")
 			if gotReminder != tt.want {
@@ -1481,7 +1482,7 @@ func TestHandleUserPromptSubmitConfigReminder(t *testing.T) {
 func TestHandleSessionStartNoProject(t *testing.T) {
 	// Empty project path should be a no-op.
 	output := captureStdout(t, func() {
-		handleSessionStart(&hookEvent{ProjectPath: ""})
+		handleSessionStart(context.Background(),&hookEvent{ProjectPath: ""})
 	})
 	if output != "" {
 		t.Errorf("empty project path should produce no output, got %q", output)
@@ -1499,7 +1500,7 @@ func TestHandleSessionStartWithSpec(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		handleSessionStart(&hookEvent{ProjectPath: dir, Source: "startup"})
+		handleSessionStart(context.Background(),&hookEvent{ProjectPath: dir, Source: "startup"})
 	})
 	if !strings.Contains(output, "session-test") {
 		t.Error("should inject session context for active spec")
@@ -1517,7 +1518,7 @@ func TestStopHookActive(t *testing.T) {
 		if ev.StopHookActive {
 			return // mirrors runHook behavior
 		}
-		handleSessionStart(ev)
+		handleSessionStart(context.Background(),ev)
 	})
 	if output != "" {
 		t.Errorf("stop_hook_active should produce no output, got %q", output)
@@ -1770,7 +1771,7 @@ func TestPreToolUseJSONOutput(t *testing.T) {
 
 func TestUserPromptSubmitJSONOutput(t *testing.T) {
 	output := captureStdout(t, func() {
-		handleUserPromptSubmit(&hookEvent{Prompt: "CLAUDE.md を更新して"})
+		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "CLAUDE.md を更新して"})
 	})
 
 	var result map[string]any

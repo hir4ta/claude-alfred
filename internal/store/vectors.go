@@ -62,6 +62,9 @@ func (s *Store) VectorSearch(queryVec []float32, source string, limit int) ([]Ve
 		var sourceID int64
 		var blob []byte
 		if err := rows.Scan(&sourceID, &blob); err != nil {
+			if DebugLog != nil {
+				DebugLog("store: VectorSearch scan error: %v", err)
+			}
 			continue // skip malformed rows; query itself succeeded
 		}
 		vec := deserializeFloat32(blob)

@@ -16,7 +16,7 @@ import (
 // This is the core of compact resilience — it reads the conversation transcript
 // to extract key context (recent user messages, decisions, blockers) and saves
 // them to session.md before the context is summarized.
-func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
+func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customInstructions string) {
 	taskSlug, err := spec.ReadActive(projectPath)
 	if err != nil {
 		debugf("PreCompact: no active spec, skipping")
@@ -71,9 +71,7 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 		debugf("PreCompact: DB open error: %v", err)
 		return
 	}
-	syncCtx, syncCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer syncCancel()
-	if err := spec.SyncSingleFile(syncCtx, sd, spec.FileSession, st, nil); err != nil {
+	if err := spec.SyncSingleFile(ctx, sd, spec.FileSession, st, nil); err != nil {
 		debugf("PreCompact: sync error: %v", err)
 		return
 	}

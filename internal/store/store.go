@@ -13,6 +13,11 @@ import (
 	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
+// DebugLog is an optional callback for diagnostic messages from the store layer.
+// Set by the application (e.g., cmd/alfred) to route store debug output to its
+// own logging facility. Nil by default (no logging).
+var DebugLog func(format string, args ...any)
+
 // Store wraps a SQLite database connection.
 type Store struct {
 	db     *sql.DB

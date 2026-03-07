@@ -3,7 +3,7 @@
 set -e
 
 REPO="hir4ta/claude-alfred"
-VERSION="0.54.2"
+VERSION="0.54.3"
 CACHE_DIR="${HOME}/.alfred/bin"
 CACHED_BIN="${CACHE_DIR}/alfred"
 
@@ -37,26 +37,30 @@ trap 'rm -rf "$DL_DIR"' EXIT
 
 if command -v curl >/dev/null 2>&1; then
   curl -sSfL "$URL" -o "$DL_DIR/alfred.tar.gz"
-  curl -sSfL "$CHECKSUM_URL" -o "$DL_DIR/checksums.txt" 2>/dev/null || true
+  curl -sSfL "$CHECKSUM_URL" -o "$DL_DIR/checksums.txt"
 elif command -v wget >/dev/null 2>&1; then
   wget -qO "$DL_DIR/alfred.tar.gz" "$URL"
-  wget -qO "$DL_DIR/checksums.txt" "$CHECKSUM_URL" 2>/dev/null || true
+  wget -qO "$DL_DIR/checksums.txt" "$CHECKSUM_URL"
 else
   echo "alfred: curl or wget required to download binary" >&2
   echo "  Install via Homebrew instead: brew install hir4ta/alfred/alfred" >&2
   exit 1
 fi
 
-# Verify checksum if checksums.txt was downloaded and shasum is available.
-if [ -s "$DL_DIR/checksums.txt" ] && command -v shasum >/dev/null 2>&1; then
-  EXPECTED=$(grep "alfred_${OS}_${ARCH}.tar.gz" "$DL_DIR/checksums.txt" | awk '{print $1}')
-  if [ -n "$EXPECTED" ]; then
-    ACTUAL=$(shasum -a 256 "$DL_DIR/alfred.tar.gz" | awk '{print $1}')
-    if [ "$ACTUAL" != "$EXPECTED" ]; then
-      echo "alfred: checksum mismatch (expected ${EXPECTED}, got ${ACTUAL})" >&2
-      exit 1
-    fi
-  fi
+# Verify checksum (required for binary integrity).
+if ! command -v shasum >/dev/null 2>&1; then
+  echo "alfred: shasum not found — cannot verify binary integrity" >&2
+  exit 1
+fi
+EXPECTED=$(grep "alfred_${OS}_${ARCH}.tar.gz" "$DL_DIR/checksums.txt" | awk '{print $1}')
+if [ -z "$EXPECTED" ]; then
+  echo "alfred: no checksum found for alfred_${OS}_${ARCH}.tar.gz" >&2
+  exit 1
+fi
+ACTUAL=$(shasum -a 256 "$DL_DIR/alfred.tar.gz" | awk '{print $1}')
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "alfred: checksum mismatch (expected ${EXPECTED}, got ${ACTUAL})" >&2
+  exit 1
 fi
 
 tar -xzf "$DL_DIR/alfred.tar.gz" -C "$CACHE_DIR" alfred

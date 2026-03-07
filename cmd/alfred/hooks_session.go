@@ -19,7 +19,8 @@ import (
 
 // handleSessionStart ingests CLAUDE.md into the knowledge DB and injects
 // spec context if an active spec exists.
-func handleSessionStart(ev *hookEvent) {
+func handleSessionStart(ctx context.Context, ev *hookEvent) {
+	_ = ctx // reserved for future context-aware store/spec operations
 	if ev.ProjectPath == "" {
 		return
 	}

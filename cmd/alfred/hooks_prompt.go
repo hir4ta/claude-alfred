@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -208,7 +209,8 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 // 3. Score with kagome tokenizer + keyword-aware relevance, threshold 0.40 (Gate 3)
 //    Single-keyword matches dampened (×0.7) to require content coverage
 // 4. Inject 1 result by default; 2 only if top score >= 0.65
-func handleUserPromptSubmit(ev *hookEvent) {
+func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
+	_ = ctx // reserved for future context-aware FTS search
 	if shouldRemindPrompt(ev.Prompt) {
 		debugf("UserPromptSubmit: reminding about alfred for prompt")
 		emitAdditionalContext("UserPromptSubmit", configReminder)

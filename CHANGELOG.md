@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.54.3] - 2026-03-08
+
+### Changed
+- PreToolUse matcher を `Edit|Write` に最小権限化（`Read` 除外で不要な発火を削減）
+- run.sh の SHA256 checksum 検証を必須化（ダウンロード失敗時は exit 1）
+- Hook handler に event 別 `context.WithTimeout` を追加（外部 timeout 前の graceful cleanup）
+- PreCompact の DB sync を hook context 経由に統一
+
+### Added
+- `store.DebugLog` callback — store 層の scan error を debug ログに出力（3箇所）
+- release スキルに `disable-model-invocation: true`（Claude による自動リリース防止）
+
 ## [0.54.2] - 2026-03-08
 
 ### Changed
@@ -159,7 +171,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.54.2...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.54.3...HEAD
+[0.54.3]: https://github.com/hir4ta/claude-alfred/compare/v0.54.2...v0.54.3
 [0.54.2]: https://github.com/hir4ta/claude-alfred/compare/v0.54.1...v0.54.2
 [0.54.1]: https://github.com/hir4ta/claude-alfred/compare/v0.54.0...v0.54.1
 [0.54.0]: https://github.com/hir4ta/claude-alfred/compare/v0.53.0...v0.54.0

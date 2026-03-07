@@ -163,6 +163,9 @@ func (s *Store) GetDocsByIDs(ids []int64) ([]DocRow, error) {
 		var version sql.NullString
 		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
 			&d.SourceType, &version, &d.CrawledAt, &d.TTLDays); err != nil {
+			if DebugLog != nil {
+				DebugLog("store: GetDocsByIDs scan error: %v", err)
+			}
 			continue // skip malformed rows; query itself succeeded
 		}
 		d.Version = version.String
@@ -280,6 +283,9 @@ func (s *Store) matchDocsFTS(query string, sourceType string, limit int) ([]DocR
 		var version sql.NullString
 		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
 			&d.SourceType, &version, &d.CrawledAt, &d.TTLDays); err != nil {
+			if DebugLog != nil {
+				DebugLog("store: SearchDocsFTS scan error: %v", err)
+			}
 			continue // skip malformed rows; query itself succeeded
 		}
 		d.Version = version.String

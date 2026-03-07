@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
 // execCommand is a variable so tests can stub it out.
@@ -94,6 +97,7 @@ func emitAdditionalContext(eventName, context string) {
 // runHook handles hook events.
 func runHook(event string) error {
 	defer closeDebugWriter()
+	store.DebugLog = debugf
 	debugf("hook event=%s", event)
 	var ev hookEvent
 	if err := json.NewDecoder(os.Stdin).Decode(&ev); err != nil {
@@ -106,17 +110,35 @@ func runHook(event string) error {
 	}
 	debugf("hook project=%s", ev.ProjectPath)
 
+	// Internal context timeout per hook event, slightly under Claude Code's
+	// external timeout to allow graceful cleanup before SIGTERM.
+	var timeout time.Duration
 	switch event {
 	case "SessionStart":
-		handleSessionStart(&ev)
+		timeout = 4500 * time.Millisecond // hooks.json: 5s
+	case "PreCompact":
+		timeout = 9 * time.Second // hooks.json: 10s
+	case "PreToolUse":
+		timeout = 1500 * time.Millisecond // hooks.json: 2s
+	case "UserPromptSubmit":
+		timeout = 2500 * time.Millisecond // hooks.json: 3s
+	default:
+		timeout = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	switch event {
+	case "SessionStart":
+		handleSessionStart(ctx, &ev)
 	case "PreCompact":
 		if ev.ProjectPath != "" {
-			handlePreCompact(ev.ProjectPath, ev.TranscriptPath, ev.CustomInstructions)
+			handlePreCompact(ctx, ev.ProjectPath, ev.TranscriptPath, ev.CustomInstructions)
 		}
 	case "PreToolUse":
 		handlePreToolUse(&ev)
 	case "UserPromptSubmit":
-		handleUserPromptSubmit(&ev)
+		handleUserPromptSubmit(ctx, &ev)
 	}
 
 	return nil
