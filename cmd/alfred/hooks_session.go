@@ -32,7 +32,7 @@ func handleSessionStart(ev *hookEvent) {
 
 	// Inject spec context if active spec exists.
 	// After compact, inject richer context for full recovery.
-	injectButlerContext(ev.ProjectPath, ev.Source)
+	injectSpecContext(ev.ProjectPath, ev.Source)
 }
 
 type mdSection struct {
@@ -100,10 +100,10 @@ func ingestProjectClaudeMD(st *store.Store, projectPath string) {
 	debugf("ingestProjectClaudeMD: %d sections from %s", len(sections), claudeMD)
 }
 
-// injectButlerContext outputs spec content to stdout when an active
+// injectSpecContext outputs spec content to stdout when an active
 // spec exists. After compact, injects richer context
 // (all 4 files) for full recovery. On normal startup, injects only session.md.
-func injectButlerContext(projectPath, source string) {
+func injectSpecContext(projectPath, source string) {
 	taskSlug, err := spec.ReadActive(projectPath)
 	if err != nil {
 		return // no active spec — silently skip
@@ -120,7 +120,7 @@ func injectButlerContext(projectPath, source string) {
 		compactCount := strings.Count(session, "## Compact Marker [")
 
 		var buf strings.Builder
-		buf.WriteString(fmt.Sprintf("\n--- Butler Protocol: Recovering Task '%s' (post-compact #%d) ---\n", taskSlug, compactCount))
+		buf.WriteString(fmt.Sprintf("\n--- Alfred Protocol: Recovering Task '%s' (post-compact #%d) ---\n", taskSlug, compactCount))
 
 		if compactCount <= 1 {
 			// First compact: inject all spec files for full context recovery.
@@ -150,16 +150,16 @@ func injectButlerContext(projectPath, source string) {
 			}
 		}
 
-		buf.WriteString("--- End Butler Protocol ---\n")
+		buf.WriteString("--- End Alfred Protocol ---\n")
 		fmt.Fprint(os.Stdout, buf.String())
-		debugf("SessionStart(compact#%d): injected butler context for %s", compactCount, taskSlug)
+		debugf("SessionStart(compact#%d): injected spec context for %s", compactCount, taskSlug)
 	} else {
 		// Normal startup/resume: inject session.md only (lightweight).
 		session, err := sd.ReadFile(spec.FileSession)
 		if err != nil || session == "" {
 			return
 		}
-		fmt.Fprintf(os.Stdout, "\n--- Butler Protocol: Active Task '%s' ---\n%s\n--- End Butler Protocol ---\n", taskSlug, session)
+		fmt.Fprintf(os.Stdout, "\n--- Alfred Protocol: Active Task '%s' ---\n%s\n--- End Alfred Protocol ---\n", taskSlug, session)
 		debugf("SessionStart(%s): injected session context for %s", source, taskSlug)
 	}
 }

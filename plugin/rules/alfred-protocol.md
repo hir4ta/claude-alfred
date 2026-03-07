@@ -1,4 +1,4 @@
-# Butler Protocol — Autonomous Spec Management
+# Alfred Protocol — Autonomous Spec Management
 
 When a `.alfred/specs/` directory exists in the project, follow this protocol:
 

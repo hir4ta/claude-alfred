@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Edit, Glob, Bash, Agent, AskUserQuestion, mcp__alfre
 context: current
 ---
 
-The butler tends to the estate's configuration — whether building new or polishing existing.
+Alfred tends to the project's configuration — whether building new or polishing existing.
 
 ## Supporting Files
 

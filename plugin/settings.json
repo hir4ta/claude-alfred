@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__alfred__knowledge",
+      "mcp__alfred__config-review",
+      "mcp__alfred__config-suggest",
+      "mcp__alfred__spec-init",
+      "mcp__alfred__spec-update",
+      "mcp__alfred__spec-status",
+      "mcp__alfred__spec-switch",
+      "mcp__alfred__spec-delete",
+      "mcp__alfred__code-review"
+    ]
+  }
+}

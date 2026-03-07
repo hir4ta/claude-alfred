@@ -1,4 +1,4 @@
-// Package spec manages Butler Protocol spec files under .alfred/specs/,
+// Package spec manages Alfred Protocol spec files under .alfred/specs/,
 // providing task lifecycle (init, switch, delete) and DB synchronization.
 package spec
 

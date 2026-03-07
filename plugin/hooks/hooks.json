@@ -1,5 +1,5 @@
 {
-  "description": "Proactive butler hooks — auto-import, config access reminder, knowledge injection, spec session persistence",
+  "description": "Proactive hooks — auto-import, config access reminder, knowledge injection, spec session persistence",
   "hooks": {
     "PreCompact": [
       {
@@ -38,12 +38,6 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-          {
-            "prompt": "Does this user message relate to Claude Code or software development?\n\nUser message: $ARGUMENTS\n\nRespond ok=true by default. Only respond ok=false if the message is CLEARLY unrelated to software development (e.g., casual chat about weather, cooking, sports). Messages about code, debugging, hooks, errors, configuration, tools, features, or ANY development task should be ok=true.",
-            "statusMessage": "alfred: checking relevance...",
-            "timeout": 5,
-            "type": "prompt"
-          },
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook UserPromptSubmit",
             "timeout": 3,

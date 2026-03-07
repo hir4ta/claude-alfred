@@ -24,8 +24,8 @@ var validSpecFiles = map[string]spec.SpecFile{
 	string(spec.FileSession):      spec.FileSession,
 }
 
-// butlerInitHandler initializes a new spec for a development task.
-func butlerInitHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
+// specInitHandler initializes a new spec for a development task.
+func specInitHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 		if projectPath == "" {
@@ -64,8 +64,8 @@ func butlerInitHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 	}
 }
 
-// butlerUpdateHandler updates a spec file for the active task.
-func butlerUpdateHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
+// specUpdateHandler updates a spec file for the active task.
+func specUpdateHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 		if projectPath == "" {
@@ -129,8 +129,8 @@ func butlerUpdateHandler(st *store.Store, emb *embedder.Embedder) server.ToolHan
 	}
 }
 
-// butlerStatusHandler returns the current spec status for a project.
-func butlerStatusHandler() server.ToolHandlerFunc {
+// specStatusHandler returns the current spec status for a project.
+func specStatusHandler() server.ToolHandlerFunc {
 	return func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 		if projectPath == "" {
@@ -180,8 +180,8 @@ func butlerStatusHandler() server.ToolHandlerFunc {
 	}
 }
 
-// butlerSwitchHandler switches the primary active task.
-func butlerSwitchHandler() server.ToolHandlerFunc {
+// specSwitchHandler switches the primary active task.
+func specSwitchHandler() server.ToolHandlerFunc {
 	return func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 		if projectPath == "" {
@@ -218,8 +218,8 @@ func butlerSwitchHandler() server.ToolHandlerFunc {
 	}
 }
 
-// butlerDeleteHandler removes a task's spec and updates _active.md.
-func butlerDeleteHandler(st *store.Store) server.ToolHandlerFunc {
+// specDeleteHandler removes a task's spec and updates _active.md.
+func specDeleteHandler(st *store.Store) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 		if projectPath == "" {

@@ -54,6 +54,7 @@ type hookEvent struct {
 	ToolName           string         `json:"tool_name"`
 	ToolInput          map[string]any `json:"tool_input"`
 	Prompt             string         `json:"prompt"`
+	StopHookActive     bool           `json:"stop_hook_active"`
 }
 
 // configReminder is the additionalContext message injected when Claude Code
@@ -69,6 +70,10 @@ func runHook(event string) error {
 	var ev hookEvent
 	if err := json.NewDecoder(os.Stdin).Decode(&ev); err != nil {
 		debugf("hook decode error: %v", err)
+		return nil
+	}
+	if ev.StopHookActive {
+		debugf("hook stop_hook_active=true, exiting")
 		return nil
 	}
 	debugf("hook project=%s", ev.ProjectPath)

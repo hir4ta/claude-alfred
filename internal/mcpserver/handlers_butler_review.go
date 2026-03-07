@@ -34,8 +34,8 @@ func severityRank(s string) int {
 	}
 }
 
-// butlerReviewHandler performs a 3-layer knowledge-powered code review.
-func butlerReviewHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
+// codeReviewHandler performs a 3-layer knowledge-powered code review.
+func codeReviewHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		projectPath := req.GetString("project_path", "")
 		focus := req.GetString("focus", "")

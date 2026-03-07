@@ -1,8 +1,8 @@
 # alfred
 
-A proactive butler for Claude Code.
+Your proactive assistant for Claude Code.
 
-He works silently in the background — surfacing relevant knowledge, catching scope violations, and preserving session context across compactions — so you can focus on building.
+Works silently in the background — surfacing relevant knowledge, catching scope violations, and preserving session context across compactions — so you can focus on building.
 
 [日本語版 README](README.ja.md)
 
@@ -10,7 +10,7 @@ He works silently in the background — surfacing relevant knowledge, catching s
 
 **Proactive Knowledge Injection** — Automatically surfaces relevant best practices from a 1,400+ document knowledge base when you're working on Claude Code configuration, architecture decisions, or any topic covered by the docs.
 
-**Butler Protocol** — Structured spec management resilient to Compact and session loss. Saves requirements, design, decisions, and session state to `.alfred/specs/`, with automatic context preservation and recovery.
+**Alfred Protocol** — Structured spec management resilient to Compact and session loss. Saves requirements, design, decisions, and session state to `.alfred/specs/`, with automatic context preservation and recovery.
 
 **3-Layer Code Review** — Checks your changes against active specs (scope violations, decision contradictions), semantic knowledge search, and best practices from documentation.
 
@@ -85,7 +85,7 @@ Invoke with `/alfred:<skill>` in Claude Code.
 | `/alfred:setup` | Project-wide setup wizard — multi-file scan + configuration, or Claude Code feature explainer |
 | `/alfred:brainstorm <theme>` | Divergent thinking — expand perspectives, options, hypotheses, and questions |
 | `/alfred:refine <theme>` | Convergent thinking — fix the issue, narrow options, score, and decide |
-| `/alfred:plan <task-slug>` | Butler Protocol — interactively generate a spec for compact-resilient development |
+| `/alfred:plan <task-slug>` | Alfred Protocol — interactively generate a spec for compact-resilient development |
 | `/alfred:review [focus]` | 3-layer knowledge-powered code review (spec + knowledge + best practices) |
 
 ## Agent (1)
@@ -106,7 +106,7 @@ Backend for skills and agents. Claude calls these automatically as needed.
 | `config-review` | Deep audit of .claude/ config (file contents + KB cross-reference) |
 | `config-suggest` | Analyze git diff and suggest .claude/ config updates |
 
-### Butler Protocol
+### Alfred Protocol
 
 | Tool | Description |
 |------|-------------|
@@ -126,7 +126,7 @@ Run automatically during Claude Code lifecycle. No user action needed.
 | SessionStart | Auto-ingest CLAUDE.md + spec context injection (adaptive recovery) |
 | PreCompact | Extract context from transcript + auto-detect decisions + track modified files → save session.md in activeContext format → emit compaction instructions → async embedding |
 | PreToolUse | Reminder to use alfred tools when accessing .claude/ config files |
-| UserPromptSubmit | Dual-layer: LLM-gated config relevance detection (prompt hook) + keyword-gated FTS knowledge injection (command hook) |
+| UserPromptSubmit | Keyword-gated FTS knowledge injection — auto-surfaces relevant best practices for Claude Code topics |
 
 ## Commands
 
@@ -151,14 +151,14 @@ Run automatically during Claude Code lifecycle. No user action needed.
 │  │               + compaction instructions        │
 │  │               + async embedding                │
 │  ├ PreToolUse  → .claude/ access reminder         │
-│  └ UserPromptSubmit → LLM gate + FTS injection     │
+│  └ UserPromptSubmit → keyword filter + FTS injection │
 │                                                  │
 │  MCP Tools (on demand)                            │
 │  ├ knowledge / config-review / config-suggest     │
 │  └ spec-init / update / status / switch           │
 │    / delete / code-review                         │
 │                                                  │
-│  Butler Protocol Flow                             │
+│  Alfred Protocol Flow                             │
 │  spec-init → .alfred/specs/add-auth/              │
 │  (4 files + DB sync)                              │
 │        ↓                                         │
@@ -171,7 +171,7 @@ Run automatically during Claude Code lifecycle. No user action needed.
 └──────────────────────────────────────────────────┘
 ```
 
-### Butler Protocol File Structure
+### Alfred Protocol File Structure
 
 ```
 .alfred/specs/{task-slug}/

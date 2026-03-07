@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Edit, Glob, Bash, AskUserQuestion, mcp__alfred__know
 context: current
 ---
 
-The butler welcomes the master and briefs them on the estate.
+Alfred welcomes you and sets up the project for Claude Code.
 
 ## Supporting Files
 

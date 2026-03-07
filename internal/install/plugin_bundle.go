@@ -51,18 +51,11 @@ func alfredHookEntries(binPath string) map[string]any {
 				},
 			},
 		},
-		// UserPromptSubmit: LLM gate + knowledge injection.
-		// The prompt hook gates the command hook: only clearly unrelated messages are blocked.
-		// Default is ok=true (permissive) to avoid false-positive blocking.
+		// UserPromptSubmit: keyword-gated knowledge injection.
+		// The command hook checks for Claude Code keywords internally — no LLM gate needed.
 		"UserPromptSubmit": []any{
 			map[string]any{
 				"hooks": []any{
-					map[string]any{
-						"type":          "prompt",
-						"prompt":        "Does this user message relate to Claude Code or software development?\n\nUser message: $ARGUMENTS\n\nRespond ok=true by default. Only respond ok=false if the message is CLEARLY unrelated to software development (e.g., casual chat about weather, cooking, sports). Messages about code, debugging, hooks, errors, configuration, tools, features, or ANY development task should be ok=true.",
-						"timeout":       5,
-						"statusMessage": "alfred: checking relevance...",
-					},
 					map[string]any{
 						"type":    "command",
 						"command": binPath + " hook UserPromptSubmit",
@@ -106,12 +99,12 @@ func Bundle(outputDir, version string) error {
 	pluginJSON := map[string]any{
 		"name":        "alfred",
 		"version":     version,
-		"description": "Your proactive butler for Claude Code",
+		"description": "Your proactive assistant for Claude Code",
 		"author":      map[string]string{"name": "hir4ta"},
 		"homepage":    "https://github.com/hir4ta/claude-alfred",
 		"repository":  "https://github.com/hir4ta/claude-alfred",
 		"license":     "MIT",
-		"keywords":    []string{"butler", "best-practices", "workflow"},
+		"keywords":    []string{"alfred", "best-practices", "workflow"},
 	}
 	if err := writeJSON(filepath.Join(outputDir, ".claude-plugin", "plugin.json"), pluginJSON); err != nil {
 		return fmt.Errorf("write plugin.json: %w", err)
@@ -119,7 +112,7 @@ func Bundle(outputDir, version string) error {
 
 	// 3. Write hooks.json — commands invoke the guard/setup wrapper.
 	hooksJSON := map[string]any{
-		"description": "Proactive butler hooks — auto-import, config access reminder, knowledge injection, spec session persistence",
+		"description": "Proactive hooks — auto-import, config access reminder, knowledge injection, spec session persistence",
 		"hooks":       alfredHookEntries(runCmd),
 	}
 	if err := writeJSON(filepath.Join(outputDir, "hooks", "hooks.json"), hooksJSON); err != nil {
@@ -179,12 +172,33 @@ func Bundle(outputDir, version string) error {
 		}
 	}
 
+	// 9. Write settings.json — default permissions for MCP tools and hooks.
+	settingsJSON := map[string]any{
+		"permissions": map[string]any{
+			"allow": []string{
+				"mcp__alfred__knowledge",
+				"mcp__alfred__config-review",
+				"mcp__alfred__config-suggest",
+				"mcp__alfred__spec-init",
+				"mcp__alfred__spec-update",
+				"mcp__alfred__spec-status",
+				"mcp__alfred__spec-switch",
+				"mcp__alfred__spec-delete",
+				"mcp__alfred__code-review",
+			},
+		},
+	}
+	if err := writeJSON(filepath.Join(outputDir, "settings.json"), settingsJSON); err != nil {
+		return fmt.Errorf("write settings.json: %w", err)
+	}
+
 	hookCount := len(alfredHookEntries(runCmd))
 
 	fmt.Printf("✓ Plugin bundle generated at %s\n", outputDir)
 	fmt.Printf("  - plugin.json (v%s)\n", version)
 	fmt.Printf("  - hooks.json (%d events)\n", hookCount)
 	fmt.Printf("  - .mcp.json\n")
+	fmt.Printf("  - settings.json (default permissions)\n")
 	fmt.Printf("  - bin/run.sh (bootstrapper)\n")
 	fmt.Printf("  - %d skills\n", len(loadSkills()))
 	fmt.Printf("  - %d rules\n", len(loadRules()))

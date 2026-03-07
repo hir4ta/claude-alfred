@@ -110,9 +110,12 @@ func runServe() error {
 	}
 	defer st.Close()
 
-	emb, err := embedder.NewEmbedder()
-	if err != nil {
-		return fmt.Errorf("VOYAGE_API_KEY is required: %w", err)
+	// Embedder is optional — graceful degradation to FTS-only search.
+	var emb *embedder.Embedder
+	if e, err := embedder.NewEmbedder(); err != nil {
+		fmt.Fprintln(os.Stderr, "Warning: VOYAGE_API_KEY not set — running in FTS-only mode (no vector search or reranking)")
+	} else {
+		emb = e
 	}
 
 	if count, _ := st.SeedDocsCount(); count == 0 {
@@ -169,7 +172,7 @@ func resolvedDate() string {
 }
 
 func printUsage() {
-	fmt.Println(`alfred - Your silent butler for Claude Code
+	fmt.Println(`alfred - Your proactive assistant for Claude Code
 
 Usage:
   alfred [command]

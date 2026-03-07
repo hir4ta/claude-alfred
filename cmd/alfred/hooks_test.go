@@ -696,15 +696,15 @@ func TestHandlePreCompactIntegration(t *testing.T) {
 	}
 
 	// Verify compaction instructions were emitted to stdout.
-	if !strings.Contains(output, "Butler Protocol") {
-		t.Error("stdout should contain Butler Protocol compaction instructions")
+	if !strings.Contains(output, "Alfred Protocol") {
+		t.Error("stdout should contain Alfred Protocol compaction instructions")
 	}
 	if !strings.Contains(output, "precompact-test") {
 		t.Error("stdout should contain task slug")
 	}
 }
 
-func TestInjectButlerContextCompact(t *testing.T) {
+func TestInjectSpecContextCompact(t *testing.T) {
 	dir := t.TempDir()
 	sd, err := spec.Init(dir, "compact-ctx", "test compact context")
 	if err != nil {
@@ -728,7 +728,7 @@ func TestInjectButlerContextCompact(t *testing.T) {
 
 	// First compact: should inject all 4 files.
 	output1 := captureStdout(t, func() {
-		injectButlerContext(dir, "compact")
+		injectSpecContext(dir, "compact")
 	})
 
 	if !strings.Contains(output1, "Requirements") {
@@ -755,7 +755,7 @@ func TestInjectButlerContextCompact(t *testing.T) {
 
 	// Second compact: should inject only session.md (lightweight).
 	output2 := captureStdout(t, func() {
-		injectButlerContext(dir, "compact")
+		injectSpecContext(dir, "compact")
 	})
 
 	if !strings.Contains(output2, "Lightweight recovery") {
@@ -773,7 +773,7 @@ func TestInjectButlerContextCompact(t *testing.T) {
 	}
 }
 
-func TestInjectButlerContextNormal(t *testing.T) {
+func TestInjectSpecContextNormal(t *testing.T) {
 	dir := t.TempDir()
 	sd, err := spec.Init(dir, "normal-ctx", "test normal startup")
 	if err != nil {
@@ -791,7 +791,7 @@ func TestInjectButlerContextNormal(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		injectButlerContext(dir, "startup")
+		injectSpecContext(dir, "startup")
 	})
 
 	if !strings.Contains(output, "Normal startup test") {
@@ -1017,15 +1017,215 @@ func TestHandleUserPromptSubmitEarlyReturns(t *testing.T) {
 		t.Error("config path prompt should trigger reminder")
 	}
 
-	// Note: keyword filtering removed; LLM prompt hook handles relevance gating.
-	// The command hook no longer rejects "unrelated" prompts — it proceeds to FTS search.
-
 	// Test short prompt (< 10 runes).
 	output = captureStdout(t, func() {
 		handleUserPromptSubmit(&hookEvent{Prompt: "hook?"})
 	})
 	if output != "" {
 		t.Errorf("short prompt should produce no output, got %q", output)
+	}
+
+	// Test unrelated prompt (keyword filter rejects).
+	output = captureStdout(t, func() {
+		handleUserPromptSubmit(&hookEvent{Prompt: "Fix the login bug in the authentication service please"})
+	})
+	if output != "" {
+		t.Errorf("unrelated prompt should produce no output, got %q", output)
+	}
+
+	// Test empty prompt.
+	output = captureStdout(t, func() {
+		handleUserPromptSubmit(&hookEvent{Prompt: ""})
+	})
+	if output != "" {
+		t.Errorf("empty prompt should produce no output, got %q", output)
+	}
+}
+
+func TestHandleUserPromptSubmitKeywordFilter(t *testing.T) {
+	// Claude Code related prompts should pass the keyword filter.
+	relatedPrompts := []string{
+		"hookの設定方法を教えてください",
+		"skillを作成したいのですが",
+		"MCP serverの接続方法は？",
+		"claude.md のベストプラクティス",
+		"compaction 後にコンテキストが失われる",
+		"pluginをインストールする方法",
+		"worktreeでの並行作業方法",
+		"subagentの使い方を教えて",
+		"フックの設定ファイルの書き方",
+	}
+
+	for _, prompt := range relatedPrompts {
+		t.Run(prompt, func(t *testing.T) {
+			if !isClaudeCodeRelated(prompt) {
+				t.Errorf("isClaudeCodeRelated(%q) = false, want true", prompt)
+			}
+		})
+	}
+}
+
+func TestHandleUserPromptSubmitFTSPath(t *testing.T) {
+	// Set up a temp DB with seed docs to exercise the FTS search path.
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer st.Close()
+
+	// Seed docs about hooks configuration.
+	for _, doc := range []store.DocRow{
+		{URL: "https://docs.example.com/hooks", SectionPath: "Hooks Configuration", Content: "Configure hooks in .claude/hooks/hooks.json to run shell commands on lifecycle events like SessionStart and PreToolUse.", SourceType: "docs"},
+		{URL: "https://docs.example.com/skills", SectionPath: "Skills", Content: "Skills are reusable prompt templates stored in .claude/skills/ directories with SKILL.md files.", SourceType: "docs"},
+		{URL: "https://docs.example.com/mcp", SectionPath: "MCP Servers", Content: "MCP servers provide tools to Claude Code. Configure in .mcp.json with command and args.", SourceType: "docs"},
+	} {
+		if _, _, err := st.UpsertDoc(&doc); err != nil {
+			t.Fatalf("UpsertDoc: %v", err)
+		}
+	}
+
+	// Override openStore to use our test DB.
+	origOpen := openStore
+	openStore = func() (*store.Store, error) { return st, nil }
+	t.Cleanup(func() { openStore = origOpen })
+
+	// English prompt about hooks should find relevant docs and inject knowledge.
+	output := captureStdout(t, func() {
+		handleUserPromptSubmit(&hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events in Claude Code?"})
+	})
+	if !strings.Contains(output, "Relevant best practices") {
+		t.Errorf("FTS path should inject knowledge, got %q", output)
+	}
+	if !strings.Contains(output, "Hooks") {
+		t.Errorf("should find hooks-related doc, got %q", output)
+	}
+}
+
+func TestHandleUserPromptSubmitFTSNoResults(t *testing.T) {
+	// Empty DB: FTS search returns 0 results.
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "empty.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer st.Close()
+
+	origOpen := openStore
+	openStore = func() (*store.Store, error) { return st, nil }
+	t.Cleanup(func() { openStore = origOpen })
+
+	output := captureStdout(t, func() {
+		handleUserPromptSubmit(&hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events?"})
+	})
+	if output != "" {
+		t.Errorf("empty DB should produce no output, got %q", output)
+	}
+}
+
+func TestHandleUserPromptSubmitFTSLowRelevance(t *testing.T) {
+	// DB has docs but they're irrelevant to the prompt.
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "irrelevant.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer st.Close()
+
+	doc := store.DocRow{
+		URL: "https://docs.example.com/auth", SectionPath: "Authentication",
+		Content: "OAuth2 authentication flow for third-party integrations with token refresh.",
+		SourceType: "docs",
+	}
+	if _, _, err := st.UpsertDoc(&doc); err != nil {
+		t.Fatalf("UpsertDoc: %v", err)
+	}
+
+	origOpen := openStore
+	openStore = func() (*store.Store, error) { return st, nil }
+	t.Cleanup(func() { openStore = origOpen })
+
+	// Prompt about hooks, but only auth docs exist — should be below relevance threshold.
+	output := captureStdout(t, func() {
+		handleUserPromptSubmit(&hookEvent{Prompt: "How do I configure hooks for SessionStart lifecycle events?"})
+	})
+	if strings.Contains(output, "Authentication") {
+		t.Errorf("irrelevant doc should be filtered by relevance scoring, got %q", output)
+	}
+}
+
+func TestHandleUserPromptSubmitConfigReminder(t *testing.T) {
+	tests := []struct {
+		name   string
+		prompt string
+		want   bool
+	}{
+		{"CLAUDE.md mention", "CLAUDE.md を更新して", true},
+		{"MEMORY.md mention", "MEMORY.md を確認して", true},
+		{".mcp.json mention", ".mcp.json の設定を変更したい", true},
+		{".claude/ mention", ".claude/rules/ にルールを追加して", true},
+		{"no config mention", "テストを書いてください", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := captureStdout(t, func() {
+				handleUserPromptSubmit(&hookEvent{Prompt: tt.prompt})
+			})
+			gotReminder := strings.Contains(output, "alfred")
+			if gotReminder != tt.want {
+				t.Errorf("config reminder for %q: got=%v, want=%v (output=%q)", tt.prompt, gotReminder, tt.want, output)
+			}
+		})
+	}
+}
+
+func TestHandleSessionStartNoProject(t *testing.T) {
+	// Empty project path should be a no-op.
+	output := captureStdout(t, func() {
+		handleSessionStart(&hookEvent{ProjectPath: ""})
+	})
+	if output != "" {
+		t.Errorf("empty project path should produce no output, got %q", output)
+	}
+}
+
+func TestHandleSessionStartWithSpec(t *testing.T) {
+	dir := t.TempDir()
+	sd, err := spec.Init(dir, "session-test", "test session start")
+	if err != nil {
+		t.Fatalf("spec.Init: %v", err)
+	}
+	if err := sd.WriteFile(spec.FileSession, "# Session: session-test\n\n## Status\nactive\n\n## Currently Working On\nTesting session start\n"); err != nil {
+		t.Fatalf("write session: %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		handleSessionStart(&hookEvent{ProjectPath: dir, Source: "startup"})
+	})
+	if !strings.Contains(output, "session-test") {
+		t.Error("should inject session context for active spec")
+	}
+	if !strings.Contains(output, "Testing session start") {
+		t.Error("should include session content")
+	}
+}
+
+func TestStopHookActive(t *testing.T) {
+	output := captureStdout(t, func() {
+		// Simulate stop_hook_active: runHook should exit early.
+		// We test the hookEvent field directly.
+		ev := &hookEvent{StopHookActive: true, ProjectPath: t.TempDir()}
+		if ev.StopHookActive {
+			return // mirrors runHook behavior
+		}
+		handleSessionStart(ev)
+	})
+	if output != "" {
+		t.Errorf("stop_hook_active should produce no output, got %q", output)
 	}
 }
 

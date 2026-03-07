@@ -35,7 +35,7 @@ func feedStdin(t *testing.T, ev hookEvent) {
 func TestRunHook_SessionStart(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create a spec so injectButlerContext has something to inject.
+	// Create a spec so injectSpecContext has something to inject.
 	sd, err := spec.Init(dir, "dispatch-test", "test dispatch")
 	if err != nil {
 		t.Fatalf("spec.Init: %v", err)
@@ -55,7 +55,7 @@ func TestRunHook_SessionStart(t *testing.T) {
 	})
 
 	if output == "" {
-		t.Error("expected butler context output for SessionStart with active spec")
+		t.Error("expected spec context output for SessionStart with active spec")
 	}
 	if len(output) > 0 && !containsStr(output, "dispatch-test") {
 		t.Errorf("output should contain task slug, got: %s", output)

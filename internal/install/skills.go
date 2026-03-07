@@ -107,7 +107,7 @@ var deprecatedSkillDirs = []string{
 	"alfred-setup",
 	"alfred-migrate",
 	"alfred-explain",
-	// v0.24-v0.26 era (renamed to butler-style in v0.27)
+	// v0.24-v0.26 era (renamed to alfred-style in v0.27)
 	"create-skill",
 	"create-rule",
 	"create-hook",

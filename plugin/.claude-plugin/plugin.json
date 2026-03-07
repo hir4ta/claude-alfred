@@ -2,15 +2,15 @@
   "author": {
     "name": "hir4ta"
   },
-  "description": "Your proactive butler for Claude Code",
+  "description": "Your proactive assistant for Claude Code",
   "homepage": "https://github.com/hir4ta/claude-alfred",
   "keywords": [
-    "butler",
+    "alfred",
     "best-practices",
     "workflow"
   ],
   "license": "MIT",
   "name": "alfred",
   "repository": "https://github.com/hir4ta/claude-alfred",
-  "version": "0.45.3"
+  "version": "0.46.0"
 }

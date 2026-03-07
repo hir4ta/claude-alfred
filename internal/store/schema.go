@@ -8,7 +8,15 @@ import (
 // schemaVersion 4 = removed redundant index + embedding 2048d.
 // Changes from V3:
 //   - Removed redundant idx_embeddings_source (UNIQUE constraint already creates implicit index)
+//
+// Migration policy (V4+):
+//   - Incremental migrations preserve existing data (docs, embeddings).
+//   - Legacy schemas (< 3) are still rebuilt from scratch.
 const schemaVersion = 4
+
+// minIncrementalVersion is the lowest version from which we can migrate
+// incrementally (without data loss). Versions below this are rebuilt.
+const minIncrementalVersion = 3
 
 const ddl = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -85,7 +93,7 @@ var legacyTables = []string{
 	"suggestion_outcomes", "failure_solutions", "solution_chains",
 	"learned_episodes", "feedbacks", "coaching_cache",
 	"snr_history", "signal_outcomes", "user_pattern_effectiveness",
-	// V100 era (dropped in V200 passive butler reset)
+	// V100 era (dropped in V200 reset)
 	"user_profile", "user_preferences", "adaptive_baselines",
 	"workflow_sequences", "file_co_changes",
 	"live_session_phases", "live_session_files",
@@ -115,10 +123,27 @@ var legacyIndexes = []string{
 	"idx_tool_failures_session",
 }
 
+// incrementalMigrations maps source version → SQL statements to apply.
+// Each entry migrates from version N to N+1.
+// Add new entries here for future schema changes.
+var incrementalMigrations = map[int][]string{
+	3: {
+		// V3 → V4: remove redundant index (UNIQUE constraint already creates one).
+		"DROP INDEX IF EXISTS idx_embeddings_source",
+	},
+	// Future example:
+	// 4: {
+	//     "ALTER TABLE docs ADD COLUMN language TEXT DEFAULT ''",
+	// },
+}
+
 // SchemaVersion returns the current schema version constant.
 func SchemaVersion() int { return schemaVersion }
 
 // Migrate applies all pending schema migrations to the database.
+// For legacy schemas (< minIncrementalVersion), the database is rebuilt.
+// For schemas >= minIncrementalVersion, incremental migrations are applied
+// preserving all existing data (docs, embeddings).
 func Migrate(db *sql.DB) error {
 	var current int
 	row := db.QueryRow("SELECT version FROM schema_version LIMIT 1")
@@ -129,44 +154,91 @@ func Migrate(db *sql.DB) error {
 		return nil
 	}
 
-	// Breaking change — drop everything and rebuild.
-	if current != 0 {
-		// Drop FTS virtual tables first (triggers reference them).
-		for _, vt := range []string{"decisions_fts", "docs_fts"} {
-			db.Exec("DROP TABLE IF EXISTS " + vt)
+	if current > 0 && current < minIncrementalVersion {
+		// Legacy schema — too different to migrate incrementally.
+		if err := rebuildFromScratch(db); err != nil {
+			return err
 		}
-		// Drop triggers.
-		for _, trigger := range legacyTriggers {
-			db.Exec("DROP TRIGGER IF EXISTS " + trigger)
+	} else if current == 0 {
+		// Fresh install — create everything.
+		if err := cleanupLegacy(db); err != nil {
+			return err
 		}
-		for _, trigger := range []string{
-			"docs_fts_ai", "docs_fts_ad", "docs_fts_au",
-		} {
-			db.Exec("DROP TRIGGER IF EXISTS " + trigger)
+		if _, err := db.Exec(ddl); err != nil {
+			return err
 		}
-		// Drop all known tables.
-		for _, table := range legacyTables {
-			db.Exec("DROP TABLE IF EXISTS " + table)
-		}
-		for _, table := range []string{"embeddings", "docs", "schema_version"} {
-			db.Exec("DROP TABLE IF EXISTS " + table)
-		}
-		for _, idx := range legacyIndexes {
-			db.Exec("DROP INDEX IF EXISTS " + idx)
+	} else {
+		// Incremental migration: apply steps from current → schemaVersion.
+		for v := current; v < schemaVersion; v++ {
+			stmts, ok := incrementalMigrations[v]
+			if !ok {
+				continue
+			}
+			for _, stmt := range stmts {
+				if _, err := db.Exec(stmt); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
+	return setSchemaVersion(db, schemaVersion)
+}
+
+// rebuildFromScratch drops all tables and recreates the schema.
+// Used only for legacy schemas that are incompatible with incremental migration.
+func rebuildFromScratch(db *sql.DB) error {
+	// Drop FTS virtual tables first (triggers reference them).
+	for _, vt := range []string{"decisions_fts", "docs_fts"} {
+		db.Exec("DROP TABLE IF EXISTS " + vt)
+	}
+	// Drop triggers.
+	for _, trigger := range legacyTriggers {
+		db.Exec("DROP TRIGGER IF EXISTS " + trigger)
+	}
+	for _, trigger := range []string{
+		"docs_fts_ai", "docs_fts_ad", "docs_fts_au",
+	} {
+		db.Exec("DROP TRIGGER IF EXISTS " + trigger)
+	}
+	// Drop all known tables.
+	for _, table := range legacyTables {
+		db.Exec("DROP TABLE IF EXISTS " + table)
+	}
+	for _, table := range []string{"embeddings", "docs", "schema_version"} {
+		db.Exec("DROP TABLE IF EXISTS " + table)
+	}
+	for _, idx := range legacyIndexes {
+		db.Exec("DROP INDEX IF EXISTS " + idx)
+	}
 	if _, err := db.Exec(ddl); err != nil {
 		return err
 	}
+	return nil
+}
 
-	// Upsert schema version.
+// cleanupLegacy removes legacy tables/triggers/indexes that may exist
+// from previous installations sharing the same DB path.
+func cleanupLegacy(db *sql.DB) error {
+	for _, trigger := range legacyTriggers {
+		db.Exec("DROP TRIGGER IF EXISTS " + trigger)
+	}
+	for _, table := range legacyTables {
+		db.Exec("DROP TABLE IF EXISTS " + table)
+	}
+	for _, idx := range legacyIndexes {
+		db.Exec("DROP INDEX IF EXISTS " + idx)
+	}
+	return nil
+}
+
+func setSchemaVersion(db *sql.DB, ver int) error {
 	if _, err := db.Exec(`DELETE FROM schema_version`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (?)`, schemaVersion); err != nil {
+	if _, err := db.Exec(`INSERT INTO schema_version (version) VALUES (?)`, ver); err != nil {
 		return err
 	}
-	_, err := db.Exec("PRAGMA user_version = " + strconv.Itoa(schemaVersion))
+	_, err := db.Exec("PRAGMA user_version = " + strconv.Itoa(ver))
 	return err
 }

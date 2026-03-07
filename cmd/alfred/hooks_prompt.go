@@ -8,6 +8,12 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
+// openStore is the function used to obtain a store connection.
+// Overridable in tests.
+var openStore = func() (*store.Store, error) {
+	return store.OpenDefaultCached()
+}
+
 // ---------------------------------------------------------------------------
 // PreToolUse: .claude/ config access reminder
 // ---------------------------------------------------------------------------
@@ -81,7 +87,7 @@ var domainSynonyms = map[string][]string{
 	"setup":       {"configure", "initialize", "wizard"},
 	"worktree":    {"worktrees", "git worktree", "isolation"},
 	"review":      {"code review", "audit", "inspect"},
-	"spec":        {"specification", "butler protocol", "requirements"},
+	"spec":        {"specification", "alfred protocol", "requirements"},
 	"embed":       {"embedding", "vector", "semantic search"},
 	"embedding":   {"embed", "vector", "semantic search"},
 	"search":      {"FTS", "full text search", "vector search", "hybrid"},
@@ -248,13 +254,17 @@ func handleUserPromptSubmit(ev *hookEvent) {
 		return // config reminder is sufficient, skip knowledge injection
 	}
 
-	// Proactive knowledge injection: LLM gate has already filtered unrelated prompts.
+	// Proactive knowledge injection: keyword filter replaces the former LLM gate.
 	prompt := strings.TrimSpace(ev.Prompt)
 	if len([]rune(prompt)) < 10 {
 		return // too short to search meaningfully (rune-based for CJK)
 	}
+	if !isClaudeCodeRelated(prompt) {
+		debugf("UserPromptSubmit: prompt not Claude Code related, skipping")
+		return
+	}
 
-	st, err := store.OpenDefaultCached()
+	st, err := openStore()
 	if err != nil {
 		debugf("UserPromptSubmit: store open failed: %v", err)
 		return

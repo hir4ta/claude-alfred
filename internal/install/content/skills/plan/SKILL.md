@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >
-  Butler Protocol: Interactively generate a spec. Requirements -> design -> task breakdown,
+  Alfred Protocol: Interactively generate a spec. Requirements -> design -> task breakdown,
   saved to .alfred/specs/. Creates a development plan resilient to Compact/session loss.
   Use when: (1) starting a new task, (2) organizing a design, (3) planning before resuming work.
 user-invocable: true
@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, WebSearch, AskUserQuestion, Agent,
 context: current
 ---
 
-# /alfred:plan — Butler Protocol Spec Generator
+# /alfred:plan — Alfred Protocol Spec Generator
 
 Interactively generate a spec, creating a development plan resilient to Compact/session loss.
 
@@ -53,7 +53,7 @@ By explicitly writing these to files, we create a spec that enables perfect reco
 
 7. **[OUTPUT]** Confirm to user:
    ```
-   Butler Protocol initialized for '{task-slug}'.
+   Alfred Protocol initialized for '{task-slug}'.
 
    Spec files: .alfred/specs/{task-slug}/
    - requirements.md ✓

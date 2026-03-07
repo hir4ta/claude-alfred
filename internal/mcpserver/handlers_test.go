@@ -723,15 +723,15 @@ func TestReviewDir_Agents(t *testing.T) {
 	// With an agent file.
 	agentsDir := filepath.Join(dir, ".claude", "agents")
 	os.MkdirAll(agentsDir, 0o755)
-	os.WriteFile(filepath.Join(agentsDir, "butler.md"), []byte("# Butler"), 0o644)
+	os.WriteFile(filepath.Join(agentsDir, "alfred.md"), []byte("# Alfred"), 0o644)
 
 	result = reviewDir(dir, ".claude", "agents")
 	if count, _ := result["count"].(int); count != 1 {
 		t.Errorf("agents count = %d, want 1", count)
 	}
 	items, _ := result["items"].([]string)
-	if len(items) != 1 || items[0] != "butler.md" {
-		t.Errorf("items = %v, want [butler.md]", items)
+	if len(items) != 1 || items[0] != "alfred.md" {
+		t.Errorf("items = %v, want [alfred.md]", items)
 	}
 }
 

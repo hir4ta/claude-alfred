@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-func TestButlerInitHandler_MissingProjectPath(t *testing.T) {
+func TestSpecInitHandler_MissingProjectPath(t *testing.T) {
 	t.Parallel()
-	handler := butlerInitHandler(nil, nil)
+	handler := specInitHandler(nil, nil)
 	res, err := handler(context.Background(), newRequest(map[string]any{
 		"task_slug": "test-task",
 	}))
@@ -20,9 +20,9 @@ func TestButlerInitHandler_MissingProjectPath(t *testing.T) {
 	}
 }
 
-func TestButlerInitHandler_MissingTaskSlug(t *testing.T) {
+func TestSpecInitHandler_MissingTaskSlug(t *testing.T) {
 	t.Parallel()
-	handler := butlerInitHandler(nil, nil)
+	handler := specInitHandler(nil, nil)
 	res, err := handler(context.Background(), newRequest(map[string]any{
 		"project_path": t.TempDir(),
 	}))
@@ -34,9 +34,9 @@ func TestButlerInitHandler_MissingTaskSlug(t *testing.T) {
 	}
 }
 
-func TestButlerInitHandler_Success(t *testing.T) {
+func TestSpecInitHandler_Success(t *testing.T) {
 	t.Parallel()
-	handler := butlerInitHandler(nil, nil)
+	handler := specInitHandler(nil, nil)
 	dir := t.TempDir()
 
 	res, err := handler(context.Background(), newRequest(map[string]any{
@@ -61,9 +61,9 @@ func TestButlerInitHandler_Success(t *testing.T) {
 	}
 }
 
-func TestButlerInitHandler_InvalidSlug(t *testing.T) {
+func TestSpecInitHandler_InvalidSlug(t *testing.T) {
 	t.Parallel()
-	handler := butlerInitHandler(nil, nil)
+	handler := specInitHandler(nil, nil)
 	res, err := handler(context.Background(), newRequest(map[string]any{
 		"project_path": t.TempDir(),
 		"task_slug":    "INVALID_SLUG!",
@@ -80,10 +80,10 @@ func TestButlerInitHandler_InvalidSlug(t *testing.T) {
 	}
 }
 
-func TestButlerInitHandler_WithDB(t *testing.T) {
+func TestSpecInitHandler_WithDB(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := butlerInitHandler(st, nil)
+	handler := specInitHandler(st, nil)
 	dir := t.TempDir()
 
 	res, err := handler(context.Background(), newRequest(map[string]any{
@@ -104,9 +104,9 @@ func TestButlerInitHandler_WithDB(t *testing.T) {
 	}
 }
 
-func TestButlerUpdateHandler_MissingFields(t *testing.T) {
+func TestSpecUpdateHandler_MissingFields(t *testing.T) {
 	t.Parallel()
-	handler := butlerUpdateHandler(nil, nil)
+	handler := specUpdateHandler(nil, nil)
 
 	tests := []struct {
 		name string
@@ -135,10 +135,10 @@ func TestButlerUpdateHandler_MissingFields(t *testing.T) {
 	}
 }
 
-func TestButlerUpdateHandler_InvalidFile(t *testing.T) {
+func TestSpecUpdateHandler_InvalidFile(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := butlerInitHandler(st, nil)
+	handler := specInitHandler(st, nil)
 	dir := t.TempDir()
 
 	// Create a spec first.
@@ -148,7 +148,7 @@ func TestButlerUpdateHandler_InvalidFile(t *testing.T) {
 		"description":  "test",
 	}))
 
-	updateHandler := butlerUpdateHandler(nil, nil)
+	updateHandler := specUpdateHandler(nil, nil)
 	res, err := updateHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"file":         "invalid.md",
@@ -162,9 +162,9 @@ func TestButlerUpdateHandler_InvalidFile(t *testing.T) {
 	}
 }
 
-func TestButlerUpdateHandler_InvalidMode(t *testing.T) {
+func TestSpecUpdateHandler_InvalidMode(t *testing.T) {
 	t.Parallel()
-	handler := butlerUpdateHandler(nil, nil)
+	handler := specUpdateHandler(nil, nil)
 	res, err := handler(context.Background(), newRequest(map[string]any{
 		"project_path": t.TempDir(),
 		"file":         "design.md",
@@ -179,19 +179,19 @@ func TestButlerUpdateHandler_InvalidMode(t *testing.T) {
 	}
 }
 
-func TestButlerUpdateHandler_AppendAndReplace(t *testing.T) {
+func TestSpecUpdateHandler_AppendAndReplace(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
 	// Init a spec.
-	initHandler := butlerInitHandler(nil, nil)
+	initHandler := specInitHandler(nil, nil)
 	initHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "upd-task",
 		"description":  "test",
 	}))
 
-	updateHandler := butlerUpdateHandler(nil, nil)
+	updateHandler := specUpdateHandler(nil, nil)
 
 	// Append mode.
 	res, err := updateHandler(context.Background(), newRequest(map[string]any{
@@ -230,9 +230,9 @@ func TestButlerUpdateHandler_AppendAndReplace(t *testing.T) {
 	}
 }
 
-func TestButlerStatusHandler_NoSpec(t *testing.T) {
+func TestSpecStatusHandler_NoSpec(t *testing.T) {
 	t.Parallel()
-	handler := butlerStatusHandler()
+	handler := specStatusHandler()
 	dir := t.TempDir()
 
 	res, err := handler(context.Background(), newRequest(map[string]any{
@@ -251,19 +251,19 @@ func TestButlerStatusHandler_NoSpec(t *testing.T) {
 	}
 }
 
-func TestButlerStatusHandler_WithSpec(t *testing.T) {
+func TestSpecStatusHandler_WithSpec(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
 	// Create a spec.
-	initHandler := butlerInitHandler(nil, nil)
+	initHandler := specInitHandler(nil, nil)
 	initHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "status-task",
 		"description":  "test status",
 	}))
 
-	handler := butlerStatusHandler()
+	handler := specStatusHandler()
 	res, err := handler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 	}))
@@ -283,9 +283,9 @@ func TestButlerStatusHandler_WithSpec(t *testing.T) {
 	}
 }
 
-func TestButlerStatusHandler_MissingProjectPath(t *testing.T) {
+func TestSpecStatusHandler_MissingProjectPath(t *testing.T) {
 	t.Parallel()
-	handler := butlerStatusHandler()
+	handler := specStatusHandler()
 	res, err := handler(context.Background(), newRequest(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -295,12 +295,12 @@ func TestButlerStatusHandler_MissingProjectPath(t *testing.T) {
 	}
 }
 
-func TestButlerSwitchHandler_Success(t *testing.T) {
+func TestSpecSwitchHandler_Success(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
 	// Create two specs.
-	initHandler := butlerInitHandler(nil, nil)
+	initHandler := specInitHandler(nil, nil)
 	initHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "task-a",
@@ -313,7 +313,7 @@ func TestButlerSwitchHandler_Success(t *testing.T) {
 	}))
 
 	// Switch to task-a.
-	switchHandler := butlerSwitchHandler()
+	switchHandler := specSwitchHandler()
 	res, err := switchHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "task-a",
@@ -331,9 +331,9 @@ func TestButlerSwitchHandler_Success(t *testing.T) {
 	}
 }
 
-func TestButlerSwitchHandler_MissingFields(t *testing.T) {
+func TestSpecSwitchHandler_MissingFields(t *testing.T) {
 	t.Parallel()
-	handler := butlerSwitchHandler()
+	handler := specSwitchHandler()
 	res, _ := handler(context.Background(), newRequest(map[string]any{
 		"project_path": t.TempDir(),
 	}))
@@ -342,12 +342,12 @@ func TestButlerSwitchHandler_MissingFields(t *testing.T) {
 	}
 }
 
-func TestButlerDeleteHandler_Success(t *testing.T) {
+func TestSpecDeleteHandler_Success(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
 	// Create a spec.
-	initHandler := butlerInitHandler(nil, nil)
+	initHandler := specInitHandler(nil, nil)
 	initHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "del-task",
@@ -355,7 +355,7 @@ func TestButlerDeleteHandler_Success(t *testing.T) {
 	}))
 
 	// Delete it.
-	delHandler := butlerDeleteHandler(nil)
+	delHandler := specDeleteHandler(nil)
 	res, err := delHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "del-task",
@@ -376,13 +376,13 @@ func TestButlerDeleteHandler_Success(t *testing.T) {
 	}
 }
 
-func TestButlerDeleteHandler_WithDB(t *testing.T) {
+func TestSpecDeleteHandler_WithDB(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
 	dir := t.TempDir()
 
 	// Create spec with DB sync.
-	initHandler := butlerInitHandler(st, nil)
+	initHandler := specInitHandler(st, nil)
 	initHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "db-del",
@@ -390,7 +390,7 @@ func TestButlerDeleteHandler_WithDB(t *testing.T) {
 	}))
 
 	// Delete with DB cleanup.
-	delHandler := butlerDeleteHandler(st)
+	delHandler := specDeleteHandler(st)
 	res, err := delHandler(context.Background(), newRequest(map[string]any{
 		"project_path": dir,
 		"task_slug":    "db-del",
@@ -408,9 +408,9 @@ func TestButlerDeleteHandler_WithDB(t *testing.T) {
 	}
 }
 
-func TestButlerDeleteHandler_MissingFields(t *testing.T) {
+func TestSpecDeleteHandler_MissingFields(t *testing.T) {
 	t.Parallel()
-	handler := butlerDeleteHandler(nil)
+	handler := specDeleteHandler(nil)
 	res, _ := handler(context.Background(), newRequest(map[string]any{
 		"project_path": t.TempDir(),
 	}))
@@ -419,9 +419,9 @@ func TestButlerDeleteHandler_MissingFields(t *testing.T) {
 	}
 }
 
-func TestButlerDeleteHandler_NonexistentTask(t *testing.T) {
+func TestSpecDeleteHandler_NonexistentTask(t *testing.T) {
 	t.Parallel()
-	handler := butlerDeleteHandler(nil)
+	handler := specDeleteHandler(nil)
 	res, err := handler(context.Background(), newRequest(map[string]any{
 		"project_path": t.TempDir(),
 		"task_slug":    "nonexistent",

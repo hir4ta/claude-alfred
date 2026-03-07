@@ -14,7 +14,7 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
-const serverInstructions = `alfred is your proactive butler for Claude Code.
+const serverInstructions = `alfred is your proactive assistant for Claude Code.
 
 He works silently in the background, and provides powerful tools when needed:
 
@@ -99,7 +99,7 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithString("task_slug", mcp.Description("URL-safe task identifier (e.g., 'add-auth', 'fix-memory-leak')"), mcp.Required()),
 				mcp.WithString("description", mcp.Description("Brief description of the task goal")),
 			),
-			Handler: butlerInitHandler(st, emb),
+			Handler: specInitHandler(st, emb),
 		},
 
 		server.ServerTool{
@@ -110,7 +110,7 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithString("content", mcp.Description("Content to write"), mcp.Required()),
 				mcp.WithString("mode", mcp.Description("Write mode: 'append' (default) or 'replace'")),
 			),
-			Handler: butlerUpdateHandler(st, emb),
+			Handler: specUpdateHandler(st, emb),
 		},
 
 		server.ServerTool{
@@ -119,7 +119,7 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 			),
-			Handler: butlerStatusHandler(),
+			Handler: specStatusHandler(),
 		},
 
 		server.ServerTool{
@@ -128,7 +128,7 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 				mcp.WithString("task_slug", mcp.Description("Task slug to switch to (must already exist)"), mcp.Required()),
 			),
-			Handler: butlerSwitchHandler(),
+			Handler: specSwitchHandler(),
 		},
 
 		server.ServerTool{
@@ -137,7 +137,7 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 				mcp.WithString("task_slug", mcp.Description("Task slug to delete"), mcp.Required()),
 			),
-			Handler: butlerDeleteHandler(st),
+			Handler: specDeleteHandler(st),
 		},
 
 		server.ServerTool{
@@ -147,7 +147,7 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 				mcp.WithString("focus", mcp.Description("Optional focus area for the review (e.g., 'auth logic', 'error handling')")),
 			),
-			Handler: butlerReviewHandler(st, emb),
+			Handler: codeReviewHandler(st, emb),
 		},
 	)
 
