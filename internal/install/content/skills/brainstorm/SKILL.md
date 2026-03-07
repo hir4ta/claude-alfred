@@ -7,7 +7,7 @@ description: |
   (3) need to surface risks and issues, (4) need raw material for convergence (/alfred:refine).
 user-invocable: true
 argument-hint: "<theme or rough prompt>"
-allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec-init
+allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec
 context: fork
 ---
 
@@ -23,8 +23,8 @@ The goal is not "deciding" but "expanding." However, it creates an entry point t
 
 ## alfred-Specific Features
 - In Phase 1, use the `knowledge` tool to search the knowledge base for related documents and best practices as divergence material
-- After Phase 4 output, offer the option "Create a spec with spec-init?"
-- Output can be persisted to DB (via spec-init)
+- After Phase 4 output, offer the option "Create a spec with spec (action=init)?"
+- Output can be persisted to DB (via spec (action=init))
 
 ## Phase 0: Intake & Minimal Assumption Check (AskUserQuestion recommended)
 Confirm with up to 3 questions (with choices):

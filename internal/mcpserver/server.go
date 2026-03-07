@@ -1,6 +1,6 @@
 // Package mcpserver implements the MCP tool server for alfred,
-// providing 9 tools: knowledge search, config review/suggest,
-// spec management (init/update/status/switch/delete), and code review.
+// providing 5 tools: knowledge search, config review/suggest,
+// unified spec management, and code review.
 package mcpserver
 
 import (
@@ -21,11 +21,7 @@ He works silently in the background, and provides powerful tools when needed:
   knowledge      — Search Claude Code docs and best practices
   config-review  — Deep audit of .claude/ config against best practices
   config-suggest — Analyze git diff, suggest .claude/ config updates
-  spec-init      — Initialize spec for a new development task
-  spec-update    — Record decisions to active spec (auto DB sync)
-  spec-status    — Get current task state for context restoration
-  spec-switch    — Switch the primary active task
-  spec-delete    — Delete a completed or abandoned task spec
+  spec           — Unified spec management (action: init/update/status/switch/delete)
   code-review    — 3-layer knowledge-powered code review
 
 When to use alfred tools:
@@ -33,9 +29,9 @@ When to use alfred tools:
 - Creating or modifying .claude/ configuration files → call knowledge for best practices first
 - Looking up how a Claude Code feature works → call knowledge
 - After code changes, check if .claude/ config needs updating → call config-suggest
-- Starting a new development task → call spec-init to create spec
-- Making design decisions → call spec-update to record
-- Starting/resuming a session → call spec-status to check active task
+- Starting a new development task → call spec with action=init
+- Making design decisions → call spec with action=update
+- Starting/resuming a session → call spec with action=status
 - Reviewing code changes against spec and best practices → call code-review
 
 Do NOT review or create .claude/ configuration by only reading files.
@@ -93,51 +89,17 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 		},
 
 		server.ServerTool{
-			Tool: mcp.NewTool("spec-init",
-				mcp.WithDescription("Initialize a new spec for a development task. Creates .alfred/specs/{task_slug}/ with template files (requirements, design, decisions, session) and syncs to the knowledge DB for semantic search."),
+			Tool: mcp.NewTool("spec",
+				mcp.WithDescription("Unified spec management for development tasks. Actions: init (create spec), update (record decisions), status (get current state), switch (change active task), delete (remove task)."),
+				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete"), mcp.Required()),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
-				mcp.WithString("task_slug", mcp.Description("URL-safe task identifier (e.g., 'add-auth', 'fix-memory-leak')"), mcp.Required()),
-				mcp.WithString("description", mcp.Description("Brief description of the task goal")),
+				mcp.WithString("task_slug", mcp.Description("Task identifier (required for init, switch, delete)")),
+				mcp.WithString("description", mcp.Description("Brief task description (for init)")),
+				mcp.WithString("file", mcp.Description("Spec file to update: requirements.md, design.md, decisions.md, session.md (for update)")),
+				mcp.WithString("content", mcp.Description("Content to write (for update)")),
+				mcp.WithString("mode", mcp.Description("Write mode: 'append' (default) or 'replace' (for update)")),
 			),
-			Handler: specInitHandler(st, emb),
-		},
-
-		server.ServerTool{
-			Tool: mcp.NewTool("spec-update",
-				mcp.WithDescription("Update a spec file for the active task. Appends or replaces content, then syncs to the knowledge DB. Use for recording decisions and session state."),
-				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
-				mcp.WithString("file", mcp.Description("Spec file to update: requirements.md, design.md, decisions.md, session.md"), mcp.Required()),
-				mcp.WithString("content", mcp.Description("Content to write"), mcp.Required()),
-				mcp.WithString("mode", mcp.Description("Write mode: 'append' (default) or 'replace'")),
-			),
-			Handler: specUpdateHandler(st, emb),
-		},
-
-		server.ServerTool{
-			Tool: mcp.NewTool("spec-status",
-				mcp.WithDescription("Get the current spec status for a project. Returns the active task's session state, requirements, and decisions. Use at session start to restore context after compact or new session."),
-				mcp.WithReadOnlyHintAnnotation(true),
-				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
-			),
-			Handler: specStatusHandler(),
-		},
-
-		server.ServerTool{
-			Tool: mcp.NewTool("spec-switch",
-				mcp.WithDescription("Switch the primary active task. Use when working on multiple tasks and you want to change which spec is active for spec-update and session hooks."),
-				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
-				mcp.WithString("task_slug", mcp.Description("Task slug to switch to (must already exist)"), mcp.Required()),
-			),
-			Handler: specSwitchHandler(),
-		},
-
-		server.ServerTool{
-			Tool: mcp.NewTool("spec-delete",
-				mcp.WithDescription("Delete a task's spec directory and remove it from the knowledge DB. Use to clean up completed or abandoned tasks."),
-				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
-				mcp.WithString("task_slug", mcp.Description("Task slug to delete"), mcp.Required()),
-			),
-			Handler: specDeleteHandler(st),
+			Handler: specHandler(st, emb),
 		},
 
 		server.ServerTool{

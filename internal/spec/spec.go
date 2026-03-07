@@ -100,7 +100,7 @@ func Init(projectPath, taskSlug, description string) (*SpecDir, error) {
 
 	// Refuse to overwrite an existing spec directory.
 	if sd.Exists() {
-		return nil, fmt.Errorf("spec already exists for '%s'; use spec-update to modify", taskSlug)
+		return nil, fmt.Errorf("spec already exists for '%s'; use spec action=update to modify", taskSlug)
 	}
 
 	if err := os.MkdirAll(sd.Dir(), 0o755); err != nil {

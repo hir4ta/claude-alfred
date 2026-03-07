@@ -28,15 +28,15 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 		return
 	}
 
-	// Extract recent conversation context from transcript.
-	var contextSnapshot string
+	// Extract rich context from transcript.
+	var txCtx *transcriptContext
 	if transcriptPath != "" {
-		contextSnapshot = extractTranscriptContext(transcriptPath)
+		txCtx = extractTranscriptContextRich(transcriptPath)
 	} else {
 		fmt.Fprintf(os.Stderr, "[alfred] warning: transcript_path is empty — session context will not be captured\n")
 		debugf("PreCompact: transcript_path is empty")
 	}
-	if contextSnapshot == "" && transcriptPath != "" {
+	if txCtx == nil && transcriptPath != "" {
 		fmt.Fprintf(os.Stderr, "[alfred] warning: could not extract context from transcript\n")
 		debugf("PreCompact: empty context from transcript %s", transcriptPath)
 	}
@@ -47,11 +47,16 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 		decisions = extractDecisionsFromTranscript(transcriptPath)
 	}
 
+	// Auto-append decisions to decisions.md (not just session.md).
+	if len(decisions) > 0 {
+		autoAppendDecisions(sd, decisions)
+	}
+
 	// Get modified files from git.
 	modifiedFiles := getModifiedFiles(projectPath)
 
-	// Build activeContext session.md.
-	session := buildActiveContextSession(sd, taskSlug, contextSnapshot, decisions, modifiedFiles, customInstructions)
+	// Build activeContext session.md with rich context.
+	session := buildActiveContextSession(sd, taskSlug, txCtx, decisions, modifiedFiles, customInstructions)
 	if err := sd.WriteFile(spec.FileSession, session); err != nil {
 		debugf("PreCompact: write session error: %v", err)
 		return
@@ -74,7 +79,11 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 	// Async embedding generation for session.md.
 	asyncEmbedSession(sd)
 
-	debugf("PreCompact: saved session for %s (context: %d bytes)", taskSlug, len(contextSnapshot))
+	ctxSize := 0
+	if txCtx != nil {
+		ctxSize = len(txCtx.LastAssistantWork) + len(txCtx.LastUserDirective)
+	}
+	debugf("PreCompact: saved session for %s (context: %d bytes)", taskSlug, ctxSize)
 }
 
 // rotateCompactMarkers keeps only the last maxMarkers compact markers in session.md.
@@ -236,10 +245,83 @@ func getModifiedFiles(projectPath string) []string {
 	return files
 }
 
+// autoAppendDecisions appends newly extracted decisions to decisions.md,
+// deduplicating against existing content.
+func autoAppendDecisions(sd *spec.SpecDir, decisions []string) {
+	existing, _ := sd.ReadFile(spec.FileDecisions)
+	existingLower := strings.ToLower(existing)
+
+	// Extract existing decision lines for substring matching.
+	var existingLines []string
+	for line := range strings.SplitSeq(existingLower, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "- ")
+		if len([]rune(line)) >= 8 && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "<!--") {
+			existingLines = append(existingLines, line)
+		}
+	}
+
+	var newDecisions []string
+	for _, d := range decisions {
+		lower := strings.ToLower(d)
+
+		// Check 1: substring match — if any existing line is contained in the
+		// new decision or vice versa, treat as duplicate.
+		isDup := false
+		for _, el := range existingLines {
+			if strings.Contains(lower, el) || strings.Contains(el, lower) {
+				isDup = true
+				break
+			}
+		}
+		if isDup {
+			continue
+		}
+
+		// Check 2: significant word overlap (60%+ threshold).
+		words := strings.Fields(lower)
+		var sigWords []string
+		for _, w := range words {
+			w = strings.Trim(w, ".,!?;:\"'`()[]{}/-")
+			if len([]rune(w)) >= 4 {
+				sigWords = append(sigWords, w)
+			}
+		}
+		if len(sigWords) > 0 {
+			hits := 0
+			for _, w := range sigWords {
+				if strings.Contains(existingLower, w) {
+					hits++
+				}
+			}
+			if float64(hits)/float64(len(sigWords)) >= 0.6 {
+				continue
+			}
+		}
+		newDecisions = append(newDecisions, d)
+	}
+
+	if len(newDecisions) == 0 {
+		return
+	}
+
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("\n## [%s] Auto-extracted from conversation\n", time.Now().Format("2006-01-02")))
+	for _, d := range newDecisions {
+		buf.WriteString(fmt.Sprintf("- %s\n", d))
+	}
+
+	if err := sd.AppendFile(spec.FileDecisions, buf.String()); err != nil {
+		debugf("autoAppendDecisions: %v", err)
+	} else {
+		debugf("autoAppendDecisions: added %d decisions", len(newDecisions))
+	}
+}
+
 // buildActiveContextSession constructs session.md in activeContext format.
 // It preserves existing content before any Compact Marker, then rebuilds
-// the structured sections with fresh data.
-func buildActiveContextSession(sd *spec.SpecDir, taskSlug, contextSnapshot string, decisions, modifiedFiles []string, customInstructions string) string {
+// the structured sections with fresh data from the rich transcript context.
+func buildActiveContextSession(sd *spec.SpecDir, taskSlug string, txCtx *transcriptContext, decisions, modifiedFiles []string, customInstructions string) string {
 	existing, _ := sd.ReadFile(spec.FileSession)
 
 	// Extract existing structured fields from session.md.
@@ -247,7 +329,6 @@ func buildActiveContextSession(sd *spec.SpecDir, taskSlug, contextSnapshot strin
 	existingStatus := extractSection(existing, "## Status")
 	existingWorkingOn := extractSection(existing, "## Currently Working On")
 	if existingWorkingOn == "" {
-		// Legacy format fallback.
 		existingWorkingOn = extractSection(existing, "## Current Position")
 	}
 	existingNextSteps := extractSection(existing, "## Next Steps")
@@ -263,23 +344,10 @@ func buildActiveContextSession(sd *spec.SpecDir, taskSlug, contextSnapshot strin
 		existingStatus = "active"
 	}
 
-	// Build "Currently Working On" from recent assistant actions in transcript.
+	// Build "Currently Working On" from the last assistant message.
 	workingOn := existingWorkingOn
-	if contextSnapshot != "" {
-		// Extract the most recent assistant action as "currently working on".
-		inAssistantSection := false
-		for _, line := range strings.Split(contextSnapshot, "\n") {
-			if line == "Recent assistant actions:" {
-				inAssistantSection = true
-				continue
-			}
-			if !strings.HasPrefix(line, "- ") && strings.TrimSpace(line) != "" {
-				inAssistantSection = false
-			}
-			if inAssistantSection && strings.HasPrefix(line, "- ") {
-				workingOn = strings.TrimPrefix(line, "- ")
-			}
-		}
+	if txCtx != nil && txCtx.LastAssistantWork != "" {
+		workingOn = txCtx.LastAssistantWork
 	}
 
 	// Build "Recent Decisions" from existing + newly extracted.
@@ -325,19 +393,55 @@ func buildActiveContextSession(sd *spec.SpecDir, taskSlug, contextSnapshot strin
 	for _, f := range modifiedFiles {
 		buf.WriteString("- " + f + "\n")
 	}
-	buf.WriteString("\n")
 
-	// Add compact marker.
+	// Add compact marker with rich context.
 	buf.WriteString(fmt.Sprintf("## Compact Marker [%s]\n", time.Now().Format("2006-01-02 15:04:05")))
 	if customInstructions != "" {
 		buf.WriteString(fmt.Sprintf("User compact instructions: %s\n", customInstructions))
 	}
-	if contextSnapshot != "" {
+
+	// Rich pre-compact context snapshot.
+	if txCtx != nil {
 		buf.WriteString("### Pre-Compact Context Snapshot\n")
-		buf.WriteString(contextSnapshot)
-		buf.WriteString("\n")
+
+		if txCtx.LastUserDirective != "" {
+			buf.WriteString("Last user directive:\n")
+			buf.WriteString(txCtx.LastUserDirective + "\n\n")
+		}
+
+		if len(txCtx.AssistantActions) > 0 {
+			buf.WriteString("Recent assistant actions:\n")
+			for _, s := range txCtx.AssistantActions {
+				buf.WriteString("- " + s + "\n")
+			}
+			buf.WriteString("\n")
+		}
+
+		if len(txCtx.RunningAgents) > 0 {
+			buf.WriteString("Running background agents (may still be active):\n")
+			for _, a := range txCtx.RunningAgents {
+				buf.WriteString("- " + a + "\n")
+			}
+			buf.WriteString("\n")
+		}
+
+		if len(txCtx.RecentToolUses) > 0 {
+			buf.WriteString("Recent tool calls:\n")
+			for _, t := range txCtx.RecentToolUses {
+				buf.WriteString("- " + t + "\n")
+			}
+			buf.WriteString("\n")
+		}
+
+		if len(txCtx.ToolErrors) > 0 {
+			buf.WriteString("Recent errors (dead ends):\n")
+			for _, e := range txCtx.ToolErrors {
+				buf.WriteString("- " + e + "\n")
+			}
+			buf.WriteString("\n")
+		}
 	}
-	buf.WriteString("---\n")
+	buf.WriteString("---\n\n")
 
 	return rotateCompactMarkers(buf.String(), 3)
 }

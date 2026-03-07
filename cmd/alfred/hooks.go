@@ -64,6 +64,19 @@ const configReminder = `This task involves Claude Code configuration. alfred's M
 - review: Project-wide .claude/ configuration audit
 Call these BEFORE reading or modifying configuration files directly.`
 
+// emitAdditionalContext outputs a JSON response with additionalContext for
+// UserPromptSubmit and SessionStart hooks. This is the recommended format
+// per Claude Code docs — context is added more discretely than plain stdout.
+func emitAdditionalContext(eventName, context string) {
+	out := map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":   eventName,
+			"additionalContext": context,
+		},
+	}
+	json.NewEncoder(os.Stdout).Encode(out)
+}
+
 // runHook handles hook events.
 func runHook(event string) error {
 	debugf("hook event=%s", event)

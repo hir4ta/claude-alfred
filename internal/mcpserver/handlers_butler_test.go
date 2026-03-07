@@ -6,12 +6,53 @@ import (
 	"testing"
 )
 
-func TestSpecInitHandler_MissingProjectPath(t *testing.T) {
+// specReq is a helper to build spec tool requests with action.
+func specReq(action string, extra map[string]any) map[string]any {
+	m := map[string]any{"action": action}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
+
+func TestSpecHandler_MissingAction(t *testing.T) {
 	t.Parallel()
-	handler := specInitHandler(nil, nil)
+	handler := specHandler(nil, nil)
 	res, err := handler(context.Background(), newRequest(map[string]any{
-		"task_slug": "test-task",
+		"project_path": t.TempDir(),
 	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected error for missing action")
+	}
+}
+
+func TestSpecHandler_UnknownAction(t *testing.T) {
+	t.Parallel()
+	handler := specHandler(nil, nil)
+	res, err := handler(context.Background(), newRequest(specReq("bogus", map[string]any{
+		"project_path": t.TempDir(),
+	})))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected error for unknown action")
+	}
+	text := resultText(t, res)
+	if !strings.Contains(text, "bogus") {
+		t.Errorf("error should mention unknown action: %s", text)
+	}
+}
+
+func TestSpecInit_MissingProjectPath(t *testing.T) {
+	t.Parallel()
+	handler := specHandler(nil, nil)
+	res, err := handler(context.Background(), newRequest(specReq("init", map[string]any{
+		"task_slug": "test-task",
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -20,12 +61,12 @@ func TestSpecInitHandler_MissingProjectPath(t *testing.T) {
 	}
 }
 
-func TestSpecInitHandler_MissingTaskSlug(t *testing.T) {
+func TestSpecInit_MissingTaskSlug(t *testing.T) {
 	t.Parallel()
-	handler := specInitHandler(nil, nil)
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	handler := specHandler(nil, nil)
+	res, err := handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": t.TempDir(),
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -34,16 +75,16 @@ func TestSpecInitHandler_MissingTaskSlug(t *testing.T) {
 	}
 }
 
-func TestSpecInitHandler_Success(t *testing.T) {
+func TestSpecInit_Success(t *testing.T) {
 	t.Parallel()
-	handler := specInitHandler(nil, nil)
+	handler := specHandler(nil, nil)
 	dir := t.TempDir()
 
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "my-task",
 		"description":  "test init",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,13 +102,13 @@ func TestSpecInitHandler_Success(t *testing.T) {
 	}
 }
 
-func TestSpecInitHandler_InvalidSlug(t *testing.T) {
+func TestSpecInit_InvalidSlug(t *testing.T) {
 	t.Parallel()
-	handler := specInitHandler(nil, nil)
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	handler := specHandler(nil, nil)
+	res, err := handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": t.TempDir(),
 		"task_slug":    "INVALID_SLUG!",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,17 +121,17 @@ func TestSpecInitHandler_InvalidSlug(t *testing.T) {
 	}
 }
 
-func TestSpecInitHandler_WithDB(t *testing.T) {
+func TestSpecInit_WithDB(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
-	handler := specInitHandler(st, nil)
+	handler := specHandler(st, nil)
 	dir := t.TempDir()
 
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "db-task",
 		"description":  "test with DB sync",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -104,18 +145,18 @@ func TestSpecInitHandler_WithDB(t *testing.T) {
 	}
 }
 
-func TestSpecUpdateHandler_MissingFields(t *testing.T) {
+func TestSpecUpdate_MissingFields(t *testing.T) {
 	t.Parallel()
-	handler := specUpdateHandler(nil, nil)
+	handler := specHandler(nil, nil)
 
 	tests := []struct {
 		name string
 		args map[string]any
 		want string
 	}{
-		{"no project_path", map[string]any{"file": "design.md", "content": "x"}, "project_path"},
-		{"no file", map[string]any{"project_path": "/tmp", "content": "x"}, "file"},
-		{"no content", map[string]any{"project_path": "/tmp", "file": "design.md"}, "content"},
+		{"no project_path", specReq("update", map[string]any{"file": "design.md", "content": "x"}), "project_path"},
+		{"no file", specReq("update", map[string]any{"project_path": "/tmp", "content": "x"}), "file"},
+		{"no content", specReq("update", map[string]any{"project_path": "/tmp", "file": "design.md"}), "content"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -135,25 +176,23 @@ func TestSpecUpdateHandler_MissingFields(t *testing.T) {
 	}
 }
 
-func TestSpecUpdateHandler_InvalidFile(t *testing.T) {
+func TestSpecUpdate_InvalidFile(t *testing.T) {
 	t.Parallel()
-	st := openTestStore(t)
-	handler := specInitHandler(st, nil)
+	handler := specHandler(nil, nil)
 	dir := t.TempDir()
 
 	// Create a spec first.
-	handler(context.Background(), newRequest(map[string]any{
+	handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "update-test",
 		"description":  "test",
-	}))
+	})))
 
-	updateHandler := specUpdateHandler(nil, nil)
-	res, err := updateHandler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("update", map[string]any{
 		"project_path": dir,
 		"file":         "invalid.md",
 		"content":      "some content",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,15 +201,15 @@ func TestSpecUpdateHandler_InvalidFile(t *testing.T) {
 	}
 }
 
-func TestSpecUpdateHandler_InvalidMode(t *testing.T) {
+func TestSpecUpdate_InvalidMode(t *testing.T) {
 	t.Parallel()
-	handler := specUpdateHandler(nil, nil)
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	handler := specHandler(nil, nil)
+	res, err := handler(context.Background(), newRequest(specReq("update", map[string]any{
 		"project_path": t.TempDir(),
 		"file":         "design.md",
 		"content":      "x",
 		"mode":         "upsert",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -179,27 +218,25 @@ func TestSpecUpdateHandler_InvalidMode(t *testing.T) {
 	}
 }
 
-func TestSpecUpdateHandler_AppendAndReplace(t *testing.T) {
+func TestSpecUpdate_AppendAndReplace(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	handler := specHandler(nil, nil)
 
 	// Init a spec.
-	initHandler := specInitHandler(nil, nil)
-	initHandler(context.Background(), newRequest(map[string]any{
+	handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "upd-task",
 		"description":  "test",
-	}))
-
-	updateHandler := specUpdateHandler(nil, nil)
+	})))
 
 	// Append mode.
-	res, err := updateHandler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("update", map[string]any{
 		"project_path": dir,
 		"file":         "decisions.md",
 		"content":      "\n## Decision 1\nUse SQLite",
 		"mode":         "append",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("append error: %v", err)
 	}
@@ -212,12 +249,12 @@ func TestSpecUpdateHandler_AppendAndReplace(t *testing.T) {
 	}
 
 	// Replace mode.
-	res, err = updateHandler(context.Background(), newRequest(map[string]any{
+	res, err = handler(context.Background(), newRequest(specReq("update", map[string]any{
 		"project_path": dir,
 		"file":         "decisions.md",
 		"content":      "# Decisions\n\nReplaced all content.",
 		"mode":         "replace",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("replace error: %v", err)
 	}
@@ -230,14 +267,14 @@ func TestSpecUpdateHandler_AppendAndReplace(t *testing.T) {
 	}
 }
 
-func TestSpecStatusHandler_NoSpec(t *testing.T) {
+func TestSpecStatus_NoSpec(t *testing.T) {
 	t.Parallel()
-	handler := specStatusHandler()
+	handler := specHandler(nil, nil)
 	dir := t.TempDir()
 
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("status", map[string]any{
 		"project_path": dir,
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -251,22 +288,21 @@ func TestSpecStatusHandler_NoSpec(t *testing.T) {
 	}
 }
 
-func TestSpecStatusHandler_WithSpec(t *testing.T) {
+func TestSpecStatus_WithSpec(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	handler := specHandler(nil, nil)
 
 	// Create a spec.
-	initHandler := specInitHandler(nil, nil)
-	initHandler(context.Background(), newRequest(map[string]any{
+	handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "status-task",
 		"description":  "test status",
-	}))
+	})))
 
-	handler := specStatusHandler()
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("status", map[string]any{
 		"project_path": dir,
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -283,10 +319,10 @@ func TestSpecStatusHandler_WithSpec(t *testing.T) {
 	}
 }
 
-func TestSpecStatusHandler_MissingProjectPath(t *testing.T) {
+func TestSpecStatus_MissingProjectPath(t *testing.T) {
 	t.Parallel()
-	handler := specStatusHandler()
-	res, err := handler(context.Background(), newRequest(nil))
+	handler := specHandler(nil, nil)
+	res, err := handler(context.Background(), newRequest(specReq("status", nil)))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -295,29 +331,28 @@ func TestSpecStatusHandler_MissingProjectPath(t *testing.T) {
 	}
 }
 
-func TestSpecSwitchHandler_Success(t *testing.T) {
+func TestSpecSwitch_Success(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	handler := specHandler(nil, nil)
 
 	// Create two specs.
-	initHandler := specInitHandler(nil, nil)
-	initHandler(context.Background(), newRequest(map[string]any{
+	handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "task-a",
 		"description":  "first",
-	}))
-	initHandler(context.Background(), newRequest(map[string]any{
+	})))
+	handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "task-b",
 		"description":  "second",
-	}))
+	})))
 
 	// Switch to task-a.
-	switchHandler := specSwitchHandler()
-	res, err := switchHandler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("switch", map[string]any{
 		"project_path": dir,
 		"task_slug":    "task-a",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -331,35 +366,34 @@ func TestSpecSwitchHandler_Success(t *testing.T) {
 	}
 }
 
-func TestSpecSwitchHandler_MissingFields(t *testing.T) {
+func TestSpecSwitch_MissingFields(t *testing.T) {
 	t.Parallel()
-	handler := specSwitchHandler()
-	res, _ := handler(context.Background(), newRequest(map[string]any{
+	handler := specHandler(nil, nil)
+	res, _ := handler(context.Background(), newRequest(specReq("switch", map[string]any{
 		"project_path": t.TempDir(),
-	}))
+	})))
 	if !res.IsError {
 		t.Fatal("expected error for missing task_slug")
 	}
 }
 
-func TestSpecDeleteHandler_Success(t *testing.T) {
+func TestSpecDelete_Success(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	handler := specHandler(nil, nil)
 
 	// Create a spec.
-	initHandler := specInitHandler(nil, nil)
-	initHandler(context.Background(), newRequest(map[string]any{
+	handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "del-task",
 		"description":  "to delete",
-	}))
+	})))
 
 	// Delete it.
-	delHandler := specDeleteHandler(nil)
-	res, err := delHandler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("delete", map[string]any{
 		"project_path": dir,
 		"task_slug":    "del-task",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -376,25 +410,24 @@ func TestSpecDeleteHandler_Success(t *testing.T) {
 	}
 }
 
-func TestSpecDeleteHandler_WithDB(t *testing.T) {
+func TestSpecDelete_WithDB(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
+	handler := specHandler(st, nil)
 	dir := t.TempDir()
 
 	// Create spec with DB sync.
-	initHandler := specInitHandler(st, nil)
-	initHandler(context.Background(), newRequest(map[string]any{
+	handler(context.Background(), newRequest(specReq("init", map[string]any{
 		"project_path": dir,
 		"task_slug":    "db-del",
 		"description":  "to delete with DB",
-	}))
+	})))
 
 	// Delete with DB cleanup.
-	delHandler := specDeleteHandler(st)
-	res, err := delHandler(context.Background(), newRequest(map[string]any{
+	res, err := handler(context.Background(), newRequest(specReq("delete", map[string]any{
 		"project_path": dir,
 		"task_slug":    "db-del",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -408,24 +441,24 @@ func TestSpecDeleteHandler_WithDB(t *testing.T) {
 	}
 }
 
-func TestSpecDeleteHandler_MissingFields(t *testing.T) {
+func TestSpecDelete_MissingFields(t *testing.T) {
 	t.Parallel()
-	handler := specDeleteHandler(nil)
-	res, _ := handler(context.Background(), newRequest(map[string]any{
+	handler := specHandler(nil, nil)
+	res, _ := handler(context.Background(), newRequest(specReq("delete", map[string]any{
 		"project_path": t.TempDir(),
-	}))
+	})))
 	if !res.IsError {
 		t.Fatal("expected error for missing task_slug")
 	}
 }
 
-func TestSpecDeleteHandler_NonexistentTask(t *testing.T) {
+func TestSpecDelete_NonexistentTask(t *testing.T) {
 	t.Parallel()
-	handler := specDeleteHandler(nil)
-	res, err := handler(context.Background(), newRequest(map[string]any{
+	handler := specHandler(nil, nil)
+	res, err := handler(context.Background(), newRequest(specReq("delete", map[string]any{
 		"project_path": t.TempDir(),
 		"task_slug":    "nonexistent",
-	}))
+	})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

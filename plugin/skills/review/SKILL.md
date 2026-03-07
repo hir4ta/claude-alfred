@@ -6,7 +6,7 @@ description: >
   Use when: (1) before committing, (2) after a milestone, (3) want a second opinion on changes.
 user-invocable: true
 argument-hint: "[focus area]"
-allowed-tools: Read, Glob, Grep, Bash, mcp__alfred__code-review, mcp__alfred__spec-status
+allowed-tools: Read, Glob, Grep, Bash, mcp__alfred__code-review, mcp__alfred__spec
 context: fork
 ---
 
@@ -22,7 +22,7 @@ A 3-layer review that goes beyond linting — checking your changes against spec
 ## Steps
 
 1. **[CONTEXT]** Gather review context:
-   - Call `spec-status` to check if an active spec exists
+   - Call `spec` with action=status to check if an active spec exists
    - If a focus area is provided in $ARGUMENTS, pass it to the review
 
 2. **[REVIEW]** Call `code-review` with project_path and optional focus:

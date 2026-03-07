@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -464,7 +465,7 @@ func TestBuildActiveContextSession(t *testing.T) {
 	t.Parallel()
 	sd := createTempSpec(t, "test-task")
 
-	result := buildActiveContextSession(sd, "test-task", "", nil, []string{"main.go", "util.go"}, "")
+	result := buildActiveContextSession(sd, "test-task", nil, nil, []string{"main.go", "util.go"}, "")
 
 	// Verify activeContext structure.
 	if !strings.Contains(result, "# Session: test-task") {
@@ -494,7 +495,7 @@ func TestBuildActiveContextSessionMergesDecisions(t *testing.T) {
 		t.Fatalf("write session: %v", err)
 	}
 
-	result := buildActiveContextSession(sd, "test-task", "", []string{"New decision C"}, nil, "")
+	result := buildActiveContextSession(sd, "test-task", nil, []string{"New decision C"}, nil, "")
 
 	if !strings.Contains(result, "Old decision A") {
 		t.Error("should preserve old decision A")
@@ -514,7 +515,7 @@ func TestBuildActiveContextSessionLegacyFormat(t *testing.T) {
 		t.Fatalf("write session: %v", err)
 	}
 
-	result := buildActiveContextSession(sd, "legacy-task", "", nil, nil, "")
+	result := buildActiveContextSession(sd, "legacy-task", nil, nil, nil, "")
 
 	// Legacy data should be migrated.
 	if !strings.Contains(result, "## Currently Working On\nWorking on auth") {
@@ -1380,5 +1381,386 @@ func TestExtractTranscriptContextEmpty(t *testing.T) {
 	result := extractTranscriptContext("/nonexistent/path/transcript.jsonl")
 	if result != "" {
 		t.Errorf("non-existent file should return empty, got %q", result)
+	}
+}
+
+func TestResolvedVersion(t *testing.T) {
+	// Not parallel: modifies package-level var.
+	orig := version
+	version = "1.2.3"
+	t.Cleanup(func() { version = orig })
+
+	got := resolvedVersion()
+	if got != "1.2.3" {
+		t.Errorf("resolvedVersion() = %q, want %q", got, "1.2.3")
+	}
+}
+
+func TestResolvedVersionDev(t *testing.T) {
+	orig := version
+	version = "dev"
+	t.Cleanup(func() { version = orig })
+
+	got := resolvedVersion()
+	if got == "" {
+		t.Error("resolvedVersion() should never return empty string")
+	}
+}
+
+func TestResolvedCommit(t *testing.T) {
+	orig := commit
+	commit = "abc1234"
+	t.Cleanup(func() { commit = orig })
+
+	got := resolvedCommit()
+	if got != "abc1234" {
+		t.Errorf("resolvedCommit() = %q, want %q", got, "abc1234")
+	}
+}
+
+func TestResolvedCommitUnknown(t *testing.T) {
+	orig := commit
+	commit = "unknown"
+	t.Cleanup(func() { commit = orig })
+
+	got := resolvedCommit()
+	_ = got // just verify no panic
+}
+
+func TestResolvedDate(t *testing.T) {
+	orig := date
+	date = "2026-01-01"
+	t.Cleanup(func() { date = orig })
+
+	got := resolvedDate()
+	if got != "2026-01-01" {
+		t.Errorf("resolvedDate() = %q, want %q", got, "2026-01-01")
+	}
+}
+
+func TestResolvedDateUnknown(t *testing.T) {
+	orig := date
+	date = "unknown"
+	t.Cleanup(func() { date = orig })
+
+	got := resolvedDate()
+	_ = got // just verify no panic
+}
+
+func TestPreToolUseJSONOutput(t *testing.T) {
+	output := captureStdout(t, func() {
+		handlePreToolUse(&hookEvent{
+			ToolInput: map[string]any{"file_path": "/project/.claude/rules/test.md"},
+		})
+	})
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("PreToolUse output is not valid JSON: %v\noutput: %s", err, output)
+	}
+
+	hso, ok := result["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatal("missing hookSpecificOutput")
+	}
+	if hso["hookEventName"] != "PreToolUse" {
+		t.Errorf("hookEventName = %v, want PreToolUse", hso["hookEventName"])
+	}
+	if hso["permissionDecision"] != "allow" {
+		t.Errorf("permissionDecision = %v, want allow", hso["permissionDecision"])
+	}
+	if _, ok := hso["permissionDecisionReason"]; !ok {
+		t.Error("missing permissionDecisionReason")
+	}
+}
+
+func TestUserPromptSubmitJSONOutput(t *testing.T) {
+	output := captureStdout(t, func() {
+		handleUserPromptSubmit(&hookEvent{Prompt: "CLAUDE.md を更新して"})
+	})
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("UserPromptSubmit output is not valid JSON: %v\noutput: %s", err, output)
+	}
+
+	hso, ok := result["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatal("missing hookSpecificOutput")
+	}
+	if hso["hookEventName"] != "UserPromptSubmit" {
+		t.Errorf("hookEventName = %v, want UserPromptSubmit", hso["hookEventName"])
+	}
+	if _, ok := hso["additionalContext"]; !ok {
+		t.Error("missing additionalContext")
+	}
+}
+
+func TestSessionStartJSONOutput(t *testing.T) {
+	dir := t.TempDir()
+	_, err := spec.Init(dir, "json-test", "test json output")
+	if err != nil {
+		t.Fatalf("spec.Init: %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		injectSpecContext(dir, "startup")
+	})
+
+	if output == "" {
+		t.Skip("no spec context to inject")
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("SessionStart output is not valid JSON: %v\noutput: %s", err, output)
+	}
+
+	hso, ok := result["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatal("missing hookSpecificOutput")
+	}
+	if hso["hookEventName"] != "SessionStart" {
+		t.Errorf("hookEventName = %v, want SessionStart", hso["hookEventName"])
+	}
+}
+
+func TestJapaneseDecisionExtraction(t *testing.T) {
+	dir := t.TempDir()
+
+	transcriptLines := []string{
+		// Japanese keyword decision (should be kept).
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"パフォーマンスの観点から、SQLiteを採用したことにしました。ネットワーク不要で組み込みDBとして最適です。"}]}}`,
+		// Japanese structured decision (should be kept).
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"検索エンジンの比較結果:\n**採用:** FTS5によるハイブリッド検索。ベクトル検索よりも決定的なランキングが可能"}]}}`,
+		// Japanese trivial decision (should be filtered).
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ファイルを確認することにした"}]}}`,
+	}
+
+	transcriptPath := writeFakeTranscript(t, dir, transcriptLines)
+	decisions := extractDecisionsFromTranscript(transcriptPath)
+
+	foundSQLite := false
+	foundFTS5 := false
+	for _, d := range decisions {
+		if strings.Contains(d, "SQLite") {
+			foundSQLite = true
+		}
+		if strings.Contains(d, "FTS5") {
+			foundFTS5 = true
+		}
+	}
+	if !foundSQLite {
+		t.Errorf("should extract Japanese keyword decision about SQLite, got: %v", decisions)
+	}
+	if !foundFTS5 {
+		t.Errorf("should extract Japanese structured decision about FTS5, got: %v", decisions)
+	}
+}
+
+func TestScoreDecisionConfidenceJapanese(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		sentence string
+		minScore float64
+		maxScore float64
+	}{
+		{
+			"Japanese rationale",
+			"パフォーマンスのためにSQLiteを採用した",
+			0.5, 1.0,
+		},
+		{
+			"Japanese alternative comparison",
+			"Redisではなく、SQLiteを選択した",
+			0.6, 1.0,
+		},
+		{
+			"Japanese architecture term",
+			"マイクロサービスアーキテクチャの設計方針を決定した",
+			0.5, 1.0,
+		},
+		{
+			"Japanese hedging penalty",
+			"とりあえずこの変数名を変えておく",
+			0.0, 0.45,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			score := scoreDecisionConfidence(tt.sentence)
+			if score < tt.minScore || score > tt.maxScore {
+				t.Errorf("scoreDecisionConfidence(%q) = %.2f, want [%.2f, %.2f]", tt.sentence, score, tt.minScore, tt.maxScore)
+			}
+		})
+	}
+}
+
+func TestBuildActiveContextSessionWithRichContext(t *testing.T) {
+	t.Parallel()
+	sd := createTempSpec(t, "rich-ctx")
+
+	txCtx := &transcriptContext{
+		LastUserDirective: "日本語のdecision markerを追加して、テストも書いて",
+		LastAssistantWork: "hooks_transcript.goに日本語のdecisionKeywords, rationaleMarkers, alternativeMarkersを追加中。テストファイルも更新している。",
+		AssistantActions: []string{
+			"日本語decision markers追加を開始",
+			"hooks_transcript.goのdecisionKeywordsに日本語パターンを追加",
+			"テストケースを書いている",
+		},
+		RunningAgents: []string{
+			"日本語decision marker徹底調査",
+			"run.sh checksum検証追加",
+		},
+		RecentToolUses: []string{"Edit", "Read", "Agent"},
+		ToolErrors:     []string{"Edit: String not found"},
+	}
+
+	result := buildActiveContextSession(sd, "rich-ctx", txCtx, []string{"Use SQLite"}, []string{"hooks.go"}, "focus on tests")
+
+	// Currently Working On should come from LastAssistantWork.
+	if !strings.Contains(result, "hooks_transcript.go") {
+		t.Error("Currently Working On should contain last assistant work detail")
+	}
+
+	// Compact marker should contain rich context.
+	if !strings.Contains(result, "Last user directive:") {
+		t.Error("should contain last user directive section")
+	}
+	if !strings.Contains(result, "日本語のdecision marker") {
+		t.Error("should contain the actual user directive")
+	}
+	if !strings.Contains(result, "Running background agents") {
+		t.Error("should contain running agents section")
+	}
+	if !strings.Contains(result, "日本語decision marker徹底調査") {
+		t.Error("should list running agent names")
+	}
+	if !strings.Contains(result, "Recent tool calls:") {
+		t.Error("should contain recent tool calls")
+	}
+	if !strings.Contains(result, "Recent errors") {
+		t.Error("should contain tool errors")
+	}
+	if !strings.Contains(result, "focus on tests") {
+		t.Error("should contain user compact instructions")
+	}
+}
+
+func TestAutoAppendDecisions(t *testing.T) {
+	t.Parallel()
+	sd := createTempSpec(t, "auto-dec")
+
+	// Write initial decisions.md.
+	initial := "# Decisions: auto-dec\n\n## [2026-01-01] Initial\n- Use SQLite\n"
+	if err := sd.WriteFile("decisions.md", initial); err != nil {
+		t.Fatalf("write decisions: %v", err)
+	}
+
+	// Auto-append new decisions (one duplicate, one new).
+	autoAppendDecisions(sd, []string{
+		"Use SQLite for the knowledge base",                    // partial overlap → should be skipped
+		"Chose FTS5 over pure vector for deterministic ranking", // new → should be added
+	})
+
+	content, err := sd.ReadFile("decisions.md")
+	if err != nil {
+		t.Fatalf("read decisions: %v", err)
+	}
+
+	if !strings.Contains(content, "FTS5") {
+		t.Error("should append new decision about FTS5")
+	}
+	if !strings.Contains(content, "Auto-extracted from conversation") {
+		t.Error("should have auto-extracted header")
+	}
+	// The duplicate "Use SQLite" should not be double-added.
+	count := strings.Count(strings.ToLower(content), "use sqlite")
+	if count > 1 {
+		t.Errorf("duplicate decision should be skipped, found %d occurrences", count)
+	}
+}
+
+func TestExtractTranscriptContextRich(t *testing.T) {
+	dir := t.TempDir()
+	lines := []string{
+		`{"type":"human","content":"implement the search feature with hybrid approach"}`,
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll implement hybrid search combining FTS5 and vector search."}]}}`,
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu_123","name":"Agent","input":{"description":"background research","prompt":"research vector DBs"}}]}}`,
+		`{"type":"human","content":"also add Japanese support"}`,
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Adding Japanese decision markers to hooks_transcript.go now."}]}}`,
+		`{"type":"tool_error","content":"connection timeout"}`,
+	}
+	path := writeFakeTranscript(t, dir, lines)
+
+	ctx := extractTranscriptContextRich(path)
+	if ctx == nil {
+		t.Fatal("expected non-nil context")
+	}
+
+	if len(ctx.UserMessages) != 2 {
+		t.Errorf("expected 2 user messages, got %d", len(ctx.UserMessages))
+	}
+	if !strings.Contains(ctx.LastUserDirective, "Japanese") {
+		t.Error("LastUserDirective should be the last user message")
+	}
+	if !strings.Contains(ctx.LastAssistantWork, "Japanese decision markers") {
+		t.Errorf("LastAssistantWork should be last assistant text, got %q", ctx.LastAssistantWork)
+	}
+	if len(ctx.ToolErrors) != 1 {
+		t.Errorf("expected 1 tool error, got %d", len(ctx.ToolErrors))
+	}
+	// Agent tool_use without completion should appear as running.
+	if len(ctx.RunningAgents) != 1 {
+		t.Errorf("expected 1 running agent, got %d: %v", len(ctx.RunningAgents), ctx.RunningAgents)
+	}
+}
+
+func TestExtractTranscriptContextRichEmpty(t *testing.T) {
+	ctx := extractTranscriptContextRich("/nonexistent/path")
+	if ctx != nil {
+		t.Error("non-existent file should return nil")
+	}
+}
+
+func TestFormatTranscriptContext(t *testing.T) {
+	ctx := &transcriptContext{
+		UserMessages:     []string{"fix the bug"},
+		AssistantActions: []string{"reading the code"},
+		ToolErrors:       []string{"timeout"},
+		RunningAgents:    []string{"research agent"},
+	}
+	result := formatTranscriptContext(ctx)
+	if !strings.Contains(result, "fix the bug") {
+		t.Error("should contain user messages")
+	}
+	if !strings.Contains(result, "Running background agents") {
+		t.Error("should contain running agents section")
+	}
+	if result2 := formatTranscriptContext(nil); result2 != "" {
+		t.Error("nil context should return empty string")
+	}
+}
+
+func TestIsTrivialDecisionJapanese(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		sentence string
+		want     bool
+	}{
+		{"パフォーマンスの観点からSQLiteを採用することにした。組み込みDBとして最適。", false},
+		{"ファイルを確認することにした", true},
+		{"テストを実行することにした", true},
+		{"短い", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.sentence, func(t *testing.T) {
+			t.Parallel()
+			if got := isTrivialDecision(tt.sentence); got != tt.want {
+				t.Errorf("isTrivialDecision(%q) = %v, want %v", tt.sentence, got, tt.want)
+			}
+		})
 	}
 }

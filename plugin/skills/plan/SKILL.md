@@ -6,7 +6,7 @@ description: >
   Use when: (1) starting a new task, (2) organizing a design, (3) planning before resuming work.
 user-invocable: true
 argument-hint: "<task-slug> [description]"
-allowed-tools: Read, Write, Edit, Glob, Grep, WebSearch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec-init, mcp__alfred__spec-update, mcp__alfred__spec-status
+allowed-tools: Read, Write, Edit, Glob, Grep, WebSearch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec
 context: current
 ---
 
@@ -25,7 +25,7 @@ By explicitly writing these to files, we create a spec that enables perfect reco
    - description (optional): brief summary
    - If no arguments, confirm via AskUserQuestion
 
-2. **[HOW]** Call `spec-status` to check existing state:
+2. **[HOW]** Call `spec` with action=status to check existing state:
    - If active spec exists for this slug -> resume mode (skip to Step 7)
    - If no spec -> creation mode (continue)
 
@@ -43,9 +43,9 @@ By explicitly writing these to files, we create a spec that enables perfect reco
    - Break into concrete, checkable tasks
    - Order by dependency
 
-6. **[HOW]** Call `spec-init` with gathered information:
+6. **[HOW]** Call `spec` with action=init with gathered information:
    - Creates all 4 files with templates
-   - Then call `spec-update` for each file to fill in gathered content:
+   - Then call `spec` with action=update for each file to fill in gathered content:
      - requirements.md: replace with full requirements
      - design.md: replace with design decisions
      - decisions.md: append initial design decisions
@@ -72,7 +72,7 @@ By explicitly writing these to files, we create a spec that enables perfect reco
 ## Resume Mode (from Step 2)
 
 If an active spec already exists:
-1. Call `spec-status` to get current session state
+1. Call `spec` with action=status to get current session state
 2. Read spec files in recovery order:
    - session.md (where am I?)
    - requirements.md (what am I building?)

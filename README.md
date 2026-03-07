@@ -110,11 +110,7 @@ Backend for skills and agents. Claude calls these automatically as needed.
 
 | Tool | Description |
 |------|-------------|
-| `spec-init` | Initialize a new task spec (.alfred/specs/ with 4 files + DB sync) |
-| `spec-update` | Update a spec file for the active task (decisions, session state) |
-| `spec-status` | Get current task state for context restoration |
-| `spec-switch` | Switch the primary active task (records switch-away in old session) |
-| `spec-delete` | Delete a task spec + clean DB + update _active.md |
+| `spec` | Unified spec management (action: init / update / status / switch / delete) |
 | `code-review` | 3-layer code review (spec + semantic knowledge + best practices) |
 
 ## Hooks (4)
@@ -155,11 +151,11 @@ Run automatically during Claude Code lifecycle. No user action needed.
 │                                                  │
 │  MCP Tools (on demand)                            │
 │  ├ knowledge / config-review / config-suggest     │
-│  └ spec-init / update / status / switch           │
-│    / delete / code-review                         │
+│  └ spec (init/update/status/switch/delete)         │
+│    / code-review                                  │
 │                                                  │
 │  Alfred Protocol Flow                             │
-│  spec-init → .alfred/specs/add-auth/              │
+│  spec(init) → .alfred/specs/add-auth/             │
 │  (4 files + DB sync)                              │
 │        ↓                                         │
 │  Compact → PreCompact auto-saves                  │
@@ -181,7 +177,7 @@ Run automatically during Claude Code lifecycle. No user action needed.
 └── session.md       # Session state in activeContext format + Compact Markers
 ```
 
-`_active.md` (YAML) manages multiple tasks; switch with `spec-switch`.
+`_active.md` (YAML) manages multiple tasks; switch with `spec` (action=switch).
 
 ### 3-Layer Code Review (code-review)
 

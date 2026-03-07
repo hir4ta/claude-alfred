@@ -140,7 +140,7 @@ func injectSpecContext(projectPath, source string) {
 			}
 		} else {
 			// Subsequent compacts: inject only session.md (lightweight).
-			buf.WriteString("Lightweight recovery (use spec-status or knowledge tool for full spec):\n\n")
+			buf.WriteString("Lightweight recovery (use spec (action=status) or knowledge tool for full spec):\n\n")
 			for _, f := range []spec.SpecFile{spec.FileSession} {
 				content, err := sd.ReadFile(f)
 				if err != nil || strings.TrimSpace(content) == "" {
@@ -151,7 +151,7 @@ func injectSpecContext(projectPath, source string) {
 		}
 
 		buf.WriteString("--- End Alfred Protocol ---\n")
-		fmt.Fprint(os.Stdout, buf.String())
+		emitAdditionalContext("SessionStart", buf.String())
 		debugf("SessionStart(compact#%d): injected spec context for %s", compactCount, taskSlug)
 	} else {
 		// Normal startup/resume: inject session.md only (lightweight).
@@ -159,7 +159,8 @@ func injectSpecContext(projectPath, source string) {
 		if err != nil || session == "" {
 			return
 		}
-		fmt.Fprintf(os.Stdout, "\n--- Alfred Protocol: Active Task '%s' ---\n%s\n--- End Alfred Protocol ---\n", taskSlug, session)
+		context := fmt.Sprintf("\n--- Alfred Protocol: Active Task '%s' ---\n%s\n--- End Alfred Protocol ---\n", taskSlug, session)
+		emitAdditionalContext("SessionStart", context)
 		debugf("SessionStart(%s): injected session context for %s", source, taskSlug)
 	}
 }

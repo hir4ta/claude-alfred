@@ -2,12 +2,12 @@
 name: refine
 description: |
   Convergent thinking: Fix the issue to one line, narrow options to 3 max, score with criteria, finalize the next output as Markdown.
-  Decisions are automatically saved to spec via spec-update.
+  Decisions are automatically saved to spec via the spec tool (action=update).
   Use when: (1) stuck and can't move forward, (2) have candidates but can't choose, (3) need to define minimum scope,
   (4) need to turn brainstorm results or notes into decisions.
 user-invocable: true
 argument-hint: "<theme or current messy notes>"
-allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec-update, mcp__alfred__spec-status
+allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec
 context: current
 ---
 
@@ -24,8 +24,8 @@ Approach: Aligned with Claude Code's Explore -> Plan -> Implement flow, this str
 
 ## alfred-Specific Features
 - Use the `knowledge` tool to search for related best practices as decision material
-- After Phase 4 (decision), automatically record via `spec-update decisions.md`
-- If an active spec exists, check current state via `spec-status` before starting
+- After Phase 4 (decision), automatically record via `spec` with action=update, file=decisions.md
+- If an active spec exists, check current state via `spec` with action=status before starting
 
 ## Phase 0: Blocker Type Diagnosis (1 question)
 Ask the user to choose:
@@ -48,7 +48,7 @@ Common axes: Impact / Feasibility / Failure cost / Learning / Sustainability / L
 ## Phase 4: Decision (the agreement point)
 - Selected option (1) or try 2 options in sequence
 - OUT (what NOT to do) — always list 3
-- **If an active spec exists, record to decisions.md via `spec-update`**
+- **If an active spec exists, record to decisions.md via `spec` with action=update**
 
 ## Phase 5: Validation Method (fix self-verification conditions)
 Test / expected output / screenshot comparison / command

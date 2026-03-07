@@ -21,7 +21,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Read|Glob|Grep|Edit|Write"
+        "matcher": "Read|Edit|Write"
       }
     ],
     "SessionStart": [

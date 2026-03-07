@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -44,12 +46,21 @@ func shouldRemind(toolInput map[string]any) bool {
 }
 
 // handlePreToolUse emits a reminder when Claude accesses .claude/ config files.
+// Uses hookSpecificOutput with permissionDecision "allow" to inject the reminder
+// as feedback while letting the tool call proceed.
 func handlePreToolUse(ev *hookEvent) {
 	if !shouldRemind(ev.ToolInput) {
 		return
 	}
 	debugf("PreToolUse: reminding about alfred for %v", ev.ToolInput)
-	fmt.Print(configReminder)
+	out := map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":            "PreToolUse",
+			"permissionDecision":       "allow",
+			"permissionDecisionReason": configReminder,
+		},
+	}
+	json.NewEncoder(os.Stdout).Encode(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -192,10 +203,13 @@ func scoreRelevance(promptLower string, doc store.DocRow) float64 {
 		return 0
 	}
 
-	// Filter to meaningful words (4+ chars, not stop words).
+	// Filter to meaningful words.
+	// English: 4+ bytes (ASCII chars). Japanese: 2+ runes (CJK chars are 3 bytes each).
 	var meaningful []string
 	for _, w := range promptWords {
-		if len(w) >= 4 {
+		runeLen := len([]rune(w))
+		if runeLen >= 4 || (runeLen >= 2 && len(w) > runeLen) {
+			// 4+ runes for ASCII, or 2+ runes for multi-byte (CJK) text.
 			meaningful = append(meaningful, w)
 		}
 	}
@@ -250,7 +264,7 @@ func scoreRelevance(promptLower string, doc store.DocRow) float64 {
 func handleUserPromptSubmit(ev *hookEvent) {
 	if shouldRemindPrompt(ev.Prompt) {
 		debugf("UserPromptSubmit: reminding about alfred for prompt")
-		fmt.Print(configReminder)
+		emitAdditionalContext("UserPromptSubmit", configReminder)
 		return // config reminder is sufficient, skip knowledge injection
 	}
 
@@ -342,6 +356,6 @@ func handleUserPromptSubmit(ev *hookEvent) {
 		}
 		fmt.Fprintf(&buf, "- [%s] %s\n", c.doc.SectionPath, snippet)
 	}
-	fmt.Print(buf.String())
+	emitAdditionalContext("UserPromptSubmit", buf.String())
 	debugf("UserPromptSubmit: injected %d knowledge snippets (scores: %.2f+)", len(candidates), candidates[0].score)
 }

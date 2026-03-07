@@ -41,7 +41,7 @@ func alfredHookEntries(binPath string) map[string]any {
 		},
 		"PreToolUse": []any{
 			map[string]any{
-				"matcher": "Read|Glob|Grep|Edit|Write",
+				"matcher": "Read|Edit|Write",
 				"hooks": []any{
 					map[string]any{
 						"type":    "command",
@@ -179,11 +179,7 @@ func Bundle(outputDir, version string) error {
 				"mcp__alfred__knowledge",
 				"mcp__alfred__config-review",
 				"mcp__alfred__config-suggest",
-				"mcp__alfred__spec-init",
-				"mcp__alfred__spec-update",
-				"mcp__alfred__spec-status",
-				"mcp__alfred__spec-switch",
-				"mcp__alfred__spec-delete",
+				"mcp__alfred__spec",
 				"mcp__alfred__code-review",
 			},
 		},
@@ -240,18 +236,37 @@ case "$ARCH" in
 esac
 
 URL="https://github.com/${REPO}/releases/download/v${VERSION}/alfred_${OS}_${ARCH}.tar.gz"
+CHECKSUM_URL="https://github.com/${REPO}/releases/download/v${VERSION}/checksums.txt"
 mkdir -p "$CACHE_DIR"
 
+DL_DIR=$(mktemp -d)
+trap 'rm -rf "$DL_DIR"' EXIT
+
 if command -v curl >/dev/null 2>&1; then
-  curl -sSfL "$URL" | tar xz -C "$CACHE_DIR" alfred
+  curl -sSfL "$URL" -o "$DL_DIR/alfred.tar.gz"
+  curl -sSfL "$CHECKSUM_URL" -o "$DL_DIR/checksums.txt" 2>/dev/null || true
 elif command -v wget >/dev/null 2>&1; then
-  wget -qO- "$URL" | tar xz -C "$CACHE_DIR" alfred
+  wget -qO "$DL_DIR/alfred.tar.gz" "$URL"
+  wget -qO "$DL_DIR/checksums.txt" "$CHECKSUM_URL" 2>/dev/null || true
 else
   echo "alfred: curl or wget required to download binary" >&2
   echo "  Install via Homebrew instead: brew install hir4ta/alfred/alfred" >&2
   exit 1
 fi
 
+# Verify checksum if checksums.txt was downloaded and shasum is available.
+if [ -s "$DL_DIR/checksums.txt" ] && command -v shasum >/dev/null 2>&1; then
+  EXPECTED=$(grep "alfred_${OS}_${ARCH}.tar.gz" "$DL_DIR/checksums.txt" | awk '{print $1}')
+  if [ -n "$EXPECTED" ]; then
+    ACTUAL=$(shasum -a 256 "$DL_DIR/alfred.tar.gz" | awk '{print $1}')
+    if [ "$ACTUAL" != "$EXPECTED" ]; then
+      echo "alfred: checksum mismatch (expected ${EXPECTED}, got ${ACTUAL})" >&2
+      exit 1
+    fi
+  fi
+fi
+
+tar -xzf "$DL_DIR/alfred.tar.gz" -C "$CACHE_DIR" alfred
 chmod +x "$CACHED_BIN"
 exec "$CACHED_BIN" "$@"
 `, ver)

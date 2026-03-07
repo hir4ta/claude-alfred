@@ -13,34 +13,64 @@ import (
 // trivialVerbs are verbs that follow decision keywords but indicate
 // routine actions rather than real design decisions.
 var trivialVerbs = []string{
+	// English
 	"read ", "check ", "look ", "run ", "open ", "try ", "start ",
 	"continue ", "proceed ", "skip ", "move ", "fix ", "update ",
 	"install ", "build ", "test ", "debug ", "print ", "log ",
 	"add ", "remove ", "delete ", "rename ", "import ", "copy ",
 	"format ", "lint ", "commit ", "push ", "pull ", "merge ",
 	"revert ", "rebase ",
+	// Japanese (読む, 確認する, 見る, 実行する, etc.)
+	"読む", "確認する", "確認し", "見る", "見て", "実行する", "実行し",
+	"開く", "試す", "試し", "始める", "続ける", "進める",
+	"飛ばす", "スキップする", "直す", "修正する", "修正し",
+	"更新する", "更新し", "追加する", "追加し", "削除する", "削除し",
+	"テストする", "テストし", "ビルドする", "ビルドし",
+	"インストールする", "インストールし", "コミットする", "コミットし",
+	"プッシュする", "プッシュし",
 }
 
 // rationaleMarkers indicate the sentence contains a reason/justification,
 // which strongly suggests a real design decision.
 var rationaleMarkers = []string{
+	// English
 	"because ", "since ", "due to ", "given that ", "in order to ",
 	"so that ", "for better ", "to ensure ", "to avoid ", "to reduce ",
 	"to improve ", "to support ", "for the sake of ",
+	// Japanese (〜ため, 〜ので, 〜から, 理由は, etc.)
+	"ため", "ので", "だから", "から、", "なぜなら",
+	"理由は", "理由として", "目的で", "観点から",
+	"を避ける", "を防ぐ", "を確保する", "を担保する",
+	"の方が", "を改善する", "を向上させる",
+	"によって", "に基づいて", "を考慮して", "を踏まえて",
 }
 
 // alternativeMarkers indicate the sentence compares options,
 // which is a strong signal for a design decision.
 var alternativeMarkers = []string{
+	// English
 	" over ", " instead of ", " rather than ", " vs ", " versus ",
 	" compared to ", " as opposed to ",
+	// Japanese (〜より, 〜ではなく, 〜の代わりに, etc.)
+	"よりも", "ではなく", "じゃなく", "の代わりに", "のかわりに",
+	"を選択", "を採用", "を選んだ", "にした",
+	"と比較して", "と比較する", "と比べて", "と比べる",
+	"に対して", "とは異なり", "一方で",
+	"も検討し", "案もあり", "代替案", "候補として",
 }
 
 // architectureTerms boost confidence when the sentence mentions design concepts.
 var architectureTerms = []string{
+	// English
 	"architecture", "pattern", "approach", "strategy", "trade-off",
 	"tradeoff", "schema", "interface", "protocol", "abstraction",
 	"design", "api ", "migration", "infrastructure",
+	// Japanese
+	"アーキテクチャ", "パターン", "アプローチ", "戦略", "トレードオフ",
+	"スキーマ", "インターフェース", "インタフェース", "プロトコル", "抽象化",
+	"設計", "構成", "構造", "方式", "方針", "移行", "基盤",
+	"コンポーネント", "モジュール", "依存関係", "疎結合", "責務",
+	"レイヤー", "データフロー", "ワークフロー", "ライフサイクル",
 }
 
 // scoreDecisionConfidence returns a confidence score (0.0-1.0) for whether
@@ -83,7 +113,10 @@ func scoreDecisionConfidence(sentence string) float64 {
 	}
 
 	// Hedging words penalty: "just", "simply", "quickly".
-	for _, hedge := range []string{"just ", "simply ", "quickly ", "also "} {
+	for _, hedge := range []string{
+		"just ", "simply ", "quickly ", "also ",
+		"とりあえず", "一旦", "まず", "ちょっと", "簡単に",
+	} {
 		if strings.Contains(lower, hedge) {
 			score -= 0.1
 			break
@@ -99,14 +132,17 @@ func isTrivialDecision(sentence string) bool {
 	lower := strings.ToLower(sentence)
 	for _, v := range trivialVerbs {
 		// Check if a trivial verb follows a decision keyword.
-		for _, kw := range []string{"decided to ", "chose to ", "going to "} {
+		for _, kw := range []string{
+			"decided to ", "chose to ", "going to ",
+			"ことにした", "にした",
+		} {
 			if strings.Contains(lower, kw+v) {
 				return true
 			}
 		}
 	}
-	// Too short to be a real decision.
-	if len(sentence) < 30 {
+	// Too short to be a real decision (rune-based for CJK).
+	if len([]rune(sentence)) < 20 {
 		return true
 	}
 	return false
@@ -122,15 +158,33 @@ func extractDecisionsFromTranscript(transcriptPath string) []string {
 
 	// Keyword patterns that indicate design decisions (not routine actions).
 	decisionKeywords := []string{
+		// English
 		"decided to ", "chose ", "going with ", "selected ",
 		"decision: ", "we'll use ", "opting for ",
 		"settled on ", "choosing ", "picked ",
+		// Japanese (決めた, 選んだ, 採用した, 方針として, etc.)
+		// Stems cover conjugation variants via substring matching:
+		//   "に決め" → に決めた / に決めました / に決めます
+		"にした", "に決め", "に決定し", "を決め", "を決定し",
+		"を選んだ", "を選択し", "を選び",
+		"を採用し", "を採用する",
+		"にしました", "にします",
+		"方針として", "方針で", "結論として",
+		"判断し", "で行き", "で行こう", "で進め",
+		"ことにし", "を導入し", "で実装",
+		// AI assistant typical expressions
+		"が最適", "が適切", "をお勧め", "を推奨",
 	}
 
 	// Structured patterns from spec format or explicit decision markers.
 	structuredPrefixes := []string{
 		"**chosen:**", "**decision:**", "**selected:**",
 		"- chosen: ", "- decision: ", "- selected: ",
+		// Japanese structured markers (half-width and full-width colons)
+		"**採用:**", "**決定:**", "**選択:**", "**結論:**", "**方針:**", "**判断:**",
+		"**採用：**", "**決定：**", "**選択：**", "**結論：**", "**方針：**", "**判断：**",
+		"- 採用: ", "- 決定: ", "- 選択: ", "- 結論: ", "- 方針: ", "- 判断: ",
+		"- 採用： ", "- 決定： ", "- 選択： ", "- 結論： ", "- 方針： ", "- 判断： ",
 	}
 
 	type scoredDecision struct {
@@ -239,34 +293,63 @@ func extractDecisionsFromTranscript(transcriptPath string) []string {
 // Transcript context extraction
 // ---------------------------------------------------------------------------
 
-// extractTranscriptContext reads the tail of a conversation transcript and
-// extracts the most valuable context: recent user messages, assistant summaries,
-// and tool errors that would otherwise be lost during compaction.
-func extractTranscriptContext(transcriptPath string) string {
-	// Read last 64KB of transcript (conversation can be huge).
-	data, err := readFileTail(transcriptPath, 64*1024)
+// transcriptContext holds structured context extracted from a conversation transcript.
+type transcriptContext struct {
+	UserMessages       []string // last 5 user messages (200 chars each)
+	AssistantActions   []string // last 5 assistant messages (300 chars each)
+	ToolErrors         []string // last 3 tool errors
+	LastUserDirective  string   // the very last user message (full, up to 500 chars)
+	LastAssistantWork  string   // the very last assistant message (full, up to 500 chars)
+	RunningAgents      []string // agents that were spawned but may not have completed
+	RecentToolUses     []string // recent tool calls for context
+}
+
+// extractTranscriptContextRich reads the tail of a conversation transcript and
+// extracts structured context: recent user messages, assistant summaries,
+// tool errors, running agents, and recent tool uses.
+func extractTranscriptContextRich(transcriptPath string) *transcriptContext {
+	data, err := readFileTail(transcriptPath, 128*1024)
 	if err != nil {
 		debugf("PreCompact: read transcript error: %v", err)
-		return ""
+		return nil
 	}
 
+	ctx := &transcriptContext{}
 	lines := strings.Split(string(data), "\n")
 
-	var userMessages []string
-	var assistantSummaries []string
-	var toolErrors []string
+	// Track agents: agent tool_use entries that may still be running.
+	agentStarts := make(map[string]string) // tool_use_id -> description
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || line[0] != '{' {
 			continue
 		}
-		var entry transcriptEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			continue
 		}
 
+		var entry transcriptEntry
+		json.Unmarshal([]byte(line), &entry)
+
 		text := extractTextContent(entry)
+
+		// Detect agent tool_use starts.
+		extractAgentToolUses(raw, agentStarts)
+
+		// Detect agent completions to remove from running set.
+		extractAgentCompletions(raw, agentStarts)
+
+		// Extract recent tool uses for context.
+		if toolName := extractToolName(raw); toolName != "" {
+			desc := truncateStr(toolName, 100)
+			ctx.RecentToolUses = append(ctx.RecentToolUses, desc)
+			if len(ctx.RecentToolUses) > 5 {
+				ctx.RecentToolUses = ctx.RecentToolUses[len(ctx.RecentToolUses)-5:]
+			}
+		}
+
 		if text == "" {
 			continue
 		}
@@ -274,45 +357,171 @@ func extractTranscriptContext(transcriptPath string) string {
 		switch {
 		case entry.Type == "human" || entry.Role == "user" ||
 			(entry.Message.Role == "user"):
-			// Keep last 5 user messages.
-			userMessages = append(userMessages, truncateStr(text, 200))
-			if len(userMessages) > 5 {
-				userMessages = userMessages[len(userMessages)-5:]
+			ctx.UserMessages = append(ctx.UserMessages, truncateStr(text, 200))
+			if len(ctx.UserMessages) > 5 {
+				ctx.UserMessages = ctx.UserMessages[len(ctx.UserMessages)-5:]
 			}
+			ctx.LastUserDirective = truncateStrKeepNewlines(text, 500)
+
 		case entry.Type == "assistant" || entry.Role == "assistant" ||
 			(entry.Message.Role == "assistant"):
-			// Keep last 3 assistant summaries (first 150 chars only).
-			summary := truncateStr(text, 150)
-			assistantSummaries = append(assistantSummaries, summary)
-			if len(assistantSummaries) > 3 {
-				assistantSummaries = assistantSummaries[len(assistantSummaries)-3:]
+			ctx.AssistantActions = append(ctx.AssistantActions, truncateStr(text, 300))
+			if len(ctx.AssistantActions) > 5 {
+				ctx.AssistantActions = ctx.AssistantActions[len(ctx.AssistantActions)-5:]
 			}
+			ctx.LastAssistantWork = truncateStrKeepNewlines(text, 500)
+
 		case entry.Type == "tool_error" || entry.Type == "error":
-			toolErrors = append(toolErrors, truncateStr(text, 150))
-			if len(toolErrors) > 3 {
-				toolErrors = toolErrors[len(toolErrors)-3:]
+			ctx.ToolErrors = append(ctx.ToolErrors, truncateStr(text, 150))
+			if len(ctx.ToolErrors) > 3 {
+				ctx.ToolErrors = ctx.ToolErrors[len(ctx.ToolErrors)-3:]
 			}
 		}
 	}
 
+	// Remaining agent starts are likely still running.
+	for _, desc := range agentStarts {
+		ctx.RunningAgents = append(ctx.RunningAgents, desc)
+	}
+
+	return ctx
+}
+
+// extractAgentToolUses detects Agent tool_use entries from transcript raw JSON.
+func extractAgentToolUses(raw map[string]any, agentStarts map[string]string) {
+	// Look in message.content for tool_use blocks with name "Agent".
+	content := getNestedContent(raw)
+	blocks, ok := content.([]any)
+	if !ok {
+		return
+	}
+	for _, b := range blocks {
+		block, ok := b.(map[string]any)
+		if !ok {
+			continue
+		}
+		if block["type"] != "tool_use" {
+			continue
+		}
+		name, _ := block["name"].(string)
+		if name != "Agent" && name != "agent" {
+			continue
+		}
+		id, _ := block["id"].(string)
+		if id == "" {
+			continue
+		}
+		// Extract description from input.
+		input, _ := block["input"].(map[string]any)
+		desc, _ := input["description"].(string)
+		prompt, _ := input["prompt"].(string)
+		if desc == "" {
+			desc = truncateStr(prompt, 80)
+		}
+		agentStarts[id] = desc
+	}
+}
+
+// extractAgentCompletions detects tool_result entries that mark an agent as complete.
+func extractAgentCompletions(raw map[string]any, agentStarts map[string]string) {
+	// Tool results have tool_use_id field.
+	content := getNestedContent(raw)
+	blocks, ok := content.([]any)
+	if !ok {
+		return
+	}
+	for _, b := range blocks {
+		block, ok := b.(map[string]any)
+		if !ok {
+			continue
+		}
+		if block["type"] != "tool_result" {
+			continue
+		}
+		if id, ok := block["tool_use_id"].(string); ok {
+			delete(agentStarts, id)
+		}
+	}
+}
+
+// extractToolName extracts the tool name from a tool_use transcript entry.
+func extractToolName(raw map[string]any) string {
+	content := getNestedContent(raw)
+	blocks, ok := content.([]any)
+	if !ok {
+		return ""
+	}
+	for _, b := range blocks {
+		block, ok := b.(map[string]any)
+		if !ok {
+			continue
+		}
+		if block["type"] == "tool_use" {
+			if name, ok := block["name"].(string); ok {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+// getNestedContent extracts the content field from either top-level or message.content.
+func getNestedContent(raw map[string]any) any {
+	if c, ok := raw["content"]; ok {
+		return c
+	}
+	if msg, ok := raw["message"].(map[string]any); ok {
+		return msg["content"]
+	}
+	return nil
+}
+
+// truncateStrKeepNewlines truncates to maxLen runes but preserves newlines
+// (unlike truncateStr which flattens to single line).
+func truncateStrKeepNewlines(s string, maxLen int) string {
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
+}
+
+// formatTranscriptContext formats a transcriptContext into a string for backward compatibility.
+func formatTranscriptContext(ctx *transcriptContext) string {
+	if ctx == nil {
+		return ""
+	}
+
 	var buf strings.Builder
-	if len(userMessages) > 0 {
+	if len(ctx.UserMessages) > 0 {
 		buf.WriteString("Recent user requests:\n")
-		for _, m := range userMessages {
+		for _, m := range ctx.UserMessages {
 			buf.WriteString("- " + m + "\n")
 		}
 	}
-	if len(assistantSummaries) > 0 {
+	if len(ctx.AssistantActions) > 0 {
 		buf.WriteString("Recent assistant actions:\n")
-		for _, s := range assistantSummaries {
+		for _, s := range ctx.AssistantActions {
 			buf.WriteString("- " + s + "\n")
 		}
 	}
-	if len(toolErrors) > 0 {
+	if len(ctx.ToolErrors) > 0 {
 		buf.WriteString("Recent errors (dead ends):\n")
-		for _, e := range toolErrors {
+		for _, e := range ctx.ToolErrors {
 			buf.WriteString("- " + e + "\n")
 		}
 	}
+	if len(ctx.RunningAgents) > 0 {
+		buf.WriteString("Running background agents:\n")
+		for _, a := range ctx.RunningAgents {
+			buf.WriteString("- " + a + "\n")
+		}
+	}
 	return buf.String()
+}
+
+// extractTranscriptContext is the backward-compatible wrapper that returns a string.
+func extractTranscriptContext(transcriptPath string) string {
+	return formatTranscriptContext(extractTranscriptContextRich(transcriptPath))
 }
