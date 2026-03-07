@@ -23,13 +23,16 @@ He works silently in the background, and provides powerful tools when needed:
   spec           — Unified spec management (action: init/update/status/switch/delete)
 
 When to use alfred tools:
-- Reviewing or auditing .claude/ configuration → call config-review first
-- Creating or modifying .claude/ configuration files → call knowledge for best practices first
-- Looking up how a Claude Code feature works → call knowledge
+- ANY question about Claude Code features, behavior, or best practices → call knowledge FIRST
+  (hooks, skills, rules, agents, plugins, MCP, CLAUDE.md, memory, permissions, settings, compaction)
+- Evaluating or auditing .claude/ configuration → call config-review
+- Creating or modifying .claude/ configuration files → call knowledge for best practices, THEN make changes
 - Starting a new development task → call spec with action=init
 - Making design decisions → call spec with action=update
 - Starting/resuming a session → call spec with action=status
 
+IMPORTANT: knowledge contains 1,400+ curated Claude Code docs with hybrid search.
+Always prefer knowledge over web search or guessing for Claude Code topics.
 config-review cross-references your config against best practices from the knowledge base.
 `
 
@@ -56,7 +59,12 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 	s.AddTools(
 		server.ServerTool{
 			Tool: mcp.NewTool("knowledge",
-				mcp.WithDescription("Search Claude Code documentation and best practices. Uses hybrid vector + FTS5 search with Voyage AI reranking."),
+				mcp.WithDescription(`Search Claude Code documentation and best practices. Uses hybrid vector + FTS5 search with Voyage AI reranking.
+
+Use for: hooks, skills, rules, agents, plugins, MCP servers, CLAUDE.md, memory, permissions, settings, compaction, CLI features.
+Do NOT use for: general programming questions, project-specific code, non-Claude-Code topics.
+
+Example queries: "SessionStart hook best practices", "skill frontmatter options", "MCP tool annotations", "CLAUDE.md size guidelines".`),
 				mcp.WithTitleAnnotation("Knowledge Search"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithString("query", mcp.Description("Search query"), mcp.Required()),
@@ -68,7 +76,10 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 
 		server.ServerTool{
 			Tool: mcp.NewTool("config-review",
-				mcp.WithDescription("Deep audit of .claude/ configuration against best practices. Reads file contents, checks skill sizes and structure, validates rules, and cross-references findings with the knowledge base. Returns structured suggestions with severity levels and documentation references."),
+				mcp.WithDescription(`Deep audit of .claude/ configuration against best practices. Reads file contents, checks skill sizes and structure, validates rules, and cross-references findings with the knowledge base. Returns structured suggestions with severity levels and documentation references.
+
+Checks: CLAUDE.md quality, skills (size/frontmatter), rules (path scoping), hooks (performance/patterns), MCP server config, and settings.json.
+Requires project_path to locate .claude/ directory. If omitted, uses current working directory.`),
 				mcp.WithTitleAnnotation("Config Review"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithString("project_path", mcp.Description("Project root path (cwd)")),
@@ -78,7 +89,16 @@ func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
 
 		server.ServerTool{
 			Tool: mcp.NewTool("spec",
-				mcp.WithDescription("Unified spec management for development tasks. Actions: init (create spec), update (record decisions), status (get current state), switch (change active task), delete (remove task)."),
+				mcp.WithDescription(`Unified spec management for development tasks. Persists context across compaction and sessions.
+
+Actions:
+- init: Create a new spec (requires task_slug, e.g. "auth-refactor")
+- update: Write to a spec file (requires file + content, mode: "append" or "replace")
+- status: Get active task state (session.md + task metadata)
+- switch: Change active task (requires task_slug)
+- delete: Remove a task spec (requires task_slug)
+
+task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).`),
 				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete"), mcp.Required()),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 				mcp.WithString("task_slug", mcp.Description("Task identifier (required for init, switch, delete)")),

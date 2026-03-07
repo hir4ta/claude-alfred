@@ -57,7 +57,7 @@ func specDoInit(ctx context.Context, req mcp.CallToolRequest, st *store.Store, e
 	}
 	taskSlug := req.GetString("task_slug", "")
 	if taskSlug == "" {
-		return mcp.NewToolResultError("task_slug is required"), nil
+		return mcp.NewToolResultError("task_slug is required (e.g. \"auth-refactor\", pattern: ^[a-z0-9][a-z0-9-]{0,63}$)"), nil
 	}
 	description := req.GetString("description", "")
 
@@ -94,7 +94,7 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 	}
 	fileName := req.GetString("file", "")
 	if fileName == "" {
-		return mcp.NewToolResultError("file is required"), nil
+		return mcp.NewToolResultError("file is required (one of: requirements.md, design.md, decisions.md, session.md)"), nil
 	}
 	content := req.GetString("content", "")
 	if content == "" {

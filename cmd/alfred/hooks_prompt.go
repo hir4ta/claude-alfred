@@ -546,6 +546,10 @@ func significantWords(text string) []string {
 //   - Primary signal: matched Claude Code keywords in doc path/content (high weight)
 //   - Secondary signal: prompt content token coverage in doc (bonus)
 //
+// Single-keyword matches are dampened (×0.7) to require content coverage for injection.
+// This prevents generic docs from being injected when the prompt merely mentions a keyword
+// without actually asking about that topic.
+//
 // matchedKeywords are the Claude Code keywords detected in the prompt by Gate 1.
 // promptLower is the full prompt (lowercased) for secondary coverage scoring.
 func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocRow) float64 {
@@ -575,6 +579,14 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 	nkw := max(len(matchedKeywords), 1)
 	keywordScore := float64(kwPathHits)*0.40/float64(nkw) + float64(kwContentHits)*0.20/float64(nkw)
 
+	// Dampen single-keyword confidence: one keyword alone is weak signal.
+	// "hookの関連性は高くないとダメだ" (mentions hook but not asking about hooks)
+	// vs "hookの設定方法を教えて" (asking about hooks + config terms match).
+	// With dampening, single-keyword needs content coverage to pass threshold.
+	if len(matchedKeywords) == 1 {
+		keywordScore *= 0.7
+	}
+
 	// Secondary signal: content token coverage in doc.
 	// Uses POS-filtered tokens with base forms for better cross-lingual matching.
 	meaningful := contentTokensForScoring(promptLower)
@@ -602,10 +614,11 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 // handleUserPromptSubmit emits config reminders and proactively injects
 // relevant knowledge from the FTS index based on the user's prompt.
 //
-// Precision design (v3):
+// Precision design (v4):
 // 1. Detect Claude Code keywords with word boundary + framework negation (Gate 1)
 // 2. Search FTS using ONLY matched keywords — no synonym expansion (Gate 2)
 // 3. Score with kagome tokenizer + keyword-aware relevance, threshold 0.40 (Gate 3)
+//    Single-keyword matches dampened (×0.7) to require content coverage
 // 4. Inject 1 result by default; 2 only if top score >= 0.65
 func handleUserPromptSubmit(ev *hookEvent) {
 	if shouldRemindPrompt(ev.Prompt) {

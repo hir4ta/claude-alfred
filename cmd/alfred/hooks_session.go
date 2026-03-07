@@ -198,13 +198,18 @@ func runEmbedAsync() error {
 	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
 	sf := spec.SpecFile(fileName)
 
+	// Timeout prevents zombie process if Voyage API is unresponsive.
+	// 30s accommodates 3 retries with exponential backoff (0 + 2s + 4s = 6s wait + API calls).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	var lastErr error
 	for attempt := range 3 {
 		if attempt > 0 {
 			debugf("embed-async: retry attempt %d for %s/%s", attempt+1, taskSlug, fileName)
 			time.Sleep(time.Duration(attempt) * 2 * time.Second)
 		}
-		if err := spec.SyncSingleFile(context.Background(), sd, sf, st, emb); err != nil {
+		if err := spec.SyncSingleFile(ctx, sd, sf, st, emb); err != nil {
 			lastErr = err
 			debugf("embed-async: attempt %d failed: %v", attempt+1, err)
 			continue

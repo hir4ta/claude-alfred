@@ -184,5 +184,6 @@ Commands:
   help           Show this help
 
 Environment:
-  VOYAGE_API_KEY     Required. Enables semantic vector search with Voyage AI.`)
+  VOYAGE_API_KEY     Optional for serve (FTS-only fallback), required for init (embedding generation).
+                     Enables semantic vector search and Voyage AI reranking.`)
 }

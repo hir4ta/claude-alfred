@@ -35,18 +35,21 @@ In Claude Code
 
 Skills, rules, hooks, agents, and MCP configuration will be installed.
 
-### 3. Set API key
+### 3. Set API key (optional but recommended)
 
 ```bash
 export VOYAGE_API_KEY=your-key  # Add to ~/.zshrc or equivalent
 ```
 
-Semantic search uses [Voyage AI](https://voyageai.com/) for embeddings and reranking.
+[Voyage AI](https://voyageai.com/) enables high-precision semantic search with embedding + reranking.
+Cost is near-zero: embedding 1,400+ docs costs ~$0.01, and each search query costs fractions of a cent.
+
+Without Voyage AI, alfred still works using FTS5 keyword search — no API key needed to run.
 
 ### 4. Initialize the knowledge base
 
 ```bash
-alfred init
+alfred init    # Requires VOYAGE_API_KEY for embedding generation
 ```
 
 Ingests 1,400+ official documentation sections into SQLite and generates Voyage AI embeddings. Shows TUI progress.
@@ -94,7 +97,7 @@ Invoke with `/alfred:<skill>` in Claude Code.
 |-------|-------------|
 | `alfred` | Claude Code configuration and best practices support |
 
-## MCP Tools (9)
+## MCP Tools (3)
 
 Backend for skills and agents. Claude calls these automatically as needed.
 

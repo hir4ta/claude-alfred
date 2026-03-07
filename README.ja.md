@@ -35,18 +35,21 @@ Claude Code 内で
 
 プラグイン（skills, rules, hooks, agents, MCP 設定）が配置される。
 
-### 3. API キーを設定
+### 3. API キーを設定（オプション・推奨）
 
 ```bash
 export VOYAGE_API_KEY=your-key  # ~/.zshrc 等に追加
 ```
 
-セマンティック検索に [Voyage AI](https://voyageai.com/) を使用する。
+[Voyage AI](https://voyageai.com/) で高精度なセマンティック検索（embedding + reranking）が利用可能。
+コストはほぼゼロ: 1,400+ ドキュメントの embedding 生成が約 $0.01、検索クエリ 1 回あたり 1 セント未満。
+
+Voyage AI なしでも FTS5 キーワード検索で動作する — API キーなしでも利用可能。
 
 ### 4. 知識ベースを初期化
 
 ```bash
-alfred init
+alfred init    # embedding 生成に VOYAGE_API_KEY が必要
 ```
 
 公式ドキュメント（1,400+ 件）を SQLite に取り込み、Voyage AI で embedding を生成する。TUI で進捗を表示する。
@@ -94,7 +97,7 @@ Claude Code 内で `/alfred:<スキル名>` で呼び出す。
 |------------|------|
 | `alfred` | Claude Code の設定・ベストプラクティスに関するサポート |
 
-## MCP ツール (9)
+## MCP ツール (3)
 
 スキルとエージェントのバックエンド。Claude が必要に応じて自動的に呼び出すため、直接呼ぶ必要はない。
 
