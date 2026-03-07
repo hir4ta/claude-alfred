@@ -6,8 +6,12 @@ require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.0
+	github.com/ikawaha/kagome-dict/ipa v1.2.6
+	github.com/ikawaha/kagome/v2 v2.11.0
+	github.com/kljensen/snowball v0.10.0
 	github.com/mark3labs/mcp-go v0.44.0
 	github.com/ncruces/go-sqlite3 v0.30.5
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -24,10 +28,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ikawaha/kagome-dict v1.1.7 // indirect
-	github.com/ikawaha/kagome-dict/ipa v1.2.6 // indirect
-	github.com/ikawaha/kagome/v2 v2.11.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/kljensen/snowball v0.10.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
@@ -41,5 +42,4 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

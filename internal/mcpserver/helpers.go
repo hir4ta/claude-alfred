@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -49,16 +48,6 @@ func queryKB(st *store.Store, query string, limit int) []KBSnippet {
 		}
 	}
 	return snippets
-}
-
-// containsAny reports whether s contains any of the given substrings.
-func containsAny(s string, substrs ...string) bool {
-	for _, sub := range substrs {
-		if strings.Contains(s, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 // truncate shortens a string to maxLen runes, appending "..." if truncated.

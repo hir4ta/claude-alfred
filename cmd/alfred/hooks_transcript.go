@@ -150,6 +150,28 @@ func isTrivialDecision(sentence string) bool {
 	return false
 }
 
+// checkTranscriptFormat samples up to 10 JSON lines and returns true if the
+// transcript appears parseable (at least half of sampled lines parse as JSON).
+// Returns true if no lines were sampled (empty transcript is acceptable).
+func checkTranscriptFormat(lines []string) bool {
+	parsedCount, totalCount := 0, 0
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] != '{' {
+			continue
+		}
+		totalCount++
+		if totalCount > 10 {
+			break
+		}
+		var probe map[string]any
+		if json.Unmarshal([]byte(line), &probe) == nil {
+			parsedCount++
+		}
+	}
+	return totalCount == 0 || parsedCount*2 >= totalCount
+}
+
 // extractDecisionsFromTranscript scans the transcript for meaningful design decisions
 // from the assistant. Uses keyword matching + structured pattern detection + trivial filtering.
 func extractDecisionsFromTranscript(transcriptPath string) []string {
@@ -191,23 +213,8 @@ func extractDecisionsFromTranscript(transcriptPath string) []string {
 
 	// Transcript format guard.
 	allLines := strings.Split(string(data), "\n")
-	parsedCount, totalCount := 0, 0
-	for _, line := range allLines {
-		line = strings.TrimSpace(line)
-		if line == "" || line[0] != '{' {
-			continue
-		}
-		totalCount++
-		if totalCount > 10 {
-			break
-		}
-		var probe map[string]any
-		if json.Unmarshal([]byte(line), &probe) == nil {
-			parsedCount++
-		}
-	}
-	if totalCount > 0 && parsedCount*2 < totalCount {
-		debugf("extractDecisions: transcript format guard triggered (%d/%d parsed)", parsedCount, totalCount)
+	if !checkTranscriptFormat(allLines) {
+		debugf("extractDecisions: transcript format guard triggered")
 		return nil
 	}
 
@@ -346,24 +353,9 @@ func extractTranscriptContextRich(transcriptPath string) *transcriptContext {
 
 	// Transcript format guard: if most lines fail to parse, the format
 	// may have changed. Parse a sample first to detect this.
-	parsedCount, totalCount := 0, 0
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || line[0] != '{' {
-			continue
-		}
-		totalCount++
-		if totalCount > 10 {
-			break
-		}
-		var probe map[string]any
-		if json.Unmarshal([]byte(line), &probe) == nil {
-			parsedCount++
-		}
-	}
-	if totalCount > 0 && parsedCount*2 < totalCount {
-		fmt.Fprintf(os.Stderr, "[alfred] warning: transcript format may have changed — only %d/%d sample lines parsed\n", parsedCount, totalCount)
-		debugf("PreCompact: transcript format guard triggered (%d/%d parsed)", parsedCount, totalCount)
+	if !checkTranscriptFormat(lines) {
+		fmt.Fprintf(os.Stderr, "[alfred] warning: transcript format may have changed\n")
+		debugf("PreCompact: transcript format guard triggered")
 		return nil
 	}
 

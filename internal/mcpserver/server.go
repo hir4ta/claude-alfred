@@ -67,6 +67,7 @@ Do NOT use for: general programming questions, project-specific code, non-Claude
 Example queries: "SessionStart hook best practices", "skill frontmatter options", "MCP tool annotations", "CLAUDE.md size guidelines".`),
 				mcp.WithTitleAnnotation("Knowledge Search"),
 				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("query", mcp.Description("Search query"), mcp.Required()),
 				mcp.WithNumber("limit", mcp.Description("Maximum results (default: 5)")),
 				mcp.WithString("source_type", mcp.Description("Filter by source type: docs, spec, or empty for all")),
@@ -82,6 +83,7 @@ Checks: CLAUDE.md quality, skills (size/frontmatter), rules (path scoping), hook
 Requires project_path to locate .claude/ directory. If omitted, uses current working directory.`),
 				mcp.WithTitleAnnotation("Config Review"),
 				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("project_path", mcp.Description("Project root path (cwd)")),
 			),
 			Handler: reviewHandler(defaultClaudeHome(), st, emb),
@@ -99,6 +101,9 @@ Actions:
 - delete: Remove a task spec (requires task_slug)
 
 task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).`),
+				mcp.WithTitleAnnotation("Spec Management"),
+				mcp.WithDestructiveHintAnnotation(true),
+				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete"), mcp.Required()),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),
 				mcp.WithString("task_slug", mcp.Description("Task identifier (required for init, switch, delete)")),
