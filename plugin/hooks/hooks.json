@@ -17,11 +17,11 @@
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook PreToolUse",
-            "timeout": 3,
+            "timeout": 2,
             "type": "command"
           }
         ],
-        "matcher": "Read|Edit|Write|Glob|Grep"
+        "matcher": "Read|Edit|Write"
       }
     ],
     "SessionStart": [

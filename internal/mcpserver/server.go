@@ -107,7 +107,7 @@ task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64
 Note: "status" is read-only. Only "init", "update", "switch", and "delete" modify state.`),
 				mcp.WithTitleAnnotation("Spec Management"),
 				mcp.WithReadOnlyHintAnnotation(false),
-				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithDestructiveHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete"), mcp.Required()),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),

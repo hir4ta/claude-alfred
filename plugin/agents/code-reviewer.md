@@ -4,7 +4,7 @@ description: >
   Knowledge-powered code reviewer. Use this agent when reviewing code changes,
   before committing, or when you want a second opinion on implementation quality.
   Cross-checks against active spec (decisions, scope) and Claude Code best practices.
-tools: Read, Grep, Glob, Bash(git*), mcp__alfred__knowledge, mcp__alfred__spec
+tools: Read, Grep, Glob, Bash(git diff:*, git log:*, git show:*, git status:*), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 disallowedTools: Write, Edit, NotebookEdit
 model: sonnet
 maxTurns: 20

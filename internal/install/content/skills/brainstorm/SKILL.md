@@ -7,7 +7,7 @@ description: |
   (3) need to surface risks and issues, (4) need raw material for convergence (/alfred:refine).
 user-invocable: true
 argument-hint: "<theme or rough prompt>"
-allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec
+allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: fork
 ---
 

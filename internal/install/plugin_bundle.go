@@ -41,12 +41,12 @@ func alfredHookEntries(binPath string) map[string]any {
 		},
 		"PreToolUse": []any{
 			map[string]any{
-				"matcher": "Read|Edit|Write|Glob|Grep",
+				"matcher": "Read|Edit|Write",
 				"hooks": []any{
 					map[string]any{
 						"type":    "command",
 						"command": binPath + " hook PreToolUse",
-						"timeout": 3,
+						"timeout": 2,
 					},
 				},
 			},
@@ -176,18 +176,10 @@ func Bundle(outputDir, version string) error {
 		}
 	}
 
-	// 9. Write settings.json — plugin settings (currently only "agent" key is
-	// supported by Claude Code; permissions are not honored in plugin settings).
-	settingsJSON := map[string]any{
-		"agent": map[string]any{
-			"alfred:alfred": map[string]any{
-				"model": "sonnet",
-			},
-			"alfred:code-reviewer": map[string]any{
-				"model": "sonnet",
-			},
-		},
-	}
+	// 9. Write settings.json — plugin settings.
+	// Agent models are defined in agents/*.md frontmatter; settings.json is the
+	// user-override layer. Ship empty so defaults come from agent definitions.
+	settingsJSON := map[string]any{}
 	if err := writeJSON(filepath.Join(outputDir, "settings.json"), settingsJSON); err != nil {
 		return fmt.Errorf("write settings.json: %w", err)
 	}

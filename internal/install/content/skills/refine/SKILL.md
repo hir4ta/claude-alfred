@@ -7,7 +7,7 @@ description: |
   (4) need to turn brainstorm results or notes into decisions.
 user-invocable: true
 argument-hint: "<theme or current messy notes>"
-allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec
+allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: current
 ---
 

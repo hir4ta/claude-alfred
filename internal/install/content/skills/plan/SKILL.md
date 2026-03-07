@@ -6,7 +6,7 @@ description: >
   Use when: (1) starting a new task, (2) organizing a design, (3) planning before resuming work.
 user-invocable: true
 argument-hint: "<task-slug> [description]"
-allowed-tools: Read, Write, Edit, Glob, Grep, WebSearch, AskUserQuestion, Agent, mcp__alfred__knowledge, mcp__alfred__spec
+allowed-tools: Read, Write, Edit, Glob, Grep, WebSearch, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: current
 ---
 

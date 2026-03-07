@@ -7,7 +7,7 @@ description: >
   (3) preference-aware configuration generation,
   (4) documentation search for Claude Code features.
   Alfred proactively provides relevant knowledge and catches issues early.
-tools: Read, Grep, Glob, Write, Edit, mcp__alfred__knowledge, mcp__alfred__config-review, mcp__alfred__spec
+tools: Read, Grep, Glob, Write, Edit, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__config-review, mcp__plugin_alfred_alfred__spec
 model: sonnet
 maxTurns: 30
 memory: user

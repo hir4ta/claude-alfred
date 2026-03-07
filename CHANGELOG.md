@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.54.2] - 2026-03-08
+
+### Changed
+- spec ツール `DestructiveHintAnnotation` を `true` に修正（delete アクションは destructive）
+- Skills/Agents の Bash 権限を最小化: review/setup/release/code-reviewer
+- PreToolUse matcher を `Read|Edit|Write` に絞り込み（Glob|Grep 除外）
+- PreToolUse timeout 3s → 2s（公式推奨 <2s に準拠）
+- alfred-protocol ルールをグローバル化（`.alfred/**` paths 制限を撤廃）
+- MCP ツール名を `mcp__plugin_alfred_alfred__*` フルネームに統一
+- settings.json から冗長な model 定義を削除（agents frontmatter が正）
+
 ## [0.54.1] - 2026-03-08
 
 ### Fixed
@@ -148,7 +159,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.54.1...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.54.2...HEAD
+[0.54.2]: https://github.com/hir4ta/claude-alfred/compare/v0.54.1...v0.54.2
 [0.54.1]: https://github.com/hir4ta/claude-alfred/compare/v0.54.0...v0.54.1
 [0.54.0]: https://github.com/hir4ta/claude-alfred/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/hir4ta/claude-alfred/compare/v0.52.0...v0.53.0

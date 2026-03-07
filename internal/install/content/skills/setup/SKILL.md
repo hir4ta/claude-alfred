@@ -6,7 +6,7 @@ description: >
   For single-file work, use /alfred:configure instead.
 user-invocable: true
 argument-hint: "[feature | --wizard]"
-allowed-tools: Read, Write, Edit, Glob, Bash, AskUserQuestion, mcp__alfred__knowledge, mcp__alfred__config-review
+allowed-tools: Read, Write, Edit, Glob, AskUserQuestion, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__config-review
 context: current
 ---
 
