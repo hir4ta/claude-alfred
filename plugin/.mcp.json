@@ -4,7 +4,10 @@
       "args": [
         "serve"
       ],
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/run.sh"
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/run.sh",
+      "env": {
+        "VOYAGE_API_KEY": "${VOYAGE_API_KEY}"
+      }
     }
   }
 }

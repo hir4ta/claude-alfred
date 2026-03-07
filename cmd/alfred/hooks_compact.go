@@ -67,6 +67,7 @@ func handlePreCompact(projectPath, transcriptPath, customInstructions string) {
 	// Sync session.md to DB (without embedder — hook is short-lived).
 	st, err := store.OpenDefaultCached()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "[alfred] warning: DB open failed, session not synced: %v\n", err)
 		debugf("PreCompact: DB open error: %v", err)
 		return
 	}
@@ -207,6 +208,7 @@ func asyncEmbedSession(sd *spec.SpecDir) {
 	// The hook handler exits shortly after; the OS reparents the child to init.
 	// No goroutine needed — cmd.Wait() is intentionally not called.
 	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "[alfred] warning: async embed failed: %v\n", err)
 		debugf("asyncEmbedSession: start error: %v", err)
 		return
 	}

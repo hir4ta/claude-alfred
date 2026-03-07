@@ -41,7 +41,7 @@ func alfredHookEntries(binPath string) map[string]any {
 		},
 		"PreToolUse": []any{
 			map[string]any{
-				"matcher": "Read|Edit|Write",
+				"matcher": "Read|Edit|Write|Glob|Grep",
 				"hooks": []any{
 					map[string]any{
 						"type":    "command",
@@ -105,6 +105,7 @@ func Bundle(outputDir, version string) error {
 		"repository":  "https://github.com/hir4ta/claude-alfred",
 		"license":     "MIT",
 		"keywords":    []string{"alfred", "best-practices", "workflow", "compaction", "spec", "documentation"},
+		"category":    "productivity",
 	}
 	if err := writeJSON(filepath.Join(outputDir, ".claude-plugin", "plugin.json"), pluginJSON); err != nil {
 		return fmt.Errorf("write plugin.json: %w", err)
@@ -125,6 +126,9 @@ func Bundle(outputDir, version string) error {
 			"alfred": map[string]any{
 				"command": "${CLAUDE_PLUGIN_ROOT}/bin/run.sh",
 				"args":    []string{"serve"},
+				"env": map[string]string{
+					"VOYAGE_API_KEY": "${VOYAGE_API_KEY}",
+				},
 			},
 		},
 	}
@@ -178,6 +182,9 @@ func Bundle(outputDir, version string) error {
 	settingsJSON := map[string]any{
 		"agent": map[string]any{
 			"alfred:alfred": map[string]any{
+				"model": "sonnet",
+			},
+			"alfred:code-reviewer": map[string]any{
 				"model": "sonnet",
 			},
 		},

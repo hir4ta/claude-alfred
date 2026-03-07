@@ -2,6 +2,9 @@
   "agent": {
     "alfred:alfred": {
       "model": "sonnet"
+    },
+    "alfred:code-reviewer": {
+      "model": "sonnet"
     }
   }
 }

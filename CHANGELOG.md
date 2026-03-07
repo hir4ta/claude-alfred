@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-03-08
+
+### Changed
+- Graceful degradation: stderr warnings on store/DB open failures (hooks_session, hooks_compact)
+- Voyage API 401/403 error masking to prevent API key leakage in logs
+- `ambiguousKeywords` DRY refactor: generated from `frameworkFamilies` table
+- Spec tool annotation: `destructiveHint: false` (status is read-only)
+- PreToolUse hook matcher expanded: `Read|Edit|Write|Glob|Grep`
+- Skills全面改善: plan (slug validation), brainstorm (query guidance), refine (flexible templates), review (git diff guidance), setup (stack defaults), configure (hook types updated)
+- Agents改善: code-reviewer (spec-less fallback), alfred (Write/Edit usage clarified)
+- Rules改善: alfred-protocol (Compact Marker format), alfred (spec tool docs)
+
+### Added
+- Plugin category field (`productivity`) in plugin.json
+- Code-reviewer agent model setting in settings.json
+- VOYAGE_API_KEY env passthrough in .mcp.json
+- README: Spec File Templates, Troubleshooting section, environment variables table
+
 ## [0.53.0] - 2026-03-08
 
 ### Added
@@ -126,7 +144,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.53.0...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.54.0...HEAD
+[0.54.0]: https://github.com/hir4ta/claude-alfred/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/hir4ta/claude-alfred/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/hir4ta/claude-alfred/compare/v0.51.0...v0.52.0
 [0.51.0]: https://github.com/hir4ta/claude-alfred/compare/v0.50.0...v0.51.0

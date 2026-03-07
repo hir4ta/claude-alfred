@@ -159,6 +159,64 @@ Run automatically during Claude Code lifecycle. No user action needed.
 
 `_active.md` (YAML) manages multiple tasks; switch with `spec` (action=switch).
 
+### Spec File Templates
+
+When you run `/alfred:plan my-feature`, alfred creates these files:
+
+**`.alfred/specs/my-feature/requirements.md`**
+```
+# Requirements: my-feature
+
+## Goal
+Add OAuth2 login flow to the API gateway.
+
+## Success Criteria
+- Users can login via Google/GitHub OAuth
+- JWT tokens issued with 1h expiry
+- Refresh token rotation implemented
+
+## Out of Scope
+- SAML/LDAP integration
+- Multi-factor authentication
+```
+
+**`.alfred/specs/my-feature/session.md`** (activeContext format)
+```
+# Session: my-feature
+
+## Status
+active
+
+## Currently Working On
+Implementing the OAuth callback handler in cmd/api/auth.go
+
+## Recent Decisions (last 3)
+1. Use golang.org/x/oauth2 instead of custom implementation
+2. Store refresh tokens in PostgreSQL, not Redis
+
+## Next Steps
+1. Add token refresh endpoint
+2. Write integration tests for OAuth flow
+
+## Blockers
+None
+
+## Modified Files (this session)
+- cmd/api/auth.go
+- internal/auth/oauth.go
+```
+
+Compact Marker example:
+```
+## Compact Marker [2025-03-08 14:30:00]
+### Pre-Compact Context Snapshot
+Last user directive: Add error handling to the OAuth callback
+Recent assistant actions:
+- Created internal/auth/oauth.go with provider abstraction
+- Added tests in internal/auth/oauth_test.go
+---
+```
+
 ## Debugging
 
 Set `ALFRED_DEBUG=1` to output debug logs to `~/.claude-alfred/debug.log`.
@@ -175,6 +233,35 @@ Set `ALFRED_DEBUG=1` to output debug logs to `~/.claude-alfred/debug.log`.
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+## Troubleshooting
+
+### Debug logging
+
+```bash
+ALFRED_DEBUG=1 claude   # Enable debug log
+cat ~/.claude-alfred/debug.log  # View logs
+```
+
+### Common issues
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| "no seed docs found" on serve | Knowledge base not initialized | Run `alfred init` |
+| Hook timeout warnings | Slow FTS search or large transcript | Check `~/.claude-alfred/debug.log` |
+| "VOYAGE_API_KEY is required" on init | API key not set | `export VOYAGE_API_KEY=your-key` |
+| Knowledge results feel stale | Docs older than 30 days | Run `alfred init` to re-crawl |
+| Hook not firing | Plugin not installed | Run `/plugin install alfred` and restart |
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VOYAGE_API_KEY` | (none) | Voyage AI API key for vector search + reranking |
+| `ALFRED_DEBUG` | (unset) | Set to `1` to enable debug logging |
+| `ALFRED_RELEVANCE_THRESHOLD` | `0.40` | Minimum score for knowledge injection |
+| `ALFRED_HIGH_CONFIDENCE_THRESHOLD` | `0.65` | Score threshold for injecting 2 results |
+| `ALFRED_SINGLE_KEYWORD_DAMPEN` | `0.80` | Dampening factor for single-keyword matches |
 
 ## License
 

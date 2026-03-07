@@ -96,16 +96,18 @@ Requires project_path to locate .claude/ directory. If omitted, uses current wor
 				mcp.WithDescription(`Unified spec management for development tasks. Persists context across compaction and sessions.
 
 Actions:
+- status: Get active task state — READ-ONLY, safe to call anytime
 - init: Create a new spec (requires task_slug, e.g. "auth-refactor")
 - update: Write to a spec file (requires file + content, mode: "append" or "replace")
-- status: Get active task state (session.md + task metadata)
 - switch: Change active task (requires task_slug)
-- delete: Remove a task spec (requires task_slug; first call previews, add confirm=true to execute)
+- delete: Remove a task spec (requires task_slug; first call previews, add confirm=true to execute) — DESTRUCTIVE
 
-task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).`),
+task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).
+
+Note: "status" is read-only. Only "init", "update", "switch", and "delete" modify state.`),
 				mcp.WithTitleAnnotation("Spec Management"),
 				mcp.WithReadOnlyHintAnnotation(false),
-				mcp.WithDestructiveHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete"), mcp.Required()),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root"), mcp.Required()),

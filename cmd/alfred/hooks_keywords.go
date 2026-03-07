@@ -30,25 +30,32 @@ var katakanaToEnglish = map[string]string{
 	"設定ファイル": "settings",
 }
 
-// ambiguousKeywords maps keywords that are shared with other frameworks
-// to framework identifiers that negate the Claude Code interpretation.
-// Only well-known framework names are listed — not features or concepts.
-var ambiguousKeywords = map[string][]string{
-	"hook":       {"react", "vue", "angular", "svelte", "wordpress", "pre-commit", "pre-push", "post-commit"},
-	"hooks":      {"react", "vue", "angular", "svelte", "wordpress", "pre-commit", "pre-push", "post-commit"},
-	"フック":        {"react", "vue", "angular", "svelte", "wordpress", "pre-commit", "pre-push", "post-commit", "git hook"},
-	"plugin":     {"webpack", "vite", "rollup", "babel", "eslint", "vim", "neovim", "wordpress", "jquery", "gradle", "maven"},
-	"プラグイン":      {"webpack", "vite", "rollup", "babel", "eslint", "vim", "neovim", "wordpress", "jquery", "gradle", "maven"},
-	"rule":       {"eslint", "prettier", "stylelint", "tslint", "firewall", "iptables", "ufw"},
-	"rules":      {"eslint", "prettier", "stylelint", "tslint", "firewall", "iptables", "ufw"},
-	"ルール":        {"eslint", "prettier", "stylelint", "tslint", "firewall", "iptables", "ufw"},
-	"compact":    {"css", "json.stringify"},
-	"compaction": {"leveldb", "rocksdb", "cassandra"},
-	"コンパクト":      {"css", "json.stringify"},
-	"skill":      {"alexa"},
-	"skills":     {"alexa"},
-	"スキル":        {"alexa"},
+// frameworkFamilies maps keyword families to their framework exclusion lists.
+// Each family groups keywords that share the same disambiguation context.
+var frameworkFamilies = []struct {
+	keywords   []string
+	frameworks []string
+}{
+	{[]string{"hook", "hooks", "フック"}, []string{"react", "vue", "angular", "svelte", "wordpress", "pre-commit", "pre-push", "post-commit"}},
+	{[]string{"plugin", "プラグイン"}, []string{"webpack", "vite", "rollup", "babel", "eslint", "vim", "neovim", "wordpress", "jquery", "gradle", "maven"}},
+	{[]string{"rule", "rules", "ルール"}, []string{"eslint", "prettier", "stylelint", "tslint", "firewall", "iptables", "ufw"}},
+	{[]string{"compact", "コンパクト"}, []string{"css", "json.stringify"}},
+	{[]string{"compaction"}, []string{"leveldb", "rocksdb", "cassandra"}},
+	{[]string{"skill", "skills", "スキル"}, []string{"alexa"}},
 }
+
+// ambiguousKeywords is generated from frameworkFamilies for O(1) lookup.
+// Maps keywords shared with other frameworks to framework identifiers that
+// negate the Claude Code interpretation.
+var ambiguousKeywords = func() map[string][]string {
+	m := make(map[string][]string)
+	for _, fam := range frameworkFamilies {
+		for _, kw := range fam.keywords {
+			m[kw] = fam.frameworks
+		}
+	}
+	return m
+}()
 
 // claudeCodeKeywordsLower is the pre-lowered version of claudeCodeKeywords.
 // Japanese keywords are unaffected by ToLower but included for consistency.
