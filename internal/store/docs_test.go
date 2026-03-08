@@ -472,3 +472,117 @@ func TestDeleteDocsByURLPrefix(t *testing.T) {
 		t.Error("doc with other.com URL should still exist")
 	}
 }
+
+func TestEscapeLIKEPrefix(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		prefix string
+		want   string
+	}{
+		{"plain prefix", "https://example.com/", `https://example.com/%`},
+		{"percent in prefix", "docs%foo", `docs\%foo%`},
+		{"underscore in prefix", "docs_bar", `docs\_bar%`},
+		{"backslash in prefix", `docs\path`, `docs\\path%`},
+		{"all special chars", `a%b_c\d`, `a\%b\_c\\d%`},
+		{"empty prefix", "", `%`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := escapeLIKEPrefix(tt.prefix)
+			if got != tt.want {
+				t.Errorf("escapeLIKEPrefix(%q) = %q, want %q", tt.prefix, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDeleteDocsByURLPrefix_WildcardSafety(t *testing.T) {
+	t.Parallel()
+	st := openTestStore(t)
+	ctx := t.Context()
+
+	// Insert docs where URL contains LIKE special characters.
+	for _, d := range []DocRow{
+		{URL: "memory://user/100%_complete/summary", SectionPath: "A", Content: "should survive", SourceType: "memory"},
+		{URL: "memory://user/100/real", SectionPath: "B", Content: "should be deleted", SourceType: "memory"},
+		{URL: "memory://user/100/other", SectionPath: "C", Content: "should also be deleted", SourceType: "memory"},
+		{URL: "spec://project/task_name/design", SectionPath: "D", Content: "task with underscore", SourceType: "spec"},
+		{URL: "spec://project/taskXname/design", SectionPath: "E", Content: "similar but different", SourceType: "spec"},
+	} {
+		d2 := d
+		if _, _, err := st.UpsertDoc(ctx, &d2); err != nil {
+			t.Fatalf("UpsertDoc: %v", err)
+		}
+	}
+
+	// Delete with prefix "memory://user/100/" — should NOT match "100%_complete".
+	n, err := st.DeleteDocsByURLPrefix(ctx, "memory://user/100/")
+	if err != nil {
+		t.Fatalf("DeleteDocsByURLPrefix: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("DeleteDocsByURLPrefix(memory://user/100/) = %d, want 2", n)
+	}
+
+	// Verify the doc with % in URL still exists.
+	count, err := st.CountDocsByURLPrefix(ctx, "memory://user/100%_complete")
+	if err != nil {
+		t.Fatalf("CountDocsByURLPrefix: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("CountDocsByURLPrefix(100%%_complete) = %d, want 1", count)
+	}
+
+	// Delete with prefix containing underscore — should match exactly, not as wildcard.
+	n, err = st.DeleteDocsByURLPrefix(ctx, "spec://project/task_name/")
+	if err != nil {
+		t.Fatalf("DeleteDocsByURLPrefix(task_name): %v", err)
+	}
+	if n != 1 {
+		t.Errorf("DeleteDocsByURLPrefix(task_name) = %d, want 1 (not 2)", n)
+	}
+
+	// taskXname doc should still exist.
+	count, err = st.CountDocsByURLPrefix(ctx, "spec://project/taskXname/")
+	if err != nil {
+		t.Fatalf("CountDocsByURLPrefix(taskXname): %v", err)
+	}
+	if count != 1 {
+		t.Errorf("CountDocsByURLPrefix(taskXname) = %d, want 1", count)
+	}
+}
+
+func TestDeleteDocsByURLPrefix_EmptyPrefix(t *testing.T) {
+	t.Parallel()
+	st := openTestStore(t)
+	ctx := t.Context()
+
+	// Insert a doc so there's data to accidentally delete.
+	d := DocRow{URL: "https://example.com/page", SectionPath: "A", Content: "content", SourceType: "docs"}
+	if _, _, err := st.UpsertDoc(ctx, &d); err != nil {
+		t.Fatalf("UpsertDoc: %v", err)
+	}
+
+	// DeleteDocsByURLPrefix with empty prefix must return an error.
+	_, err := st.DeleteDocsByURLPrefix(ctx, "")
+	if err == nil {
+		t.Fatal("DeleteDocsByURLPrefix(\"\") = nil, want error")
+	}
+
+	// CountDocsByURLPrefix with empty prefix must return an error.
+	_, err = st.CountDocsByURLPrefix(ctx, "")
+	if err == nil {
+		t.Fatal("CountDocsByURLPrefix(\"\") = nil, want error")
+	}
+
+	// Original doc must still exist.
+	count, err := st.CountDocsByURLPrefix(ctx, "https://example.com/")
+	if err != nil {
+		t.Fatalf("CountDocsByURLPrefix: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("CountDocsByURLPrefix = %d, want 1 (doc should not have been deleted)", count)
+	}
+}

@@ -50,8 +50,9 @@ paths:
 }
 ```
 
-Event types: PreToolUse, PostToolUse, UserPromptSubmit, SessionStart, PreCompact, Stop
+Event types: PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, UserPromptSubmit, SessionStart, SessionEnd, PreCompact, Stop, Notification, SubagentStart, SubagentStop, TeammateIdle, TaskCompleted, InstructionsLoaded, ConfigChange, WorktreeCreate, WorktreeRemove
 Hook types: command, http, prompt (LLM-gated), agent (multi-turn)
+Matcher support: PreToolUse/PostToolUse/PostToolUseFailure/PermissionRequest (tool name), SessionStart (startup/resume/clear/compact), SessionEnd (clear/logout/prompt_input_exit/bypass_permissions_disabled/other), PreCompact (manual/auto), Notification (notification type), SubagentStart/SubagentStop (agent type), ConfigChange (config source). No matcher: UserPromptSubmit, Stop, TeammateIdle, TaskCompleted, WorktreeCreate, WorktreeRemove, InstructionsLoaded.
 
 - Keep hooks fast (< 2s for synchronous)
 - Use `matcher` to limit which tools trigger

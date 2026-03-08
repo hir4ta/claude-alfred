@@ -35,7 +35,8 @@
             "timeout": 3,
             "type": "command"
           }
-        ]
+        ],
+        "matcher": "logout|prompt_input_exit|bypass_permissions_disabled|other"
       }
     ],
     "SessionStart": [
@@ -45,18 +46,6 @@
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook SessionStart",
             "statusMessage": "alfred: restoring session context...",
             "timeout": 5,
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook Stop",
-            "statusMessage": "alfred: saving session memory...",
-            "timeout": 3,
             "type": "command"
           }
         ]

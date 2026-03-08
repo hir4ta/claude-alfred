@@ -115,22 +115,33 @@ func (s *Store) UpsertDoc(ctx context.Context, doc *DocRow) (id int64, changed b
 	return id, true, nil
 }
 
+// escapeLIKEPrefix escapes LIKE special characters (%, _) in prefix and appends
+// the trailing wildcard. Use with ESCAPE '\' clause.
+func escapeLIKEPrefix(prefix string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(prefix) + "%"
+}
+
 // DeleteDocsByURLPrefix removes all docs (and their embeddings) whose URL starts with the given prefix.
 // Returns the number of deleted document rows.
 func (s *Store) DeleteDocsByURLPrefix(ctx context.Context, prefix string) (int64, error) {
+	if prefix == "" {
+		return 0, fmt.Errorf("store: DeleteDocsByURLPrefix: empty prefix")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("store: begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
+	escaped := escapeLIKEPrefix(prefix)
 	_, err = tx.ExecContext(ctx,
-		`DELETE FROM embeddings WHERE source = 'docs' AND source_id IN (SELECT id FROM docs WHERE url LIKE ? || '%')`, prefix)
+		`DELETE FROM embeddings WHERE source = 'docs' AND source_id IN (SELECT id FROM docs WHERE url LIKE ? ESCAPE '\')`, escaped)
 	if err != nil {
 		return 0, fmt.Errorf("delete embeddings: %w", err)
 	}
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM docs WHERE url LIKE ? || '%'`, prefix)
+		`DELETE FROM docs WHERE url LIKE ? ESCAPE '\'`, escaped)
 	if err != nil {
 		return 0, fmt.Errorf("delete docs: %w", err)
 	}
@@ -146,9 +157,12 @@ func (s *Store) DeleteDocsByURLPrefix(ctx context.Context, prefix string) (int64
 
 // CountDocsByURLPrefix returns the number of documents matching the given URL prefix.
 func (s *Store) CountDocsByURLPrefix(ctx context.Context, prefix string) (int64, error) {
+	if prefix == "" {
+		return 0, fmt.Errorf("store: CountDocsByURLPrefix: empty prefix")
+	}
 	var count int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM docs WHERE url LIKE ? || '%'`, prefix).Scan(&count)
+		`SELECT COUNT(*) FROM docs WHERE url LIKE ? ESCAPE '\'`, escapeLIKEPrefix(prefix)).Scan(&count)
 	return count, err
 }
 
