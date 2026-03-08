@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -60,6 +61,11 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 
 	// Get modified files from git.
 	modifiedFiles := getModifiedFiles(projectPath)
+
+	// Persist current session as a "chapter" memory before overwriting.
+	// This preserves the full context of each compact cycle, enabling
+	// recall of early-session conversations after multiple compactions.
+	persistChapterMemory(ctx, projectPath, taskSlug, sd, transcriptPath)
 
 	// Build activeContext session.md with rich context, then enforce size limit.
 	session := buildActiveContextSession(sd, taskSlug, txCtx, decisions, modifiedFiles, customInstructions)
@@ -635,5 +641,165 @@ func truncateDecision(d string, maxLen int) string {
 		return d
 	}
 	return string(runes[:maxLen])
+}
+
+// ---------------------------------------------------------------------------
+// Chapter memory: compact-cycle snapshots for multi-compact session recall
+// ---------------------------------------------------------------------------
+
+// maxChapterSectionBytes caps each chapter section (individual user message or
+// session state) at 32KB. Large enough for ~800-line markdown files or JSON
+// payloads, while preventing extreme outliers from bloating the DB.
+const maxChapterSectionBytes = 32 * 1024
+
+// persistChapterMemory saves the current session context as permanent memory
+// "chapter" sections before session.md is overwritten by the new compact cycle.
+//
+// Unlike a single monolithic doc, each user message and the session state are
+// stored as separate docs. This enables:
+// - Individual FTS/vector search per section (better recall precision)
+// - No artificial size cap on total chapter (sum of sections can be large)
+// - Each section gets its own embedding (search finds the specific passage)
+func persistChapterMemory(ctx context.Context, projectPath, taskSlug string, sd *spec.SpecDir, transcriptPath string) {
+	st, err := store.OpenDefaultCached()
+	if err != nil {
+		debugf("persistChapterMemory: DB open error: %v", err)
+		return
+	}
+
+	// Determine chapter number from existing compact markers.
+	existing, _ := sd.ReadFile(spec.FileSession)
+	chapterNum := strings.Count(existing, "## Compact Marker [") + 1
+
+	project := projectBaseName(projectPath)
+	ts := time.Now().Format("2006-01-02T15:04:05")
+	baseURL := fmt.Sprintf("memory://user/%s/%s/chapter-%d", project, taskSlug, chapterNum)
+
+	// Create a concise label for timeline display.
+	workingOn := extractSection(existing, "## Currently Working On")
+	if workingOn == "" {
+		workingOn = extractSectionFallback(existing, "## Current Position", "## Status")
+	}
+	label := truncateStr(workingOn, 120)
+	if label == "" {
+		label = fmt.Sprintf("chapter %d", chapterNum)
+	}
+
+	var savedCount int
+	var changedIDs []int64
+
+	// Section 1: Session state (the structured summary of this compact cycle).
+	if existing != "" {
+		content := existing
+		if len(content) > maxChapterSectionBytes {
+			content = safeTruncateBytes(content, maxChapterSectionBytes) + "\n... (truncated at 32KB)"
+		}
+		sectionPath := fmt.Sprintf("%s > %s > chapter-%d > %s", project, taskSlug, chapterNum, label)
+		id, changed, err := st.UpsertDoc(ctx, &store.DocRow{
+			URL:         baseURL + "/session-state",
+			SectionPath: sectionPath,
+			Content:     content,
+			SourceType:  store.SourceMemory,
+			TTLDays:     0,
+		})
+		if err != nil {
+			debugf("persistChapterMemory: session state upsert error: %v", err)
+		} else if changed {
+			savedCount++
+			changedIDs = append(changedIDs, id)
+		}
+	}
+
+	// Section 2+: Early conversation context — each user message as a separate doc.
+	// User's initial messages contain reference materials, design docs, JSON payloads,
+	// and task context that would be lost after compact.
+	if transcriptPath != "" {
+		earlyMsgs := extractEarlyUserMessages(transcriptPath)
+		for i, msg := range earlyMsgs {
+			content := msg
+			if len(content) > maxChapterSectionBytes {
+				content = safeTruncateBytes(content, maxChapterSectionBytes) + "\n... (truncated at 32KB)"
+			}
+			msgLabel := truncateStr(content, 80)
+			sectionPath := fmt.Sprintf("%s > %s > chapter-%d > user-context-%d > %s", project, taskSlug, chapterNum, i+1, msgLabel)
+			id, changed, err := st.UpsertDoc(ctx, &store.DocRow{
+				URL:         fmt.Sprintf("%s/user-context-%d", baseURL, i+1),
+				SectionPath: sectionPath,
+				Content:     content,
+				SourceType:  store.SourceMemory,
+				TTLDays:     0,
+			})
+			if err != nil {
+				debugf("persistChapterMemory: user context %d upsert error: %v", i+1, err)
+				continue
+			}
+			if changed {
+				savedCount++
+				changedIDs = append(changedIDs, id)
+			}
+		}
+	}
+
+	// Async embed all changed docs (non-blocking).
+	for _, id := range changedIDs {
+		asyncEmbedDoc(id)
+	}
+	if savedCount > 0 {
+		notifyUser("saved chapter %d (%d sections) for task '%s' (%s)", chapterNum, savedCount, taskSlug, ts)
+	}
+	debugf("persistChapterMemory: chapter %d for %s — %d sections saved", chapterNum, taskSlug, savedCount)
+}
+
+// extractEarlyUserMessages reads the first portion of the transcript and returns
+// individual user messages — reference materials, design docs, JSON payloads,
+// and task context that are typically passed at session start.
+// Returns up to 10 messages, each preserving full content (no per-message truncation).
+func extractEarlyUserMessages(transcriptPath string) []string {
+	// Read the first 512KB of the transcript — enough for large reference materials.
+	data, err := readFileHead(transcriptPath, 512*1024)
+	if err != nil {
+		debugf("extractEarlyUserMessages: read error: %v", err)
+		return nil
+	}
+
+	lines := strings.Split(string(data), "\n")
+	if !checkTranscriptFormat(lines) {
+		return nil
+	}
+
+	var msgs []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] != '{' {
+			continue
+		}
+		var entry transcriptEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		role := entry.Role
+		if role == "" {
+			role = entry.Message.Role
+		}
+		// Only capture user messages (where reference materials live).
+		if role != "user" && entry.Type != "human" {
+			continue
+		}
+
+		text := extractTextContent(entry)
+		if text == "" {
+			continue
+		}
+
+		msgs = append(msgs, text)
+
+		// Capture first 10 user messages — covers most initial context passing.
+		if len(msgs) >= 10 {
+			break
+		}
+	}
+
+	return msgs
 }
 

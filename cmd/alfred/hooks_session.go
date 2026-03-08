@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -161,6 +162,12 @@ func injectSpecContext(ctx context.Context, projectPath, source string, st *stor
 			}
 		}
 
+		// Inject chapter timeline: past compact snapshots stored as memories.
+		// Enables recall of early session context even after 5+ compactions.
+		if timeline := buildChapterTimeline(ctx, projectPath, taskSlug, st); timeline != "" {
+			buf.WriteString(timeline)
+		}
+
 		buf.WriteString("--- End Alfred Protocol ---\n")
 		emitAdditionalContext("SessionStart", buf.String())
 		notifyUser("recovered task '%s' (compact #%d)", taskSlug, compactCount)
@@ -272,6 +279,83 @@ func proactiveMemoryHints(ctx context.Context, taskSlug, session string, st *sto
 	}
 	notifyUser("found %d related past experience(s)", len(docs))
 	debugf("SessionStart: proactive memory injection for %s, docs=%d", taskSlug, len(docs))
+	return buf.String()
+}
+
+// buildChapterTimeline queries stored chapter memories for the active task and
+// returns a compact timeline showing what happened in each compact cycle.
+// This enables Claude to understand the full session history even after many
+// compactions, and to use the recall tool for detailed context from any chapter.
+func buildChapterTimeline(ctx context.Context, projectPath, taskSlug string, st *store.Store) string {
+	if st == nil {
+		return ""
+	}
+	project := projectBaseName(projectPath)
+	chapterPrefix := fmt.Sprintf("%s > %s > chapter-", project, taskSlug)
+
+	// Use URL prefix search instead of FTS to avoid tokenization issues,
+	// duplicate entries from multi-section chapters, and result cap limits.
+	urlPrefix := fmt.Sprintf("memory://user/%s/%s/chapter-", project, taskSlug)
+	docs, err := st.SearchDocsByURLPrefix(ctx, urlPrefix, 200)
+	if err != nil {
+		debugf("buildChapterTimeline: URL prefix search error: %v", err)
+		return ""
+	}
+
+	// Deduplicate by chapter number. Use session-state docs for labels
+	// (skip user-context docs which have less descriptive labels).
+	type chapterEntry struct {
+		num   int
+		label string
+	}
+	seen := make(map[int]string) // chapterNum → label
+	for _, d := range docs {
+		if !strings.HasPrefix(d.SectionPath, chapterPrefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(d.SectionPath, chapterPrefix)
+		parts := strings.SplitN(rest, " > ", 2)
+		num := 0
+		fmt.Sscanf(parts[0], "%d", &num)
+		if num == 0 {
+			continue
+		}
+		// Prefer session-state label over user-context label.
+		label := ""
+		if len(parts) > 1 {
+			label = parts[1]
+		}
+		if _, exists := seen[num]; !exists || !strings.HasPrefix(label, "user-context-") {
+			if !strings.HasPrefix(label, "user-context-") {
+				seen[num] = label
+			}
+		}
+	}
+
+	if len(seen) == 0 {
+		return ""
+	}
+
+	// Collect and sort by chapter number.
+	chapters := make([]chapterEntry, 0, len(seen))
+	for num, label := range seen {
+		chapters = append(chapters, chapterEntry{num: num, label: label})
+	}
+	sort.Slice(chapters, func(i, j int) bool { return chapters[i].num < chapters[j].num })
+
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("\n### Session Timeline (%d past compact cycles)\n", len(chapters)))
+	buf.WriteString("Previous session context is stored as permanent memory. Use the `recall` tool to search for details from any chapter.\n\n")
+	for _, ch := range chapters {
+		label := ch.label
+		if label == "" {
+			label = "(no summary)"
+		}
+		fmt.Fprintf(&buf, "- **Chapter %d**: %s\n", ch.num, label)
+	}
+	buf.WriteString("\n")
+
+	debugf("buildChapterTimeline: %d chapters for %s/%s", len(chapters), project, taskSlug)
 	return buf.String()
 }
 

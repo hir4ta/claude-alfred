@@ -167,6 +167,34 @@ func (s *Store) CountDocsByURLPrefix(ctx context.Context, prefix string) (int64,
 	return count, err
 }
 
+// SearchDocsByURLPrefix returns docs whose URL starts with the given prefix.
+// Unlike FTS, this is an exact prefix match (no tokenization issues).
+// Results are ordered by URL for deterministic output.
+func (s *Store) SearchDocsByURLPrefix(ctx context.Context, prefix string, limit int) ([]DocRow, error) {
+	if prefix == "" {
+		return nil, fmt.Errorf("store: SearchDocsByURLPrefix: empty prefix")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, url, section_path, content, source_type, ttl_days FROM docs WHERE url LIKE ? ESCAPE '\' ORDER BY url LIMIT ?`,
+		escapeLIKEPrefix(prefix), limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: SearchDocsByURLPrefix: %w", err)
+	}
+	defer rows.Close()
+	var docs []DocRow
+	for rows.Next() {
+		var d DocRow
+		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.SourceType, &d.TTLDays); err != nil {
+			return nil, fmt.Errorf("store: SearchDocsByURLPrefix scan: %w", err)
+		}
+		docs = append(docs, d)
+	}
+	return docs, rows.Err()
+}
+
 // DeleteExpiredDocs removes docs whose TTL has expired based on crawled_at + ttl_days.
 // Returns the number of deleted rows.
 func (s *Store) DeleteExpiredDocs(ctx context.Context) (int64, error) {

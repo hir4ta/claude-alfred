@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-03-09
+
+### Added
+- **Chapter memory**: PreCompact persists each compact cycle as permanent memory "chapters" — session state + up to 10 early user messages stored as individual searchable docs (32KB/section)
+- **Session timeline injection**: SessionStart compact recovery shows timeline of all past chapters with `recall` tool hint
+- `store.SearchDocsByURLPrefix()`: exact LIKE prefix search for deterministic doc retrieval (no FTS tokenization issues)
+- `safeTruncateBytes()`: UTF-8 rune-boundary-safe byte truncation for Japanese content
+
+### Fixed
+- Chapter timeline duplicate entries — deduplicate by chapter number using `map[int]string`, prefer session-state labels over user-context labels
+- Chapter timeline silent data loss — replaced FTS phrase query (limit=20) with URL prefix search (limit=200) to handle 5+ compact cycles
+- UTF-8 corruption in chapter truncation — byte-boundary slicing replaced with rune-safe `safeTruncateBytes()`
+- FTS5 injection via project directory names containing double-quotes — eliminated by switching to URL prefix search
+- `readFileHead`/`readFileTail` unnecessary 512KB string allocation — `string(buf)` → `bytes.LastIndexByte`/`bytes.IndexByte`
+- Session-state truncation missing notice — now appends `"... (truncated at 32KB)"` consistent with user-message truncation
+- `buildChapterTimeline` bubble sort → `sort.Slice` (Go idiomatic)
+- `extractEarlyUserContext` moved from production to test-only (was unused in production code)
+
 ## [0.61.1] - 2026-03-09
 
 ### Fixed
@@ -428,7 +446,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.61.1...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.62.0...HEAD
+[0.62.0]: https://github.com/hir4ta/claude-alfred/compare/v0.61.1...v0.62.0
 [0.61.1]: https://github.com/hir4ta/claude-alfred/compare/v0.61.0...v0.61.1
 [0.61.0]: https://github.com/hir4ta/claude-alfred/compare/v0.60.3...v0.61.0
 [0.60.3]: https://github.com/hir4ta/claude-alfred/compare/v0.60.2...v0.60.3

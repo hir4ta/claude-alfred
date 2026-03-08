@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
@@ -238,6 +240,36 @@ func safeSnippet(s string, maxRunes int) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
+// readFileHead reads the first n bytes of a file.
+func readFileHead(path string, n int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	if info.Size() <= n {
+		return io.ReadAll(f)
+	}
+
+	buf := make([]byte, n)
+	_, err = f.ReadAt(buf, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	// Truncate to last complete line.
+	if idx := bytes.LastIndexByte(buf, '\n'); idx >= 0 {
+		buf = buf[:idx+1]
+	}
+	return buf, nil
+}
+
 // readFileTail reads the last n bytes of a file.
 func readFileTail(path string, n int64) ([]byte, error) {
 	f, err := os.Open(path)
@@ -263,10 +295,23 @@ func readFileTail(path string, n int64) ([]byte, error) {
 	}
 
 	// Skip to first complete line.
-	if idx := strings.IndexByte(string(buf), '\n'); idx >= 0 {
+	if idx := bytes.IndexByte(buf, '\n'); idx >= 0 {
 		buf = buf[idx+1:]
 	}
 	return buf, nil
+}
+
+// safeTruncateBytes truncates a string to at most maxBytes while respecting
+// UTF-8 rune boundaries. Prevents invalid UTF-8 from mid-rune byte slicing.
+func safeTruncateBytes(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	// Walk backwards from maxBytes to find a valid rune boundary.
+	for maxBytes > 0 && !utf8.RuneStart(s[maxBytes]) {
+		maxBytes--
+	}
+	return s[:maxBytes]
 }
 
 // transcriptEntry represents a single line from the Claude Code conversation JSONL.
