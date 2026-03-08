@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
 const (
@@ -27,16 +30,27 @@ type CrawlProgress struct {
 	OnBlogPost func(done, total int)
 }
 
+// CrawlStats tracks conditional fetch statistics.
+type CrawlStats struct {
+	Fetched    int // pages fetched (new or modified)
+	NotModified int // pages skipped (304 Not Modified)
+}
+
 // Crawl fetches all documentation sources and returns the seed data.
-func Crawl(progress *CrawlProgress) (*SeedFile, error) {
+// If st is non-nil, uses HTTP conditional requests (ETag/If-Modified-Since)
+// to skip unchanged pages. Pass nil for a fresh crawl without conditionals.
+func Crawl(progress *CrawlProgress, st *store.Store) (*SeedFile, *CrawlStats, error) {
 	sf := &SeedFile{
 		CrawledAt: time.Now().UTC().Format(time.RFC3339),
 	}
+	stats := &CrawlStats{}
+	ctx := context.Background()
+	now := time.Now().UTC().Format(time.RFC3339)
 
 	// 1. Fetch and crawl Claude Code docs.
 	urls, err := fetchDocsIndex()
 	if err != nil {
-		return nil, fmt.Errorf("fetch docs index: %w", err)
+		return nil, nil, fmt.Errorf("fetch docs index: %w", err)
 	}
 
 	var docsFail int
@@ -44,21 +58,38 @@ func Crawl(progress *CrawlProgress) (*SeedFile, error) {
 		if progress != nil && progress.OnDocsPage != nil {
 			progress.OnDocsPage(i+1, len(urls))
 		}
-		src, err := CrawlDocsPage(pageURL)
+
+		// CrawlDocsPage fetches the .md URL.
+		mdURL := pageURL
+		if !strings.HasSuffix(mdURL, ".md") {
+			mdURL += ".md"
+		}
+
+		src, skipped, err := crawlPageConditional(ctx, st, pageURL, mdURL, "docs", now)
 		if err != nil {
 			docsFail++
 			continue
 		}
-		if len(src.Sections) > 0 {
+		if skipped {
+			stats.NotModified++
+			continue
+		}
+		stats.Fetched++
+		if src != nil && len(src.Sections) > 0 {
 			sf.Sources = append(sf.Sources, *src)
 		}
 	}
 
 	// 2. Fetch changelog (v2.x only).
-	body, err := FetchPage(changelogURL)
-	if err == nil {
-		clSources := crawlChangelog(body)
-		sf.Sources = append(sf.Sources, clSources...)
+	clSrc, clSkipped, clErr := fetchConditional(ctx, st, changelogURL, now)
+	if clErr == nil {
+		if clSkipped {
+			stats.NotModified++
+		} else {
+			stats.Fetched++
+			clSources := crawlChangelog(clSrc)
+			sf.Sources = append(sf.Sources, clSources...)
+		}
 	}
 
 	// 3. Fetch engineering blog posts.
@@ -68,33 +99,171 @@ func Crawl(progress *CrawlProgress) (*SeedFile, error) {
 			if progress != nil && progress.OnBlogPost != nil {
 				progress.OnBlogPost(i+1, len(blogURLs))
 			}
-			src, err := crawlBlogPost(blogURL)
+
+			src, skipped, err := crawlPageConditional(ctx, st, blogURL, blogURL, "engineering", now)
 			if err != nil {
 				continue
 			}
-			if len(src.Sections) > 0 {
+			if skipped {
+				stats.NotModified++
+				continue
+			}
+			stats.Fetched++
+			if src != nil && len(src.Sections) > 0 {
 				sf.Sources = append(sf.Sources, *src)
 			}
 		}
 	}
 
 	if docsFail > len(urls)/5 {
-		return sf, fmt.Errorf("too many doc failures (%d/%d); check network or site structure", docsFail, len(urls))
+		return sf, stats, fmt.Errorf("too many doc failures (%d/%d); check network or site structure", docsFail, len(urls))
 	}
-	return sf, nil
+	return sf, stats, nil
+}
+
+// crawlPageConditional fetches a page with conditional requests when a store
+// is available. Returns the parsed SeedSource, whether the page was skipped
+// (304), and any error.
+func crawlPageConditional(ctx context.Context, st *store.Store, canonicalURL, fetchURL, sourceType, now string) (*SeedSource, bool, error) {
+	var etag, lastMod string
+	if st != nil {
+		if meta, err := st.GetCrawlMeta(ctx, canonicalURL); err == nil && meta != nil {
+			etag = meta.ETag
+			lastMod = meta.LastModified
+		}
+	}
+
+	var body string
+	if etag != "" || lastMod != "" {
+		res, err := FetchPageConditional(fetchURL, etag, lastMod)
+		if err != nil {
+			return nil, false, err
+		}
+		if res.NotModified {
+			// Update last_crawled_at even on 304.
+			if st != nil {
+				_ = st.UpsertCrawlMeta(ctx, &store.CrawlMeta{
+					URL:           canonicalURL,
+					ETag:          cond(res.ETag != "", res.ETag, etag),
+					LastModified:  cond(res.LastModified != "", res.LastModified, lastMod),
+					LastCrawledAt: now,
+				})
+			}
+			return nil, true, nil
+		}
+		body = res.Body
+		etag = res.ETag
+		lastMod = res.LastModified
+	} else {
+		// No prior metadata — plain fetch, but capture response headers.
+		res, err := FetchPageConditional(fetchURL, "", "")
+		if err != nil {
+			return nil, false, err
+		}
+		body = res.Body
+		etag = res.ETag
+		lastMod = res.LastModified
+	}
+
+	// Save metadata for next crawl.
+	if st != nil {
+		_ = st.UpsertCrawlMeta(ctx, &store.CrawlMeta{
+			URL:           canonicalURL,
+			ETag:          etag,
+			LastModified:  lastMod,
+			LastCrawledAt: now,
+		})
+	}
+
+	// Parse based on source type.
+	switch sourceType {
+	case "docs":
+		title := extractTitle(body, canonicalURL)
+		cleaned := stripJSX(body)
+		sections := SplitMarkdownSections(title, cleaned)
+		return &SeedSource{
+			URL:        canonicalURL,
+			SourceType: "docs",
+			Sections:   sections,
+		}, false, nil
+	case "engineering":
+		content := extractArticleContent(body)
+		if content == "" {
+			return nil, false, fmt.Errorf("no article content found")
+		}
+		title := extractHTMLTitle(body)
+		if title == "" {
+			parts := strings.Split(canonicalURL, "/")
+			title = parts[len(parts)-1]
+		}
+		sections := SplitMarkdownSections(title, content)
+		return &SeedSource{
+			URL:        canonicalURL,
+			SourceType: "engineering",
+			Sections:   sections,
+		}, false, nil
+	default:
+		return nil, false, fmt.Errorf("unknown source type: %s", sourceType)
+	}
+}
+
+// fetchConditional fetches a raw page body with conditional requests.
+// Returns the body, whether the page was skipped (304), and any error.
+func fetchConditional(ctx context.Context, st *store.Store, url, now string) (string, bool, error) {
+	var etag, lastMod string
+	if st != nil {
+		if meta, err := st.GetCrawlMeta(ctx, url); err == nil && meta != nil {
+			etag = meta.ETag
+			lastMod = meta.LastModified
+		}
+	}
+
+	res, err := FetchPageConditional(url, etag, lastMod)
+	if err != nil {
+		return "", false, err
+	}
+	if res.NotModified {
+		if st != nil {
+			_ = st.UpsertCrawlMeta(ctx, &store.CrawlMeta{
+				URL:           url,
+				ETag:          cond(res.ETag != "", res.ETag, etag),
+				LastModified:  cond(res.LastModified != "", res.LastModified, lastMod),
+				LastCrawledAt: now,
+			})
+		}
+		return "", true, nil
+	}
+
+	if st != nil {
+		_ = st.UpsertCrawlMeta(ctx, &store.CrawlMeta{
+			URL:           url,
+			ETag:          res.ETag,
+			LastModified:  res.LastModified,
+			LastCrawledAt: now,
+		})
+	}
+	return res.Body, false, nil
+}
+
+// cond returns a if non-empty, otherwise b.
+func cond(ok bool, a, b string) string {
+	if ok {
+		return a
+	}
+	return b
 }
 
 // CrawlSeed fetches all documentation sources and writes a seed JSON file.
 func CrawlSeed(outputPath string) error {
 	fmt.Println("Fetching docs index from llms.txt...")
-	sf, err := Crawl(&CrawlProgress{
+	sf, _, err := Crawl(&CrawlProgress{
 		OnDocsPage: func(done, total int) {
 			fmt.Printf("\r  Crawling docs [%d/%d]", done, total)
 		},
 		OnBlogPost: func(done, total int) {
 			fmt.Printf("\r  Crawling blog [%d/%d]", done, total)
 		},
-	})
+	}, nil)
 	if sf == nil {
 		return err
 	}
@@ -144,6 +313,59 @@ func FetchPage(url string) (string, error) {
 		return "", err
 	}
 	return string(body), nil
+}
+
+// ConditionalResult holds the result of a conditional HTTP fetch.
+type ConditionalResult struct {
+	Body         string
+	NotModified  bool
+	ETag         string
+	LastModified string
+}
+
+// FetchPageConditional performs an HTTP GET with conditional request headers.
+// If etag or lastModified are non-empty, sets If-None-Match / If-Modified-Since.
+// On 304 Not Modified, returns NotModified=true with an empty Body.
+func FetchPageConditional(url, etag, lastModified string) (*ConditionalResult, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "claude-alfred/seed-crawler")
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	if lastModified != "" {
+		req.Header.Set("If-Modified-Since", lastModified)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return &ConditionalResult{
+			NotModified:  true,
+			ETag:         resp.Header.Get("ETag"),
+			LastModified: resp.Header.Get("Last-Modified"),
+		}, nil
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	if err != nil {
+		return nil, err
+	}
+	return &ConditionalResult{
+		Body:         string(body),
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+	}, nil
 }
 
 // --- Docs ---

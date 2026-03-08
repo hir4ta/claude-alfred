@@ -337,6 +337,89 @@ func TestSeedDocsCount(t *testing.T) {
 	})
 }
 
+func TestCrawlMeta(t *testing.T) {
+	t.Parallel()
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	t.Run("get nonexistent returns nil", func(t *testing.T) {
+		t.Parallel()
+		meta, err := st.GetCrawlMeta(ctx, "https://example.com/missing")
+		if err != nil {
+			t.Fatalf("GetCrawlMeta() = _, %v", err)
+		}
+		if meta != nil {
+			t.Errorf("GetCrawlMeta() = %+v, want nil", meta)
+		}
+	})
+
+	t.Run("upsert and get", func(t *testing.T) {
+		m := &CrawlMeta{
+			URL:           "https://example.com/page",
+			ETag:          `"abc123"`,
+			LastModified:  "Mon, 01 Jan 2024 00:00:00 GMT",
+			LastCrawledAt: "2024-01-01T00:00:00Z",
+		}
+		if err := st.UpsertCrawlMeta(ctx, m); err != nil {
+			t.Fatalf("UpsertCrawlMeta() = %v", err)
+		}
+
+		got, err := st.GetCrawlMeta(ctx, "https://example.com/page")
+		if err != nil {
+			t.Fatalf("GetCrawlMeta() = _, %v", err)
+		}
+		if got == nil {
+			t.Fatal("GetCrawlMeta() = nil, want non-nil")
+		}
+		if got.ETag != `"abc123"` {
+			t.Errorf("ETag = %q, want %q", got.ETag, `"abc123"`)
+		}
+		if got.LastModified != "Mon, 01 Jan 2024 00:00:00 GMT" {
+			t.Errorf("LastModified = %q, want %q", got.LastModified, "Mon, 01 Jan 2024 00:00:00 GMT")
+		}
+	})
+
+	t.Run("upsert updates existing", func(t *testing.T) {
+		m := &CrawlMeta{
+			URL:           "https://example.com/page",
+			ETag:          `"def456"`,
+			LastModified:  "Tue, 02 Jan 2024 00:00:00 GMT",
+			LastCrawledAt: "2024-01-02T00:00:00Z",
+		}
+		if err := st.UpsertCrawlMeta(ctx, m); err != nil {
+			t.Fatalf("UpsertCrawlMeta() = %v", err)
+		}
+
+		got, err := st.GetCrawlMeta(ctx, "https://example.com/page")
+		if err != nil {
+			t.Fatalf("GetCrawlMeta() = _, %v", err)
+		}
+		if got.ETag != `"def456"` {
+			t.Errorf("ETag = %q, want %q", got.ETag, `"def456"`)
+		}
+		if got.LastCrawledAt != "2024-01-02T00:00:00Z" {
+			t.Errorf("LastCrawledAt = %q, want %q", got.LastCrawledAt, "2024-01-02T00:00:00Z")
+		}
+	})
+
+	t.Run("default last_crawled_at", func(t *testing.T) {
+		m := &CrawlMeta{
+			URL:  "https://example.com/auto-time",
+			ETag: `"xyz"`,
+		}
+		if err := st.UpsertCrawlMeta(ctx, m); err != nil {
+			t.Fatalf("UpsertCrawlMeta() = %v", err)
+		}
+		got, err := st.GetCrawlMeta(ctx, "https://example.com/auto-time")
+		if err != nil {
+			t.Fatalf("GetCrawlMeta() = _, %v", err)
+		}
+		if got.LastCrawledAt == "" {
+			t.Error("LastCrawledAt should be auto-populated")
+		}
+	})
+}
+
 func TestDeleteDocsByURLPrefix(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)

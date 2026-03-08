@@ -16,7 +16,11 @@ func (s *Store) CountEmbeddings() (int, error) {
 }
 
 // InsertEmbedding stores a vector embedding as a BLOB.
+// If ExpectedDims is set on the Store, validates that vector dimensions match.
 func (s *Store) InsertEmbedding(source string, sourceID int64, model string, vector []float32) error {
+	if s.ExpectedDims > 0 && len(vector) != s.ExpectedDims {
+		return fmt.Errorf("store: insert embedding: dimension mismatch: got %d, expected %d", len(vector), s.ExpectedDims)
+	}
 	blob := serializeFloat32(vector)
 	_, err := s.db.Exec(`
 		INSERT OR REPLACE INTO embeddings (source, source_id, model, dims, vector)
@@ -76,6 +80,12 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 			continue // skip malformed rows; query itself succeeded
 		}
 		vec := deserializeFloat32(blob)
+		if len(vec) != len(queryVec) {
+			if DebugLog != nil {
+				DebugLog("store: VectorSearch: dimension mismatch for source_id=%d (got %d, query %d), skipping", sourceID, len(vec), len(queryVec))
+			}
+			continue
+		}
 		sim := cosineSimilarity(queryVec, vec)
 		if sim < minSimilarity {
 			continue

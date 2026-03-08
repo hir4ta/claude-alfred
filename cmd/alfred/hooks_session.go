@@ -184,6 +184,12 @@ func injectSpecContext(ctx context.Context, projectPath, source string, st *stor
 			buf.WriteString(memHints)
 		}
 
+		// Proactive: search memories from other projects for cross-project patterns.
+		currentProject := projectBaseName(projectPath)
+		if crossHints := proactiveCrossProjectHints(ctx, currentProject, taskSlug, session, st); crossHints != "" {
+			buf.WriteString(crossHints)
+		}
+
 		buf.WriteString("--- End Alfred Protocol ---\n")
 		emitAdditionalContext("SessionStart", buf.String())
 		notifyUser("injected context for task '%s'", taskSlug)
@@ -214,13 +220,13 @@ func proactiveHintsForNextSteps(ctx context.Context, session string, st *store.S
 	// Search FTS with matched keywords.
 	var ftsTerms []string
 	for _, kw := range matched {
-		if en, ok := store.KatakanaToEnglish[kw]; ok {
+		if en, ok := store.TranslateTerm(kw); ok {
 			ftsTerms = append(ftsTerms, en)
 		} else {
 			ftsTerms = append(ftsTerms, kw)
 		}
 	}
-	ftsQuery := strings.Join(ftsTerms, " OR ")
+	ftsQuery := store.JoinFTS5Terms(ftsTerms)
 	docs, _ := st.SearchDocsFTS(ctx, ftsQuery, store.SourceDocs, 3) // FTS failure is acceptable; no docs means no hints
 	if len(docs) == 0 {
 		return ""
@@ -266,6 +272,71 @@ func proactiveMemoryHints(ctx context.Context, taskSlug, session string, st *sto
 	}
 	notifyUser("found %d related past experience(s)", len(docs))
 	debugf("SessionStart: proactive memory injection for %s, docs=%d", taskSlug, len(docs))
+	return buf.String()
+}
+
+// proactiveCrossProjectHints searches memories from other projects for patterns
+// relevant to the current task. Returns formatted hint string or "".
+func proactiveCrossProjectHints(ctx context.Context, currentProject, taskSlug string, session string, st *store.Store) string {
+	if st == nil {
+		return ""
+	}
+
+	// Build a search query from current work context.
+	workingOn := extractSection(session, "## Currently Working On")
+	if workingOn == "" {
+		workingOn = extractSection(session, "## Current Position")
+	}
+	nextSteps := extractSection(session, "## Next Steps")
+
+	// Combine task slug with context keywords for a meaningful search.
+	query := taskSlug
+	if workingOn != "" {
+		query += " " + truncateStr(workingOn, 80)
+	}
+	if nextSteps != "" {
+		query += " " + truncateStr(nextSteps, 80)
+	}
+	if len(strings.TrimSpace(query)) < 5 {
+		return ""
+	}
+
+	// Search memories broadly (fetch extra to allow filtering).
+	docs, err := st.SearchDocsFTS(ctx, query, store.SourceMemory, 10)
+	if err != nil || len(docs) == 0 {
+		return ""
+	}
+
+	// Filter out results from the current project.
+	// Memory URLs are like: memory://user/{project}/{task-slug}/{date}
+	// Section paths are like: {project} > {task-slug} > session-summary > ...
+	currentPrefix := currentProject + " > "
+	var crossDocs []store.DocRow
+	for _, d := range docs {
+		if strings.HasPrefix(d.SectionPath, currentPrefix) {
+			continue
+		}
+		crossDocs = append(crossDocs, d)
+		if len(crossDocs) >= 2 {
+			break
+		}
+	}
+	if len(crossDocs) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+	buf.WriteString("\n### Cross-project insights\n")
+	for _, d := range crossDocs {
+		// Extract project name from section_path (first segment before " > ").
+		project := d.SectionPath
+		if idx := strings.Index(project, " > "); idx > 0 {
+			project = project[:idx]
+		}
+		snippet := safeSnippet(d.Content, 200)
+		fmt.Fprintf(&buf, "- [%s] %s\n", project, snippet)
+	}
+	debugf("SessionStart: cross-project memory injection, docs=%d", len(crossDocs))
 	return buf.String()
 }
 
@@ -341,7 +412,9 @@ func asyncEmbedDoc(docID int64) {
 		debugf("asyncEmbedDoc: start error: %v", err)
 		return
 	}
-	debugf("asyncEmbedDoc: spawned pid=%d for doc_id=%d", cmd.Process.Pid, docID)
+	pid := cmd.Process.Pid
+	_ = cmd.Process.Release()
+	debugf("asyncEmbedDoc: spawned pid=%d for doc_id=%d", pid, docID)
 }
 
 // runEmbedDoc is the entry point for the embed-doc subcommand.
@@ -443,8 +516,8 @@ func checkAndSpawnCrawl(st *store.Store) {
 		debugf("checkAndSpawnCrawl: no lock path, skipping")
 		return
 	}
-	if isCrawlRunning(lockPath) {
-		debugf("checkAndSpawnCrawl: crawl already running")
+	if isCrawlRunning(lockPath) || lockFileExists(lockPath) {
+		debugf("checkAndSpawnCrawl: crawl already running or lock held")
 		return
 	}
 
@@ -461,6 +534,15 @@ func crawlLockPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".claude-alfred", "crawl.lock")
+}
+
+// lockFileExists reports whether the lock file exists at all.
+// Used as a fast pre-check before the more expensive isCrawlRunning (signal 0).
+// Catches the transient "spawning" state where the file exists but contains
+// no valid PID yet (isCrawlRunning would incorrectly return false).
+func lockFileExists(lockPath string) bool {
+	_, err := os.Stat(lockPath)
+	return err == nil
 }
 
 // isCrawlRunning checks if a crawl process is already running by examining
@@ -506,13 +588,15 @@ func spawnCrawlAsync() {
 		return
 	}
 
-	// Write a placeholder lock file before spawning to prevent concurrent
-	// sessions from both passing the isCrawlRunning check (TOCTOU).
-	// The child process will overwrite with its own PID.
-	if err := os.WriteFile(lockPath, []byte("spawning"), 0o600); err != nil {
-		debugf("spawnCrawlAsync: lock write error: %v", err)
+	// Atomic lock acquisition: O_CREATE|O_EXCL fails if file already exists,
+	// preventing TOCTOU races between isCrawlRunning() and lock creation.
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		debugf("spawnCrawlAsync: lock acquire failed (concurrent session?): %v", err)
 		return
 	}
+	_, _ = f.WriteString("spawning")
+	_ = f.Close()
 
 	cmd := execCommand(exe, "crawl-async")
 	cmd.Stdout = nil
@@ -522,9 +606,10 @@ func spawnCrawlAsync() {
 		debugf("spawnCrawlAsync: start error: %v", err)
 		return
 	}
+	pid := cmd.Process.Pid
 	_ = cmd.Process.Release()
-	notifyUser("refreshing knowledge base in background (pid=%d)", cmd.Process.Pid)
-	debugf("spawnCrawlAsync: spawned pid=%d", cmd.Process.Pid)
+	notifyUser("refreshing knowledge base in background (pid=%d)", pid)
+	debugf("spawnCrawlAsync: spawned pid=%d", pid)
 }
 
 // runCrawlAsync is the entry point for the crawl-async subcommand.
@@ -554,14 +639,17 @@ func runCrawlAsync() error {
 		debugf("crawl-async: cleaned %d expired docs", n)
 	}
 
-	// Crawl fresh docs from live sources.
+	// Crawl fresh docs from live sources (with conditional requests).
 	debugf("crawl-async: starting live crawl")
-	sf, err := install.Crawl(nil)
+	sf, crawlStats, err := install.Crawl(nil, st)
 	if sf == nil {
 		return fmt.Errorf("crawl-async: crawl failed: %w", err)
 	}
 	if err != nil {
 		debugf("crawl-async: crawl warning: %v", err)
+	}
+	if crawlStats != nil {
+		debugf("crawl-async: fetched %d, skipped %d (304)", crawlStats.Fetched, crawlStats.NotModified)
 	}
 
 	// Embedder is optional — FTS-only if VOYAGE_API_KEY not set.

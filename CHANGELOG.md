@@ -7,6 +7,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-03-08
+
+### Added
+- Implicit feedback loop: doc_feedback table tracks injection→reference signals, applies ±0.1 additive boost
+- Cross-project learning: SessionStart proactively searches memories from other projects
+- Transcript format guard: 20-line sample, 70% parse + 50% structural validity thresholds
+- Katakana→English dictionary: built-in + user-defined override via `~/.claude-alfred/dictionary.json`
+- HTTP conditional requests (ETag/If-Modified-Since) via crawl_meta table for diff-based auto-crawl
+- `FeedbackBoostBatch`: batch query replacing N+1 per-doc feedback lookups
+- Spec file locking: advisory flock on `.lock` file in spec directory (graceful fallback)
+
+### Changed
+- FTS5 query sanitization: individual terms sanitized via `JoinFTS5Terms()` before OR-joining (consistency fix)
+- Feedback boost: multiplicative → additive to prevent death spiral on threshold-marginal scores
+- Orphan cleanup: `DeleteExpiredDocs` now removes stale doc_feedback rows (`NOT EXISTS` pattern)
+- `GetRecentInjections`: added `LIMIT 20` for bounded hook-timeout queries
+- Crawl lock: `O_CREATE|O_EXCL` atomic file creation replacing WriteFile TOCTOU pattern
+- `Process.Release()` ordering: PID captured before Release() in all async spawn functions
+
+### Fixed
+- FTS5 injection in `proactiveHintsForNextSteps`: `strings.Join` → `store.JoinFTS5Terms()`
+- Stale PID access after `Process.Release()` in `asyncEmbedDoc` and `spawnCrawlAsync`
+- Crawl lock race: `lockFileExists()` guard catches transient "spawning" state
+
 ## [0.59.0] - 2026-03-08
 
 ### Added
@@ -297,7 +321,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.59.0...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.60.0...HEAD
+[0.60.0]: https://github.com/hir4ta/claude-alfred/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/hir4ta/claude-alfred/compare/v0.58.2...v0.59.0
 [0.58.1]: https://github.com/hir4ta/claude-alfred/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/hir4ta/claude-alfred/compare/v0.57.0...v0.58.0

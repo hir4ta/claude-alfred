@@ -11,14 +11,14 @@ type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-// schemaVersion 4 = removed redundant index + embedding 2048d.
-// Changes from V3:
-//   - Removed redundant idx_embeddings_source (UNIQUE constraint already creates implicit index)
+// schemaVersion 6 = added doc_feedback table for implicit relevance signals.
+// Changes from V5:
+//   - Added doc_feedback table (doc_id → positive/negative hit counts)
 //
 // Migration policy (V4+):
 //   - Incremental migrations preserve existing data (docs, embeddings).
 //   - Legacy schemas (< 3) are still rebuilt from scratch.
-const schemaVersion = 4
+const schemaVersion = 6
 
 // minIncrementalVersion is the lowest version from which we can migrate
 // incrementally (without data loss). Versions below this are rebuilt.
@@ -89,6 +89,27 @@ END;
 -- ==========================================================
 CREATE INDEX IF NOT EXISTS idx_docs_source_type ON docs(source_type);
 CREATE INDEX IF NOT EXISTS idx_docs_crawled_at ON docs(crawled_at);
+
+-- ==========================================================
+-- Crawl metadata (HTTP conditional request caching)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS crawl_meta (
+    url             TEXT PRIMARY KEY,
+    etag            TEXT DEFAULT '',
+    last_modified   TEXT DEFAULT '',
+    last_crawled_at TEXT NOT NULL
+);
+
+-- ==========================================================
+-- Doc feedback (implicit relevance signals)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS doc_feedback (
+    doc_id         INTEGER PRIMARY KEY,
+    positive_hits  INTEGER DEFAULT 0,
+    negative_hits  INTEGER DEFAULT 0,
+    last_injected  TEXT,
+    last_feedback  TEXT
+);
 `
 
 // legacyTables are tables from previous versions that no longer exist.
@@ -137,10 +158,25 @@ var incrementalMigrations = map[int][]string{
 		// V3 → V4: remove redundant index (UNIQUE constraint already creates one).
 		"DROP INDEX IF EXISTS idx_embeddings_source",
 	},
-	// Future example:
-	// 4: {
-	//     "ALTER TABLE docs ADD COLUMN language TEXT DEFAULT ''",
-	// },
+	4: {
+		// V4 → V5: add crawl_meta table for HTTP conditional requests.
+		`CREATE TABLE IF NOT EXISTS crawl_meta (
+			url             TEXT PRIMARY KEY,
+			etag            TEXT DEFAULT '',
+			last_modified   TEXT DEFAULT '',
+			last_crawled_at TEXT NOT NULL
+		)`,
+	},
+	5: {
+		// V5 → V6: add doc_feedback table for implicit relevance signals.
+		`CREATE TABLE IF NOT EXISTS doc_feedback (
+			doc_id         INTEGER PRIMARY KEY,
+			positive_hits  INTEGER DEFAULT 0,
+			negative_hits  INTEGER DEFAULT 0,
+			last_injected  TEXT,
+			last_feedback  TEXT
+		)`,
+	},
 }
 
 // SchemaVersion returns the current schema version constant.

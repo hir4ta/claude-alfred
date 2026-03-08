@@ -500,6 +500,86 @@ func TestFetchPage(t *testing.T) {
 	})
 }
 
+func TestFetchPageConditional(t *testing.T) {
+	t.Run("200 with etag and last-modified", func(t *testing.T) {
+		setupMockHTTPRewrite(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", `"abc123"`)
+			w.Header().Set("Last-Modified", "Mon, 01 Jan 2024 00:00:00 GMT")
+			w.WriteHeader(200)
+			w.Write([]byte("content"))
+		}))
+
+		res, err := FetchPageConditional("https://example.com/page", "", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.NotModified {
+			t.Error("NotModified should be false for 200")
+		}
+		if res.Body != "content" {
+			t.Errorf("Body = %q, want %q", res.Body, "content")
+		}
+		if res.ETag != `"abc123"` {
+			t.Errorf("ETag = %q, want %q", res.ETag, `"abc123"`)
+		}
+		if res.LastModified != "Mon, 01 Jan 2024 00:00:00 GMT" {
+			t.Errorf("LastModified = %q, want date string", res.LastModified)
+		}
+	})
+
+	t.Run("304 not modified", func(t *testing.T) {
+		setupMockHTTPRewrite(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("If-None-Match") == `"abc123"` {
+				w.WriteHeader(304)
+				return
+			}
+			w.WriteHeader(200)
+			w.Write([]byte("content"))
+		}))
+
+		res, err := FetchPageConditional("https://example.com/page", `"abc123"`, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !res.NotModified {
+			t.Error("NotModified should be true for 304")
+		}
+		if res.Body != "" {
+			t.Errorf("Body should be empty for 304, got %q", res.Body)
+		}
+	})
+
+	t.Run("sends if-modified-since header", func(t *testing.T) {
+		var gotIMS string
+		setupMockHTTPRewrite(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotIMS = r.Header.Get("If-Modified-Since")
+			w.WriteHeader(304)
+		}))
+
+		_, err := FetchPageConditional("https://example.com/page", "", "Mon, 01 Jan 2024 00:00:00 GMT")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if gotIMS != "Mon, 01 Jan 2024 00:00:00 GMT" {
+			t.Errorf("If-Modified-Since = %q, want date string", gotIMS)
+		}
+	})
+
+	t.Run("non-200 non-304 returns error", func(t *testing.T) {
+		setupMockHTTPRewrite(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(500)
+		}))
+
+		_, err := FetchPageConditional("https://example.com/page", `"abc"`, "")
+		if err == nil {
+			t.Fatal("expected error for 500 status")
+		}
+		if !strings.Contains(err.Error(), "HTTP 500") {
+			t.Errorf("error should mention HTTP 500, got: %v", err)
+		}
+	})
+}
+
 func TestFetchDocsIndex(t *testing.T) {
 	t.Run("parses markdown links", func(t *testing.T) {
 		llmsTxt := `# Claude Code Docs

@@ -218,6 +218,7 @@ func asyncEmbedSession(sd *spec.SpecDir) {
 		return
 	}
 	debugf("asyncEmbedSession: spawned pid=%d for %s/%s", cmd.Process.Pid, sd.TaskSlug, spec.FileSession)
+	_ = cmd.Process.Release()
 }
 
 // getModifiedFiles returns a list of files modified in the current git working tree.

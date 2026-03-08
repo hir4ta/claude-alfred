@@ -181,6 +181,12 @@ func (s *Store) DeleteExpiredDocs(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("store: expired docs rows affected: %w", err)
 	}
+
+	// Best-effort orphan cleanup: remove doc_feedback rows for deleted docs.
+	// Error is non-fatal; the transaction commit will catch corruption.
+	_, _ = tx.ExecContext(ctx,
+		`DELETE FROM doc_feedback WHERE NOT EXISTS (SELECT 1 FROM docs WHERE docs.id = doc_feedback.doc_id)`)
+
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("store: commit expired delete: %w", err)
 	}
@@ -231,6 +237,157 @@ func (s *Store) GetDocsByIDs(ctx context.Context, ids []int64) ([]DocRow, error)
 	return docs, nil
 }
 
+// CrawlMeta represents HTTP caching metadata for a URL.
+type CrawlMeta struct {
+	URL           string
+	ETag          string
+	LastModified  string
+	LastCrawledAt string
+}
+
+// GetCrawlMeta retrieves HTTP caching metadata for the given URL.
+// Returns nil (not an error) if no metadata exists.
+func (s *Store) GetCrawlMeta(ctx context.Context, url string) (*CrawlMeta, error) {
+	var m CrawlMeta
+	err := s.db.QueryRowContext(ctx,
+		`SELECT url, etag, last_modified, last_crawled_at FROM crawl_meta WHERE url = ?`, url,
+	).Scan(&m.URL, &m.ETag, &m.LastModified, &m.LastCrawledAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("store: get crawl meta: %w", err)
+	}
+	return &m, nil
+}
+
+// UpsertCrawlMeta inserts or updates HTTP caching metadata for a URL.
+func (s *Store) UpsertCrawlMeta(ctx context.Context, meta *CrawlMeta) error {
+	if meta.LastCrawledAt == "" {
+		meta.LastCrawledAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO crawl_meta (url, etag, last_modified, last_crawled_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(url) DO UPDATE SET
+			etag = excluded.etag,
+			last_modified = excluded.last_modified,
+			last_crawled_at = excluded.last_crawled_at`,
+		meta.URL, meta.ETag, meta.LastModified, meta.LastCrawledAt,
+	)
+	if err != nil {
+		return fmt.Errorf("store: upsert crawl meta: %w", err)
+	}
+	return nil
+}
+
+// RecordInjection saves which doc IDs were injected, so the next prompt
+// can evaluate whether the injection was useful (implicit feedback).
+func (s *Store) RecordInjection(ctx context.Context, docIDs []int64) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, id := range docIDs {
+		_, err := s.db.ExecContext(ctx, `
+			INSERT INTO doc_feedback (doc_id, last_injected)
+			VALUES (?, ?)
+			ON CONFLICT(doc_id) DO UPDATE SET last_injected = excluded.last_injected`,
+			id, now,
+		)
+		if err != nil {
+			return fmt.Errorf("store: record injection: %w", err)
+		}
+	}
+	return nil
+}
+
+// RecordFeedback increments the positive or negative hit count for a doc.
+func (s *Store) RecordFeedback(ctx context.Context, docID int64, positive bool) error {
+	col := "negative_hits"
+	if positive {
+		col = "positive_hits"
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf(`
+		UPDATE doc_feedback SET %s = %s + 1, last_feedback = ?
+		WHERE doc_id = ?`, col, col),
+		now, docID,
+	)
+	return err
+}
+
+// GetRecentInjections returns doc IDs injected within the last duration.
+func (s *Store) GetRecentInjections(ctx context.Context, within time.Duration) ([]int64, error) {
+	cutoff := time.Now().Add(-within).UTC().Format(time.RFC3339)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT doc_id FROM doc_feedback WHERE last_injected > ? ORDER BY last_injected DESC LIMIT 20`,
+		cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// FeedbackBoost returns a relevance boost factor for a doc based on accumulated
+// feedback signals. Returns 1.0 (neutral) if no feedback exists.
+// Positive-heavy docs get up to +0.1 boost; negative-heavy get up to -0.1 penalty.
+func (s *Store) FeedbackBoost(ctx context.Context, docID int64) float64 {
+	m := s.FeedbackBoostBatch(ctx, []int64{docID})
+	if v, ok := m[docID]; ok {
+		return v
+	}
+	return 1.0
+}
+
+// FeedbackBoostBatch returns relevance boost factors for multiple docs in a
+// single query. Missing entries default to 1.0 (neutral).
+func (s *Store) FeedbackBoostBatch(ctx context.Context, docIDs []int64) map[int64]float64 {
+	result := make(map[int64]float64, len(docIDs))
+	if len(docIDs) == 0 {
+		return result
+	}
+
+	query := "SELECT doc_id, positive_hits, negative_hits FROM doc_feedback WHERE doc_id IN ("
+	args := make([]any, len(docIDs))
+	for i, id := range docIDs {
+		if i > 0 {
+			query += ","
+		}
+		query += "?"
+		args[i] = id
+	}
+	query += ")"
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return result
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var docID int64
+		var pos, neg int
+		if err := rows.Scan(&docID, &pos, &neg); err != nil {
+			continue
+		}
+		total := pos + neg
+		if total == 0 {
+			continue
+		}
+		ratio := float64(pos-neg) / float64(total)
+		result[docID] = 1.0 + ratio*0.1
+	}
+	return result
+}
+
 // isFTS5TokenChar reports whether r is a token character under the unicode61
 // tokenizer's default configuration (categories L*, N*, Co).
 // Everything else is a separator.
@@ -241,6 +398,43 @@ func isFTS5TokenChar(r rune) bool {
 // fts5Reserved are FTS5 boolean operators that must be removed from user queries.
 var fts5Reserved = map[string]bool{
 	"AND": true, "OR": true, "NOT": true, "NEAR": true,
+}
+
+// SanitizeFTS5Term sanitizes a single FTS5 term by removing non-token
+// characters and FTS5 reserved words. Returns "" if the term is empty.
+func SanitizeFTS5Term(term string) string {
+	var buf strings.Builder
+	for _, r := range term {
+		if isFTS5TokenChar(r) {
+			buf.WriteRune(r)
+		} else {
+			buf.WriteByte(' ')
+		}
+	}
+	words := strings.Fields(buf.String())
+	filtered := words[:0]
+	for _, w := range words {
+		if !fts5Reserved[strings.ToUpper(w)] {
+			filtered = append(filtered, w)
+		}
+	}
+	return strings.Join(filtered, " ")
+}
+
+// JoinFTS5Terms sanitizes individual terms and joins them with OR.
+// Returns "" if no valid terms remain after sanitization.
+func JoinFTS5Terms(terms []string) string {
+	var sanitized []string
+	for _, t := range terms {
+		s := SanitizeFTS5Term(t)
+		if s != "" {
+			sanitized = append(sanitized, s)
+		}
+	}
+	if len(sanitized) == 0 {
+		return ""
+	}
+	return strings.Join(sanitized, " OR ")
 }
 
 // SanitizeFTS5Query converts user input into safe FTS5 MATCH tokens.

@@ -23,6 +23,10 @@ type Store struct {
 	db     *sql.DB
 	dbPath string
 
+	// ExpectedDims is the expected vector dimension count for embeddings.
+	// When > 0, InsertEmbedding validates that vectors match this size.
+	ExpectedDims int
+
 	vocabOnce  sync.Once
 	vocabTerms map[string]bool
 }

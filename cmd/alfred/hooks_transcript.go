@@ -163,26 +163,56 @@ func isTrivialDecision(sentence string) bool {
 	return false
 }
 
-// checkTranscriptFormat samples up to 10 JSON lines and returns true if the
-// transcript appears parseable (at least half of sampled lines parse as JSON).
+// checkTranscriptFormat samples up to 20 JSON lines and returns true if the
+// transcript appears parseable (at least 70% of sampled lines parse as valid
+// transcript entries with expected fields).
 // Returns true if no lines were sampled (empty transcript is acceptable).
 func checkTranscriptFormat(lines []string) bool {
-	parsedCount, totalCount := 0, 0
+	parsedCount, structuralCount, totalCount := 0, 0, 0
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || line[0] != '{' {
 			continue
 		}
 		totalCount++
-		if totalCount > 10 {
+		if totalCount > 20 {
 			break
 		}
 		var probe map[string]any
 		if json.Unmarshal([]byte(line), &probe) == nil {
 			parsedCount++
+			// Structural validation: check for known transcript fields.
+			if hasTranscriptFields(probe) {
+				structuralCount++
+			}
 		}
 	}
-	return totalCount == 0 || parsedCount*2 >= totalCount
+	if totalCount == 0 {
+		return true
+	}
+	// Require 70% parse success AND at least 50% structural validity.
+	return parsedCount*10 >= totalCount*7 && structuralCount*2 >= parsedCount
+}
+
+// hasTranscriptFields checks if a parsed JSON object contains expected
+// transcript entry fields (type, role, or message with a role).
+func hasTranscriptFields(m map[string]any) bool {
+	knownTypes := map[string]bool{
+		"human": true, "assistant": true, "tool_use": true, "tool_result": true,
+		"tool_error": true, "error": true, "system": true,
+	}
+	if t, ok := m["type"].(string); ok && knownTypes[t] {
+		return true
+	}
+	if r, ok := m["role"].(string); ok && (r == "user" || r == "assistant" || r == "system") {
+		return true
+	}
+	if msg, ok := m["message"].(map[string]any); ok {
+		if r, ok := msg["role"].(string); ok && (r == "user" || r == "assistant") {
+			return true
+		}
+	}
+	return false
 }
 
 // extractDecisionsFromTranscript scans the transcript for meaningful design decisions

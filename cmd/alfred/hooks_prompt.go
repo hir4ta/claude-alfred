@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
@@ -166,7 +167,7 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 	kwContentHits := 0
 	for _, kw := range matchedKeywords {
 		kwCheck := kw
-		if en, ok := store.KatakanaToEnglish[kw]; ok {
+		if en, ok := store.TranslateTerm(kw); ok {
 			kwCheck = en
 		}
 		if strings.Contains(pathLower, kwCheck) {
@@ -258,13 +259,13 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	// Translate katakana keywords to English for searching the English KB.
 	var ftsTerms []string
 	for _, kw := range matched {
-		if en, ok := store.KatakanaToEnglish[kw]; ok {
+		if en, ok := store.TranslateTerm(kw); ok {
 			ftsTerms = append(ftsTerms, en)
 		} else {
 			ftsTerms = append(ftsTerms, kw)
 		}
 	}
-	ftsQuery := strings.Join(ftsTerms, " OR ")
+	ftsQuery := store.JoinFTS5Terms(ftsTerms)
 	// Retrieve 8 candidates: enough diversity for scoring, but bounded to keep hook fast.
 	allDocs, ftsErr := st.SearchDocsFTS(ctx, ftsQuery, store.SourceDocs, 8)
 	if ftsErr != nil {
@@ -327,6 +328,39 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 		candidates = candidates[:maxResults]
 	}
 
+	// Implicit feedback: check if previous injection's topic was referenced in this prompt.
+	evaluateInjectionFeedback(ctx, prompt, st)
+
+	// Apply feedback boost to candidate scores (batch query).
+	boostIDs := make([]int64, len(candidates))
+	for i := range candidates {
+		boostIDs[i] = candidates[i].doc.ID
+	}
+	boosts := st.FeedbackBoostBatch(ctx, boostIDs)
+	for i := range candidates {
+		if b, ok := boosts[candidates[i].doc.ID]; ok {
+			// Additive boost (not multiplicative) to avoid death spiral:
+			// multiplicative ×0.9 on a threshold-marginal score (0.40) drops to 0.36,
+			// permanently excluding the doc. Additive ±0.1 keeps scores recoverable.
+			candidates[i].score = max(0, candidates[i].score+b-1.0)
+		}
+	}
+	// Re-sort after boost and re-apply threshold.
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
+	filtered := candidates[:0]
+	for _, c := range candidates {
+		if c.score >= relevanceThreshold {
+			filtered = append(filtered, c)
+		}
+	}
+	candidates = filtered
+	if len(candidates) == 0 {
+		debugf("UserPromptSubmit: no relevant matches after feedback boost")
+		return
+	}
+
 	var buf strings.Builder
 	if rememberHint != "" {
 		buf.WriteString(rememberHint + "\n\n")
@@ -343,6 +377,15 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 		for _, m := range memSnippets {
 			buf.WriteString(m)
 		}
+	}
+
+	// Record which docs were injected for feedback tracking.
+	var injectedIDs []int64
+	for _, c := range candidates {
+		injectedIDs = append(injectedIDs, c.doc.ID)
+	}
+	if err := st.RecordInjection(ctx, injectedIDs); err != nil {
+		debugf("UserPromptSubmit: record injection error: %v", err)
 	}
 
 	emitAdditionalContext("UserPromptSubmit", buf.String())
@@ -367,6 +410,47 @@ func detectRememberIntent(prompt string) bool {
 		}
 	}
 	return false
+}
+
+// evaluateInjectionFeedback checks if docs injected in the previous prompt
+// are referenced in the current prompt (implicit positive signal).
+// Uses a 10-minute window to capture multi-turn conversations.
+func evaluateInjectionFeedback(ctx context.Context, prompt string, st *store.Store) {
+	recentIDs, err := st.GetRecentInjections(ctx, 10*time.Minute)
+	if err != nil || len(recentIDs) == 0 {
+		return
+	}
+
+	// Load the injected docs and check if their topics appear in the current prompt.
+	docs, err := st.GetDocsByIDs(ctx, recentIDs)
+	if err != nil || len(docs) == 0 {
+		return
+	}
+
+	promptLower := strings.ToLower(prompt)
+	for _, doc := range docs {
+		// Extract significant words from the doc's section path.
+		pathWords := strings.Fields(strings.ToLower(doc.SectionPath))
+		hits := 0
+		for _, w := range pathWords {
+			w = strings.Trim(w, ">|")
+			if len(w) >= 3 && strings.Contains(promptLower, w) {
+				hits++
+			}
+		}
+		// If 30%+ of path words appear in the prompt, count as positive.
+		meaningful := 0
+		for _, w := range pathWords {
+			if len(strings.Trim(w, ">|")) >= 3 {
+				meaningful++
+			}
+		}
+		if meaningful > 0 && float64(hits)/float64(meaningful) >= 0.3 {
+			if err := st.RecordFeedback(ctx, doc.ID, true); err != nil {
+				debugf("evaluateInjectionFeedback: positive feedback error: %v", err)
+			}
+		}
+	}
 }
 
 // searchMemoryForPrompt searches memory docs for the user's prompt.

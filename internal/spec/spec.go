@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -206,9 +207,51 @@ func (s *SpecDir) ReadFile(f SpecFile) (string, error) {
 	return string(data), nil
 }
 
+// lockSpecDir acquires an advisory flock on a .lock file in the spec directory.
+// Returns the lock file handle (caller must defer unlock+close) or an error.
+// Uses non-blocking lock with 3 retries (100ms apart) to avoid deadlock.
+func (s *SpecDir) lockSpecDir() (*os.File, error) {
+	lockPath := filepath.Join(s.Dir(), ".lock")
+	lf, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open lock file: %w", err)
+	}
+	for attempt := range 3 {
+		err = syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return lf, nil
+		}
+		if attempt < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	lf.Close()
+	return nil, fmt.Errorf("spec lock timeout on %s", lockPath)
+}
+
+// unlockSpecDir releases the advisory lock and closes the file.
+func unlockSpecDir(lf *os.File) {
+	if lf == nil {
+		return
+	}
+	_ = syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	lf.Close()
+}
+
 // WriteFile writes content to a spec file using atomic rename to prevent
-// partial writes from concurrent hook invocations.
+// partial writes from concurrent hook invocations. Protected by advisory flock.
 func (s *SpecDir) WriteFile(f SpecFile, content string) error {
+	lf, err := s.lockSpecDir()
+	if err != nil {
+		// Fall back to unprotected write if lock fails.
+		return s.writeFileUnlocked(f, content)
+	}
+	defer unlockSpecDir(lf)
+	return s.writeFileUnlocked(f, content)
+}
+
+// writeFileUnlocked performs the actual atomic write (tmp + rename).
+func (s *SpecDir) writeFileUnlocked(f SpecFile, content string) error {
 	path := s.FilePath(f)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
@@ -218,16 +261,25 @@ func (s *SpecDir) WriteFile(f SpecFile, content string) error {
 }
 
 // AppendFile appends content to a spec file via read-append-rename.
-// The rename prevents partial writes. Note: concurrent callers may cause
-// a lost update (last writer wins). This is acceptable because Claude Code
-// serializes hook invocations per event type.
+// Protected by advisory flock to prevent lost updates from concurrent callers.
 func (s *SpecDir) AppendFile(f SpecFile, content string) error {
+	lf, err := s.lockSpecDir()
+	if err != nil {
+		// Fall back to unprotected append if lock fails.
+		return s.appendFileUnlocked(f, content)
+	}
+	defer unlockSpecDir(lf)
+	return s.appendFileUnlocked(f, content)
+}
+
+// appendFileUnlocked performs the actual read-append-rename.
+func (s *SpecDir) appendFileUnlocked(f SpecFile, content string) error {
 	path := s.FilePath(f)
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return s.WriteFile(f, string(existing)+content)
+	return s.writeFileUnlocked(f, string(existing)+content)
 }
 
 // ReadActive reads the primary task slug from _active.md.

@@ -1,6 +1,9 @@
 package store
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"unicode"
@@ -45,14 +48,58 @@ var KatakanaToEnglish = map[string]string{
 	"設定ファイル": "settings",
 }
 
+var (
+	mergedDictOnce sync.Once
+	mergedDict     map[string]string
+)
+
+// mergedKatakanaDict returns the KatakanaToEnglish map merged with any
+// user-defined dictionary at ~/.claude-alfred/dictionary.json.
+// The user dictionary overrides built-in entries.
+func mergedKatakanaDict() map[string]string {
+	mergedDictOnce.Do(func() {
+		mergedDict = make(map[string]string, len(KatakanaToEnglish))
+		for k, v := range KatakanaToEnglish {
+			mergedDict[k] = v
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		data, err := os.ReadFile(filepath.Join(home, ".claude-alfred", "dictionary.json"))
+		if err != nil {
+			return // file not found is normal
+		}
+		var userDict map[string]string
+		if err := json.Unmarshal(data, &userDict); err != nil {
+			return
+		}
+		for k, v := range userDict {
+			mergedDict[k] = v
+		}
+	})
+	return mergedDict
+}
+
+// TranslateTerm returns the English equivalent for a Japanese term,
+// checking both the built-in and user-defined dictionaries.
+// Returns the term unchanged and false if no translation exists.
+func TranslateTerm(term string) (string, bool) {
+	dict := mergedKatakanaDict()
+	en, ok := dict[term]
+	return en, ok
+}
+
 // TranslateQuery replaces Japanese terms with English equivalents.
 // ASCII-only input is returned unchanged (fast path).
+// Uses the merged built-in + user-defined dictionary.
 func TranslateQuery(query string) string {
 	if isAllASCII(query) {
 		return query
 	}
+	dict := mergedKatakanaDict()
 	result := query
-	for ja, en := range KatakanaToEnglish {
+	for ja, en := range dict {
 		if strings.Contains(result, ja) {
 			result = strings.ReplaceAll(result, ja, en)
 		}
