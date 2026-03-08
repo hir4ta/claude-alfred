@@ -145,7 +145,25 @@ func TestReviewHandler_EmptyProject(t *testing.T) {
 	claudeHome := t.TempDir()
 	handler := reviewHandler(claudeHome, nil, nil)
 
+	// Empty project_path should be rejected by validateProjectPath.
 	res, err := handler(context.Background(), newRequest(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected error result for empty project_path")
+	}
+}
+
+func TestReviewHandler_ValidProject(t *testing.T) {
+	t.Parallel()
+	claudeHome := t.TempDir()
+	projectDir := t.TempDir()
+	handler := reviewHandler(claudeHome, nil, nil)
+
+	res, err := handler(context.Background(), newRequest(map[string]any{
+		"project_path": projectDir,
+	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

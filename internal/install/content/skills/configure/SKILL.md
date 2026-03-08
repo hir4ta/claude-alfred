@@ -7,7 +7,6 @@ description: >
 user-invocable: true
 argument-hint: "<type> [name]"
 allowed-tools: Read, Write, Edit, Glob, Agent, AskUserQuestion, mcp__plugin_alfred_alfred__knowledge
-context: current
 ---
 
 Alfred tends to the project's configuration — whether building new or polishing existing.
@@ -80,7 +79,7 @@ Alfred tends to the project's configuration — whether building new or polishin
 |------|------|
 | skill | `.claude/skills/<name>/SKILL.md` |
 | rule | `.claude/rules/<name>.md` |
-| hook | `.claude/hooks.json` (or settings.json hooks section) |
+| hook | `.claude/hooks.json` |
 | agent | `.claude/agents/<name>.md` |
 | mcp | `.mcp.json` |
 | claude-md | `CLAUDE.md` (project root) |

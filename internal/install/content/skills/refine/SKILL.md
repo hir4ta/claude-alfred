@@ -6,9 +6,9 @@ description: |
   Use when: (1) stuck and can't move forward, (2) have candidates but can't choose, (3) need to define minimum scope,
   (4) need to turn brainstorm results or notes into decisions.
 user-invocable: true
+disable-model-invocation: true
 argument-hint: "<theme or current messy notes>"
-allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
-context: current
+allowed-tools: Read, Glob, Grep, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 ---
 
 # /alfred:refine

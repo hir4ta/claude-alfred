@@ -292,7 +292,11 @@ func downloadRelease(version string) error {
 	checksumURL := fmt.Sprintf("https://github.com/%s/releases/download/v%s/checksums.txt",
 		githubRepo, version)
 
-	cacheDir := filepath.Join(os.Getenv("HOME"), ".alfred", "bin")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	cacheDir := filepath.Join(home, ".alfred", "bin")
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return err
 	}

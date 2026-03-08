@@ -91,13 +91,15 @@ func ingestProjectClaudeMD(_ context.Context, st *store.Store, projectPath strin
 
 	url := "project://" + projectPath + "/CLAUDE.md"
 	for _, sec := range sections {
-		st.UpsertDoc(&store.DocRow{
+		if _, _, err := st.UpsertDoc(&store.DocRow{
 			URL:         url,
 			SectionPath: sec.Path,
 			Content:     sec.Content,
 			SourceType:  "project",
 			TTLDays:     1,
-		})
+		}); err != nil {
+			debugf("ingestProjectClaudeMD: upsert error: %v", err)
+		}
 	}
 	debugf("ingestProjectClaudeMD: %d sections from %s", len(sections), claudeMD)
 }

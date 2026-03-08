@@ -17,7 +17,10 @@ import (
 
 func reviewHandler(claudeHome string, st *store.Store, _ *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		projectPath := req.GetString("project_path", "")
+		projectPath, errResult := validateProjectPath(req.GetString("project_path", ""))
+		if errResult != nil {
+			return errResult, nil
+		}
 
 		report := map[string]any{
 			"project_path": projectPath,
@@ -118,7 +121,7 @@ type skillInfo struct {
 	HasDesc       bool     `json:"has_description"`
 	HasTrigger    bool     `json:"has_trigger"`
 	HasAllowed    bool     `json:"has_allowed_tools"`
-	UserInvocable bool    `json:"user_invocable"`
+	UserInvocable bool     `json:"user_invocable"`
 	BodyLines     int      `json:"body_lines"`
 	SizeWarning   string   `json:"size_warning,omitempty"`
 	HasSupport    bool     `json:"has_support_files"`

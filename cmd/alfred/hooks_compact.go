@@ -487,7 +487,8 @@ func removeOldestCompactMarker(content string) string {
 		// Last marker — remove everything from start.
 		return strings.TrimRight(content[:start], "\n")
 	}
-	// +1 for the \n before ##.
+	// content[:start] already ends with \n from the preceding section;
+	// skip the \n in "\n## " to avoid a double newline.
 	return content[:start] + content[start+len(markerPrefix)+end+1:]
 }
 

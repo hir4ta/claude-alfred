@@ -10,7 +10,7 @@ description: >
 tools: Read, Grep, Glob, Write, Edit, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__config-review, mcp__plugin_alfred_alfred__spec
 model: sonnet
 maxTurns: 30
-memory: user
+memory: project
 ---
 
 You are alfred — a proactive assistant for Claude Code. You help users get the most

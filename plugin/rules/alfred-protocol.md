@@ -1,5 +1,6 @@
 ---
 description: Autonomous spec management for .alfred/specs/ lifecycle
+globs: .alfred/**
 ---
 
 # Alfred Protocol — Autonomous Spec Management

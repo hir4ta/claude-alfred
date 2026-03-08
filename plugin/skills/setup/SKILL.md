@@ -7,7 +7,6 @@ description: >
 user-invocable: true
 argument-hint: "[feature | --wizard]"
 allowed-tools: Read, Write, Edit, Glob, AskUserQuestion, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__config-review
-context: current
 ---
 
 Alfred welcomes you and sets up the project for Claude Code.

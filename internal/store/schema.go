@@ -6,6 +6,11 @@ import (
 	"strconv"
 )
 
+// execer abstracts *sql.DB and *sql.Tx for DDL execution in migrations.
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 // schemaVersion 4 = removed redundant index + embedding 2048d.
 // Changes from V3:
 //   - Removed redundant idx_embeddings_source (UNIQUE constraint already creates implicit index)
@@ -145,6 +150,7 @@ func SchemaVersion() int { return schemaVersion }
 // For legacy schemas (< minIncrementalVersion), the database is rebuilt.
 // For schemas >= minIncrementalVersion, incremental migrations are applied
 // preserving all existing data (docs, embeddings).
+// All mutations are wrapped in a transaction for atomicity.
 func Migrate(db *sql.DB) error {
 	var current int
 	row := db.QueryRow("SELECT version FROM schema_version LIMIT 1")
@@ -155,17 +161,23 @@ func Migrate(db *sql.DB) error {
 		return nil
 	}
 
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("store: begin migration tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	if current > 0 && current < minIncrementalVersion {
 		// Legacy schema — too different to migrate incrementally.
-		if err := rebuildFromScratch(db); err != nil {
+		if err := rebuildFromScratch(tx); err != nil {
 			return err
 		}
 	} else if current == 0 {
 		// Fresh install — create everything.
-		if err := cleanupLegacy(db); err != nil {
+		if err := cleanupLegacy(tx); err != nil {
 			return err
 		}
-		if _, err := db.Exec(ddl); err != nil {
+		if _, err := tx.Exec(ddl); err != nil {
 			return err
 		}
 	} else {
@@ -176,19 +188,22 @@ func Migrate(db *sql.DB) error {
 				continue
 			}
 			for _, stmt := range stmts {
-				if _, err := db.Exec(stmt); err != nil {
+				if _, err := tx.Exec(stmt); err != nil {
 					return err
 				}
 			}
 		}
 	}
 
-	return setSchemaVersion(db, schemaVersion)
+	if err := setSchemaVersion(tx, schemaVersion); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // rebuildFromScratch drops all tables and recreates the schema.
 // Used only for legacy schemas that are incompatible with incremental migration.
-func rebuildFromScratch(db *sql.DB) error {
+func rebuildFromScratch(db execer) error {
 	// Drop FTS virtual tables first (triggers reference them).
 	for _, vt := range []string{"decisions_fts", "docs_fts"} {
 		if _, err := db.Exec("DROP TABLE IF EXISTS " + vt); err != nil {
@@ -232,7 +247,7 @@ func rebuildFromScratch(db *sql.DB) error {
 
 // cleanupLegacy removes legacy tables/triggers/indexes that may exist
 // from previous installations sharing the same DB path.
-func cleanupLegacy(db *sql.DB) error {
+func cleanupLegacy(db execer) error {
 	for _, trigger := range legacyTriggers {
 		if _, err := db.Exec("DROP TRIGGER IF EXISTS " + trigger); err != nil {
 			return fmt.Errorf("cleanup trigger %s: %w", trigger, err)
@@ -251,7 +266,10 @@ func cleanupLegacy(db *sql.DB) error {
 	return nil
 }
 
-func setSchemaVersion(db *sql.DB, ver int) error {
+// setSchemaVersion writes the schema version to both the schema_version table
+// and PRAGMA user_version. PRAGMA inside a tx is driver-specific;
+// confirmed working with ncruces/go-sqlite3 (WAL mode).
+func setSchemaVersion(db execer, ver int) error {
 	if _, err := db.Exec(`DELETE FROM schema_version`); err != nil {
 		return err
 	}

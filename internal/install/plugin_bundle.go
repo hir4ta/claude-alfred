@@ -102,6 +102,7 @@ func Bundle(outputDir, version string) error {
 		"description": "Your proactive assistant for Claude Code — surfacing knowledge, catching scope violations, and preserving session context across compactions.",
 		"author":      map[string]string{"name": "hir4ta", "url": "https://github.com/hir4ta"},
 		"homepage":    "https://github.com/hir4ta/claude-alfred",
+		"hooks":       "./hooks/hooks.json",
 		"repository":  "https://github.com/hir4ta/claude-alfred",
 		"license":     "MIT",
 		"keywords":    []string{"alfred", "best-practices", "workflow", "compaction", "spec", "documentation"},

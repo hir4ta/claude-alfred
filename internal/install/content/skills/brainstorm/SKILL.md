@@ -6,8 +6,9 @@ description: |
   Use when: (1) unsure what to think about, (2) ideas are few or thinking is rigid,
   (3) need to surface risks and issues, (4) need raw material for convergence (/alfred:refine).
 user-invocable: true
+disable-model-invocation: true
 argument-hint: "<theme or rough prompt>"
-allowed-tools: Read, Glob, Grep, WebSearch, WebFetch, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
+allowed-tools: Read, Glob, Grep, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: fork
 ---
 

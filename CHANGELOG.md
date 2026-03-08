@@ -7,6 +7,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-03-08
+
+### Fixed
+- **[Critical]** `reviewHandler` に `validateProjectPath` 追加（パストラバーサル脆弱性修正）
+- **[Critical]** `ingestProjectClaudeMD` の `UpsertDoc` 戻り値キャプチャ（エラー完全破棄を修正）
+- `PRAGMA user_version` Scan エラーのログ出力追加（silent fallback 解消）
+- `downloadRelease` の `os.Getenv("HOME")` → `os.UserHomeDir()` に統一
+- `removeOldestCompactMarker` のコメント修正（ロジックは正しかった）
+
+### Changed
+- Schema migration を `BEGIN/COMMIT` トランザクションで原子化（`execer` interface 導入）
+- `DeleteDocsByURLPrefix` / `DeleteExpiredDocs` をトランザクションで原子化
+- spec ツール: `DestructiveHintAnnotation` 削除（action 粒度で description 内に明記）
+- spec ツール: `project_path` から `Required()` 削除（description との矛盾解消）
+- brainstorm/refine/plan: `WebSearch`/`WebFetch` 削除（curated knowledge 方針統一）
+- brainstorm/refine: `disable-model-invocation: true` 追加（自動起動防止）
+- configure/setup/refine: 未定義の `context: current` 削除
+- alfred-protocol rule: `globs: .alfred/**` 追加（条件付きロード）
+- alfred agent: `memory: user` → `memory: project`（マルチプロジェクト汚染防止）
+- plugin.json: `hooks` フィールド追加（auto-discovery 依存からマニフェスト明示へ）
+- 空の `settings.json` 削除（バンドル時に自動生成）
+
 ## [0.54.4] - 2026-03-08
 
 ### Fixed
@@ -186,7 +208,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.54.4...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.55.0...HEAD
+[0.55.0]: https://github.com/hir4ta/claude-alfred/compare/v0.54.4...v0.55.0
 [0.54.4]: https://github.com/hir4ta/claude-alfred/compare/v0.54.3...v0.54.4
 [0.54.3]: https://github.com/hir4ta/claude-alfred/compare/v0.54.2...v0.54.3
 [0.54.2]: https://github.com/hir4ta/claude-alfred/compare/v0.54.1...v0.54.2

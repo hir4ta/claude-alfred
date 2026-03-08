@@ -92,12 +92,18 @@ func (s *Store) UpsertDoc(doc *DocRow) (id int64, changed bool, err error) {
 // DeleteDocsByURLPrefix removes all docs (and their embeddings) whose URL starts with the given prefix.
 // Returns the number of deleted document rows.
 func (s *Store) DeleteDocsByURLPrefix(ctx context.Context, prefix string) (int64, error) {
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("store: begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx,
 		`DELETE FROM embeddings WHERE source = 'docs' AND source_id IN (SELECT id FROM docs WHERE url LIKE ? || '%')`, prefix)
 	if err != nil {
 		return 0, fmt.Errorf("delete embeddings: %w", err)
 	}
-	res, err := s.db.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM docs WHERE url LIKE ? || '%'`, prefix)
 	if err != nil {
 		return 0, fmt.Errorf("delete docs: %w", err)
@@ -105,6 +111,9 @@ func (s *Store) DeleteDocsByURLPrefix(ctx context.Context, prefix string) (int64
 	n, err := res.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("store: delete docs rows affected: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("store: commit delete: %w", err)
 	}
 	return n, nil
 }
@@ -120,8 +129,14 @@ func (s *Store) CountDocsByURLPrefix(ctx context.Context, prefix string) (int64,
 // DeleteExpiredDocs removes docs whose TTL has expired based on crawled_at + ttl_days.
 // Returns the number of deleted rows.
 func (s *Store) DeleteExpiredDocs(ctx context.Context) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("store: begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Delete associated embeddings first.
-	_, err := s.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`DELETE FROM embeddings WHERE source = 'docs' AND source_id IN (
 			SELECT id FROM docs WHERE ttl_days > 0
 			AND datetime(crawled_at, '+' || ttl_days || ' days') < datetime('now')
@@ -130,13 +145,20 @@ func (s *Store) DeleteExpiredDocs(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("store: delete expired embeddings: %w", err)
 	}
 
-	res, err := s.db.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM docs WHERE ttl_days > 0
 		AND datetime(crawled_at, '+' || ttl_days || ' days') < datetime('now')`)
 	if err != nil {
 		return 0, fmt.Errorf("store: delete expired docs: %w", err)
 	}
-	return res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("store: expired docs rows affected: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("store: commit expired delete: %w", err)
+	}
+	return n, nil
 }
 
 // GetDocsByIDs retrieves multiple docs by their IDs.

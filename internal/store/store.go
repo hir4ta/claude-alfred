@@ -55,7 +55,13 @@ func Open(dbPath string) (*Store, error) {
 	// Fast path: skip Migrate() entirely when schema is already current.
 	// PRAGMA user_version is a single-syscall read with no table scan.
 	var uv int
-	_ = db.QueryRow("PRAGMA user_version").Scan(&uv)
+	if err := db.QueryRow("PRAGMA user_version").Scan(&uv); err != nil {
+		// Scan failure forces uv=0, which triggers Migrate on every Open.
+		// This is recoverable (Migrate re-checks schema_version table).
+		if DebugLog != nil {
+			DebugLog("store: PRAGMA user_version scan failed: %v", err)
+		}
+	}
 	if uv != SchemaVersion() {
 		if err := Migrate(db); err != nil {
 			db.Close()
