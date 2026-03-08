@@ -48,7 +48,7 @@ func specHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		action := req.GetString("action", "")
 		if action == "" {
-			return mcp.NewToolResultError("action is required (init, update, status, switch, delete)"), nil
+			return mcp.NewToolResultError("action is required (init, update, status, switch, delete, history, rollback)"), nil
 		}
 
 		switch action {
@@ -62,8 +62,12 @@ func specHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc
 			return specDoSwitch(req)
 		case "delete":
 			return specDoDelete(ctx, req, st)
+		case "history":
+			return specDoHistory(req)
+		case "rollback":
+			return specDoRollback(req)
 		default:
-			return mcp.NewToolResultError(fmt.Sprintf("unknown action: %s (valid: init, update, status, switch, delete)", action)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("unknown action: %s (valid: init, update, status, switch, delete, history, rollback)", action)), nil
 		}
 	}
 }
@@ -331,4 +335,82 @@ func specDoDelete(ctx context.Context, req mcp.CallToolRequest, st *store.Store)
 	}
 
 	return marshalResult(result)
+}
+
+func specDoHistory(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectPath, errResult := validateProjectPath(req.GetString("project_path", ""))
+	if errResult != nil {
+		return errResult, nil
+	}
+	fileName := req.GetString("file", "")
+	if fileName == "" {
+		return mcp.NewToolResultError("file is required (one of: requirements.md, design.md, decisions.md, session.md)"), nil
+	}
+	sf, ok := validSpecFiles[fileName]
+	if !ok {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid file: %s", fileName)), nil
+	}
+
+	taskSlug, err := spec.ReadActive(projectPath)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("no active spec: %v", err)), nil
+	}
+
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	entries, err := sd.History(sf)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("history error: %v", err)), nil
+	}
+
+	type historyItem struct {
+		Timestamp string `json:"timestamp"`
+		Size      int64  `json:"size_bytes"`
+	}
+	items := make([]historyItem, len(entries))
+	for i, e := range entries {
+		items[i] = historyItem{Timestamp: e.Timestamp, Size: e.Size}
+	}
+
+	return marshalResult(map[string]any{
+		"task_slug": taskSlug,
+		"file":      fileName,
+		"versions":  items,
+		"count":     len(items),
+	})
+}
+
+func specDoRollback(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectPath, errResult := validateProjectPath(req.GetString("project_path", ""))
+	if errResult != nil {
+		return errResult, nil
+	}
+	fileName := req.GetString("file", "")
+	if fileName == "" {
+		return mcp.NewToolResultError("file is required"), nil
+	}
+	version := req.GetString("version", "")
+	if version == "" {
+		return mcp.NewToolResultError("version (timestamp) is required — use action=history to list versions"), nil
+	}
+	sf, ok := validSpecFiles[fileName]
+	if !ok {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid file: %s", fileName)), nil
+	}
+
+	taskSlug, err := spec.ReadActive(projectPath)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("no active spec: %v", err)), nil
+	}
+
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	if err := sd.Rollback(sf, version); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("rollback failed: %v", err)), nil
+	}
+
+	return marshalResult(map[string]any{
+		"task_slug": taskSlug,
+		"file":      fileName,
+		"restored":  version,
+		"message":   "current version saved to history before rollback (undoable)",
+	})
 }

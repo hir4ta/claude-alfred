@@ -674,8 +674,8 @@ func TestScoreRelevance(t *testing.T) {
 	}
 
 	// With matched keywords (the primary signal from Gate 1).
-	high := scoreRelevance([]string{"hooks"}, "how to configure hooks for precompact", doc)
-	low := scoreRelevance([]string{"hooks"}, "fix login button css color", doc)
+	high := scoreRelevance([]string{"hooks"}, "how to configure hooks for precompact", doc, defaultSingleKeywordDampen)
+	low := scoreRelevance([]string{"hooks"}, "fix login button css color", doc, defaultSingleKeywordDampen)
 
 	if high <= low {
 		t.Errorf("relevant prompt should score higher: high=%.2f, low=%.2f", high, low)
@@ -818,7 +818,7 @@ func TestScoreRelevanceJapanese(t *testing.T) {
 	}
 
 	// Japanese prompt — tokenizePrompt splits "hookの設定方法" into ["hook", "の", "設定", "方法"].
-	score := scoreRelevance([]string{"hook"}, "hookの設定方法を教えて", doc)
+	score := scoreRelevance([]string{"hook"}, "hookの設定方法を教えて", doc, defaultSingleKeywordDampen)
 	if score < 0.30 {
 		t.Errorf("Japanese prompt about hooks should score well, got %.2f", score)
 	}
@@ -828,7 +828,7 @@ func TestScoreRelevanceJapanese(t *testing.T) {
 		SectionPath: "Authentication Guide",
 		Content:     "OAuth2 authentication flow for third-party integrations.",
 	}
-	irrelevantScore := scoreRelevance([]string{"hook"}, "hookの設定方法を教えて", irrelevantDoc)
+	irrelevantScore := scoreRelevance([]string{"hook"}, "hookの設定方法を教えて", irrelevantDoc, defaultSingleKeywordDampen)
 	if irrelevantScore >= score {
 		t.Errorf("irrelevant doc should score lower: relevant=%.2f, irrelevant=%.2f", score, irrelevantScore)
 	}

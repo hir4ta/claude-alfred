@@ -259,7 +259,13 @@ func (s *Store) filterByDocSourceType(ctx context.Context, candidates []HybridMa
 	for rows.Next() {
 		var id int64
 		var st string
-		if rows.Scan(&id, &st) == nil && allowed[st] {
+		if err := rows.Scan(&id, &st); err != nil {
+			if DebugLog != nil {
+				DebugLog("store: filterByDocSourceType scan error: %v", err)
+			}
+			continue
+		}
+		if allowed[st] {
 			valid[id] = true
 		}
 	}

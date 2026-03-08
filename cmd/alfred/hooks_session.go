@@ -481,12 +481,7 @@ const defaultCrawlIntervalDays = 7
 
 // crawlIntervalDays returns the configured crawl interval from env or default.
 func crawlIntervalDays() int {
-	if v := os.Getenv("ALFRED_CRAWL_INTERVAL_DAYS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return defaultCrawlIntervalDays
+	return envInt("ALFRED_CRAWL_INTERVAL_DAYS", defaultCrawlIntervalDays)
 }
 
 // checkAndSpawnCrawl checks the last crawl timestamp and spawns a background
@@ -638,7 +633,19 @@ func runCrawlAsync() error {
 
 	// Crawl fresh docs from live sources (with conditional requests).
 	debugf("crawl-async: starting live crawl")
-	sf, crawlStats, err := install.Crawl(ctx, nil, st)
+	// Load custom sources from project config if available.
+	var customSources []install.CustomSource
+	cwd, _ := os.Getwd()
+	if cfg := loadProjectConfig(cwd); cfg != nil {
+		for _, cs := range cfg.CustomSources {
+			customSources = append(customSources, install.CustomSource{URL: cs.URL, Label: cs.Label})
+		}
+	}
+	// Also load global custom sources from ~/.claude-alfred/sources.json.
+	if globalSources := loadGlobalCustomSources(); len(globalSources) > 0 {
+		customSources = append(customSources, globalSources...)
+	}
+	sf, crawlStats, err := install.Crawl(ctx, nil, st, customSources)
 	if sf == nil {
 		return fmt.Errorf("crawl-async: crawl failed: %w", err)
 	}

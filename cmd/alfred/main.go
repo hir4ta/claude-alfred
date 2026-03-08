@@ -53,6 +53,10 @@ func run() error {
 		return runMemory()
 	case "settings":
 		return runSettings()
+	case "analytics":
+		return runAnalytics()
+	case "doctor":
+		return runDoctor()
 	case "crawl-seed":
 		output := "internal/install/seed_docs.json"
 		if len(os.Args) > 2 {
@@ -195,6 +199,8 @@ Commands:
   export         Export memories to JSON (--all includes specs)
   memory         Manage memories (prune, stats)
   settings       Configure API keys and preferences
+  analytics      Show feedback loop stats and injection activity
+  doctor         Diagnose common issues (DB, hooks, API keys)
   update         Update alfred to the latest version
   version        Show version
   help           Show this help

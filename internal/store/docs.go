@@ -18,6 +18,7 @@ const (
 	SourceProject     = "project"
 	SourceChangelog   = "changelog"
 	SourceEngineering = "engineering"
+	SourceCustom      = "custom"
 )
 
 // LastCrawledAt returns the most recent crawled_at timestamp for seed docs.
@@ -666,9 +667,13 @@ func (s *Store) ListMemoriesBefore(ctx context.Context, cutoff string, limit int
 	var items []MemoryListItem
 	for rows.Next() {
 		var item MemoryListItem
-		if rows.Scan(&item.SectionPath, &item.CrawledAt) == nil {
-			items = append(items, item)
+		if err := rows.Scan(&item.SectionPath, &item.CrawledAt); err != nil {
+			if DebugLog != nil {
+				DebugLog("store: ListMemoriesBefore scan error: %v", err)
+			}
+			continue
 		}
+		items = append(items, item)
 	}
 	return items, rows.Err()
 }
@@ -736,11 +741,104 @@ func (s *Store) MemoryStatsByProject(ctx context.Context, limit int) ([]MemoryPr
 	var stats []MemoryProjectStat
 	for rows.Next() {
 		var s MemoryProjectStat
-		if rows.Scan(&s.Project, &s.Count, &s.Oldest, &s.Newest) == nil && s.Project != "" {
+		if err := rows.Scan(&s.Project, &s.Count, &s.Oldest, &s.Newest); err != nil {
+			if DebugLog != nil {
+				DebugLog("store: MemoryStatsByProject scan error: %v", err)
+			}
+			continue
+		}
+		if s.Project != "" {
 			stats = append(stats, s)
 		}
 	}
 	return stats, rows.Err()
+}
+
+// FeedbackSummary holds aggregate feedback statistics.
+type FeedbackSummary struct {
+	TotalTracked   int
+	TotalPositive  int
+	TotalNegative  int
+	BoostedCount   int // docs with net positive feedback
+	PenalizedCount int // docs with net negative feedback
+}
+
+// GetFeedbackSummary returns aggregate feedback statistics.
+func (s *Store) GetFeedbackSummary(ctx context.Context) (*FeedbackSummary, error) {
+	var fs FeedbackSummary
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*),
+		       COALESCE(SUM(positive_hits), 0),
+		       COALESCE(SUM(negative_hits), 0),
+		       COUNT(CASE WHEN positive_hits > negative_hits THEN 1 END),
+		       COUNT(CASE WHEN negative_hits > positive_hits THEN 1 END)
+		FROM doc_feedback`).Scan(&fs.TotalTracked, &fs.TotalPositive, &fs.TotalNegative, &fs.BoostedCount, &fs.PenalizedCount)
+	if err != nil {
+		return nil, fmt.Errorf("store: feedback summary: %w", err)
+	}
+	return &fs, nil
+}
+
+// DocFeedbackDetail holds per-doc feedback detail for analytics.
+type DocFeedbackDetail struct {
+	DocID       int64
+	SectionPath string
+	Positive    int
+	Negative    int
+	BoostFactor float64
+}
+
+// TopFeedbackDocs returns docs ordered by net feedback (positive - negative).
+// If ascending is true, returns most-penalized first; otherwise most-boosted first.
+func (s *Store) TopFeedbackDocs(ctx context.Context, limit int, ascending bool) ([]DocFeedbackDetail, error) {
+	order := "DESC"
+	if ascending {
+		order = "ASC"
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT f.doc_id, COALESCE(d.section_path, '(deleted)'), f.positive_hits, f.negative_hits
+		FROM doc_feedback f
+		LEFT JOIN docs d ON d.id = f.doc_id
+		WHERE f.positive_hits + f.negative_hits > 0
+		ORDER BY (f.positive_hits - f.negative_hits) `+order+`
+		LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: top feedback docs: %w", err)
+	}
+	defer rows.Close()
+	var results []DocFeedbackDetail
+	for rows.Next() {
+		var d DocFeedbackDetail
+		if err := rows.Scan(&d.DocID, &d.SectionPath, &d.Positive, &d.Negative); err != nil {
+			if DebugLog != nil {
+				DebugLog("store: TopFeedbackDocs scan error: %v", err)
+			}
+			continue
+		}
+		total := d.Positive + d.Negative
+		if total > 0 {
+			d.BoostFactor = 1.0 + float64(d.Positive-d.Negative)/float64(total)*0.1
+		} else {
+			d.BoostFactor = 1.0
+		}
+		results = append(results, d)
+	}
+	return results, rows.Err()
+}
+
+// RecentInjectionStats returns the number of injections and unique docs injected within the given number of days.
+func (s *Store) RecentInjectionStats(ctx context.Context, days int) (injected int64, uniqueDocs int64, err error) {
+	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour).UTC().Format(time.RFC3339)
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COUNT(DISTINCT doc_id) FROM doc_feedback WHERE last_injected > ?`, cutoff,
+	).Scan(&injected, &uniqueDocs)
+	return
+}
+
+// FTSIntegrityCheck runs the FTS5 integrity-check command.
+func (s *Store) FTSIntegrityCheck() error {
+	_, err := s.db.Exec(`INSERT INTO docs_fts(docs_fts) VALUES('integrity-check')`)
+	return err
 }
 
 // ExportDoc represents a document for export purposes.
@@ -760,10 +858,19 @@ const (
 	OrderByURL           DocOrderBy = "url ASC"
 )
 
+// validDocOrderBy is the safelist of allowed ORDER BY values.
+var validDocOrderBy = map[DocOrderBy]bool{
+	OrderByCrawledAtDesc: true,
+	OrderByURL:           true,
+}
+
 // QueryDocsBySourceType returns all documents of the given source type.
 func (s *Store) QueryDocsBySourceType(ctx context.Context, sourceType string, orderBy DocOrderBy) ([]ExportDoc, error) {
 	if orderBy == "" {
 		orderBy = OrderByCrawledAtDesc
+	}
+	if !validDocOrderBy[orderBy] {
+		return nil, fmt.Errorf("store: invalid order by: %q", string(orderBy))
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT url, section_path, content, source_type, crawled_at

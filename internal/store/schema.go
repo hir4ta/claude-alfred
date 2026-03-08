@@ -3,8 +3,13 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strconv"
 )
+
+// safeIdentifier validates SQL identifiers used in DDL concatenation.
+// Only allows alphanumeric characters and underscores.
+var safeIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // execer abstracts *sql.DB and *sql.Tx for DDL execution in migrations.
 type execer interface {
@@ -179,8 +184,17 @@ var incrementalMigrations = map[int][]string{
 	},
 }
 
-// SchemaVersion returns the current schema version constant.
+// SchemaVersion returns the target schema version constant.
 func SchemaVersion() int { return schemaVersion }
+
+// SchemaVersionCurrent returns the actual schema version from the database.
+func (s *Store) SchemaVersionCurrent() int {
+	var v int
+	if err := s.db.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&v); err != nil {
+		return 0
+	}
+	return v
+}
 
 // Migrate applies all pending schema migrations to the database.
 // For legacy schemas (< minIncrementalVersion), the database is rebuilt.
@@ -237,42 +251,55 @@ func Migrate(db *sql.DB) error {
 	return tx.Commit()
 }
 
+// dropSafe executes a DROP IF EXISTS statement after validating the identifier
+// against safeIdentifier to prevent SQL injection via string concatenation.
+func dropSafe(db execer, kind, name string) error {
+	if !safeIdentifier.MatchString(name) {
+		return fmt.Errorf("store: unsafe identifier in DROP %s: %q", kind, name)
+	}
+	_, err := db.Exec("DROP " + kind + " IF EXISTS " + name)
+	if err != nil {
+		return fmt.Errorf("drop %s %s: %w", kind, name, err)
+	}
+	return nil
+}
+
 // rebuildFromScratch drops all tables and recreates the schema.
 // Used only for legacy schemas that are incompatible with incremental migration.
 func rebuildFromScratch(db execer) error {
 	// Drop FTS virtual tables first (triggers reference them).
 	for _, vt := range []string{"decisions_fts", "docs_fts"} {
-		if _, err := db.Exec("DROP TABLE IF EXISTS " + vt); err != nil {
-			return fmt.Errorf("drop FTS table %s: %w", vt, err)
+		if err := dropSafe(db, "TABLE", vt); err != nil {
+			return err
 		}
 	}
 	// Drop triggers.
 	for _, trigger := range legacyTriggers {
-		if _, err := db.Exec("DROP TRIGGER IF EXISTS " + trigger); err != nil {
-			return fmt.Errorf("drop trigger %s: %w", trigger, err)
+		if err := dropSafe(db, "TRIGGER", trigger); err != nil {
+			return err
 		}
 	}
 	for _, trigger := range []string{
 		"docs_fts_ai", "docs_fts_ad", "docs_fts_au",
 	} {
-		if _, err := db.Exec("DROP TRIGGER IF EXISTS " + trigger); err != nil {
-			return fmt.Errorf("drop trigger %s: %w", trigger, err)
+		if err := dropSafe(db, "TRIGGER", trigger); err != nil {
+			return err
 		}
 	}
 	// Drop all known tables.
 	for _, table := range legacyTables {
-		if _, err := db.Exec("DROP TABLE IF EXISTS " + table); err != nil {
-			return fmt.Errorf("drop table %s: %w", table, err)
+		if err := dropSafe(db, "TABLE", table); err != nil {
+			return err
 		}
 	}
 	for _, table := range []string{"embeddings", "docs", "schema_version"} {
-		if _, err := db.Exec("DROP TABLE IF EXISTS " + table); err != nil {
-			return fmt.Errorf("drop table %s: %w", table, err)
+		if err := dropSafe(db, "TABLE", table); err != nil {
+			return err
 		}
 	}
 	for _, idx := range legacyIndexes {
-		if _, err := db.Exec("DROP INDEX IF EXISTS " + idx); err != nil {
-			return fmt.Errorf("drop index %s: %w", idx, err)
+		if err := dropSafe(db, "INDEX", idx); err != nil {
+			return err
 		}
 	}
 	if _, err := db.Exec(ddl); err != nil {
@@ -285,18 +312,18 @@ func rebuildFromScratch(db execer) error {
 // from previous installations sharing the same DB path.
 func cleanupLegacy(db execer) error {
 	for _, trigger := range legacyTriggers {
-		if _, err := db.Exec("DROP TRIGGER IF EXISTS " + trigger); err != nil {
-			return fmt.Errorf("cleanup trigger %s: %w", trigger, err)
+		if err := dropSafe(db, "TRIGGER", trigger); err != nil {
+			return err
 		}
 	}
 	for _, table := range legacyTables {
-		if _, err := db.Exec("DROP TABLE IF EXISTS " + table); err != nil {
-			return fmt.Errorf("cleanup table %s: %w", table, err)
+		if err := dropSafe(db, "TABLE", table); err != nil {
+			return err
 		}
 	}
 	for _, idx := range legacyIndexes {
-		if _, err := db.Exec("DROP INDEX IF EXISTS " + idx); err != nil {
-			return fmt.Errorf("cleanup index %s: %w", idx, err)
+		if err := dropSafe(db, "INDEX", idx); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -36,10 +36,17 @@ type CrawlStats struct {
 	NotModified int // pages skipped (304 Not Modified)
 }
 
+// CustomSource defines a user-provided documentation URL for knowledge ingestion.
+type CustomSource struct {
+	URL   string `json:"url"`
+	Label string `json:"label,omitempty"`
+}
+
 // Crawl fetches all documentation sources and returns the seed data.
 // If st is non-nil, uses HTTP conditional requests (ETag/If-Modified-Since)
 // to skip unchanged pages. Pass nil for a fresh crawl without conditionals.
-func Crawl(ctx context.Context, progress *CrawlProgress, st *store.Store) (*SeedFile, *CrawlStats, error) {
+// customSources are user-defined documentation URLs (stored as source_type="custom").
+func Crawl(ctx context.Context, progress *CrawlProgress, st *store.Store, customSources []CustomSource) (*SeedFile, *CrawlStats, error) {
 	sf := &SeedFile{
 		CrawledAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -111,6 +118,25 @@ func Crawl(ctx context.Context, progress *CrawlProgress, st *store.Store) (*Seed
 			if src != nil && len(src.Sections) > 0 {
 				sf.Sources = append(sf.Sources, *src)
 			}
+		}
+	}
+
+	// 4. Fetch custom user sources.
+	for _, cs := range customSources {
+		if cs.URL == "" {
+			continue
+		}
+		src, skipped, err := crawlPageConditional(ctx, st, cs.URL, cs.URL, "custom", now)
+		if err != nil {
+			continue
+		}
+		if skipped {
+			stats.NotModified++
+			continue
+		}
+		stats.Fetched++
+		if src != nil && len(src.Sections) > 0 {
+			sf.Sources = append(sf.Sources, *src)
 		}
 	}
 
@@ -262,7 +288,7 @@ func CrawlSeed(outputPath string) error {
 		OnBlogPost: func(done, total int) {
 			fmt.Printf("\r  Crawling blog [%d/%d]", done, total)
 		},
-	}, nil)
+	}, nil, nil)
 	if sf == nil {
 		return err
 	}

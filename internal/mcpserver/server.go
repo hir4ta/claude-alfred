@@ -20,7 +20,7 @@ He works silently in the background, and provides powerful tools when needed:
 
   knowledge      — Search Claude Code docs and best practices
   config-review  — Deep audit of .claude/ config against best practices
-  spec           — Unified spec management (action: init/update/status/switch/delete)
+  spec           — Unified spec management (action: init/update/status/switch/delete/history/rollback)
   recall         — Memory search and save (past sessions, decisions, notes)
 
 When to use alfred tools:

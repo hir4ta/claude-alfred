@@ -7,6 +7,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-03-08
+
+### Added
+- `alfred doctor` command: 11 diagnostic checks (DB, schema, FTS integrity, plugin, hooks, bootstrap, Voyage API, embeddings, crawl freshness, config dir)
+- `alfred analytics` command: feedback loop stats (injection activity, top boosted/penalized docs)
+- Per-project configuration: `.alfred/config.json` overrides env var defaults (relevance thresholds, crawl interval, quiet mode)
+- Custom knowledge sources: per-project (`custom_sources` in config.json) and global (`~/.claude-alfred/sources.json`)
+- Spec version history: `.history/` directory with max 20 versions per file, auto-pruned
+- Spec `history` action: list saved versions of spec files
+- Spec `rollback` action: restore a previous version (saves current first, so rollback is undoable)
+- 3 new rules: `claude-md-guidelines.md`, `hooks-guidelines.md`, `config-pitfalls.md`
+- `retryVoyage[T]()` generic retry helper — eliminates duplication between `embed()` and `rerank()`
+- `DocOrderBy` safelist validation in `QueryDocsBySourceType` — rejects invalid ORDER BY values
+- `dropSafe()` helper with `safeIdentifier` regex — validates DDL identifiers before concatenation
+- `SchemaVersionCurrent()` method on Store
+- Store methods: `GetFeedbackSummary`, `TopFeedbackDocs`, `RecentInjectionStats`, `FTSIntegrityCheck`, `CountEmbeddings`
+- `DebugLog` on `rows.Scan()` errors in `ListMemoriesBefore`, `MemoryStatsByProject`, `filterByDocSourceType` (previously silently discarded)
+
+### Changed
+- `Crawl()` now accepts `customSources []CustomSource` parameter for user-defined documentation URLs
+- Hook thresholds resolved per-call via project config chain (`.alfred/config.json` > env var > default) instead of package-level vars
+- `scoreRelevance` accepts `dampen float64` parameter instead of using package-level variable
+- README/README.ja.md: added per-project configuration section, doctor/analytics commands, spec history/rollback
+
 ## [0.60.3] - 2026-03-08
 
 ### Fixed
@@ -387,7 +411,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.60.3...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.61.0...HEAD
+[0.61.0]: https://github.com/hir4ta/claude-alfred/compare/v0.60.3...v0.61.0
 [0.60.3]: https://github.com/hir4ta/claude-alfred/compare/v0.60.2...v0.60.3
 [0.60.2]: https://github.com/hir4ta/claude-alfred/compare/v0.60.1...v0.60.2
 [0.60.1]: https://github.com/hir4ta/claude-alfred/compare/v0.60.0...v0.60.1

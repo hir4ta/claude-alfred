@@ -106,7 +106,7 @@ Backend for skills and agents. Claude calls these automatically as needed.
 |------|-------------|
 | `knowledge` | Hybrid vector + FTS5 + Voyage rerank document search |
 | `config-review` | Deep audit of .claude/ config (file contents + KB cross-reference) |
-| `spec` | Unified spec management (action: init / update / status / switch / delete) |
+| `spec` | Unified spec management (action: init / update / status / switch / delete / history / rollback) |
 | `recall` | Memory search and save — past sessions, decisions, and notes |
 
 ## Hooks (5)
@@ -127,6 +127,8 @@ Run automatically during Claude Code lifecycle. No user action needed.
 |---------|-------------|
 | `init` | Initialize knowledge base (interactive API key setup + TUI progress) |
 | `status [--verbose]` | Show system status — DB stats, API key, active tasks, paths |
+| `doctor` | Run 11 diagnostic checks — DB, schema, FTS, plugin, hooks, Voyage, embeddings, crawl |
+| `analytics` | Show feedback loop stats — injection activity, top boosted/penalized docs |
 | `export [--all]` | Export memories to JSON (`--all` includes specs) |
 | `memory prune [--confirm]` | Remove old memories (dry-run by default, `--max-age DAYS` supported) |
 | `memory stats` | Show memory statistics by project |
@@ -228,7 +230,8 @@ sequenceDiagram
 ├── requirements.md  # Goals, success criteria, out of scope
 ├── design.md        # Architecture, tech decisions
 ├── decisions.md     # Design decisions with alternatives and rationale
-└── session.md       # Session state in activeContext format + Compact Markers
+├── session.md       # Session state in activeContext format + Compact Markers
+└── .history/        # Version history (max 20 per file, auto-pruned)
 ```
 
 `_active.md` (YAML) manages multiple tasks; switch with `spec` (action=switch).
@@ -290,6 +293,34 @@ Recent assistant actions:
 - Added tests in internal/auth/oauth_test.go
 ---
 ```
+
+## Per-Project Configuration
+
+Create `.alfred/config.json` in any project root to override default thresholds and add custom knowledge sources:
+
+```json
+{
+  "relevance_threshold": 0.35,
+  "high_confidence_threshold": 0.60,
+  "crawl_interval_days": 3,
+  "quiet": false,
+  "custom_sources": [
+    { "url": "https://example.com/docs/page", "label": "Internal API docs" }
+  ]
+}
+```
+
+All fields are optional — only specified values override the defaults.
+
+For global custom sources (shared across all projects), create `~/.claude-alfred/sources.json`:
+
+```json
+[
+  { "url": "https://docs.example.com/guide", "label": "Company style guide" }
+]
+```
+
+Custom sources are crawled alongside official docs during auto-crawl.
 
 ## Debugging
 

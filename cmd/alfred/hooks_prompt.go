@@ -19,12 +19,12 @@ var openStore = func() (*store.Store, error) {
 	return store.OpenDefaultCached()
 }
 
-// Scoring thresholds for knowledge injection.
-// Defaults can be overridden via environment variables for tuning.
-var (
-	relevanceThreshold      = envFloat("ALFRED_RELEVANCE_THRESHOLD", 0.40)
-	highConfidenceThreshold = envFloat("ALFRED_HIGH_CONFIDENCE_THRESHOLD", 0.65)
-	singleKeywordDampen     = envFloat("ALFRED_SINGLE_KEYWORD_DAMPEN", 0.8)
+// Default scoring thresholds for knowledge injection.
+// Overridden by: .alfred/config.json (project) > environment variable > default.
+const (
+	defaultRelevanceThreshold      = 0.40
+	defaultHighConfidenceThreshold = 0.65
+	defaultSingleKeywordDampen     = 0.80
 )
 
 // Scoring weights for keyword-aware relevance computation.
@@ -147,13 +147,14 @@ func shouldRemindPrompt(prompt string) bool {
 //   - Primary signal: matched Claude Code keywords in doc path/content (high weight)
 //   - Secondary signal: prompt content token coverage in doc (bonus)
 //
-// Single-keyword matches are dampened (×0.7) to require content coverage for injection.
+// Single-keyword matches are dampened to require content coverage for injection.
 // This prevents generic docs from being injected when the prompt merely mentions a keyword
 // without actually asking about that topic.
 //
 // matchedKeywords are the Claude Code keywords detected in the prompt by Gate 1.
 // promptLower is the full prompt (lowercased) for secondary coverage scoring.
-func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocRow) float64 {
+// dampen is the single-keyword dampening factor.
+func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocRow, dampen float64) float64 {
 	pathLower := strings.ToLower(doc.SectionPath)
 	contentLower := strings.ToLower(doc.Content)
 	firstLine := contentLower
@@ -182,7 +183,7 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 
 	// Dampen single-keyword confidence: one keyword alone is weak signal.
 	if len(matchedKeywords) == 1 {
-		keywordScore *= singleKeywordDampen
+		keywordScore *= dampen
 	}
 
 	// Secondary signal: content token coverage in doc.
@@ -219,11 +220,26 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 //    Single-keyword matches dampened (×0.7) to require content coverage
 // 4. Inject 1 result by default; 2 only if top score >= 0.65
 func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
+	// Resolve per-project thresholds: .alfred/config.json > env var > default.
+	cfg := loadProjectConfig(ev.ProjectPath)
+	var quietPtr *bool
+	var relPtr, highPtr, dampenPtr *float64
+	if cfg != nil {
+		quietPtr = cfg.Quiet
+		relPtr = cfg.RelevanceThreshold
+		highPtr = cfg.HighConfidenceThreshold
+		dampenPtr = cfg.SingleKeywordDampen
+	}
+
 	// Quiet mode: suppress knowledge injection (spec recovery & session persistence still run).
-	if os.Getenv("ALFRED_QUIET") == "1" {
+	if resolveBool(quietPtr, "ALFRED_QUIET", "0") {
 		debugf("UserPromptSubmit: quiet mode, skipping")
 		return
 	}
+
+	relevanceThreshold := resolveFloat(relPtr, "ALFRED_RELEVANCE_THRESHOLD", defaultRelevanceThreshold)
+	highConfidenceThreshold := resolveFloat(highPtr, "ALFRED_HIGH_CONFIDENCE_THRESHOLD", defaultHighConfidenceThreshold)
+	skDampen := resolveFloat(dampenPtr, "ALFRED_SINGLE_KEYWORD_DAMPEN", defaultSingleKeywordDampen)
 
 	if shouldRemindPrompt(ev.Prompt) {
 		debugf("UserPromptSubmit: reminding about alfred for prompt")
@@ -311,7 +327,7 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	}
 	var candidates []scored
 	for _, doc := range uniqueDocs {
-		s := scoreRelevance(matched, promptLower, doc)
+		s := scoreRelevance(matched, promptLower, doc, skDampen)
 		if s >= relevanceThreshold {
 			candidates = append(candidates, scored{doc, s})
 		}

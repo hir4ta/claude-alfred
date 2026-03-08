@@ -126,43 +126,26 @@ func isVoyageTransient(detail string) bool {
 	return false
 }
 
-// embed sends an embedding request to the Voyage API with retry on transient errors.
-// Retries up to 3 times with exponential backoff on 429, 5xx, and transient 400 errors.
-func (c *voyageClient) embed(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
-	body := voyageRequest{
-		Input:           texts,
-		Model:           c.model,
-		InputType:       inputType,
-		OutputDimension: c.dims,
-	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("embedder: marshal: %w", err)
-	}
-
+// retryVoyage retries fn up to 3 times with exponential backoff on transient errors.
+// Retries on 429, 5xx, transient 400s, and non-Voyage errors (network, DNS, TLS).
+// Returns immediately on non-retryable errors (401, 403, 404, 422, etc.).
+func retryVoyage[T any](ctx context.Context, fn func() (T, error)) (T, error) {
 	var lastErr error
+	var zero T
 	for attempt := range 3 {
 		if attempt > 0 {
-			// Exponential backoff: 2s, 4s (1<<attempt seconds).
 			delay := time.Duration(1<<attempt) * time.Second
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return zero, ctx.Err()
 			case <-time.After(delay):
 			}
 		}
-
-		vecs, err := c.doEmbed(ctx, payload)
+		result, err := fn()
 		if err == nil {
-			return vecs, nil
+			return result, nil
 		}
 		lastErr = err
-
-		// Retry on transient errors only:
-		// - 429 (rate limit): always retry
-		// - 5xx (server error): always retry
-		// - 400 with specific Voyage transient patterns: retry
-		// Don't retry on 401 (auth), 403 (forbidden), 404, 422 (validation), etc.
 		var ve *voyageError
 		if errors.As(err, &ve) {
 			switch {
@@ -171,13 +154,28 @@ func (c *voyageClient) embed(ctx context.Context, texts []string, inputType stri
 			case ve.status == 400 && isVoyageTransient(ve.detail):
 				continue
 			default:
-				return nil, err
+				return zero, err
 			}
 		}
-		// Non-Voyage errors (network, DNS, TLS): always retry.
 		continue
 	}
-	return nil, lastErr
+	return zero, lastErr
+}
+
+// embed sends an embedding request to the Voyage API with retry on transient errors.
+func (c *voyageClient) embed(ctx context.Context, texts []string, inputType string) ([][]float32, error) {
+	payload, err := json.Marshal(voyageRequest{
+		Input:           texts,
+		Model:           c.model,
+		InputType:       inputType,
+		OutputDimension: c.dims,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("embedder: marshal: %w", err)
+	}
+	return retryVoyage(ctx, func() ([][]float32, error) {
+		return c.doEmbed(ctx, payload)
+	})
 }
 
 func (c *voyageClient) doEmbed(ctx context.Context, payload []byte) ([][]float32, error) {
@@ -261,52 +259,19 @@ type RerankResult struct {
 }
 
 // rerank calls the Voyage rerank API with retry on transient errors.
-// Retries up to 3 times with exponential backoff on 429, 5xx, and transient 400 errors,
-// consistent with the embed method's retry strategy.
 func (c *voyageClient) rerank(ctx context.Context, query string, documents []string, topK int) ([]RerankResult, error) {
-	body := rerankRequest{
+	payload, err := json.Marshal(rerankRequest{
 		Query:     query,
 		Documents: documents,
 		Model:     c.rerankModel,
 		TopK:      topK,
-	}
-	payload, err := json.Marshal(body)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("embedder: marshal rerank: %w", err)
 	}
-
-	var lastErr error
-	for attempt := range 3 {
-		if attempt > 0 {
-			delay := time.Duration(1<<attempt) * time.Second
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(delay):
-			}
-		}
-
-		results, err := c.doRerank(ctx, payload)
-		if err == nil {
-			return results, nil
-		}
-		lastErr = err
-
-		var ve *voyageError
-		if errors.As(err, &ve) {
-			switch {
-			case ve.status == 429, ve.status >= 500:
-				continue
-			case ve.status == 400 && isVoyageTransient(ve.detail):
-				continue
-			default:
-				return nil, err
-			}
-		}
-		// Non-Voyage errors (network, DNS, TLS): always retry.
-		continue
-	}
-	return nil, lastErr
+	return retryVoyage(ctx, func() ([]RerankResult, error) {
+		return c.doRerank(ctx, payload)
+	})
 }
 
 // doRerank performs a single rerank API request.

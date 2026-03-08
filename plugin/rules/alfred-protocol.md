@@ -1,7 +1,6 @@
 ---
 description: Autonomous spec management for .alfred/specs/ lifecycle
-paths:
-  - ".alfred/**"
+paths: .alfred/**
 ---
 
 # Alfred Protocol — Autonomous Spec Management
