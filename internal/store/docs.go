@@ -10,6 +10,16 @@ import (
 	"unicode"
 )
 
+// Source type constants for the docs table.
+const (
+	SourceDocs        = "docs"
+	SourceMemory      = "memory"
+	SourceSpec        = "spec"
+	SourceProject     = "project"
+	SourceChangelog   = "changelog"
+	SourceEngineering = "engineering"
+)
+
 // DocRow represents a row in the docs table.
 type DocRow struct {
 	ID          int64
@@ -17,7 +27,7 @@ type DocRow struct {
 	SectionPath string
 	Content     string
 	ContentHash string
-	SourceType  string // "docs", "changelog", "engineering"
+	SourceType  string // SourceDocs, SourceMemory, SourceSpec, etc.
 	Version     string // CLI version (changelog only)
 	CrawledAt   string
 	TTLDays     int
@@ -46,7 +56,7 @@ func (s *Store) UpsertDoc(doc *DocRow) (id int64, changed bool, err error) {
 	// TTLDays == 0 means "permanent" (never expires) when set intentionally
 	// (e.g., source_type="memory"). Apply default TTL only for source types
 	// that expect expiration (docs, project, etc.).
-	if doc.TTLDays == 0 && doc.SourceType != "memory" {
+	if doc.TTLDays == 0 && doc.SourceType != SourceMemory {
 		doc.TTLDays = 7
 	}
 

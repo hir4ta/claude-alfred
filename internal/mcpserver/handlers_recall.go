@@ -31,7 +31,7 @@ func recallHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFu
 	}
 }
 
-// recallSearch searches memory entries (source_type="memory") using hybrid
+// recallSearch searches memory entries (source_type=store.SourceMemory) using hybrid
 // or FTS-only search depending on embedder availability.
 func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	query := req.GetString("query", "")
@@ -57,7 +57,7 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 			if overRetrieve < 20 {
 				overRetrieve = 20
 			}
-			matches, err := st.HybridSearch(queryVec, query, "memory", overRetrieve, overRetrieve)
+			matches, err := st.HybridSearch(queryVec, query, store.SourceMemory, overRetrieve, overRetrieve)
 			if err == nil && len(matches) > 0 {
 				ids := make([]int64, len(matches))
 				for i, m := range matches {
@@ -106,7 +106,7 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 	if len(docs) == 0 {
 		searchMethod = "fts5_only"
 		var err error
-		docs, err = st.SearchDocsFTS(query, "memory", limit)
+		docs, err = st.SearchDocsFTS(query, store.SourceMemory, limit)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("memory search failed: %v", err)), nil
 		}
@@ -158,7 +158,7 @@ func recallSave(st *store.Store, req mcp.CallToolRequest) (*mcp.CallToolResult, 
 		URL:         url,
 		SectionPath: sectionPath,
 		Content:     strings.TrimSpace(content),
-		SourceType:  "memory",
+		SourceType:  store.SourceMemory,
 		TTLDays:     0, // permanent
 	})
 	if err != nil {

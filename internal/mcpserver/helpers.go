@@ -36,7 +36,7 @@ func queryKB(st *store.Store, query string, limit int) []KBSnippet {
 	if limit <= 0 {
 		limit = 3
 	}
-	docs, err := st.SearchDocsFTS(query, "docs", limit)
+	docs, err := st.SearchDocsFTS(query, store.SourceDocs, limit)
 	if err != nil || len(docs) == 0 {
 		return nil
 	}

@@ -221,10 +221,21 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 		return // too short to search meaningfully (rune-based for CJK)
 	}
 
+	// Detect "remember this" intent for recall tool suggestion.
+	rememberHint := ""
+	if detectRememberIntent(prompt) {
+		debugf("UserPromptSubmit: remember intent detected")
+		rememberHint = "User wants to save information. Use the recall tool with action=save to persist this as permanent memory. " +
+			"Parameters: content (what to save), label (short description), project (optional context)."
+	}
+
 	// Gate 1: Detect Claude Code keywords with word boundary matching.
 	// Only the matched keywords are used as search terms — no synonym expansion.
 	matched := detectClaudeCodeKeywords(prompt)
 	if len(matched) == 0 {
+		if rememberHint != "" {
+			emitAdditionalContext("UserPromptSubmit", rememberHint)
+		}
 		debugf("UserPromptSubmit: no Claude Code keywords detected, skipping")
 		return
 	}
@@ -247,7 +258,7 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 	}
 	ftsQuery := strings.Join(ftsTerms, " OR ")
 	// Retrieve 8 candidates: enough diversity for scoring, but bounded to keep hook fast.
-	allDocs, ftsErr := st.SearchDocsFTS(ftsQuery, "docs", 8)
+	allDocs, ftsErr := st.SearchDocsFTS(ftsQuery, store.SourceDocs, 8)
 	if ftsErr != nil {
 		debugf("UserPromptSubmit: FTS keyword search failed: %v", ftsErr)
 	}
@@ -255,7 +266,7 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 	// Supplemental: also search with prompt keywords (no expansion) for coverage.
 	keywords := extractSearchKeywords(prompt, 6)
 	if keywords != "" {
-		docs, err := st.SearchDocsFTS(keywords, "docs", 3)
+		docs, err := st.SearchDocsFTS(keywords, store.SourceDocs, 3)
 		if err != nil {
 			debugf("UserPromptSubmit: FTS supplemental search failed: %v", err)
 		}
@@ -309,6 +320,9 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 	}
 
 	var buf strings.Builder
+	if rememberHint != "" {
+		buf.WriteString(rememberHint + "\n\n")
+	}
 	buf.WriteString("Relevant best practices from alfred knowledge base:\n")
 	for _, c := range candidates {
 		snippet := safeSnippet(c.doc.Content, 300)
@@ -324,7 +338,27 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 	}
 
 	emitAdditionalContext("UserPromptSubmit", buf.String())
+	notifyUser("ナレッジ%d件を注入しました (score: %.2f)", len(candidates), candidates[0].score)
 	debugf("UserPromptSubmit: injected %d knowledge snippets (top score: %.2f, keywords: %v), %d memory hints", len(candidates), candidates[0].score, matched, len(memSnippets))
+}
+
+// rememberKeywords are phrases indicating the user wants to save information.
+var rememberKeywords = []string{
+	"覚えて", "覚えておいて", "記憶して", "記憶しておいて",
+	"メモして", "メモしておいて",
+	"remember this", "remember that", "save this", "save that",
+	"don't forget",
+}
+
+// detectRememberIntent returns true if the prompt contains a "remember this" keyword.
+func detectRememberIntent(prompt string) bool {
+	lower := strings.ToLower(prompt)
+	for _, kw := range rememberKeywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 // searchMemoryForPrompt searches memory docs for the user's prompt.
@@ -335,7 +369,7 @@ func searchMemoryForPrompt(prompt string, st *store.Store) []string {
 		return nil
 	}
 
-	docs, err := st.SearchDocsFTS(keywords, "memory", 2)
+	docs, err := st.SearchDocsFTS(keywords, store.SourceMemory, 2)
 	if err != nil || len(docs) == 0 {
 		return nil
 	}

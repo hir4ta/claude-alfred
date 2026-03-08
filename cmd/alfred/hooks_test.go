@@ -2167,3 +2167,154 @@ func TestEnforceSessionSizeLimit(t *testing.T) {
 		}
 	})
 }
+
+func TestStripCompactMarkers(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		input   string
+		wantSub string // substring that should remain
+		notSub  string // substring that should be removed
+	}{
+		{"empty", "", "", ""},
+		{"no markers", "## Status\nactive\n", "active", ""},
+		{"single trailing marker", "## Status\nactive\n## Compact Marker [2026-01-01]\nstuff\n", "active", "Compact Marker"},
+		{"marker between sections", "## Status\nactive\n## Compact Marker [2026-01-01]\nstuff\n## Next Steps\nfoo\n", "foo", "Compact Marker"},
+		{"multiple markers", "## Status\nactive\n## Compact Marker [1]\na\n## Compact Marker [2]\nb\n## Next Steps\nbar\n", "bar", "Compact Marker"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := stripCompactMarkers(tt.input)
+			if tt.wantSub != "" && !strings.Contains(got, tt.wantSub) {
+				t.Errorf("stripCompactMarkers() missing expected substring %q in result %q", tt.wantSub, got)
+			}
+			if tt.notSub != "" && strings.Contains(got, tt.notSub) {
+				t.Errorf("stripCompactMarkers() should not contain %q in result %q", tt.notSub, got)
+			}
+		})
+	}
+}
+
+func TestCleanSectionContent(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"empty", "", ""},
+		{"plain text", "hello world", "hello world"},
+		{"heading prefix", "## Foo bar", "Foo bar"},
+		{"bold markers", "**important** stuff", "important stuff"},
+		{"separator", "---", ""},
+		{"mixed", "## Title\n**bold**\n---\nnormal", "Title; bold; normal"},
+		{"shell comment preserved", "set -e", "set -e"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := cleanSectionContent(tt.input)
+			if got != tt.want {
+				t.Errorf("cleanSectionContent(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectRememberIntent(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		prompt string
+		want   bool
+	}{
+		{"覚えておいて、このパターン", true},
+		{"remember this for next time", true},
+		{"save this information", true},
+		{"メモしておいて", true},
+		{"don't forget about this", true},
+		{"hookの設定方法は？", false},
+		{"what is memory management?", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.prompt, func(t *testing.T) {
+			t.Parallel()
+			if got := detectRememberIntent(tt.prompt); got != tt.want {
+				t.Errorf("detectRememberIntent(%q) = %v, want %v", tt.prompt, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildSessionSummary(t *testing.T) {
+	t.Parallel()
+	session := `# Session: test-task
+
+## Status
+active
+
+## Currently Working On
+認証フロー実装
+
+## Recent Decisions (last 3)
+1. JWT認証を採用
+2. Clerk統合を検討
+
+## Next Steps
+- [ ] テスト追加
+- [x] 設計完了
+
+## Modified Files (this session)
+- auth.go
+- auth_test.go
+
+## Compact Marker [2026-01-01 00:00:00]
+### Pre-Compact Context Snapshot
+This should be stripped
+`
+
+	got := buildSessionSummary(session)
+
+	if !strings.Contains(got, "認証フロー実装") {
+		t.Error("summary should contain working-on content")
+	}
+	if !strings.Contains(got, "JWT認証") {
+		t.Error("summary should contain decision content")
+	}
+	if !strings.Contains(got, "テスト追加") {
+		t.Error("summary should contain next steps")
+	}
+	if !strings.Contains(got, "auth.go") {
+		t.Error("summary should contain modified files")
+	}
+	if strings.Contains(got, "Compact Marker") {
+		t.Error("summary should not contain compact markers")
+	}
+	if strings.Contains(got, "Pre-Compact") {
+		t.Error("summary should not contain compact context snapshot")
+	}
+}
+
+func TestExtractSummaryTitle(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		session string
+		want    string
+	}{
+		{"with working on", "## Currently Working On\n認証実装\n## Next Steps\n", "認証実装"},
+		{"multiline working on", "## Currently Working On\nfirst line\nsecond line\n", "first line"},
+		{"no working on", "## Status\nactive\n", "session"},
+		{"empty working on", "## Currently Working On\n\n## Next Steps\n", "session"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := extractSummaryTitle(tt.session)
+			if got != tt.want {
+				t.Errorf("extractSummaryTitle() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

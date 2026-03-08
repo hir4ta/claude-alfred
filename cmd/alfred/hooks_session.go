@@ -95,7 +95,7 @@ func ingestProjectClaudeMD(_ context.Context, st *store.Store, projectPath strin
 			URL:         url,
 			SectionPath: sec.Path,
 			Content:     sec.Content,
-			SourceType:  "project",
+			SourceType:  store.SourceProject,
 			TTLDays:     1,
 		}); err != nil {
 			debugf("ingestProjectClaudeMD: upsert error: %v", err)
@@ -157,6 +157,7 @@ func injectSpecContext(projectPath, source string, st *store.Store) {
 
 		buf.WriteString("--- End Alfred Protocol ---\n")
 		emitAdditionalContext("SessionStart", buf.String())
+		notifyUser("タスク '%s' を復元しました (compact #%d)", taskSlug, compactCount)
 		debugf("SessionStart(compact#%d): injected spec context for %s", compactCount, taskSlug)
 	} else {
 		// Normal startup/resume: inject session.md + proactive knowledge for Next Steps.
@@ -179,6 +180,7 @@ func injectSpecContext(projectPath, source string, st *store.Store) {
 
 		buf.WriteString("--- End Alfred Protocol ---\n")
 		emitAdditionalContext("SessionStart", buf.String())
+		notifyUser("タスク '%s' のコンテキストを注入しました", taskSlug)
 		debugf("SessionStart(%s): injected session context for %s", source, taskSlug)
 	}
 }
@@ -188,7 +190,7 @@ func injectSpecContext(projectPath, source string, st *store.Store) {
 // This makes alfred genuinely proactive: surfacing information before the user asks.
 func proactiveHintsForNextSteps(session string, st *store.Store) string {
 	// Extract Next Steps section.
-	nextSteps := extractSection(session, "Next Steps")
+	nextSteps := extractSection(session, "## Next Steps")
 	if nextSteps == "" || len(strings.TrimSpace(nextSteps)) < 10 {
 		return ""
 	}
@@ -213,7 +215,7 @@ func proactiveHintsForNextSteps(session string, st *store.Store) string {
 		}
 	}
 	ftsQuery := strings.Join(ftsTerms, " OR ")
-	docs, _ := st.SearchDocsFTS(ftsQuery, "docs", 3) // FTS failure is acceptable; no docs means no hints
+	docs, _ := st.SearchDocsFTS(ftsQuery, store.SourceDocs, 3) // FTS failure is acceptable; no docs means no hints
 	if len(docs) == 0 {
 		return ""
 	}
@@ -237,12 +239,15 @@ func proactiveMemoryHints(taskSlug, session string, st *store.Store) string {
 
 	// Search memories using the task slug and current work context.
 	workingOn := extractSection(session, "## Currently Working On")
+	if workingOn == "" {
+		workingOn = extractSection(session, "## Current Position")
+	}
 	query := taskSlug
 	if workingOn != "" {
 		query = taskSlug + " " + truncateStr(workingOn, 100)
 	}
 
-	docs, err := st.SearchDocsFTS(query, "memory", 3)
+	docs, err := st.SearchDocsFTS(query, store.SourceMemory, 3)
 	if err != nil || len(docs) == 0 {
 		return ""
 	}
@@ -253,6 +258,7 @@ func proactiveMemoryHints(taskSlug, session string, st *store.Store) string {
 		snippet := safeSnippet(d.Content, 200)
 		fmt.Fprintf(&buf, "- [%s] %s\n", d.SectionPath, snippet)
 	}
+	notifyUser("過去の関連経験を%d件見つけました", len(docs))
 	debugf("SessionStart: proactive memory injection for %s, docs=%d", taskSlug, len(docs))
 	return buf.String()
 }
@@ -312,6 +318,84 @@ func runEmbedAsync() error {
 	return fmt.Errorf("embed-async: all retries failed for %s/%s: %w", taskSlug, fileName, lastErr)
 }
 
+// asyncEmbedDoc spawns a background process to generate embeddings for a
+// doc already stored in the docs table. This mirrors asyncEmbedSession but
+// works with arbitrary doc IDs rather than spec files.
+func asyncEmbedDoc(docID int64) {
+	exe, err := os.Executable()
+	if err != nil {
+		debugf("asyncEmbedDoc: executable path error: %v", err)
+		return
+	}
+
+	cmd := execCommand(exe, "embed-doc", "--id", fmt.Sprintf("%d", docID))
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		debugf("asyncEmbedDoc: start error: %v", err)
+		return
+	}
+	debugf("asyncEmbedDoc: spawned pid=%d for doc_id=%d", cmd.Process.Pid, docID)
+}
+
+// runEmbedDoc is the entry point for the embed-doc subcommand.
+// Generates embeddings for a single doc by ID with retry on transient failures.
+func runEmbedDoc() error {
+	var docID int64
+	for i := 2; i < len(os.Args)-1; i++ {
+		if os.Args[i] == "--id" {
+			if _, err := fmt.Sscanf(os.Args[i+1], "%d", &docID); err != nil {
+				return fmt.Errorf("invalid --id: %w", err)
+			}
+		}
+	}
+	if docID == 0 {
+		return fmt.Errorf("usage: alfred embed-doc --id DOC_ID")
+	}
+
+	st, err := store.OpenDefault()
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer st.Close()
+
+	emb, err := embedder.NewEmbedder()
+	if err != nil {
+		return fmt.Errorf("embedder: %w", err)
+	}
+
+	docs, err := st.GetDocsByIDs([]int64{docID})
+	if err != nil || len(docs) == 0 {
+		return fmt.Errorf("doc not found: id=%d", docID)
+	}
+	doc := docs[0]
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	text := doc.SectionPath + "\n" + doc.Content
+
+	var lastErr error
+	for attempt := range 3 {
+		if attempt > 0 {
+			debugf("embed-doc: retry attempt %d for doc_id=%d", attempt+1, docID)
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+		}
+		vec, err := emb.EmbedForStorage(ctx, text)
+		if err != nil {
+			lastErr = err
+			debugf("embed-doc: attempt %d failed: %v", attempt+1, err)
+			continue
+		}
+		if err := st.InsertEmbedding("docs", docID, emb.Model(), vec); err != nil {
+			return fmt.Errorf("embed-doc: insert embedding: %w", err)
+		}
+		debugf("embed-doc: success for doc_id=%d", docID)
+		return nil
+	}
+	return fmt.Errorf("embed-doc: all retries failed for doc_id=%d: %w", docID, lastErr)
+}
+
 // ---------------------------------------------------------------------------
 // Stop (SessionEnd): session-summary memory persistence
 // ---------------------------------------------------------------------------
@@ -319,7 +403,7 @@ func runEmbedAsync() error {
 // handleSessionEnd persists a session summary as permanent memory when the
 // session ends. Reads the active spec's session.md and saves a condensed
 // summary to the docs table with source_type="memory".
-func handleSessionEnd(_ context.Context, ev *hookEvent) {
+func handleSessionEnd(ctx context.Context, ev *hookEvent) {
 	if ev.ProjectPath == "" {
 		return
 	}
@@ -341,12 +425,18 @@ func handleSessionEnd(_ context.Context, ev *hookEvent) {
 		return
 	}
 
-	persistSessionSummary(ev.ProjectPath, taskSlug, session)
+	persistSessionSummary(ctx, ev.ProjectPath, taskSlug, session)
 }
 
 // persistSessionSummary saves a condensed session summary as permanent memory.
 // Extracts key sections from session.md and stores as source_type="memory".
-func persistSessionSummary(projectPath, taskSlug, session string) {
+func persistSessionSummary(ctx context.Context, projectPath, taskSlug, session string) {
+	// Check context before doing work — Stop hook has a tight 2.5s timeout.
+	if ctx.Err() != nil {
+		debugf("persistSessionSummary: context already expired, skipping")
+		return
+	}
+
 	st, err := store.OpenDefaultCached()
 	if err != nil {
 		debugf("persistSessionSummary: DB open error: %v", err)
@@ -367,11 +457,11 @@ func persistSessionSummary(projectPath, taskSlug, session string) {
 	sectionPath := fmt.Sprintf("%s > %s > session-summary > %s",
 		project, taskSlug, truncateStr(extractSummaryTitle(session), 60))
 
-	_, changed, err := st.UpsertDoc(&store.DocRow{
+	id, changed, err := st.UpsertDoc(&store.DocRow{
 		URL:         url,
 		SectionPath: sectionPath,
 		Content:     summary,
-		SourceType:  "memory",
+		SourceType:  store.SourceMemory,
 		TTLDays:     0, // permanent
 	})
 	if err != nil {
@@ -379,42 +469,104 @@ func persistSessionSummary(projectPath, taskSlug, session string) {
 		return
 	}
 	if changed {
+		notifyUser("セッション要約を記憶しました (%s/%s)", project, taskSlug)
+		asyncEmbedDoc(id)
 		debugf("persistSessionSummary: saved session summary for %s/%s", project, taskSlug)
 	}
 }
 
 // buildSessionSummary extracts key information from session.md into a
 // condensed text suitable for memory storage and future search.
+// Strips compact markers and cleans markdown noise before extraction.
 func buildSessionSummary(session string) string {
+	// Strip compact markers to avoid noise in the summary.
+	cleaned := stripCompactMarkers(session)
+
 	var buf strings.Builder
 
-	workingOn := extractSection(session, "## Currently Working On")
+	workingOn := cleanSectionContent(extractSection(cleaned, "## Currently Working On"))
 	if workingOn != "" {
 		buf.WriteString("作業内容: " + truncateStr(workingOn, 200) + "\n")
 	}
 
-	decisions := extractSection(session, "## Recent Decisions")
+	decisions := cleanSectionContent(extractSection(cleaned, "## Recent Decisions"))
 	if decisions == "" {
-		decisions = extractSection(session, "## Recent Decisions (last 3)")
+		decisions = cleanSectionContent(extractSection(cleaned, "## Recent Decisions (last 3)"))
 	}
 	if decisions != "" {
 		buf.WriteString("意思決定: " + truncateStr(decisions, 200) + "\n")
 	}
 
-	nextSteps := extractSection(session, "## Next Steps")
+	nextSteps := cleanSectionContent(extractSection(cleaned, "## Next Steps"))
 	if nextSteps != "" {
 		buf.WriteString("次のステップ: " + truncateStr(nextSteps, 200) + "\n")
 	}
 
-	modifiedFiles := extractSection(session, "## Modified Files")
+	modifiedFiles := cleanSectionContent(extractSection(cleaned, "## Modified Files"))
 	if modifiedFiles == "" {
-		modifiedFiles = extractSection(session, "## Modified Files (this session)")
+		modifiedFiles = cleanSectionContent(extractSection(cleaned, "## Modified Files (this session)"))
 	}
 	if modifiedFiles != "" {
 		buf.WriteString("変更ファイル: " + truncateStr(modifiedFiles, 200) + "\n")
 	}
 
 	return buf.String()
+}
+
+// stripCompactMarkers removes all "## Compact Marker [...]" sections and
+// their content from session.md to prevent noise in summaries.
+func stripCompactMarkers(session string) string {
+	const marker = "## Compact Marker ["
+	for {
+		start := strings.Index(session, marker)
+		if start < 0 {
+			return session
+		}
+		// Find end: next "## " heading or "---" separator or EOF.
+		rest := session[start+len(marker):]
+		end := -1
+		for _, delim := range []string{"\n## ", "\n---"} {
+			if idx := strings.Index(rest, delim); idx >= 0 {
+				if end < 0 || idx < end {
+					end = idx
+				}
+			}
+		}
+		if end < 0 {
+			// Marker extends to EOF.
+			session = strings.TrimRight(session[:start], "\n")
+		} else {
+			session = session[:start] + rest[end+1:]
+		}
+	}
+}
+
+// cleanSectionContent removes markdown noise from extracted section content.
+// Strips heading prefixes, collapses whitespace, and removes separators.
+func cleanSectionContent(s string) string {
+	if s == "" {
+		return ""
+	}
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "---" {
+			continue
+		}
+		// Strip markdown heading prefixes (e.g., "## Foo" → "Foo").
+		for _, prefix := range []string{"### ", "## ", "# "} {
+			if strings.HasPrefix(line, prefix) {
+				line = line[len(prefix):]
+				break
+			}
+		}
+		// Strip bold markers.
+		line = strings.ReplaceAll(line, "**", "")
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "; ")
 }
 
 // extractSummaryTitle creates a short title from the session's "Currently Working On" section.

@@ -79,6 +79,12 @@ const configReminder = `This task involves Claude Code configuration. alfred's M
 - review: Project-wide .claude/ configuration audit
 Call these BEFORE reading or modifying configuration files directly.`
 
+// notifyUser outputs a brief message to stderr so the user can see what
+// alfred did. Stdout is reserved for hook protocol JSON.
+func notifyUser(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "[alfred] "+format+"\n", args...)
+}
+
 // emitAdditionalContext outputs a JSON response with additionalContext for
 // UserPromptSubmit and SessionStart hooks. This is the recommended format
 // per Claude Code docs — context is added more discretely than plain stdout.

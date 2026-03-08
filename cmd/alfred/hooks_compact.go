@@ -87,6 +87,8 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 	// Async embedding generation for session.md.
 	asyncEmbedSession(sd)
 
+	notifyUser("タスク '%s' のセッションを保存しました", taskSlug)
+
 	ctxSize := 0
 	if txCtx != nil {
 		ctxSize = len(txCtx.LastAssistantWork) + len(txCtx.LastUserDirective)
@@ -586,13 +588,13 @@ func persistDecisionMemory(projectPath, taskSlug string, decisions []string) {
 	url := fmt.Sprintf("memory://user/%s/%s/%s", project, taskSlug, date)
 
 	saved := 0
-	for _, d := range decisions {
-		sectionPath := fmt.Sprintf("%s > %s > decision > %s", project, taskSlug, truncateDecision(d, 60))
-		_, changed, err := st.UpsertDoc(&store.DocRow{
+	for i, d := range decisions {
+		sectionPath := fmt.Sprintf("%s > %s > decision > %s#%d", project, taskSlug, truncateDecision(d, 60), i)
+		id, changed, err := st.UpsertDoc(&store.DocRow{
 			URL:         url,
 			SectionPath: sectionPath,
 			Content:     d,
-			SourceType:  "memory",
+			SourceType:  store.SourceMemory,
 			TTLDays:     0, // permanent
 		})
 		if err != nil {
@@ -601,9 +603,11 @@ func persistDecisionMemory(projectPath, taskSlug string, decisions []string) {
 		}
 		if changed {
 			saved++
+			asyncEmbedDoc(id)
 		}
 	}
 	if saved > 0 {
+		notifyUser("意思決定%d件を記憶しました (%s/%s)", saved, project, taskSlug)
 		debugf("persistDecisionMemory: saved %d decisions for %s/%s", saved, project, taskSlug)
 	}
 }

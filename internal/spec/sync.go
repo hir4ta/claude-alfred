@@ -29,7 +29,7 @@ func SyncToDB(ctx context.Context, sd *SpecDir, st *store.Store, emb *embedder.E
 			URL:         sec.URL,
 			SectionPath: fmt.Sprintf("%s > %s", sd.TaskSlug, sec.File),
 			Content:     sec.Content,
-			SourceType:  "spec",
+			SourceType:  store.SourceSpec,
 			TTLDays:     365,
 		})
 		if err != nil {
@@ -67,7 +67,7 @@ func SyncSingleFile(ctx context.Context, sd *SpecDir, f SpecFile, st *store.Stor
 		URL:         url,
 		SectionPath: fmt.Sprintf("%s > %s", sd.TaskSlug, f),
 		Content:     content,
-		SourceType:  "spec",
+		SourceType:  store.SourceSpec,
 		TTLDays:     365,
 	})
 	if err != nil {

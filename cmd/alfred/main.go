@@ -59,6 +59,8 @@ func run() error {
 		return install.Bundle(outputDir, version)
 	case "embed-async":
 		return runEmbedAsync()
+	case "embed-doc":
+		return runEmbedDoc()
 	case "hook":
 		if len(os.Args) < 3 {
 			return fmt.Errorf("usage: alfred hook <EventName>")
