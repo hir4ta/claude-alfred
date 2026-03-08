@@ -5,7 +5,6 @@
   },
   "description": "Your proactive assistant for Claude Code — surfacing knowledge, catching scope violations, and preserving session context across compactions.",
   "homepage": "https://github.com/hir4ta/claude-alfred",
-  "hooks": "./hooks/hooks.json",
   "keywords": [
     "alfred",
     "best-practices",
@@ -17,5 +16,5 @@
   "license": "MIT",
   "name": "alfred",
   "repository": "https://github.com/hir4ta/claude-alfred",
-  "version": "0.56.0"
+  "version": "0.56.1"
 }
