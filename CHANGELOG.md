@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.60.2] - 2026-03-08
+
+### Fixed
+- `buildSessionSummary` incomplete fallback migration: legacy session headings (`## Current Position`, `## Pending`) silently lost in permanent memory records
+- `InstallUserRules` unconditional overwrite: added skip-if-unchanged via content comparison
+- `InstallUserRules` missing deprecated rule cleanup: stale files from previous versions now removed on install
+
+### Changed
+- DRY refactor: `extractSectionFallback` variadic helper replaces repeated if-empty-fallback patterns across hooks
+- Removed dead code: `formatTranscriptContext` and `extractTranscriptContext` (replaced by `extractTranscriptContextRich`)
+- `alfred init` post-setup message: "Installed" → "Updated" for rule file count
+
 ## [0.60.1] - 2026-03-08
 
 ### Added
@@ -350,7 +362,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.60.1...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.60.2...HEAD
+[0.60.2]: https://github.com/hir4ta/claude-alfred/compare/v0.60.1...v0.60.2
 [0.60.1]: https://github.com/hir4ta/claude-alfred/compare/v0.60.0...v0.60.1
 [0.60.0]: https://github.com/hir4ta/claude-alfred/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/hir4ta/claude-alfred/compare/v0.58.2...v0.59.0

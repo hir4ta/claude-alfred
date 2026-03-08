@@ -370,5 +370,16 @@ func runSetup() error {
 	}()
 
 	_, err = p.Run()
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Install alfred rules to ~/.claude/rules/ for global loading.
+	if n, rErr := install.InstallUserRules(); rErr != nil {
+		fmt.Fprintf(os.Stderr, "  Warning: could not install rules: %v\n", rErr)
+	} else if n > 0 {
+		fmt.Fprintf(os.Stderr, "  ✓ Updated %d rules in ~/.claude/rules/\n", n)
+	}
+
+	return nil
 }

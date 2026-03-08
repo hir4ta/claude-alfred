@@ -181,6 +181,16 @@ func extractSection(content, heading string) string {
 	return strings.TrimSpace(strings.Join(result, "\n"))
 }
 
+// extractSectionFallback tries headings in order, returning the first non-empty match.
+func extractSectionFallback(content string, headings ...string) string {
+	for _, h := range headings {
+		if s := extractSection(content, h); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
 // extractListItems extracts numbered or bulleted list items from a section.
 func extractListItems(content, heading string) []string {
 	section := extractSection(content, heading)

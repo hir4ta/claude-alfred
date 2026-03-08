@@ -157,3 +157,64 @@ func TestBundleIdempotent(t *testing.T) {
 		t.Errorf("version = %v, want 1.0.1", got)
 	}
 }
+
+func TestInstallUserRules(t *testing.T) {
+	// Not parallel: modifies HOME env var.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// First install: should write all rule files.
+	n, err := InstallUserRules()
+	if err != nil {
+		t.Fatalf("InstallUserRules() error: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("InstallUserRules() returned 0 files on first install")
+	}
+
+	rulesDir := filepath.Join(home, ".claude", "rules")
+	entries, err := os.ReadDir(rulesDir)
+	if err != nil {
+		t.Fatalf("read rules dir: %v", err)
+	}
+
+	// All files should have alfred prefix.
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), "alfred") {
+			t.Errorf("rule file %q should have alfred prefix", e.Name())
+		}
+	}
+
+	// Verify content is non-empty.
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(rulesDir, e.Name()))
+		if err != nil {
+			t.Errorf("read %s: %v", e.Name(), err)
+		}
+		if len(data) == 0 {
+			t.Errorf("rule file %s is empty", e.Name())
+		}
+	}
+
+	// Second install: should skip all (content unchanged).
+	n2, err := InstallUserRules()
+	if err != nil {
+		t.Fatalf("InstallUserRules() second call error: %v", err)
+	}
+	if n2 != 0 {
+		t.Errorf("InstallUserRules() second call = %d, want 0 (unchanged)", n2)
+	}
+
+	// Stale file should be cleaned by deprecated list.
+	stale := filepath.Join(rulesDir, "alfred-butler-protocol.md")
+	if err := os.WriteFile(stale, []byte("old"), 0o644); err != nil {
+		t.Fatalf("write stale file: %v", err)
+	}
+	_, err = InstallUserRules()
+	if err != nil {
+		t.Fatalf("InstallUserRules() cleanup call error: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("deprecated rule file should have been removed")
+	}
+}

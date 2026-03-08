@@ -253,10 +253,7 @@ func proactiveMemoryHints(ctx context.Context, taskSlug, session string, st *sto
 	}
 
 	// Search memories using the task slug and current work context.
-	workingOn := extractSection(session, "## Currently Working On")
-	if workingOn == "" {
-		workingOn = extractSection(session, "## Current Position")
-	}
+	workingOn := extractSectionFallback(session, "## Currently Working On", "## Current Position")
 	query := taskSlug
 	if workingOn != "" {
 		query = taskSlug + " " + truncateStr(workingOn, 100)
@@ -286,10 +283,7 @@ func proactiveCrossProjectHints(ctx context.Context, currentProject, taskSlug st
 	}
 
 	// Build a search query from current work context.
-	workingOn := extractSection(session, "## Currently Working On")
-	if workingOn == "" {
-		workingOn = extractSection(session, "## Current Position")
-	}
+	workingOn := extractSectionFallback(session, "## Currently Working On", "## Current Position")
 	nextSteps := extractSection(session, "## Next Steps")
 
 	// Combine task slug with context keywords for a meaningful search.
@@ -768,28 +762,22 @@ func buildSessionSummary(session string) string {
 
 	var buf strings.Builder
 
-	workingOn := cleanSectionContent(extractSection(cleaned, "## Currently Working On"))
+	workingOn := cleanSectionContent(extractSectionFallback(cleaned, "## Currently Working On", "## Current Position"))
 	if workingOn != "" {
 		buf.WriteString("Working on: " + truncateStr(workingOn, 200) + "\n")
 	}
 
-	decisions := cleanSectionContent(extractSection(cleaned, "## Recent Decisions"))
-	if decisions == "" {
-		decisions = cleanSectionContent(extractSection(cleaned, "## Recent Decisions (last 3)"))
-	}
+	decisions := cleanSectionContent(extractSectionFallback(cleaned, "## Recent Decisions", "## Recent Decisions (last 3)"))
 	if decisions != "" {
 		buf.WriteString("Decisions: " + truncateStr(decisions, 200) + "\n")
 	}
 
-	nextSteps := cleanSectionContent(extractSection(cleaned, "## Next Steps"))
+	nextSteps := cleanSectionContent(extractSectionFallback(cleaned, "## Next Steps", "## Pending"))
 	if nextSteps != "" {
 		buf.WriteString("Next steps: " + truncateStr(nextSteps, 200) + "\n")
 	}
 
-	modifiedFiles := cleanSectionContent(extractSection(cleaned, "## Modified Files"))
-	if modifiedFiles == "" {
-		modifiedFiles = cleanSectionContent(extractSection(cleaned, "## Modified Files (this session)"))
-	}
+	modifiedFiles := cleanSectionContent(extractSectionFallback(cleaned, "## Modified Files", "## Modified Files (this session)"))
 	if modifiedFiles != "" {
 		buf.WriteString("Modified files: " + truncateStr(modifiedFiles, 200) + "\n")
 	}

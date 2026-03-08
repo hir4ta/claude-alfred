@@ -498,6 +498,33 @@ None
 	}
 }
 
+func TestExtractSectionFallback(t *testing.T) {
+	t.Parallel()
+	content := "## Current Position\nold heading\n\n## Next Steps\n1. test\n"
+
+	t.Run("first heading matches", func(t *testing.T) {
+		t.Parallel()
+		got := extractSectionFallback(content, "## Current Position", "## Currently Working On")
+		if got != "old heading" {
+			t.Errorf("extractSectionFallback = %q, want %q", got, "old heading")
+		}
+	})
+	t.Run("fallback to second heading", func(t *testing.T) {
+		t.Parallel()
+		got := extractSectionFallback(content, "## Currently Working On", "## Current Position")
+		if got != "old heading" {
+			t.Errorf("extractSectionFallback = %q, want %q", got, "old heading")
+		}
+	})
+	t.Run("no match returns empty", func(t *testing.T) {
+		t.Parallel()
+		got := extractSectionFallback(content, "## Missing", "## Also Missing")
+		if got != "" {
+			t.Errorf("extractSectionFallback = %q, want empty", got)
+		}
+	})
+}
+
 func TestExtractSectionNoFalsePrefix(t *testing.T) {
 	t.Parallel()
 	content := "## Status\nactive\n\n## StatusUpdate\nsome update\n"
@@ -1645,42 +1672,6 @@ func TestIngestProjectClaudeMD(t *testing.T) {
 	}
 }
 
-func TestExtractTranscriptContext(t *testing.T) {
-	dir := t.TempDir()
-	lines := []string{
-		`{"type":"human","content":"first user message"}`,
-		`{"type":"assistant","message":{"role":"assistant","content":"assistant response one"}}`,
-		`{"type":"human","content":"second user message"}`,
-		`{"type":"tool_error","content":"connection refused"}`,
-		`{"type":"assistant","message":{"role":"assistant","content":"assistant response two"}}`,
-	}
-	path := writeFakeTranscript(t, dir, lines)
-
-	result := extractTranscriptContext(path)
-
-	if !strings.Contains(result, "first user message") {
-		t.Error("should contain user messages")
-	}
-	if !strings.Contains(result, "assistant response") {
-		t.Error("should contain assistant summaries")
-	}
-	if !strings.Contains(result, "connection refused") {
-		t.Error("should contain tool errors")
-	}
-	if !strings.Contains(result, "Recent user requests:") {
-		t.Error("should have user section header")
-	}
-	if !strings.Contains(result, "Recent errors") {
-		t.Error("should have errors section header")
-	}
-}
-
-func TestExtractTranscriptContextEmpty(t *testing.T) {
-	result := extractTranscriptContext("/nonexistent/path/transcript.jsonl")
-	if result != "" {
-		t.Errorf("non-existent file should return empty, got %q", result)
-	}
-}
 
 func TestResolvedVersion(t *testing.T) {
 	// Not parallel: modifies package-level var.
@@ -2023,24 +2014,6 @@ func TestExtractTranscriptContextRichEmpty(t *testing.T) {
 	}
 }
 
-func TestFormatTranscriptContext(t *testing.T) {
-	ctx := &transcriptContext{
-		UserMessages:     []string{"fix the bug"},
-		AssistantActions: []string{"reading the code"},
-		ToolErrors:       []string{"timeout"},
-		RunningAgents:    []string{"research agent"},
-	}
-	result := formatTranscriptContext(ctx)
-	if !strings.Contains(result, "fix the bug") {
-		t.Error("should contain user messages")
-	}
-	if !strings.Contains(result, "Running background agents") {
-		t.Error("should contain running agents section")
-	}
-	if result2 := formatTranscriptContext(nil); result2 != "" {
-		t.Error("nil context should return empty string")
-	}
-}
 
 func TestIsTrivialDecisionJapanese(t *testing.T) {
 	t.Parallel()

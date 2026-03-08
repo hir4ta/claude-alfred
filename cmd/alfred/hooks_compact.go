@@ -340,18 +340,9 @@ func buildActiveContextSession(sd *spec.SpecDir, taskSlug string, txCtx *transcr
 	// Extract existing structured fields from session.md.
 	// Supports both new activeContext format and legacy format.
 	existingStatus := extractSection(existing, "## Status")
-	existingWorkingOn := extractSection(existing, "## Currently Working On")
-	if existingWorkingOn == "" {
-		existingWorkingOn = extractSection(existing, "## Current Position")
-	}
-	existingNextSteps := extractSection(existing, "## Next Steps")
-	if existingNextSteps == "" {
-		existingNextSteps = extractSection(existing, "## Pending")
-	}
-	existingBlockers := extractSection(existing, "## Blockers")
-	if existingBlockers == "" {
-		existingBlockers = extractSection(existing, "## Unresolved Issues")
-	}
+	existingWorkingOn := extractSectionFallback(existing, "## Currently Working On", "## Current Position")
+	existingNextSteps := extractSectionFallback(existing, "## Next Steps", "## Pending")
+	existingBlockers := extractSectionFallback(existing, "## Blockers", "## Unresolved Issues")
 
 	if existingStatus == "" {
 		existingStatus = "active"
