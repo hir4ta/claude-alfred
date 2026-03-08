@@ -791,17 +791,24 @@ type DocFeedbackDetail struct {
 // TopFeedbackDocs returns docs ordered by net feedback (positive - negative).
 // If ascending is true, returns most-penalized first; otherwise most-boosted first.
 func (s *Store) TopFeedbackDocs(ctx context.Context, limit int, ascending bool) ([]DocFeedbackDetail, error) {
-	order := "DESC"
-	if ascending {
-		order = "ASC"
-	}
-	rows, err := s.db.QueryContext(ctx, `
+	// Use two separate queries instead of string concatenation for SQL safety.
+	q := `
 		SELECT f.doc_id, COALESCE(d.section_path, '(deleted)'), f.positive_hits, f.negative_hits
 		FROM doc_feedback f
 		LEFT JOIN docs d ON d.id = f.doc_id
 		WHERE f.positive_hits + f.negative_hits > 0
-		ORDER BY (f.positive_hits - f.negative_hits) `+order+`
-		LIMIT ?`, limit)
+		ORDER BY (f.positive_hits - f.negative_hits) DESC
+		LIMIT ?`
+	if ascending {
+		q = `
+		SELECT f.doc_id, COALESCE(d.section_path, '(deleted)'), f.positive_hits, f.negative_hits
+		FROM doc_feedback f
+		LEFT JOIN docs d ON d.id = f.doc_id
+		WHERE f.positive_hits + f.negative_hits > 0
+		ORDER BY (f.positive_hits - f.negative_hits) ASC
+		LIMIT ?`
+	}
+	rows, err := s.db.QueryContext(ctx, q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: top feedback docs: %w", err)
 	}

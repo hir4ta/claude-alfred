@@ -99,10 +99,16 @@ func (s *SpecDir) Rollback(f SpecFile, timestamp string) error {
 		return fmt.Errorf("read history %s: %w", timestamp, err)
 	}
 
+	// Acquire lock first, then save history + write atomically to avoid
+	// a TOCTOU where a concurrent WriteFile could slip between saveHistory
+	// and the actual write.
+	lf, err := s.lockSpecDir()
+	if err == nil {
+		defer unlockSpecDir(lf)
+	}
 	// Save current version before restoring (makes rollback undoable).
 	_ = s.saveHistory(f)
-
-	return s.WriteFile(f, string(data))
+	return s.writeFileRaw(f, string(data))
 }
 
 // pruneHistory keeps only the last maxHistoryPerFile versions per file.

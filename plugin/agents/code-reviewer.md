@@ -5,7 +5,7 @@ description: >
   reviewing code changes, before committing, or when you want a second opinion on
   implementation quality. Spawns 3 specialized sub-reviewers in parallel for thorough
   coverage, then aggregates findings.
-tools: Read, Grep, Glob, Agent, Bash(git diff:*, git log:*, git show:*, git status:*), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
+tools: Read, Grep, Glob, Agent, Bash(git diff *, git log *, git show *, git status *), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 disallowedTools: Write, Edit, NotebookEdit
 model: sonnet
 permissionMode: plan

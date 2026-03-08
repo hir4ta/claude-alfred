@@ -7,6 +7,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.61.1] - 2026-03-09
+
+### Fixed
+- **Security**: SSRF prevention — `validateCustomURL()` rejects non-HTTPS schemes, private/loopback IPs, and empty hosts in custom source URLs
+- **Security**: Shell injection in `saveEnvToProfile` — replaced `%q` (Go-style quoting) with POSIX single-quote escaping to prevent `$()` expansion
+- **Security**: SQL concatenation in `TopFeedbackDocs` — replaced `ORDER BY ... +order+` with two hardcoded query literals
+- Spec `Rollback` double history save — extracted `writeFileRaw()` to skip the implicit `saveHistory` in `writeFileUnlocked`; lock now wraps entire read-save-write sequence
+- Crawl lock PID reuse false positive — added `crawlLockMaxAge` (6 min) age check before signal-0 liveness probe
+- `autoAppendDecisions` substring dedup false positives — raised minimum match length to 20 runes; fixed slice aliasing in `buildActiveContextSession`
+- Vector search cap warning — counts scanned rows (not filtered candidates) for accurate detection of `maxVectorCandidates` saturation
+
+### Changed
+- Plugin agents/skills: `Bash(git diff:*)` → `Bash(git diff *)` (non-deprecated permission syntax)
+- `alfred-protocol.md` rule: `paths` field changed from string to array format
+- Remove empty `settings.json` from plugin bundle (no functional purpose)
+- `OpenDefaultCached` doc comment: documents `sync.Once` limitation for long-lived processes
+
 ## [0.61.0] - 2026-03-08
 
 ### Added
@@ -411,7 +428,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.61.0...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.61.1...HEAD
+[0.61.1]: https://github.com/hir4ta/claude-alfred/compare/v0.61.0...v0.61.1
 [0.61.0]: https://github.com/hir4ta/claude-alfred/compare/v0.60.3...v0.61.0
 [0.60.3]: https://github.com/hir4ta/claude-alfred/compare/v0.60.2...v0.60.3
 [0.60.2]: https://github.com/hir4ta/claude-alfred/compare/v0.60.1...v0.60.2

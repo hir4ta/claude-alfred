@@ -211,7 +211,9 @@ func saveEnvToProfile(key, value string) error {
 
 	// Read existing content to check for duplicates.
 	content, _ := os.ReadFile(profilePath)
-	exportLine := fmt.Sprintf("export %s=%q", key, value)
+	// Use single quotes for shell safety: prevents $() and backtick expansion.
+	escaped := strings.ReplaceAll(value, "'", "'\\''")
+	exportLine := fmt.Sprintf("export %s='%s'", key, escaped)
 	prefix := fmt.Sprintf("export %s=", key)
 
 	// Replace existing line if present.

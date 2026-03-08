@@ -71,7 +71,9 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 	defer rows.Close()
 
 	var candidates []VectorMatch
+	var rowsScanned int
 	for rows.Next() {
+		rowsScanned++
 		var sourceID int64
 		var blob []byte
 		if err := rows.Scan(&sourceID, &blob); err != nil {
@@ -95,6 +97,12 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 	}
 	if err := rows.Err(); err != nil {
 		return candidates, fmt.Errorf("store: vector search iteration: %w", err)
+	}
+
+	// Warn if DB returned exactly maxVectorCandidates rows — recall may be
+	// silently degraded because higher-ID embeddings were never considered.
+	if rowsScanned >= maxVectorCandidates && DebugLog != nil {
+		DebugLog("store: VectorSearch: hit maxVectorCandidates (%d) for source=%q — consider sqlite-vec for larger datasets", maxVectorCandidates, source)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {

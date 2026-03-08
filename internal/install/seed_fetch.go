@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -13,6 +15,28 @@ import (
 
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
+
+// validateCustomURL checks that a user-supplied URL is safe to fetch.
+// Rejects non-HTTPS schemes, loopback, link-local, and private RFC1918 addresses.
+func validateCustomURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("only https URLs are allowed, got %q", u.Scheme)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("missing host in URL")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("private/loopback IP not allowed: %s", ip)
+		}
+	}
+	return nil
+}
 
 const (
 	docsIndexURL    = "https://code.claude.com/docs/llms.txt"
@@ -121,9 +145,15 @@ func Crawl(ctx context.Context, progress *CrawlProgress, st *store.Store, custom
 		}
 	}
 
-	// 4. Fetch custom user sources.
+	// 4. Fetch custom user sources (HTTPS only, no private IPs).
 	for _, cs := range customSources {
 		if cs.URL == "" {
+			continue
+		}
+		if err := validateCustomURL(cs.URL); err != nil {
+			if store.DebugLog != nil {
+				store.DebugLog("skipping custom source %q: %v", cs.URL, err)
+			}
 			continue
 		}
 		src, skipped, err := crawlPageConditional(ctx, st, cs.URL, cs.URL, "custom", now)

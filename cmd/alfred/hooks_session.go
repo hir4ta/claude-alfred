@@ -537,10 +537,25 @@ func lockFileExists(lockPath string) bool {
 	return err == nil
 }
 
+// crawlLockMaxAge is the maximum age for a crawl lock file before it is
+// considered stale, regardless of PID liveness. Prevents PID reuse false positives.
+const crawlLockMaxAge = 6 * time.Minute
+
 // isCrawlRunning checks if a crawl process is already running by examining
-// the lock file. Returns false if the lock file is stale (process exited).
+// the lock file. Returns false if the lock file is stale (process exited or
+// lock file exceeds crawlLockMaxAge to guard against PID reuse).
 func isCrawlRunning(lockPath string) bool {
 	if lockPath == "" {
+		return false
+	}
+	info, err := os.Stat(lockPath)
+	if err != nil {
+		return false
+	}
+	// Guard against PID reuse: if the lock file is older than the crawl
+	// timeout, the original process is certainly gone regardless of PID.
+	if time.Since(info.ModTime()) > crawlLockMaxAge {
+		_ = os.Remove(lockPath)
 		return false
 	}
 	data, err := os.ReadFile(lockPath)

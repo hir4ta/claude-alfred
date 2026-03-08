@@ -255,7 +255,11 @@ func (s *SpecDir) WriteFile(f SpecFile, content string) error {
 func (s *SpecDir) writeFileUnlocked(f SpecFile, content string) error {
 	// Save history before overwriting (fail-open: errors don't prevent the write).
 	_ = s.saveHistory(f)
+	return s.writeFileRaw(f, content)
+}
 
+// writeFileRaw performs atomic write (tmp + rename) without saving history.
+func (s *SpecDir) writeFileRaw(f SpecFile, content string) error {
 	path := s.FilePath(f)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {

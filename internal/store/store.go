@@ -96,6 +96,10 @@ var (
 // OpenDefaultCached returns a process-level cached store connection.
 // Intended for short-lived hook-handler processes where opening the DB
 // once per process is sufficient. Do NOT call Close() on the returned Store.
+//
+// Limitation: if the initial Open succeeds but the connection degrades later
+// (e.g., DB file deleted), subsequent calls return the stale connection.
+// For long-lived processes (alfred serve), prefer Open() with explicit lifecycle.
 func OpenDefaultCached() (*Store, error) {
 	defaultOnce.Do(func() {
 		defaultCached, defaultCachedErr = Open(DefaultDBPath())

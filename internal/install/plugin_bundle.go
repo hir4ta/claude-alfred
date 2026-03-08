@@ -89,13 +89,14 @@ func alfredHookEntries(binPath string) map[string]any {
 // Bundle generates the plugin directory structure from Go source definitions.
 // The outputDir will contain .claude-plugin/, hooks/, bin/, skills/, agents/, rules/, and .mcp.json.
 func Bundle(outputDir, version string) error {
-	// 0. Clean up deprecated skill directories and rule files.
+	// 0. Clean up deprecated skill directories, rule files, and settings.json.
 	for _, dir := range deprecatedSkillDirs {
 		_ = os.RemoveAll(filepath.Join(outputDir, "skills", dir))
 	}
 	for _, file := range deprecatedRuleFiles {
 		_ = os.Remove(filepath.Join(outputDir, "rules", file))
 	}
+	_ = os.Remove(filepath.Join(outputDir, "settings.json")) // empty, no longer needed
 
 	// 1. Create directory structure.
 	dirs := []string{
@@ -195,21 +196,12 @@ func Bundle(outputDir, version string) error {
 		}
 	}
 
-	// 9. Write settings.json — plugin settings.
-	// Agent models are defined in agents/*.md frontmatter; settings.json is the
-	// user-override layer. Ship empty so defaults come from agent definitions.
-	settingsJSON := map[string]any{}
-	if err := writeJSON(filepath.Join(outputDir, "settings.json"), settingsJSON); err != nil {
-		return fmt.Errorf("write settings.json: %w", err)
-	}
-
 	hookCount := len(alfredHookEntries(runCmd))
 
 	fmt.Printf("✓ Plugin bundle generated at %s\n", outputDir)
 	fmt.Printf("  - plugin.json (v%s)\n", version)
 	fmt.Printf("  - hooks.json (%d events)\n", hookCount)
 	fmt.Printf("  - .mcp.json\n")
-	fmt.Printf("  - settings.json (default permissions)\n")
 	fmt.Printf("  - bin/run.sh (bootstrapper)\n")
 	fmt.Printf("  - %d skills\n", len(loadSkills()))
 	fmt.Printf("  - %d rules\n", len(loadRules()))

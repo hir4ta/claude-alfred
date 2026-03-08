@@ -285,10 +285,16 @@ func autoAppendDecisions(sd *spec.SpecDir, decisions []string) {
 		lower := strings.ToLower(d)
 
 		// Check 1: substring match — if any existing line is contained in the
-		// new decision or vice versa, treat as duplicate.
+		// new decision or vice versa, treat as duplicate. Only match if the
+		// shorter side is at least 20 runes to avoid overly broad matching
+		// from short existing entries (e.g., "use postgres" blocking unrelated decisions).
 		isDup := false
 		for _, el := range existingLines {
-			if strings.Contains(lower, el) || strings.Contains(el, lower) {
+			shorter := len([]rune(el))
+			if shorter > len([]rune(lower)) {
+				shorter = len([]rune(lower))
+			}
+			if shorter >= 20 && (strings.Contains(lower, el) || strings.Contains(el, lower)) {
 				isDup = true
 				break
 			}
@@ -356,7 +362,9 @@ func buildActiveContextSession(sd *spec.SpecDir, taskSlug string, txCtx *transcr
 
 	// Build "Recent Decisions" from existing + newly extracted.
 	existingDecisions := extractListItems(existing, "## Recent Decisions")
-	allDecisions := append(existingDecisions, decisions...)
+	allDecisions := make([]string, 0, len(existingDecisions)+len(decisions))
+	allDecisions = append(allDecisions, existingDecisions...)
+	allDecisions = append(allDecisions, decisions...)
 	if len(allDecisions) > 3 {
 		allDecisions = allDecisions[len(allDecisions)-3:]
 	}

@@ -1942,16 +1942,17 @@ func TestAutoAppendDecisions(t *testing.T) {
 	t.Parallel()
 	sd := createTempSpec(t, "auto-dec")
 
-	// Write initial decisions.md.
-	initial := "# Decisions: auto-dec\n\n## [2026-01-01] Initial\n- Use SQLite\n"
+	// Write initial decisions.md with a long-enough entry (≥20 runes)
+	// so substring dedup can reliably match without false positives.
+	initial := "# Decisions: auto-dec\n\n## [2026-01-01] Initial\n- Use SQLite for persistent storage\n"
 	if err := sd.WriteFile("decisions.md", initial); err != nil {
 		t.Fatalf("write decisions: %v", err)
 	}
 
 	// Auto-append new decisions (one duplicate, one new).
 	autoAppendDecisions(sd, []string{
-		"Use SQLite for the knowledge base",                    // partial overlap → should be skipped
-		"Chose FTS5 over pure vector for deterministic ranking", // new → should be added
+		"Use SQLite for persistent storage in the knowledge base", // substring overlap → should be skipped
+		"Chose FTS5 over pure vector for deterministic ranking",   // new → should be added
 	})
 
 	content, err := sd.ReadFile("decisions.md")
@@ -1965,8 +1966,8 @@ func TestAutoAppendDecisions(t *testing.T) {
 	if !strings.Contains(content, "Auto-extracted from conversation") {
 		t.Error("should have auto-extracted header")
 	}
-	// The duplicate "Use SQLite" should not be double-added.
-	count := strings.Count(strings.ToLower(content), "use sqlite")
+	// The duplicate "Use SQLite for persistent storage" should not be double-added.
+	count := strings.Count(strings.ToLower(content), "use sqlite for persistent storage")
 	if count > 1 {
 		t.Errorf("duplicate decision should be skipped, found %d occurrences", count)
 	}
