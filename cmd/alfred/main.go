@@ -47,6 +47,10 @@ func run() error {
 		return runUpdate()
 	case "status":
 		return runStatus()
+	case "export":
+		return runExport()
+	case "memory":
+		return runMemory()
 	case "settings":
 		return runSettings()
 	case "crawl-seed":
@@ -188,6 +192,8 @@ Usage:
 Commands:
   init           Initialize knowledge base (seed docs + generate embeddings)
   status         Show system status (DB, API keys, active tasks)
+  export         Export memories to JSON (--all includes specs)
+  memory         Manage memories (prune, stats)
   settings       Configure API keys and preferences
   update         Update alfred to the latest version
   version        Show version

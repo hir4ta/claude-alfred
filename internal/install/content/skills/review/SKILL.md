@@ -9,6 +9,7 @@ user-invocable: true
 argument-hint: "[focus area]"
 allowed-tools: Read, Glob, Grep, Agent, Bash(git diff:*, git log:*, git show:*, git status:*), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: fork
+model: sonnet
 ---
 
 # /alfred:review — Multi-Agent Code Review

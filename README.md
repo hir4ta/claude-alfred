@@ -72,7 +72,7 @@ alfred update
 Updates both the binary (via Homebrew or direct download) and the plugin bundle automatically.
 Restart Claude Code after updating.
 
-## Skills (6)
+## Skills (7)
 
 Invoke with `/alfred:<skill>` in Claude Code.
 
@@ -84,6 +84,7 @@ Invoke with `/alfred:<skill>` in Claude Code.
 | `/alfred:refine <theme>` | Convergent thinking — fix the issue, narrow options, score, and decide |
 | `/alfred:plan <task-slug>` | Alfred Protocol — multi-agent spec generation (Architect + Devil's Advocate + Researcher deliberate on design) |
 | `/alfred:review [focus]` | Multi-agent code review — 3 sub-reviewers (security, logic, design) in parallel |
+| `/alfred:help [feature]` | Quick reference for all capabilities — skills, agents, MCP tools, CLI commands |
 
 ## Agents (2)
 
@@ -112,15 +113,18 @@ Run automatically during Claude Code lifecycle. No user action needed.
 | SessionStart | Auto-ingest CLAUDE.md + spec context injection (adaptive recovery) + past memory hints + auto-crawl check |
 | PreCompact | Extract context from transcript + auto-detect decisions + track modified files + auto-update Next Steps completion → save session.md → persist decisions as memory → emit compaction instructions → async embedding |
 | PreToolUse | Reminder to use alfred tools when accessing .claude/ config files (Edit/Write/MultiEdit) |
-| UserPromptSubmit | Keyword-gated FTS knowledge injection + memory search — auto-surfaces best practices and past experience |
-| Stop | Persist session summary as permanent memory for future recall |
+| UserPromptSubmit | Keyword-gated FTS knowledge injection + memory search — auto-surfaces best practices and past experience (suppressed by `ALFRED_QUIET=1`) |
+| SessionEnd | Persist session summary as permanent memory for future recall (skips on `reason=clear`) |
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `init` | Initialize knowledge base (interactive API key setup + TUI progress) |
-| `status` | Show system status — DB stats, API key, active tasks, paths |
+| `status [--verbose]` | Show system status — DB stats, API key, active tasks, paths |
+| `export [--all]` | Export memories to JSON (`--all` includes specs) |
+| `memory prune [--confirm]` | Remove old memories (dry-run by default, `--max-age DAYS` supported) |
+| `memory stats` | Show memory statistics by project |
 | `settings` | Configure API keys and preferences (interactive TUI) |
 | `update` | Update to latest version (Homebrew / download / go install) |
 | `version` | Show version |
@@ -143,7 +147,7 @@ Run automatically during Claude Code lifecycle. No user action needed.
 │  │               + async embedding                │
 │  ├ PreToolUse  → .claude/ access reminder         │
 │  ├ UserPromptSubmit → FTS injection + memory      │
-│  └ Stop        → session summary → memory         │
+│  └ SessionEnd  → session summary → memory         │
 │                                                  │
 │  MCP Tools (on demand)                            │
 │  ├ knowledge / config-review                      │
@@ -279,6 +283,8 @@ cat ~/.claude-alfred/debug.log  # View logs
 | `ALFRED_HIGH_CONFIDENCE_THRESHOLD` | `0.65` | Score threshold for injecting 2 results |
 | `ALFRED_SINGLE_KEYWORD_DAMPEN` | `0.80` | Dampening factor for single-keyword matches |
 | `ALFRED_CRAWL_INTERVAL_DAYS` | `7` | Auto-crawl interval in days |
+| `ALFRED_QUIET` | `0` | Set to `1` to suppress knowledge injection |
+| `ALFRED_MEMORY_MAX_AGE_DAYS` | `180` | Default cutoff age for `alfred memory prune` |
 
 ## License
 

@@ -174,20 +174,23 @@ func injectSpecContext(ctx context.Context, projectPath, source string, st *stor
 		var buf strings.Builder
 		buf.WriteString(fmt.Sprintf("\n--- Alfred Protocol: Active Task '%s' ---\n%s\n", taskSlug, session))
 
-		// Proactive: extract Next Steps and pre-fetch relevant knowledge.
-		if hints := proactiveHintsForNextSteps(ctx, session, st); hints != "" {
-			buf.WriteString(hints)
-		}
+		// Proactive hints: skip in quiet mode (spec context above is structural, always injected).
+		if os.Getenv("ALFRED_QUIET") != "1" {
+			// Proactive: extract Next Steps and pre-fetch relevant knowledge.
+			if hints := proactiveHintsForNextSteps(ctx, session, st); hints != "" {
+				buf.WriteString(hints)
+			}
 
-		// Proactive: search past memories relevant to the current task.
-		if memHints := proactiveMemoryHints(ctx, taskSlug, session, st); memHints != "" {
-			buf.WriteString(memHints)
-		}
+			// Proactive: search past memories relevant to the current task.
+			if memHints := proactiveMemoryHints(ctx, taskSlug, session, st); memHints != "" {
+				buf.WriteString(memHints)
+			}
 
-		// Proactive: search memories from other projects for cross-project patterns.
-		currentProject := projectBaseName(projectPath)
-		if crossHints := proactiveCrossProjectHints(ctx, currentProject, taskSlug, session, st); crossHints != "" {
-			buf.WriteString(crossHints)
+			// Proactive: search memories from other projects for cross-project patterns.
+			currentProject := projectBaseName(projectPath)
+			if crossHints := proactiveCrossProjectHints(ctx, currentProject, taskSlug, session, st); crossHints != "" {
+				buf.WriteString(crossHints)
+			}
 		}
 
 		buf.WriteString("--- End Alfred Protocol ---\n")
@@ -680,6 +683,12 @@ func runCrawlAsync() error {
 // summary to the docs table with source_type="memory".
 func handleSessionEnd(ctx context.Context, ev *hookEvent) {
 	if ev.ProjectPath == "" {
+		return
+	}
+
+	// Skip memory persistence when user intentionally clears the session.
+	if ev.Reason == "clear" {
+		debugf("SessionEnd: reason=clear, skipping memory persistence")
 		return
 	}
 

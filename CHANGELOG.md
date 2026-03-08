@@ -7,6 +7,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.60.1] - 2026-03-08
+
+### Added
+- `/alfred:help` skill: quick reference for all capabilities (skills, agents, MCP tools, CLI commands)
+- `alfred export [--all]` command: export memories (and optionally specs) as JSON
+- `alfred memory prune [--confirm]` command: remove old memories with dry-run preview
+- `alfred memory stats` command: memory statistics by project
+- `alfred status --verbose`: environment overrides and memory-by-project breakdown
+- `ALFRED_QUIET=1` environment variable: suppress knowledge injection in UserPromptSubmit and proactive hints
+- `ALFRED_MEMORY_MAX_AGE_DAYS` environment variable: configurable cutoff for memory pruning (default 180)
+- Onboarding guidance after `alfred init` completion
+
+### Changed
+- Hook lifecycle: Stop → SessionEnd with `reason` field support (backward-compatible, both events handled)
+- SessionEnd skips memory persistence when `reason=clear`
+- `DestructiveHint` annotation: `true` → `false` on spec tool (safety via 2-phase delete confirm)
+- MCP tool descriptions: added response format documentation to all 4 tools
+- code-reviewer agent: added `permissionMode: plan`
+- brainstorm/review/setup skills: added `model: sonnet`
+- setup skill: added `context: fork` for isolated execution
+
+### Fixed
+- `rows.Err()` checks added to all `rows.Next()` loops in export.go, memory.go, status.go
+- `crawled[:10]` panic guard for short date strings in memory prune display
+- `defer specRows.Close()` inside loop → explicit Close in export.go
+- Scan errors now logged via debugf instead of silently discarded
+- `QueryRowContext` error check added in memory stats
+- Double DB connection eliminated in status verbose section (gatherStatus refactor)
+
 ## [0.60.0] - 2026-03-08
 
 ### Added
@@ -321,7 +350,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.60.0...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.60.1...HEAD
+[0.60.1]: https://github.com/hir4ta/claude-alfred/compare/v0.60.0...v0.60.1
 [0.60.0]: https://github.com/hir4ta/claude-alfred/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/hir4ta/claude-alfred/compare/v0.58.2...v0.59.0
 [0.58.1]: https://github.com/hir4ta/claude-alfred/compare/v0.58.0...v0.58.1

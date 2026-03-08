@@ -69,6 +69,7 @@ type hookEvent struct {
 	ToolName           string         `json:"tool_name"`
 	ToolInput          map[string]any `json:"tool_input"`
 	Prompt             string         `json:"prompt"`
+	Reason             string         `json:"reason"`              // SessionEnd: clear/logout/prompt_input_exit/other
 	StopHookActive     bool           `json:"stop_hook_active"`
 }
 
@@ -130,7 +131,7 @@ func runHook(event string) error {
 		timeout = 1500 * time.Millisecond // hooks.json: 2s
 	case "UserPromptSubmit":
 		timeout = 2500 * time.Millisecond // hooks.json: 3s
-	case "Stop":
+	case "Stop", "SessionEnd":
 		timeout = 2500 * time.Millisecond // hooks.json: 3s
 	default:
 		timeout = 5 * time.Second
@@ -149,7 +150,7 @@ func runHook(event string) error {
 		handlePreToolUse(&ev)
 	case "UserPromptSubmit":
 		handleUserPromptSubmit(ctx, &ev)
-	case "Stop":
+	case "Stop", "SessionEnd":
 		handleSessionEnd(ctx, &ev)
 	}
 

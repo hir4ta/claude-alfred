@@ -11,6 +11,7 @@ disable-model-invocation: true
 argument-hint: "<theme or rough prompt>"
 allowed-tools: Read, Glob, Grep, AskUserQuestion, Agent, WebSearch, WebFetch, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: fork
+model: sonnet
 ---
 
 # /alfred:brainstorm — Multi-Agent Divergent Thinking

@@ -68,13 +68,14 @@ func alfredHookEntries(binPath string) map[string]any {
 				},
 			},
 		},
-		// Stop: session summary persistence as permanent memory.
-		"Stop": []any{
+		// SessionEnd: session summary persistence as permanent memory.
+		// Go handler also accepts "Stop" for backward compatibility.
+		"SessionEnd": []any{
 			map[string]any{
 				"hooks": []any{
 					map[string]any{
 						"type":          "command",
-						"command":       binPath + " hook Stop",
+						"command":       binPath + " hook SessionEnd",
 						"statusMessage": "alfred: saving session memory...",
 						"timeout":       3,
 					},

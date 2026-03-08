@@ -67,7 +67,9 @@ func New(st *store.Store, emb *embedder.Embedder, ver string) *server.MCPServer 
 Use for: hooks, skills, rules, agents, plugins, MCP servers, CLAUDE.md, memory, permissions, settings, compaction, CLI features.
 Do NOT use for: general programming questions, project-specific code, non-Claude-Code topics.
 
-Example queries: "SessionStart hook best practices", "skill frontmatter options", "MCP tool annotations", "CLAUDE.md size guidelines".`),
+Example queries: "SessionStart hook best practices", "skill frontmatter options", "MCP tool annotations", "CLAUDE.md size guidelines".
+
+Response: {"query", "results": [{"section_path", "content", "url", "source_type", "freshness_days"}], "docs_count", "search_method", "warning?"}`),
 				mcp.WithTitleAnnotation("Knowledge Search"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithIdempotentHintAnnotation(true),
@@ -84,7 +86,9 @@ Example queries: "SessionStart hook best practices", "skill frontmatter options"
 				mcp.WithDescription(`Deep audit of .claude/ configuration against best practices. Reads file contents, checks skill sizes and structure, validates rules, and cross-references findings with the knowledge base. Returns structured suggestions with severity levels and documentation references.
 
 Checks: CLAUDE.md quality, skills (size/frontmatter), rules (path scoping), hooks (performance/patterns), MCP server config, and settings.json.
-Requires project_path to locate .claude/ directory. If omitted, uses current working directory.`),
+Requires project_path to locate .claude/ directory. If omitted, uses current working directory.
+
+Response: {"categories": [{"name", "score", "item_count", "suggestions": [{"type", "severity", "message", "reference?", "affected?"}]}], "overall_score", "kb_enrichments?"}`),
 				mcp.WithTitleAnnotation("Config Review"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithIdempotentHintAnnotation(true),
@@ -107,10 +111,16 @@ Actions:
 
 task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).
 
-Note: "status" is read-only. Only "init", "update", "switch", and "delete" modify state.`),
+Note: "status" is read-only. Only "init", "update", "switch", and "delete" modify state.
+
+Response (status): {"task_slug", "active", "spec_dir", "requirements", "design", "decisions", "session"}
+Response (init): {"task_slug", "spec_dir", "files", "db_synced", "db_embedded"}
+Response (update): {"task_slug", "file", "mode", "db_synced"}
+Response (delete preview): {"task_slug", "files", "total_size", "db_docs"}
+Response (delete confirm): {"task_slug", "deleted_files", "deleted_db_docs"}`),
 				mcp.WithTitleAnnotation("Spec Management"),
 				mcp.WithReadOnlyHintAnnotation(false),
-				mcp.WithDestructiveHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete"), mcp.Required()),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root")),
@@ -135,7 +145,10 @@ Actions:
 Memories persist permanently and are searchable across projects. Use for:
 - "Have I worked on something like this before?"
 - "What decisions did I make about authentication?"
-- "Remember this approach for future reference"`),
+- "Remember this approach for future reference"
+
+Response (search): {"query", "results": [{"section_path", "content", "url"}], "count", "search_method"}
+Response (save): {"status", "id", "url", "section_path"}`),
 				mcp.WithTitleAnnotation("Memory Recall"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),

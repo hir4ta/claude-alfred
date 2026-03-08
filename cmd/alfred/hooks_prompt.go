@@ -219,6 +219,12 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 //    Single-keyword matches dampened (×0.7) to require content coverage
 // 4. Inject 1 result by default; 2 only if top score >= 0.65
 func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
+	// Quiet mode: suppress knowledge injection (spec recovery & session persistence still run).
+	if os.Getenv("ALFRED_QUIET") == "1" {
+		debugf("UserPromptSubmit: quiet mode, skipping")
+		return
+	}
+
 	if shouldRemindPrompt(ev.Prompt) {
 		debugf("UserPromptSubmit: reminding about alfred for prompt")
 		emitAdditionalContext("UserPromptSubmit", configReminder)

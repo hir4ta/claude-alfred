@@ -306,6 +306,11 @@ func (m setupModel) View() tea.View {
 			b.WriteString(fmt.Sprintf("  %d docs, %d embeddings\n\n",
 				total, m.result.Embedded))
 		}
+		b.WriteString("  " + dimStyle.Render("What's next:") + "\n")
+		b.WriteString("  " + dimStyle.Render("  Ask about Claude Code  → alfred injects relevant docs automatically") + "\n")
+		b.WriteString("  " + dimStyle.Render("  /alfred:setup          → project-wide configuration wizard") + "\n")
+		b.WriteString("  " + dimStyle.Render("  /alfred:plan <task>    → start a spec-driven development task") + "\n")
+		b.WriteString("  " + dimStyle.Render("  alfred status          → check system state anytime") + "\n\n")
 	} else if m.phase == phaseError {
 		b.WriteString(fmt.Sprintf("  %s %v\n\n",
 			errStyle.Render("✗ Error:"), m.err))

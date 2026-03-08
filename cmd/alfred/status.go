@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +15,12 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/spec"
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
+
+// memoryByProject holds per-project memory counts for verbose display.
+type memoryByProject struct {
+	project string
+	count   int
+}
 
 // statusInfo gathers all system state for the status display.
 type statusInfo struct {
@@ -32,9 +39,10 @@ type statusInfo struct {
 	activeTask string
 	specDir    string
 	lastCrawl  string
+	memByProject []memoryByProject // verbose only
 }
 
-func gatherStatus() statusInfo {
+func gatherStatus(verbose bool) statusInfo {
 	info := statusInfo{
 		version: resolvedVersion(),
 		commit:  resolvedCommit(),
@@ -98,11 +106,31 @@ func gatherStatus() statusInfo {
 		info.specDir = sd.Dir()
 	}
 
+	// Verbose: memory breakdown by project (reuse existing DB connection).
+	if verbose {
+		rows, err := st.DB().QueryContext(ctx,
+			`SELECT SUBSTR(section_path, 1, INSTR(section_path, ' > ')-1) AS project, COUNT(*) AS cnt
+			 FROM docs WHERE source_type = 'memory'
+			 GROUP BY project ORDER BY cnt DESC LIMIT 10`)
+		if err == nil {
+			for rows.Next() {
+				var proj string
+				var cnt int
+				if rows.Scan(&proj, &cnt) == nil && proj != "" {
+					info.memByProject = append(info.memByProject, memoryByProject{proj, cnt})
+				}
+			}
+			_ = rows.Err() // best effort for display
+			rows.Close()
+		}
+	}
+
 	return info
 }
 
 func runStatus() error {
-	info := gatherStatus()
+	verbose := slices.Contains(os.Args[1:], "--verbose")
+	info := gatherStatus(verbose)
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7571F9"))
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#626262")).Width(20)
@@ -185,6 +213,43 @@ func runStatus() error {
 	configDir := filepath.Join(home, ".claude-alfred")
 	configDisplay := strings.Replace(configDir, home, "~", 1)
 	b.WriteString("  " + labelStyle.Render("Config dir") + mutedStyle.Render(configDisplay) + "\n")
+
+	// Verbose: environment overrides and operational details.
+	if verbose && info.dbExists {
+		b.WriteString("\n")
+		b.WriteString("  " + headerStyle.Render("Environment") + "\n")
+		b.WriteString("  " + mutedStyle.Render(strings.Repeat("─", 42)) + "\n\n")
+
+		envVars := []struct {
+			name, fallback string
+		}{
+			{"ALFRED_QUIET", "0"},
+			{"ALFRED_RELEVANCE_THRESHOLD", "0.40"},
+			{"ALFRED_HIGH_CONFIDENCE_THRESHOLD", "0.65"},
+			{"ALFRED_SINGLE_KEYWORD_DAMPEN", "0.80"},
+			{"ALFRED_CRAWL_INTERVAL_DAYS", "7"},
+			{"ALFRED_DEBUG", ""},
+		}
+		for _, ev := range envVars {
+			val := os.Getenv(ev.name)
+			if val == "" {
+				if ev.fallback != "" {
+					b.WriteString("  " + labelStyle.Render("  "+ev.name) + mutedStyle.Render(ev.fallback+" (default)") + "\n")
+				}
+			} else {
+				b.WriteString("  " + labelStyle.Render("  "+ev.name) + valStyle.Render(val) + "\n")
+			}
+		}
+
+		// Memory breakdown by project (data gathered in gatherStatus).
+		if len(info.memByProject) > 0 {
+			b.WriteString("\n  " + headerStyle.Render("Memories by project") + "\n")
+			b.WriteString("  " + mutedStyle.Render(strings.Repeat("─", 42)) + "\n\n")
+			for _, mp := range info.memByProject {
+				b.WriteString("  " + labelStyle.Render("  "+mp.project) + valStyle.Render(fmt.Sprintf("%d", mp.count)) + "\n")
+			}
+		}
+	}
 
 	b.WriteString("\n")
 	fmt.Print(b.String())
