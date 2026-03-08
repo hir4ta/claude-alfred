@@ -128,7 +128,7 @@ func runServe() error {
 		fmt.Fprintln(os.Stderr, "Warning: no seed docs found. Run 'alfred init' to initialize.")
 	}
 
-	s := mcpserver.New(st, emb)
+	s := mcpserver.New(st, emb, resolvedVersion())
 	return server.ServeStdio(s)
 }
 
@@ -178,7 +178,7 @@ func resolvedDate() string {
 }
 
 func printUsage() {
-	fmt.Println(`alfred - Your proactive assistant for Claude Code
+	fmt.Println(`alfred - Your silent butler for Claude Code
 
 Usage:
   alfred [command]

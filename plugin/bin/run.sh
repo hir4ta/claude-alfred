@@ -3,7 +3,7 @@
 set -e
 
 REPO="hir4ta/claude-alfred"
-VERSION="0.57.0"
+VERSION="0.58.0"
 CACHE_DIR="${HOME}/.alfred/bin"
 CACHED_BIN="${CACHE_DIR}/alfred"
 
@@ -48,8 +48,12 @@ else
 fi
 
 # Verify checksum (required for binary integrity).
-if ! command -v shasum >/dev/null 2>&1; then
-  echo "alfred: shasum not found — cannot verify binary integrity" >&2
+if command -v shasum >/dev/null 2>&1; then
+  SHA_CMD="shasum -a 256"
+elif command -v sha256sum >/dev/null 2>&1; then
+  SHA_CMD="sha256sum"
+else
+  echo "alfred: shasum or sha256sum not found — cannot verify binary integrity" >&2
   exit 1
 fi
 EXPECTED=$(grep "alfred_${OS}_${ARCH}.tar.gz" "$DL_DIR/checksums.txt" | awk '{print $1}')
@@ -57,7 +61,7 @@ if [ -z "$EXPECTED" ]; then
   echo "alfred: no checksum found for alfred_${OS}_${ARCH}.tar.gz" >&2
   exit 1
 fi
-ACTUAL=$(shasum -a 256 "$DL_DIR/alfred.tar.gz" | awk '{print $1}')
+ACTUAL=$($SHA_CMD "$DL_DIR/alfred.tar.gz" | awk '{print $1}')
 if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "alfred: checksum mismatch (expected ${EXPECTED}, got ${ACTUAL})" >&2
   exit 1

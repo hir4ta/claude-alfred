@@ -1,6 +1,6 @@
 # alfred
 
-Your proactive assistant for Claude Code.
+Your silent butler for Claude Code.
 
 Works silently in the background — surfacing relevant knowledge, catching scope violations, and preserving session context across compactions — so you can focus on building.
 
@@ -8,13 +8,13 @@ Works silently in the background — surfacing relevant knowledge, catching scop
 
 ## What alfred does
 
-**Proactive Knowledge Injection** — Automatically surfaces relevant best practices from an extensive document knowledge base when you're working on Claude Code configuration, architecture decisions, or any topic covered by the docs.
+**Knowledge Injection** — Automatically surfaces relevant best practices from an extensive document knowledge base when you're working on Claude Code configuration, architecture decisions, or any topic covered by the docs.
 
 **Alfred Protocol** — Structured spec management resilient to Compact and session loss. Saves requirements, design, decisions, and session state to `.alfred/specs/`, with automatic context preservation and recovery.
 
-**3-Layer Code Review** — Checks your changes against active specs (scope violations, decision contradictions), semantic knowledge search, and best practices from documentation.
+**Multi-Agent Code Review** — 3 specialized sub-reviewers (security, logic, design) run in parallel, then findings are aggregated and deduplicated. Each reviewer has explicit checklists for LLM blind spots. Cross-checks against active specs and knowledge base.
 
-**Persistent Memory** — Remembers past sessions, decisions, and notes across projects. Automatically saves session summaries and design decisions as permanent memory. Search past experience with the `recall` tool or let alfred proactively surface relevant memories.
+**Persistent Memory** — Remembers past sessions, decisions, and notes across projects. Automatically saves session summaries and design decisions as permanent memory. Search past experience with the `recall` tool — alfred automatically surfaces relevant memories at session start.
 
 **Compact Resilience** — PreCompact hook auto-extracts decisions, tracks modified files, saves session state in activeContext format, and auto-updates Next Steps completion status. SessionStart hook restores full context after compaction.
 
@@ -78,17 +78,17 @@ Invoke with `/alfred:<skill>` in Claude Code.
 |-------|-------------|
 | `/alfred:configure <type> [name]` | Create or polish a single config file (skill, rule, hook, agent, MCP, CLAUDE.md, memory) with independent review |
 | `/alfred:setup` | Project-wide setup wizard — multi-file scan + configuration, or Claude Code feature explainer |
-| `/alfred:brainstorm <theme>` | Divergent thinking — expand perspectives, options, hypotheses, and questions |
+| `/alfred:brainstorm <theme>` | Multi-agent divergent thinking — 3 specialists (Visionary, Pragmatist, Critic) generate ideas in parallel, then debate |
 | `/alfred:refine <theme>` | Convergent thinking — fix the issue, narrow options, score, and decide |
-| `/alfred:plan <task-slug>` | Alfred Protocol — interactively generate a spec for compact-resilient development |
-| `/alfred:review [focus]` | 3-layer knowledge-powered code review (spec + knowledge + best practices) |
+| `/alfred:plan <task-slug>` | Alfred Protocol — multi-agent spec generation (Architect + Devil's Advocate + Researcher deliberate on design) |
+| `/alfred:review [focus]` | Multi-agent code review — 3 sub-reviewers (security, logic, design) in parallel |
 
 ## Agents (2)
 
 | Agent | Description |
 |-------|-------------|
-| `alfred` | Claude Code configuration and best practices support |
-| `code-reviewer` | Read-only code reviewer — cross-checks against spec and knowledge base |
+| `alfred` | Silent butler — Claude Code configuration and best practices support |
+| `code-reviewer` | Multi-agent review orchestrator — spawns 3 sub-reviewers (security, logic, design) in parallel |
 
 ## MCP Tools (4)
 
@@ -109,7 +109,7 @@ Run automatically during Claude Code lifecycle. No user action needed.
 |-------|--------|
 | SessionStart | Auto-ingest CLAUDE.md + spec context injection (adaptive recovery) + past memory hints |
 | PreCompact | Extract context from transcript + auto-detect decisions + track modified files + auto-update Next Steps completion → save session.md → persist decisions as memory → emit compaction instructions → async embedding |
-| PreToolUse | Reminder to use alfred tools when accessing .claude/ config files |
+| PreToolUse | Reminder to use alfred tools when accessing .claude/ config files (Edit/Write/MultiEdit) |
 | UserPromptSubmit | Keyword-gated FTS knowledge injection + memory search — auto-surfaces best practices and past experience |
 | Stop | Persist session summary as permanent memory for future recall |
 

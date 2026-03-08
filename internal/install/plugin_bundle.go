@@ -41,7 +41,7 @@ func alfredHookEntries(binPath string) map[string]any {
 		},
 		"PreToolUse": []any{
 			map[string]any{
-				"matcher": "Edit|Write",
+				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{
 					map[string]any{
 						"type":    "command",
@@ -111,7 +111,7 @@ func Bundle(outputDir, version string) error {
 	pluginJSON := map[string]any{
 		"name":        "alfred",
 		"version":     version,
-		"description": "Your proactive assistant for Claude Code — surfacing knowledge, catching scope violations, and preserving session context across compactions.",
+		"description": "Your silent butler for Claude Code — surfacing knowledge, catching scope violations, and preserving session context across compactions.",
 		"author":      map[string]string{"name": "hir4ta", "url": "https://github.com/hir4ta"},
 		"homepage":    "https://github.com/hir4ta/claude-alfred",
 		"repository":  "https://github.com/hir4ta/claude-alfred",
@@ -263,8 +263,12 @@ else
 fi
 
 # Verify checksum (required for binary integrity).
-if ! command -v shasum >/dev/null 2>&1; then
-  echo "alfred: shasum not found — cannot verify binary integrity" >&2
+if command -v shasum >/dev/null 2>&1; then
+  SHA_CMD="shasum -a 256"
+elif command -v sha256sum >/dev/null 2>&1; then
+  SHA_CMD="sha256sum"
+else
+  echo "alfred: shasum or sha256sum not found — cannot verify binary integrity" >&2
   exit 1
 fi
 EXPECTED=$(grep "alfred_${OS}_${ARCH}.tar.gz" "$DL_DIR/checksums.txt" | awk '{print $1}')
@@ -272,7 +276,7 @@ if [ -z "$EXPECTED" ]; then
   echo "alfred: no checksum found for alfred_${OS}_${ARCH}.tar.gz" >&2
   exit 1
 fi
-ACTUAL=$(shasum -a 256 "$DL_DIR/alfred.tar.gz" | awk '{print $1}')
+ACTUAL=$($SHA_CMD "$DL_DIR/alfred.tar.gz" | awk '{print $1}')
 if [ "$ACTUAL" != "$EXPECTED" ]; then
   echo "alfred: checksum mismatch (expected ${EXPECTED}, got ${ACTUAL})" >&2
   exit 1

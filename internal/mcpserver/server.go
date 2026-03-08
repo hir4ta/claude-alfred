@@ -14,7 +14,7 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
-const serverInstructions = `alfred is your proactive assistant for Claude Code.
+const serverInstructions = `alfred is your silent butler for Claude Code.
 
 He works silently in the background, and provides powerful tools when needed:
 
@@ -49,10 +49,11 @@ func defaultClaudeHome() string {
 }
 
 // New creates a new MCP server with all tools registered.
-func New(st *store.Store, emb *embedder.Embedder) *server.MCPServer {
+// ver is the application version (from build-time ldflags or runtime detection).
+func New(st *store.Store, emb *embedder.Embedder, ver string) *server.MCPServer {
 	s := server.NewMCPServer(
 		"alfred",
-		"1.0.0",
+		ver,
 		server.WithToolCapabilities(true),
 		server.WithInstructions(serverInstructions),
 		server.WithLogging(),

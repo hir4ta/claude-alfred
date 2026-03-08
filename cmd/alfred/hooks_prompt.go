@@ -346,7 +346,7 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 	}
 
 	emitAdditionalContext("UserPromptSubmit", buf.String())
-	notifyUser("ナレッジ%d件を注入しました (score: %.2f)", len(candidates), candidates[0].score)
+	notifyUser("injected %d knowledge snippet(s) (score: %.2f)", len(candidates), candidates[0].score)
 	debugf("UserPromptSubmit: injected %d knowledge snippets (top score: %.2f, keywords: %v), %d memory hints", len(candidates), candidates[0].score, matched, len(memSnippets))
 }
 

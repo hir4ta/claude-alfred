@@ -61,8 +61,8 @@ func TestBundle(t *testing.T) {
 		// Verify PreToolUse has correct matcher.
 		if preToolUse, ok := hooks["PreToolUse"].([]any); ok && len(preToolUse) > 0 {
 			if entry, ok := preToolUse[0].(map[string]any); ok {
-				if matcher, _ := entry["matcher"].(string); matcher != "Edit|Write" {
-					t.Errorf("PreToolUse matcher = %q, want %q", matcher, "Edit|Write")
+				if matcher, _ := entry["matcher"].(string); matcher != "Edit|Write|MultiEdit" {
+					t.Errorf("PreToolUse matcher = %q, want %q", matcher, "Edit|Write|MultiEdit")
 				}
 			}
 		}

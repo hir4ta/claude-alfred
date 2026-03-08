@@ -76,7 +76,7 @@ type hookEvent struct {
 // accesses configuration files or the user's prompt mentions them.
 const configReminder = `This task involves Claude Code configuration. alfred's MCP tools have specialized, up-to-date knowledge:
 - knowledge: Best practices for .claude/ files, CLAUDE.md, hooks, skills, rules, agents, MCP
-- review: Project-wide .claude/ configuration audit
+- config-review: Project-wide .claude/ configuration audit
 Call these BEFORE reading or modifying configuration files directly.`
 
 // notifyUser outputs a brief message to stderr so the user can see what
@@ -107,6 +107,8 @@ func runHook(event string) error {
 	debugf("hook event=%s", event)
 	var ev hookEvent
 	if err := json.NewDecoder(os.Stdin).Decode(&ev); err != nil {
+		// Fail-open: decode errors must not block Claude Code.
+		// Hook protocol requires clean exit; errors are logged for debugging.
 		debugf("hook decode error: %v", err)
 		return nil
 	}

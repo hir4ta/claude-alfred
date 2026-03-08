@@ -1,6 +1,6 @@
 # alfred MCP Tools
 
-alfred's knowledge base contains 1,400+ Claude Code docs and best practices with hybrid vector + FTS search.
+alfred's knowledge base contains extensive curated Claude Code docs and best practices with hybrid vector + FTS search.
 
 ## knowledge — Search docs and best practices
 

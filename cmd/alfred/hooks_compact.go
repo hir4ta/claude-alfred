@@ -87,7 +87,7 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 	// Async embedding generation for session.md.
 	asyncEmbedSession(sd)
 
-	notifyUser("タスク '%s' のセッションを保存しました", taskSlug)
+	notifyUser("saved session for task '%s'", taskSlug)
 
 	ctxSize := 0
 	if txCtx != nil {
@@ -588,6 +588,7 @@ func persistDecisionMemory(projectPath, taskSlug string, decisions []string) {
 	url := fmt.Sprintf("memory://user/%s/%s/%s", project, taskSlug, date)
 
 	saved := 0
+	var changedIDs []int64
 	for i, d := range decisions {
 		sectionPath := fmt.Sprintf("%s > %s > decision > %s#%d", project, taskSlug, truncateDecision(d, 60), i)
 		id, changed, err := st.UpsertDoc(&store.DocRow{
@@ -603,12 +604,18 @@ func persistDecisionMemory(projectPath, taskSlug string, decisions []string) {
 		}
 		if changed {
 			saved++
-			asyncEmbedDoc(id)
+			changedIDs = append(changedIDs, id)
 		}
 	}
+	// asyncEmbedDoc spawns detached background processes (non-blocking cmd.Start).
+	// Each runs independently after this hook exits, so they don't consume our
+	// 10s PreCompact timeout budget.
+	for _, id := range changedIDs {
+		asyncEmbedDoc(id)
+	}
 	if saved > 0 {
-		notifyUser("意思決定%d件を記憶しました (%s/%s)", saved, project, taskSlug)
-		debugf("persistDecisionMemory: saved %d decisions for %s/%s", saved, project, taskSlug)
+		notifyUser("persisted %d decision(s) to memory (%s/%s)", saved, project, taskSlug)
+		debugf("persistDecisionMemory: saved %d decisions for %s/%s (embed: %d)", saved, project, taskSlug, len(changedIDs))
 	}
 }
 

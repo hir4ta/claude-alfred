@@ -157,7 +157,7 @@ func injectSpecContext(projectPath, source string, st *store.Store) {
 
 		buf.WriteString("--- End Alfred Protocol ---\n")
 		emitAdditionalContext("SessionStart", buf.String())
-		notifyUser("タスク '%s' を復元しました (compact #%d)", taskSlug, compactCount)
+		notifyUser("recovered task '%s' (compact #%d)", taskSlug, compactCount)
 		debugf("SessionStart(compact#%d): injected spec context for %s", compactCount, taskSlug)
 	} else {
 		// Normal startup/resume: inject session.md + proactive knowledge for Next Steps.
@@ -180,7 +180,7 @@ func injectSpecContext(projectPath, source string, st *store.Store) {
 
 		buf.WriteString("--- End Alfred Protocol ---\n")
 		emitAdditionalContext("SessionStart", buf.String())
-		notifyUser("タスク '%s' のコンテキストを注入しました", taskSlug)
+		notifyUser("injected context for task '%s'", taskSlug)
 		debugf("SessionStart(%s): injected session context for %s", source, taskSlug)
 	}
 }
@@ -258,7 +258,7 @@ func proactiveMemoryHints(taskSlug, session string, st *store.Store) string {
 		snippet := safeSnippet(d.Content, 200)
 		fmt.Fprintf(&buf, "- [%s] %s\n", d.SectionPath, snippet)
 	}
-	notifyUser("過去の関連経験を%d件見つけました", len(docs))
+	notifyUser("found %d related past experience(s)", len(docs))
 	debugf("SessionStart: proactive memory injection for %s, docs=%d", taskSlug, len(docs))
 	return buf.String()
 }
@@ -469,7 +469,7 @@ func persistSessionSummary(ctx context.Context, projectPath, taskSlug, session s
 		return
 	}
 	if changed {
-		notifyUser("セッション要約を記憶しました (%s/%s)", project, taskSlug)
+		notifyUser("saved session summary to memory (%s/%s)", project, taskSlug)
 		asyncEmbedDoc(id)
 		debugf("persistSessionSummary: saved session summary for %s/%s", project, taskSlug)
 	}
@@ -486,7 +486,7 @@ func buildSessionSummary(session string) string {
 
 	workingOn := cleanSectionContent(extractSection(cleaned, "## Currently Working On"))
 	if workingOn != "" {
-		buf.WriteString("作業内容: " + truncateStr(workingOn, 200) + "\n")
+		buf.WriteString("Working on: " + truncateStr(workingOn, 200) + "\n")
 	}
 
 	decisions := cleanSectionContent(extractSection(cleaned, "## Recent Decisions"))
@@ -494,12 +494,12 @@ func buildSessionSummary(session string) string {
 		decisions = cleanSectionContent(extractSection(cleaned, "## Recent Decisions (last 3)"))
 	}
 	if decisions != "" {
-		buf.WriteString("意思決定: " + truncateStr(decisions, 200) + "\n")
+		buf.WriteString("Decisions: " + truncateStr(decisions, 200) + "\n")
 	}
 
 	nextSteps := cleanSectionContent(extractSection(cleaned, "## Next Steps"))
 	if nextSteps != "" {
-		buf.WriteString("次のステップ: " + truncateStr(nextSteps, 200) + "\n")
+		buf.WriteString("Next steps: " + truncateStr(nextSteps, 200) + "\n")
 	}
 
 	modifiedFiles := cleanSectionContent(extractSection(cleaned, "## Modified Files"))
@@ -507,7 +507,7 @@ func buildSessionSummary(session string) string {
 		modifiedFiles = cleanSectionContent(extractSection(cleaned, "## Modified Files (this session)"))
 	}
 	if modifiedFiles != "" {
-		buf.WriteString("変更ファイル: " + truncateStr(modifiedFiles, 200) + "\n")
+		buf.WriteString("Modified files: " + truncateStr(modifiedFiles, 200) + "\n")
 	}
 
 	return buf.String()

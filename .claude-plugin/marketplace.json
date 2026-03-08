@@ -4,14 +4,14 @@
     "name": "hir4ta"
   },
   "metadata": {
-    "description": "Your proactive assistant for Claude Code"
+    "description": "Your silent butler for Claude Code"
   },
   "plugins": [
     {
       "name": "alfred",
       "source": "./plugin",
-      "description": "Proactive assistant — best practice skills, session intelligence, independent review",
-      "version": "0.57.0"
+      "description": "Silent butler — best practice skills, session intelligence, independent review",
+      "version": "0.58.0"
     }
   ]
 }
