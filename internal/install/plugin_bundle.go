@@ -64,6 +64,18 @@ func alfredHookEntries(binPath string) map[string]any {
 				},
 			},
 		},
+		// Stop: session summary persistence as permanent memory.
+		"Stop": []any{
+			map[string]any{
+				"hooks": []any{
+					map[string]any{
+						"type":    "command",
+						"command": binPath + " hook Stop",
+						"timeout": 3,
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -113,7 +125,7 @@ func Bundle(outputDir, version string) error {
 
 	// 3. Write hooks.json — commands invoke the guard/setup wrapper.
 	hooksJSON := map[string]any{
-		"description": "Proactive hooks — auto-import, config access reminder, knowledge injection, spec session persistence",
+		"description": "Proactive hooks — auto-import, config access reminder, knowledge injection, spec session persistence, memory persistence",
 		"hooks":       alfredHookEntries(runCmd),
 	}
 	if err := writeJSON(filepath.Join(outputDir, "hooks", "hooks.json"), hooksJSON); err != nil {

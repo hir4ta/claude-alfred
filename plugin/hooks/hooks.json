@@ -35,22 +35,22 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
+    "Stop": [
       {
         "hooks": [
           {
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook UserPromptSubmit",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook Stop",
             "timeout": 3,
             "type": "command"
           }
         ]
       }
     ],
-    "Stop": [
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook Stop",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook UserPromptSubmit",
             "timeout": 3,
             "type": "command"
           }
