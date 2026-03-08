@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -50,7 +51,7 @@ const maxVectorCandidates = 10000
 
 // VectorSearch performs a generic vector search on a given source table.
 // Returns (sourceID, score) pairs sorted by descending similarity.
-func (s *Store) VectorSearch(queryVec []float32, source string, limit int) ([]VectorMatch, error) {
+func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source string, limit int) ([]VectorMatch, error) {
 	if queryVec == nil {
 		return nil, nil
 	}
@@ -58,7 +59,7 @@ func (s *Store) VectorSearch(queryVec []float32, source string, limit int) ([]Ve
 		limit = 10
 	}
 
-	rows, err := s.db.Query(`SELECT source_id, vector FROM embeddings WHERE source = ? LIMIT ?`, source, maxVectorCandidates)
+	rows, err := s.db.QueryContext(ctx, `SELECT source_id, vector FROM embeddings WHERE source = ? LIMIT ?`, source, maxVectorCandidates)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +155,7 @@ type HybridMatch struct {
 // Both search methods run independently and results are merged by RRF score.
 // The overRetrieve parameter controls how many candidates each method retrieves
 // before fusion (typically 3-4x the desired final limit).
-func (s *Store) HybridSearch(queryVec []float32, ftsQuery string, sourceType string, limit int, overRetrieve int) ([]HybridMatch, error) {
+func (s *Store) HybridSearch(ctx context.Context, queryVec []float32, ftsQuery string, sourceType string, limit int, overRetrieve int) ([]HybridMatch, error) {
 	if limit <= 0 {
 		limit = 5
 	}
@@ -164,17 +165,23 @@ func (s *Store) HybridSearch(queryVec []float32, ftsQuery string, sourceType str
 
 	scores := make(map[int64]float64)
 
-	// Vector search.
-	matches, err := s.VectorSearch(queryVec, "docs", overRetrieve)
-	if err == nil {
-		for rank, m := range matches {
-			scores[m.SourceID] += 1.0 / float64(rrfK+rank+1)
+	// Vector search — search each source type's embeddings.
+	vecSources := parseSourceTypes(sourceType)
+	if len(vecSources) == 0 {
+		vecSources = []string{"docs"}
+	}
+	for _, vs := range vecSources {
+		matches, err := s.VectorSearch(ctx, queryVec, vs, overRetrieve)
+		if err == nil {
+			for rank, m := range matches {
+				scores[m.SourceID] += 1.0 / float64(rrfK+rank+1)
+			}
 		}
 	}
 
 	// FTS5 search.
 	if ftsQuery != "" {
-		ftsResults, err := s.SearchDocsFTS(ftsQuery, sourceType, overRetrieve)
+		ftsResults, err := s.SearchDocsFTS(ctx, ftsQuery, sourceType, overRetrieve)
 		if err == nil {
 			for rank, d := range ftsResults {
 				scores[d.ID] += 1.0 / float64(rrfK+rank+1)

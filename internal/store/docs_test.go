@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 )
@@ -28,7 +29,8 @@ func TestUpsertDoc(t *testing.T) {
 		TTLDays:     7,
 	}
 
-	id, changed, err := st.UpsertDoc(doc)
+	ctx := context.Background()
+	id, changed, err := st.UpsertDoc(ctx, doc)
 	if err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
@@ -40,7 +42,7 @@ func TestUpsertDoc(t *testing.T) {
 	}
 
 	// Upsert same content → unchanged.
-	id2, changed2, err := st.UpsertDoc(doc)
+	id2, changed2, err := st.UpsertDoc(ctx, doc)
 	if err != nil {
 		t.Fatalf("UpsertDoc (same): %v", err)
 	}
@@ -53,7 +55,7 @@ func TestUpsertDoc(t *testing.T) {
 
 	// Upsert with different content → changed.
 	doc.Content = "Updated content for hooks."
-	id3, changed3, err := st.UpsertDoc(doc)
+	id3, changed3, err := st.UpsertDoc(ctx, doc)
 	if err != nil {
 		t.Fatalf("UpsertDoc (updated): %v", err)
 	}
@@ -75,13 +77,13 @@ func TestSearchDocsFTS(t *testing.T) {
 		{URL: "https://docs.example.com/changelog", SectionPath: "v1.0.30", Content: "Added new hook events for subagent lifecycle.", SourceType: "changelog"},
 	}
 	for i := range docs {
-		if _, _, err := st.UpsertDoc(&docs[i]); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &docs[i]); err != nil {
 			t.Fatalf("UpsertDoc[%d]: %v", i, err)
 		}
 	}
 
 	// Search for "hooks".
-	results, err := st.SearchDocsFTS("hooks", "", 10)
+	results, err := st.SearchDocsFTS(context.Background(),"hooks", "", 10)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS: %v", err)
 	}
@@ -90,7 +92,7 @@ func TestSearchDocsFTS(t *testing.T) {
 	}
 
 	// Filter by source_type.
-	changelogResults, err := st.SearchDocsFTS("hook", "changelog", 10)
+	changelogResults, err := st.SearchDocsFTS(context.Background(),"hook", "changelog", 10)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS (changelog): %v", err)
 	}
@@ -113,14 +115,14 @@ func TestGetDocsByIDs(t *testing.T) {
 			Content:     "Content for section " + string(rune('A'+i)),
 			SourceType:  "docs",
 		}
-		id, _, err := st.UpsertDoc(doc)
+		id, _, err := st.UpsertDoc(context.Background(), doc)
 		if err != nil {
 			t.Fatalf("UpsertDoc[%d]: %v", i, err)
 		}
 		ids = append(ids, id)
 	}
 
-	docs, err := st.GetDocsByIDs(ids[:2])
+	docs, err := st.GetDocsByIDs(context.Background(),ids[:2])
 	if err != nil {
 		t.Fatalf("GetDocsByIDs: %v", err)
 	}
@@ -129,7 +131,7 @@ func TestGetDocsByIDs(t *testing.T) {
 	}
 
 	// Empty slice.
-	empty, err := st.GetDocsByIDs(nil)
+	empty, err := st.GetDocsByIDs(context.Background(),nil)
 	if err != nil {
 		t.Fatalf("GetDocsByIDs(nil): %v", err)
 	}
@@ -185,13 +187,13 @@ func TestSearchDocsFTS_PhraseFirst(t *testing.T) {
 		{URL: "https://a.com/3", SectionPath: "C", Content: "Tools for debugging and inspection", SourceType: "docs"},
 	}
 	for i := range docs {
-		if _, _, err := st.UpsertDoc(&docs[i]); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &docs[i]); err != nil {
 			t.Fatalf("UpsertDoc[%d]: %v", i, err)
 		}
 	}
 
 	// Multi-word query should work (phrase or OR fallback).
-	results, err := st.SearchDocsFTS("hooks lifecycle", "", 10)
+	results, err := st.SearchDocsFTS(context.Background(),"hooks lifecycle", "", 10)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS: %v", err)
 	}
@@ -207,12 +209,12 @@ func TestSearchDocsFTS_SpecialChars(t *testing.T) {
 	doc := &DocRow{
 		URL: "https://a.com/1", SectionPath: "Test", Content: "Configure MCP servers properly", SourceType: "docs",
 	}
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
 	// Should not crash on special characters.
-	results, err := st.SearchDocsFTS(`configure(MCP)`, "", 10)
+	results, err := st.SearchDocsFTS(context.Background(),`configure(MCP)`, "", 10)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS with special chars: %v", err)
 	}
@@ -231,13 +233,13 @@ func TestSearchDocsFTS_TokenSeparators(t *testing.T) {
 		Content:     "Subagents use YAML frontmatter for configuration. The tools and disallowedTools fields control capabilities.",
 		SourceType:  "docs",
 	}
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
 	// This query previously returned 0 results because .claude/agents and
 	// allowed_tools injected bare AND terms into the OR fallback chain.
-	results, err := st.SearchDocsFTS(
+	results, err := st.SearchDocsFTS(context.Background(),
 		"custom agent .claude/agents markdown frontmatter allowed_tools model haiku sonnet opus", "", 5)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS: %v", err)
@@ -280,7 +282,7 @@ func TestSeedDocsCount(t *testing.T) {
 		t.Parallel()
 		st := openTestStore(t)
 		for i := range 3 {
-			_, _, err := st.UpsertDoc(&DocRow{
+			_, _, err := st.UpsertDoc(context.Background(), &DocRow{
 				URL:         "https://docs.example.com/page",
 				SectionPath: "Section " + string(rune('A'+i)),
 				Content:     "Seed content " + string(rune('A'+i)),
@@ -302,21 +304,21 @@ func TestSeedDocsCount(t *testing.T) {
 	t.Run("project docs excluded", func(t *testing.T) {
 		t.Parallel()
 		st := openTestStore(t)
-		_, _, err := st.UpsertDoc(&DocRow{
+		_, _, err := st.UpsertDoc(context.Background(), &DocRow{
 			URL: "https://docs.example.com/a", SectionPath: "A",
 			Content: "seed content", SourceType: "seed",
 		})
 		if err != nil {
 			t.Fatalf("UpsertDoc(seed): %v", err)
 		}
-		_, _, err = st.UpsertDoc(&DocRow{
+		_, _, err = st.UpsertDoc(context.Background(), &DocRow{
 			URL: "project://claude.md", SectionPath: "B",
 			Content: "project content", SourceType: "project",
 		})
 		if err != nil {
 			t.Fatalf("UpsertDoc(project): %v", err)
 		}
-		_, _, err = st.UpsertDoc(&DocRow{
+		_, _, err = st.UpsertDoc(context.Background(), &DocRow{
 			URL: "https://custom.dev/docs", SectionPath: "C",
 			Content: "custom content", SourceType: "custom",
 		})
@@ -347,7 +349,7 @@ func TestDeleteDocsByURLPrefix(t *testing.T) {
 		{URL: "https://other.com/page", SectionPath: "Other", Content: "other content", SourceType: "docs"},
 	} {
 		d2 := d
-		if _, _, err := st.UpsertDoc(&d2); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &d2); err != nil {
 			t.Fatalf("UpsertDoc: %v", err)
 		}
 	}
@@ -362,7 +364,7 @@ func TestDeleteDocsByURLPrefix(t *testing.T) {
 	}
 
 	// Verify docs.example.com docs are gone.
-	docs, err := st.SearchDocsFTS("hooks skills", "", 10)
+	docs, err := st.SearchDocsFTS(context.Background(),"hooks skills", "", 10)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS: %v", err)
 	}
@@ -373,7 +375,7 @@ func TestDeleteDocsByURLPrefix(t *testing.T) {
 	}
 
 	// Verify other.com doc still exists.
-	docs, err = st.SearchDocsFTS("other content", "", 10)
+	docs, err = st.SearchDocsFTS(context.Background(),"other content", "", 10)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS: %v", err)
 	}

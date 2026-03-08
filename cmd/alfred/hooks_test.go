@@ -995,7 +995,7 @@ func TestInjectSpecContextCompact(t *testing.T) {
 
 	// First compact: should inject all 4 files.
 	output1 := captureStdout(t, func() {
-		injectSpecContext(dir, "compact", nil)
+		injectSpecContext(context.Background(), dir, "compact", nil)
 	})
 
 	if !strings.Contains(output1, "Requirements") {
@@ -1022,7 +1022,7 @@ func TestInjectSpecContextCompact(t *testing.T) {
 
 	// Second compact: should inject only session.md (lightweight).
 	output2 := captureStdout(t, func() {
-		injectSpecContext(dir, "compact", nil)
+		injectSpecContext(context.Background(), dir, "compact", nil)
 	})
 
 	if !strings.Contains(output2, "Lightweight recovery") {
@@ -1058,7 +1058,7 @@ func TestInjectSpecContextNormal(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		injectSpecContext(dir, "startup", nil)
+		injectSpecContext(context.Background(), dir, "startup", nil)
 	})
 
 	if !strings.Contains(output, "Normal startup test") {
@@ -1348,7 +1348,7 @@ func TestHandleUserPromptSubmitFTSPath(t *testing.T) {
 		{URL: "https://docs.example.com/skills", SectionPath: "Skills", Content: "Skills are reusable prompt templates stored in .claude/skills/ directories with SKILL.md files.", SourceType: "docs"},
 		{URL: "https://docs.example.com/mcp", SectionPath: "MCP Servers", Content: "MCP servers provide tools to Claude Code. Configure in .mcp.json with command and args.", SourceType: "docs"},
 	} {
-		if _, _, err := st.UpsertDoc(&doc); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &doc); err != nil {
 			t.Fatalf("UpsertDoc: %v", err)
 		}
 	}
@@ -1407,7 +1407,7 @@ func TestHandleUserPromptSubmitFTSLowRelevance(t *testing.T) {
 		Content: "OAuth2 authentication flow for third-party integrations with token refresh.",
 		SourceType: "docs",
 	}
-	if _, _, err := st.UpsertDoc(&doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), &doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
@@ -1439,7 +1439,7 @@ func TestHandleUserPromptSubmitWordBoundary(t *testing.T) {
 		Content: "Configure hooks in .claude/hooks.json for lifecycle events.",
 		SourceType: "docs",
 	}
-	if _, _, err := st.UpsertDoc(&doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), &doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
@@ -1636,7 +1636,7 @@ func TestIngestProjectClaudeMD(t *testing.T) {
 	ingestProjectClaudeMD(context.Background(), st, dir)
 
 	// Verify docs were inserted.
-	docs, err := st.SearchDocsFTS("Commands", "project", 5)
+	docs, err := st.SearchDocsFTS(context.Background(),"Commands", "project", 5)
 	if err != nil {
 		t.Fatalf("SearchDocsFTS: %v", err)
 	}
@@ -1802,7 +1802,7 @@ func TestSessionStartJSONOutput(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		injectSpecContext(dir, "startup", nil)
+		injectSpecContext(context.Background(), dir, "startup", nil)
 	})
 
 	if output == "" {
@@ -2108,7 +2108,7 @@ func TestProactiveHintsForNextSteps(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := proactiveHintsForNextSteps(tt.session, nil)
+			got := proactiveHintsForNextSteps(context.Background(), tt.session, nil)
 			if tt.empty && got != "" {
 				t.Errorf("proactiveHintsForNextSteps() = %q, want empty", got)
 			}

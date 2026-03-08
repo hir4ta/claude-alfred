@@ -7,6 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.58.1] - 2026-03-08
+
+### Fixed
+- HybridSearch vector source hardcoded to "docs" — now derives from sourceType (memory search quality fix)
+- Hook handlers discarding caller's `context.Context` — propagate ctx through all helper functions
+- embedWarning overwrite in cascade failures — accumulate warnings in slice
+- Non-voyageError implicit retry fall-through — add explicit `continue` for network errors
+- Review skill implicit dependency on code-reviewer agent — specify path + add missing-file fallback
+
+### Changed
+- AppendFile comment: document hook serialization assumption (no concurrent lost updates)
+- entryFromRaw: avoid double JSON unmarshal in transcript parsing
+- Plugin metadata: rules `globs` → `paths`, add `category`, add hook `statusMessage`
+- Rerank retry: exponential backoff matching embed pattern (was single-attempt)
+- Context propagation: all DB-facing store methods now accept `context.Context`
+
 ## [0.58.0] - 2026-03-08
 
 ### Added
@@ -255,7 +271,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.58.0...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.58.1...HEAD
+[0.58.1]: https://github.com/hir4ta/claude-alfred/compare/v0.58.0...v0.58.1
 [0.58.0]: https://github.com/hir4ta/claude-alfred/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/hir4ta/claude-alfred/compare/v0.56.1...v0.57.0
 [0.56.1]: https://github.com/hir4ta/claude-alfred/compare/v0.55.0...v0.56.1

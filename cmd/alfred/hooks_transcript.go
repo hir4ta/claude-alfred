@@ -384,11 +384,8 @@ func extractTranscriptContextRich(transcriptPath string) *transcriptContext {
 			continue
 		}
 
-		var entry transcriptEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue // already validated via raw parse above
-		}
-
+		// Build transcriptEntry from the already-parsed raw map to avoid double unmarshal.
+		entry := entryFromRaw(raw)
 		text := extractTextContent(entry)
 
 		// Detect agent tool_use starts.

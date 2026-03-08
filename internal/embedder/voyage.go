@@ -174,6 +174,8 @@ func (c *voyageClient) embed(ctx context.Context, texts []string, inputType stri
 				return nil, err
 			}
 		}
+		// Non-Voyage errors (network, DNS, TLS): always retry.
+		continue
 	}
 	return nil, lastErr
 }
@@ -260,7 +262,9 @@ type RerankResult struct {
 	RelevanceScore float64 `json:"relevance_score"`
 }
 
-// rerank calls the Voyage rerank API.
+// rerank calls the Voyage rerank API with retry on transient errors.
+// Retries up to 3 times with exponential backoff on 429, 5xx, and transient 400 errors,
+// consistent with the embed method's retry strategy.
 func (c *voyageClient) rerank(ctx context.Context, query string, documents []string, topK int) ([]RerankResult, error) {
 	body := rerankRequest{
 		Query:     query,
@@ -273,6 +277,42 @@ func (c *voyageClient) rerank(ctx context.Context, query string, documents []str
 		return nil, fmt.Errorf("embedder: marshal rerank: %w", err)
 	}
 
+	var lastErr error
+	for attempt := range 3 {
+		if attempt > 0 {
+			delay := time.Duration(1<<attempt) * time.Second
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		results, err := c.doRerank(ctx, payload)
+		if err == nil {
+			return results, nil
+		}
+		lastErr = err
+
+		var ve *voyageError
+		if errors.As(err, &ve) {
+			switch {
+			case ve.status == 429, ve.status >= 500:
+				continue
+			case ve.status == 400 && isVoyageTransient(ve.detail):
+				continue
+			default:
+				return nil, err
+			}
+		}
+		// Non-Voyage errors (network, DNS, TLS): always retry.
+		continue
+	}
+	return nil, lastErr
+}
+
+// doRerank performs a single rerank API request.
+func (c *voyageClient) doRerank(ctx context.Context, payload []byte) ([]RerankResult, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", c.rerankURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("embedder: new rerank request: %w", err)

@@ -48,12 +48,12 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 
 		// Try embedding the query for hybrid search (requires VOYAGE_API_KEY).
 		var queryVec []float32
-		var embedWarning string
+		var warnings []string
 		if emb != nil {
 			var embedErr error
 			queryVec, embedErr = emb.EmbedForSearch(ctx, query)
 			if embedErr != nil {
-				embedWarning = fmt.Sprintf("vector embedding failed, using FTS-only: %v", embedErr)
+				warnings = append(warnings, fmt.Sprintf("vector embedding failed, using FTS-only: %v", embedErr))
 			}
 		}
 
@@ -71,9 +71,9 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 				overRetrieve = overRetrieveMin
 			}
 
-			hybridMatches, err := st.HybridSearch(queryVec, query, sourceType, overRetrieve, overRetrieve)
+			hybridMatches, err := st.HybridSearch(ctx, queryVec, query, sourceType, overRetrieve, overRetrieve)
 			if err != nil {
-				embedWarning = fmt.Sprintf("hybrid search degraded: %v", err)
+				warnings = append(warnings, fmt.Sprintf("hybrid search degraded: %v", err))
 			}
 
 			if len(hybridMatches) > 0 {
@@ -81,7 +81,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 				for i, m := range hybridMatches {
 					ids[i] = m.DocID
 				}
-				docs, err = st.GetDocsByIDs(ids)
+				docs, err = st.GetDocsByIDs(ctx, ids)
 				if err != nil {
 					return mcp.NewToolResultError(fmt.Sprintf("failed to retrieve docs: %v", err)), nil
 				}
@@ -107,8 +107,10 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 					for i, d := range docs {
 						contents[i] = d.SectionPath + "\n" + d.Content
 					}
-					reranked, err := emb.Rerank(ctx, query, contents, limit)
-					if err == nil && len(reranked) > 0 {
+					reranked, rerankErr := emb.Rerank(ctx, query, contents, limit)
+					if rerankErr != nil {
+						warnings = append(warnings, fmt.Sprintf("rerank failed, using RRF order: %v", rerankErr))
+					} else if len(reranked) > 0 {
 						reorderedDocs := make([]store.DocRow, 0, len(reranked))
 						for _, r := range reranked {
 							if r.Index >= 0 && r.Index < len(docs) {
@@ -129,7 +131,7 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 			// FTS5-only fallback (no embedder available or embed failed).
 			searchMethod = "fts5_only"
 			var ftsErr error
-			docs, ftsErr = st.SearchDocsFTS(query, sourceType, limit)
+			docs, ftsErr = st.SearchDocsFTS(ctx, query, sourceType, limit)
 			if ftsErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("FTS search failed: %v", ftsErr)), nil
 			}
@@ -177,8 +179,8 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 			result["staleness_warning"] = fmt.Sprintf(
 				"Results include docs from %d days ago. Run 'alfred init' to refresh.", maxAgeDays)
 		}
-		if embedWarning != "" {
-			result["warning"] = embedWarning
+		if len(warnings) > 0 {
+			result["warning"] = strings.Join(warnings, "; ")
 		}
 
 		return marshalResult(result)

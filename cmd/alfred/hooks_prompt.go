@@ -217,7 +217,7 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 // 3. Score with kagome tokenizer + keyword-aware relevance, threshold 0.40 (Gate 3)
 //    Single-keyword matches dampened (×0.7) to require content coverage
 // 4. Inject 1 result by default; 2 only if top score >= 0.65
-func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
+func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	if shouldRemindPrompt(ev.Prompt) {
 		debugf("UserPromptSubmit: reminding about alfred for prompt")
 		emitAdditionalContext("UserPromptSubmit", configReminder)
@@ -266,7 +266,7 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 	}
 	ftsQuery := strings.Join(ftsTerms, " OR ")
 	// Retrieve 8 candidates: enough diversity for scoring, but bounded to keep hook fast.
-	allDocs, ftsErr := st.SearchDocsFTS(ftsQuery, store.SourceDocs, 8)
+	allDocs, ftsErr := st.SearchDocsFTS(ctx, ftsQuery, store.SourceDocs, 8)
 	if ftsErr != nil {
 		debugf("UserPromptSubmit: FTS keyword search failed: %v", ftsErr)
 	}
@@ -274,7 +274,7 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 	// Supplemental: also search with prompt keywords (no expansion) for coverage.
 	keywords := extractSearchKeywords(prompt, 6)
 	if keywords != "" {
-		docs, err := st.SearchDocsFTS(keywords, store.SourceDocs, 3)
+		docs, err := st.SearchDocsFTS(ctx, keywords, store.SourceDocs, 3)
 		if err != nil {
 			debugf("UserPromptSubmit: FTS supplemental search failed: %v", err)
 		}
@@ -337,7 +337,7 @@ func handleUserPromptSubmit(_ context.Context, ev *hookEvent) {
 		fmt.Fprintf(&buf, "- [%s] %s\n", c.doc.SectionPath, snippet)
 	}
 	// Also search memories (no keyword gate — memory is small).
-	memSnippets := searchMemoryForPrompt(prompt, st)
+	memSnippets := searchMemoryForPrompt(ctx, prompt, st)
 	if len(memSnippets) > 0 {
 		buf.WriteString("\nRelated past experience:\n")
 		for _, m := range memSnippets {
@@ -371,13 +371,13 @@ func detectRememberIntent(prompt string) bool {
 
 // searchMemoryForPrompt searches memory docs for the user's prompt.
 // Returns formatted snippet lines (max 2) or nil if no relevant memories found.
-func searchMemoryForPrompt(prompt string, st *store.Store) []string {
+func searchMemoryForPrompt(ctx context.Context, prompt string, st *store.Store) []string {
 	keywords := extractSearchKeywords(prompt, 6)
 	if keywords == "" {
 		return nil
 	}
 
-	docs, err := st.SearchDocsFTS(keywords, store.SourceMemory, 2)
+	docs, err := st.SearchDocsFTS(ctx, keywords, store.SourceMemory, 2)
 	if err != nil || len(docs) == 0 {
 		return nil
 	}

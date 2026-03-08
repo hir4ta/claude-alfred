@@ -25,7 +25,7 @@ func SyncToDB(ctx context.Context, sd *SpecDir, st *store.Store, emb *embedder.E
 
 	result := &SyncResult{}
 	for _, sec := range sections {
-		id, changed, err := st.UpsertDoc(&store.DocRow{
+		id, changed, err := st.UpsertDoc(ctx, &store.DocRow{
 			URL:         sec.URL,
 			SectionPath: fmt.Sprintf("%s > %s", sd.TaskSlug, sec.File),
 			Content:     sec.Content,
@@ -63,7 +63,7 @@ func SyncSingleFile(ctx context.Context, sd *SpecDir, f SpecFile, st *store.Stor
 	}
 
 	url := fmt.Sprintf("spec://%s/%s/%s", filepath.Base(sd.ProjectPath), sd.TaskSlug, f)
-	id, changed, err := st.UpsertDoc(&store.DocRow{
+	id, changed, err := st.UpsertDoc(ctx, &store.DocRow{
 		URL:         url,
 		SectionPath: fmt.Sprintf("%s > %s", sd.TaskSlug, f),
 		Content:     content,

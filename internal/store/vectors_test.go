@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"math"
 	"testing"
 )
@@ -174,7 +175,7 @@ func TestVectorSearch(t *testing.T) {
 		{4, []float32{-1, 0, 0}},     // opposite of x
 	}
 	for _, e := range entries {
-		_, _, err := st.UpsertDoc(&DocRow{
+		_, _, err := st.UpsertDoc(context.Background(), &DocRow{
 			URL:         "https://example.com/doc",
 			SectionPath: "Section " + string(rune('A'+e.id)),
 			Content:     "content",
@@ -191,7 +192,7 @@ func TestVectorSearch(t *testing.T) {
 	// Query along x-axis. Should match entries 1 and 2 (above threshold 0.3),
 	// entry 3 is orthogonal (~0), entry 4 is opposite (~-1).
 	query := []float32{1, 0, 0}
-	results, err := st.VectorSearch(query, "docs", 10)
+	results, err := st.VectorSearch(context.Background(),query, "docs", 10)
 	if err != nil {
 		t.Fatalf("VectorSearch = _, %v", err)
 	}
@@ -218,7 +219,7 @@ func TestVectorSearch(t *testing.T) {
 	}
 
 	// Limit results.
-	limited, err := st.VectorSearch(query, "docs", 1)
+	limited, err := st.VectorSearch(context.Background(),query, "docs", 1)
 	if err != nil {
 		t.Fatalf("VectorSearch(limit=1) = _, %v", err)
 	}
@@ -227,7 +228,7 @@ func TestVectorSearch(t *testing.T) {
 	}
 
 	// Nil queryVec returns nil.
-	nilResult, err := st.VectorSearch(nil, "docs", 10)
+	nilResult, err := st.VectorSearch(context.Background(),nil, "docs", 10)
 	if err != nil {
 		t.Fatalf("VectorSearch(nil) = _, %v", err)
 	}
@@ -236,7 +237,7 @@ func TestVectorSearch(t *testing.T) {
 	}
 
 	// Non-existent source returns empty.
-	empty, err := st.VectorSearch(query, "nonexistent", 10)
+	empty, err := st.VectorSearch(context.Background(),query, "nonexistent", 10)
 	if err != nil {
 		t.Fatalf("VectorSearch(nonexistent) = _, %v", err)
 	}
@@ -262,7 +263,7 @@ func TestHybridSearch(t *testing.T) {
 	}
 
 	for i, d := range docs {
-		id, _, err := st.UpsertDoc(&DocRow{
+		id, _, err := st.UpsertDoc(context.Background(), &DocRow{
 			URL:         d.url,
 			SectionPath: d.section,
 			Content:     d.content,
@@ -278,7 +279,7 @@ func TestHybridSearch(t *testing.T) {
 
 	// Search with both vector and FTS signals. Query "hooks" with vector close to doc 1.
 	queryVec := []float32{0.9, 0.1, 0}
-	results, err := st.HybridSearch(queryVec, "hooks", "", 5, 20)
+	results, err := st.HybridSearch(context.Background(),queryVec, "hooks", "", 5, 20)
 	if err != nil {
 		t.Fatalf("HybridSearch = _, %v", err)
 	}
@@ -299,7 +300,7 @@ func TestHybridSearch(t *testing.T) {
 	}
 
 	// FTS-only search (nil vector).
-	ftsOnly, err := st.HybridSearch(nil, "hooks", "", 5, 0)
+	ftsOnly, err := st.HybridSearch(context.Background(),nil, "hooks", "", 5, 0)
 	if err != nil {
 		t.Fatalf("HybridSearch(fts-only) = _, %v", err)
 	}
@@ -308,7 +309,7 @@ func TestHybridSearch(t *testing.T) {
 	}
 
 	// Vector-only search (empty FTS query).
-	vecOnly, err := st.HybridSearch(queryVec, "", "", 5, 0)
+	vecOnly, err := st.HybridSearch(context.Background(),queryVec, "", "", 5, 0)
 	if err != nil {
 		t.Fatalf("HybridSearch(vec-only) = _, %v", err)
 	}
@@ -317,7 +318,7 @@ func TestHybridSearch(t *testing.T) {
 	}
 
 	// Both nil/empty returns nil.
-	empty, err := st.HybridSearch(nil, "", "", 5, 0)
+	empty, err := st.HybridSearch(context.Background(),nil, "", "", 5, 0)
 	if err != nil {
 		t.Fatalf("HybridSearch(empty) = _, %v", err)
 	}

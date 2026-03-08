@@ -33,7 +33,7 @@ func handleSessionStart(ctx context.Context, ev *hookEvent) {
 
 	// Inject spec context if active spec exists.
 	// After compact, inject richer context for full recovery.
-	injectSpecContext(ev.ProjectPath, ev.Source, st)
+	injectSpecContext(ctx, ev.ProjectPath, ev.Source, st)
 }
 
 type mdSection struct {
@@ -76,7 +76,7 @@ func splitMarkdownSections(md string) []mdSection {
 // ingestProjectClaudeMD reads CLAUDE.md from the project root and upserts
 // each markdown section into the docs table for knowledge search.
 // Silently skips if the file doesn't exist or is empty.
-func ingestProjectClaudeMD(_ context.Context, st *store.Store, projectPath string) {
+func ingestProjectClaudeMD(ctx context.Context, st *store.Store, projectPath string) {
 	claudeMD := filepath.Join(projectPath, "CLAUDE.md")
 	content, err := os.ReadFile(claudeMD)
 	if err != nil {
@@ -91,7 +91,7 @@ func ingestProjectClaudeMD(_ context.Context, st *store.Store, projectPath strin
 
 	url := "project://" + projectPath + "/CLAUDE.md"
 	for _, sec := range sections {
-		if _, _, err := st.UpsertDoc(&store.DocRow{
+		if _, _, err := st.UpsertDoc(ctx, &store.DocRow{
 			URL:         url,
 			SectionPath: sec.Path,
 			Content:     sec.Content,
@@ -107,7 +107,7 @@ func ingestProjectClaudeMD(_ context.Context, st *store.Store, projectPath strin
 // injectSpecContext outputs spec content to stdout when an active
 // spec exists. After compact, injects richer context
 // (all 4 files) for full recovery. On normal startup, injects only session.md.
-func injectSpecContext(projectPath, source string, st *store.Store) {
+func injectSpecContext(ctx context.Context, projectPath, source string, st *store.Store) {
 	taskSlug, err := spec.ReadActive(projectPath)
 	if err != nil {
 		debugf("injectSpecContext: no active spec for %s", projectPath)
@@ -169,12 +169,12 @@ func injectSpecContext(projectPath, source string, st *store.Store) {
 		buf.WriteString(fmt.Sprintf("\n--- Alfred Protocol: Active Task '%s' ---\n%s\n", taskSlug, session))
 
 		// Proactive: extract Next Steps and pre-fetch relevant knowledge.
-		if hints := proactiveHintsForNextSteps(session, st); hints != "" {
+		if hints := proactiveHintsForNextSteps(ctx, session, st); hints != "" {
 			buf.WriteString(hints)
 		}
 
 		// Proactive: search past memories relevant to the current task.
-		if memHints := proactiveMemoryHints(taskSlug, session, st); memHints != "" {
+		if memHints := proactiveMemoryHints(ctx, taskSlug, session, st); memHints != "" {
 			buf.WriteString(memHints)
 		}
 
@@ -188,7 +188,7 @@ func injectSpecContext(projectPath, source string, st *store.Store) {
 // proactiveHintsForNextSteps extracts the "## Next Steps" section from session.md,
 // detects Claude Code keywords in it, and pre-fetches relevant knowledge snippets.
 // This makes alfred genuinely proactive: surfacing information before the user asks.
-func proactiveHintsForNextSteps(session string, st *store.Store) string {
+func proactiveHintsForNextSteps(ctx context.Context, session string, st *store.Store) string {
 	// Extract Next Steps section.
 	nextSteps := extractSection(session, "## Next Steps")
 	if nextSteps == "" || len(strings.TrimSpace(nextSteps)) < 10 {
@@ -215,7 +215,7 @@ func proactiveHintsForNextSteps(session string, st *store.Store) string {
 		}
 	}
 	ftsQuery := strings.Join(ftsTerms, " OR ")
-	docs, _ := st.SearchDocsFTS(ftsQuery, store.SourceDocs, 3) // FTS failure is acceptable; no docs means no hints
+	docs, _ := st.SearchDocsFTS(ctx, ftsQuery, store.SourceDocs, 3) // FTS failure is acceptable; no docs means no hints
 	if len(docs) == 0 {
 		return ""
 	}
@@ -232,7 +232,7 @@ func proactiveHintsForNextSteps(session string, st *store.Store) string {
 
 // proactiveMemoryHints searches past memories relevant to the current task
 // and returns formatted hints for injection into the session context.
-func proactiveMemoryHints(taskSlug, session string, st *store.Store) string {
+func proactiveMemoryHints(ctx context.Context, taskSlug, session string, st *store.Store) string {
 	if st == nil {
 		return ""
 	}
@@ -247,7 +247,7 @@ func proactiveMemoryHints(taskSlug, session string, st *store.Store) string {
 		query = taskSlug + " " + truncateStr(workingOn, 100)
 	}
 
-	docs, err := st.SearchDocsFTS(query, store.SourceMemory, 3)
+	docs, err := st.SearchDocsFTS(ctx, query, store.SourceMemory, 3)
 	if err != nil || len(docs) == 0 {
 		return ""
 	}
@@ -364,7 +364,7 @@ func runEmbedDoc() error {
 		return fmt.Errorf("embedder: %w", err)
 	}
 
-	docs, err := st.GetDocsByIDs([]int64{docID})
+	docs, err := st.GetDocsByIDs(context.Background(), []int64{docID})
 	if err != nil || len(docs) == 0 {
 		return fmt.Errorf("doc not found: id=%d", docID)
 	}
@@ -457,7 +457,7 @@ func persistSessionSummary(ctx context.Context, projectPath, taskSlug, session s
 	sectionPath := fmt.Sprintf("%s > %s > session-summary > %s",
 		project, taskSlug, truncateStr(extractSummaryTitle(session), 60))
 
-	id, changed, err := st.UpsertDoc(&store.DocRow{
+	id, changed, err := st.UpsertDoc(ctx, &store.DocRow{
 		URL:         url,
 		SectionPath: sectionPath,
 		Content:     summary,

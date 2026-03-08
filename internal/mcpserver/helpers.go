@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -29,14 +30,14 @@ type Suggestion struct {
 // compact snippets. Designed for internal use by review/suggest — cheap
 // FTS5 queries with no Voyage API calls.
 // Returns nil when st is nil or query matches nothing.
-func queryKB(st *store.Store, query string, limit int) []KBSnippet {
+func queryKB(ctx context.Context, st *store.Store, query string, limit int) []KBSnippet {
 	if st == nil {
 		return nil
 	}
 	if limit <= 0 {
 		limit = 3
 	}
-	docs, err := st.SearchDocsFTS(query, store.SourceDocs, limit)
+	docs, err := st.SearchDocsFTS(ctx, query, store.SourceDocs, limit)
 	if err != nil || len(docs) == 0 {
 		return nil
 	}

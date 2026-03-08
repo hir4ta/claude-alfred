@@ -6,6 +6,7 @@
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook PreCompact",
+            "statusMessage": "alfred: saving session state...",
             "timeout": 10,
             "type": "command"
           }
@@ -17,6 +18,7 @@
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook PreToolUse",
+            "statusMessage": "alfred: checking config access...",
             "timeout": 2,
             "type": "command"
           }
@@ -29,6 +31,7 @@
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook SessionStart",
+            "statusMessage": "alfred: restoring session context...",
             "timeout": 5,
             "type": "command"
           }
@@ -40,6 +43,7 @@
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook Stop",
+            "statusMessage": "alfred: saving session memory...",
             "timeout": 3,
             "type": "command"
           }
@@ -51,6 +55,7 @@
         "hooks": [
           {
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook UserPromptSubmit",
+            "statusMessage": "alfred: searching knowledge...",
             "timeout": 3,
             "type": "command"
           }

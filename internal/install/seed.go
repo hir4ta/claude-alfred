@@ -107,7 +107,7 @@ func ApplySeedData(ctx context.Context, st *store.Store, emb *embedder.Embedder,
 				TTLDays:     365,
 			}
 
-			docID, changed, err := st.UpsertDoc(doc)
+			docID, changed, err := st.UpsertDoc(ctx, doc)
 			if err != nil {
 				return res, fmt.Errorf("seed: upsert %q: %w", sec.Path, err)
 			}

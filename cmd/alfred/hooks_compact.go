@@ -55,7 +55,7 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 
 	// Persist decisions as permanent memory (survives spec deletion).
 	if len(decisions) > 0 {
-		persistDecisionMemory(projectPath, taskSlug, decisions)
+		persistDecisionMemory(ctx, projectPath, taskSlug, decisions)
 	}
 
 	// Get modified files from git.
@@ -576,7 +576,7 @@ func isItemCompleted(itemText, assistantTextLower string) bool {
 // persistDecisionMemory saves extracted decisions as permanent memory docs
 // (source_type="memory"). These survive spec deletion and enable cross-session
 // search for past decisions.
-func persistDecisionMemory(projectPath, taskSlug string, decisions []string) {
+func persistDecisionMemory(ctx context.Context, projectPath, taskSlug string, decisions []string) {
 	st, err := store.OpenDefaultCached()
 	if err != nil {
 		debugf("persistDecisionMemory: DB open error: %v", err)
@@ -591,7 +591,7 @@ func persistDecisionMemory(projectPath, taskSlug string, decisions []string) {
 	var changedIDs []int64
 	for i, d := range decisions {
 		sectionPath := fmt.Sprintf("%s > %s > decision > %s#%d", project, taskSlug, truncateDecision(d, 60), i)
-		id, changed, err := st.UpsertDoc(&store.DocRow{
+		id, changed, err := st.UpsertDoc(ctx, &store.DocRow{
 			URL:         url,
 			SectionPath: sectionPath,
 			Content:     d,

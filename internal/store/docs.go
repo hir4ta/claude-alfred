@@ -48,7 +48,7 @@ func ContentHashOf(content string) string {
 
 // UpsertDoc inserts or updates a doc section. Returns the row ID and whether
 // the content was actually changed (false if hash matched existing row).
-func (s *Store) UpsertDoc(doc *DocRow) (id int64, changed bool, err error) {
+func (s *Store) UpsertDoc(ctx context.Context, doc *DocRow) (id int64, changed bool, err error) {
 	doc.ContentHash = ContentHashOf(doc.Content)
 	if doc.CrawledAt == "" {
 		doc.CrawledAt = time.Now().UTC().Format(time.RFC3339)
@@ -63,7 +63,7 @@ func (s *Store) UpsertDoc(doc *DocRow) (id int64, changed bool, err error) {
 	// Check if existing row has same hash (skip update if unchanged).
 	var existingID int64
 	var existingHash string
-	err = s.db.QueryRow(
+	err = s.db.QueryRowContext(ctx,
 		`SELECT id, content_hash FROM docs WHERE url = ? AND section_path = ?`,
 		doc.URL, doc.SectionPath,
 	).Scan(&existingID, &existingHash)
@@ -71,7 +71,7 @@ func (s *Store) UpsertDoc(doc *DocRow) (id int64, changed bool, err error) {
 		return existingID, false, nil
 	}
 
-	res, err := s.db.Exec(`
+	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO docs (url, section_path, content, content_hash, source_type, version, crawled_at, ttl_days)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(url, section_path) DO UPDATE SET
@@ -94,7 +94,7 @@ func (s *Store) UpsertDoc(doc *DocRow) (id int64, changed bool, err error) {
 	if id == 0 {
 		// Re-query to get the ID; Scan error means row exists but ID lookup
 		// failed — acceptable since the upsert itself succeeded.
-		_ = s.db.QueryRow(
+		_ = s.db.QueryRowContext(ctx,
 			`SELECT id FROM docs WHERE url = ? AND section_path = ?`,
 			doc.URL, doc.SectionPath,
 		).Scan(&id)
@@ -175,7 +175,7 @@ func (s *Store) DeleteExpiredDocs(ctx context.Context) (int64, error) {
 }
 
 // GetDocsByIDs retrieves multiple docs by their IDs.
-func (s *Store) GetDocsByIDs(ids []int64) ([]DocRow, error) {
+func (s *Store) GetDocsByIDs(ctx context.Context, ids []int64) ([]DocRow, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -192,7 +192,7 @@ func (s *Store) GetDocsByIDs(ids []int64) ([]DocRow, error) {
 	}
 	query += ")"
 
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: get docs by ids: %w", err)
 	}
@@ -268,7 +268,7 @@ func SanitizeFTS5Query(query string) string {
 // Multi-word queries use phrase-first matching with OR fallback.
 // Automatically translates Japanese terms and corrects typos when
 // the initial query returns no results.
-func (s *Store) SearchDocsFTS(rawQuery string, sourceType string, limit int) ([]DocRow, error) {
+func (s *Store) SearchDocsFTS(ctx context.Context, rawQuery string, sourceType string, limit int) ([]DocRow, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -280,7 +280,7 @@ func (s *Store) SearchDocsFTS(rawQuery string, sourceType string, limit int) ([]
 		return nil, nil
 	}
 
-	results, err := s.searchFTS(query, sourceType, limit)
+	results, err := s.searchFTS(ctx, query, sourceType, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -293,26 +293,26 @@ func (s *Store) SearchDocsFTS(rawQuery string, sourceType string, limit int) ([]
 	if corrected == query {
 		return nil, nil
 	}
-	return s.searchFTS(corrected, sourceType, limit)
+	return s.searchFTS(ctx, corrected, sourceType, limit)
 }
 
 // searchFTS executes phrase-first then OR-fallback FTS5 search.
-func (s *Store) searchFTS(query string, sourceType string, limit int) ([]DocRow, error) {
+func (s *Store) searchFTS(ctx context.Context, query string, sourceType string, limit int) ([]DocRow, error) {
 	words := strings.Fields(query)
 	if len(words) > 1 {
 		phraseQuery := `"` + strings.Join(words, " ") + `"`
-		results, err := s.matchDocsFTS(phraseQuery, sourceType, limit)
+		results, err := s.matchDocsFTS(ctx, phraseQuery, sourceType, limit)
 		if err == nil && len(results) > 0 {
 			return results, nil
 		}
 		query = strings.Join(words, " OR ")
 	}
-	return s.matchDocsFTS(query, sourceType, limit)
+	return s.matchDocsFTS(ctx, query, sourceType, limit)
 }
 
 // matchDocsFTS executes a FTS5 MATCH query against the docs_fts table.
 // sourceType supports: single value ("docs"), comma-separated ("docs,memory"), or empty (all types).
-func (s *Store) matchDocsFTS(query string, sourceType string, limit int) ([]DocRow, error) {
+func (s *Store) matchDocsFTS(ctx context.Context, query string, sourceType string, limit int) ([]DocRow, error) {
 	var sqlQuery string
 	var args []any
 
@@ -356,7 +356,7 @@ func (s *Store) matchDocsFTS(query string, sourceType string, limit int) ([]DocR
 		args = append(args, limit)
 	}
 
-	rows, err := s.db.Query(sqlQuery, args...)
+	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: search docs fts: %w", err)
 	}

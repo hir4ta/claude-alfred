@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"testing"
 )
 
@@ -78,7 +79,7 @@ func TestCorrectTypos(t *testing.T) {
 		{URL: "https://a.com/6", SectionPath: "Connect to MCP servers", Content: "mcp server content", SourceType: "docs"},
 	}
 	for i := range docs {
-		if _, _, err := st.UpsertDoc(&docs[i]); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &docs[i]); err != nil {
 			t.Fatalf("UpsertDoc[%d]: %v", i, err)
 		}
 	}
@@ -119,7 +120,7 @@ func TestSearchDocsFTS_Japanese(t *testing.T) {
 		{URL: "https://a.com/3", SectionPath: "Configure permissions", Content: "Permission rules control what Claude can do.", SourceType: "docs"},
 	}
 	for i := range docs {
-		if _, _, err := st.UpsertDoc(&docs[i]); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &docs[i]); err != nil {
 			t.Fatalf("UpsertDoc[%d]: %v", i, err)
 		}
 	}
@@ -135,7 +136,7 @@ func TestSearchDocsFTS_Japanese(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
 			t.Parallel()
-			results, err := st.SearchDocsFTS(tt.query, "", 5)
+			results, err := st.SearchDocsFTS(context.Background(),tt.query, "", 5)
 			if err != nil {
 				t.Fatalf("SearchDocsFTS(%q): %v", tt.query, err)
 			}
@@ -156,7 +157,7 @@ func TestSearchDocsFTS_TypoCorrection(t *testing.T) {
 		{URL: "https://a.com/3", SectionPath: "Permissions overview", Content: "Configure permissions.", SourceType: "docs"},
 	}
 	for i := range docs {
-		if _, _, err := st.UpsertDoc(&docs[i]); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &docs[i]); err != nil {
 			t.Fatalf("UpsertDoc[%d]: %v", i, err)
 		}
 	}
@@ -172,7 +173,7 @@ func TestSearchDocsFTS_TypoCorrection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
 			t.Parallel()
-			results, err := st.SearchDocsFTS(tt.query, "", 5)
+			results, err := st.SearchDocsFTS(context.Background(),tt.query, "", 5)
 			if err != nil {
 				t.Fatalf("SearchDocsFTS(%q): %v", tt.query, err)
 			}

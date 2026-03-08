@@ -41,7 +41,7 @@ func reviewHandler(claudeHome string, st *store.Store, _ *embedder.Embedder) ser
 		report["mcp_servers"] = reviewMCP(projectPath)
 
 		// Generate improvement suggestions with KB cross-reference.
-		suggestions := generateReviewSuggestions(report, st)
+		suggestions := generateReviewSuggestions(ctx, report, st)
 		report["suggestions"] = suggestions
 		report["suggestion_count"] = len(suggestions)
 
@@ -493,7 +493,7 @@ var kbQueries = map[string]string{
 	"hooks":     "hooks lifecycle events configuration automation",
 }
 
-func generateReviewSuggestions(report map[string]any, st *store.Store) []Suggestion {
+func generateReviewSuggestions(ctx context.Context, report map[string]any, st *store.Store) []Suggestion {
 	var suggestions []Suggestion
 
 	// CLAUDE.md checks.
@@ -597,13 +597,13 @@ func generateReviewSuggestions(report map[string]any, st *store.Store) []Suggest
 	}
 
 	// Enrich suggestions with KB best practices.
-	enrichWithKB(suggestions, st)
+	enrichWithKB(ctx, suggestions, st)
 
 	return suggestions
 }
 
 // enrichWithKB attaches best practice snippets from the knowledge base to suggestions.
-func enrichWithKB(suggestions []Suggestion, st *store.Store) {
+func enrichWithKB(ctx context.Context, suggestions []Suggestion, st *store.Store) {
 	if st == nil || len(suggestions) == 0 {
 		return
 	}
@@ -620,7 +620,7 @@ func enrichWithKB(suggestions []Suggestion, st *store.Store) {
 		if !ok {
 			continue
 		}
-		if snippets := queryKB(st, q, 1); len(snippets) > 0 {
+		if snippets := queryKB(ctx, st, q, 1); len(snippets) > 0 {
 			cache[cat] = &snippets[0]
 		}
 	}

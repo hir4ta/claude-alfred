@@ -217,15 +217,17 @@ func (s *SpecDir) WriteFile(f SpecFile, content string) error {
 	return os.Rename(tmp, path)
 }
 
-// AppendFile appends content to a spec file.
+// AppendFile appends content to a spec file via read-append-rename.
+// The rename prevents partial writes. Note: concurrent callers may cause
+// a lost update (last writer wins). This is acceptable because Claude Code
+// serializes hook invocations per event type.
 func (s *SpecDir) AppendFile(f SpecFile, content string) error {
-	f2, err := os.OpenFile(s.FilePath(f), os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
+	path := s.FilePath(f)
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	defer f2.Close()
-	_, err = f2.WriteString(content)
-	return err
+	return s.WriteFile(f, string(existing)+content)
 }
 
 // ReadActive reads the primary task slug from _active.md.

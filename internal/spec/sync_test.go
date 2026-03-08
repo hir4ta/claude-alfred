@@ -73,7 +73,7 @@ func TestSyncSingleFile(t *testing.T) {
 	}
 
 	// Verify searchable via FTS
-	docs, err := st.SearchDocsFTS("Session single-sync", "spec", 5)
+	docs, err := st.SearchDocsFTS(context.Background(),"Session single-sync", "spec", 5)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -24,7 +24,7 @@ func recallHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFu
 		case "search":
 			return recallSearch(ctx, st, emb, req)
 		case "save":
-			return recallSave(st, req)
+			return recallSave(ctx, st, req)
 		default:
 			return mcp.NewToolResultError(fmt.Sprintf("unknown action %q: use 'search' or 'save'", action)), nil
 		}
@@ -48,26 +48,33 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 
 	var docs []store.DocRow
 	searchMethod := "fts5_only"
+	var warnings []string
 
 	// Try hybrid search if embedder is available.
 	if emb != nil {
-		queryVec, err := emb.EmbedForSearch(ctx, query)
-		if err == nil && queryVec != nil {
+		queryVec, embedErr := emb.EmbedForSearch(ctx, query)
+		if embedErr != nil {
+			warnings = append(warnings, fmt.Sprintf("vector embedding failed, using FTS-only: %v", embedErr))
+		} else if queryVec != nil {
 			overRetrieve := limit * 4
 			if overRetrieve < 20 {
 				overRetrieve = 20
 			}
-			matches, err := st.HybridSearch(queryVec, query, store.SourceMemory, overRetrieve, overRetrieve)
-			if err == nil && len(matches) > 0 {
+			matches, hybridErr := st.HybridSearch(ctx, queryVec, query, store.SourceMemory, overRetrieve, overRetrieve)
+			if hybridErr != nil {
+				warnings = append(warnings, fmt.Sprintf("hybrid search degraded: %v", hybridErr))
+			} else if len(matches) > 0 {
 				ids := make([]int64, len(matches))
 				for i, m := range matches {
 					ids[i] = m.DocID
 				}
-				docs, err = st.GetDocsByIDs(ids)
-				if err == nil {
+				fetchedDocs, fetchErr := st.GetDocsByIDs(ctx, ids)
+				if fetchErr != nil {
+					warnings = append(warnings, fmt.Sprintf("doc fetch failed, using FTS-only: %v", fetchErr))
+				} else {
 					// Preserve RRF ordering.
-					docMap := make(map[int64]store.DocRow, len(docs))
-					for _, d := range docs {
+					docMap := make(map[int64]store.DocRow, len(fetchedDocs))
+					for _, d := range fetchedDocs {
 						docMap[d.ID] = d
 					}
 					ordered := make([]store.DocRow, 0, len(ids))
@@ -85,8 +92,10 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 						for i, d := range docs {
 							contents[i] = d.SectionPath + "\n" + d.Content
 						}
-						reranked, err := emb.Rerank(ctx, query, contents, limit)
-						if err == nil && len(reranked) > 0 {
+						reranked, rerankErr := emb.Rerank(ctx, query, contents, limit)
+						if rerankErr != nil {
+							warnings = append(warnings, fmt.Sprintf("rerank failed, using RRF order: %v", rerankErr))
+						} else if len(reranked) > 0 {
 							reorderedDocs := make([]store.DocRow, 0, len(reranked))
 							for _, r := range reranked {
 								if r.Index >= 0 && r.Index < len(docs) {
@@ -106,7 +115,7 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 	if len(docs) == 0 {
 		searchMethod = "fts5_only"
 		var err error
-		docs, err = st.SearchDocsFTS(query, store.SourceMemory, limit)
+		docs, err = st.SearchDocsFTS(ctx, query, store.SourceMemory, limit)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("memory search failed: %v", err)), nil
 		}
@@ -130,16 +139,20 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 		results = append(results, dm)
 	}
 
-	return marshalResult(map[string]any{
+	result := map[string]any{
 		"query":         query,
 		"results":       results,
 		"count":         len(results),
 		"search_method": searchMethod,
-	})
+	}
+	if len(warnings) > 0 {
+		result["warning"] = strings.Join(warnings, "; ")
+	}
+	return marshalResult(result)
 }
 
 // recallSave saves a new memory entry to the knowledge base.
-func recallSave(st *store.Store, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func recallSave(ctx context.Context, st *store.Store, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	content := req.GetString("content", "")
 	if content == "" {
 		return mcp.NewToolResultError("content parameter is required for save"), nil
@@ -154,7 +167,7 @@ func recallSave(st *store.Store, req mcp.CallToolRequest) (*mcp.CallToolResult, 
 	url := fmt.Sprintf("memory://user/%s/manual/%s", project, date)
 	sectionPath := fmt.Sprintf("%s > manual > %s", project, truncate(label, 60))
 
-	id, changed, err := st.UpsertDoc(&store.DocRow{
+	id, changed, err := st.UpsertDoc(ctx, &store.DocRow{
 		URL:         url,
 		SectionPath: sectionPath,
 		Content:     strings.TrimSpace(content),

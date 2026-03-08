@@ -92,7 +92,7 @@ func TestKnowledgeHandler_FTSSearch(t *testing.T) {
 			Content: "Skills are prompt templates that guide Claude.", SourceType: "docs"},
 	} {
 		doc.ContentHash = store.ContentHashOf(doc.Content)
-		if _, _, err := st.UpsertDoc(&doc); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), &doc); err != nil {
 			t.Fatalf("UpsertDoc: %v", err)
 		}
 	}
@@ -570,7 +570,7 @@ func TestReviewHandler_WithKBEnrichment(t *testing.T) {
 		SourceType:  "docs",
 	}
 	doc.ContentHash = store.ContentHashOf(doc.Content)
-	st.UpsertDoc(doc)
+	st.UpsertDoc(context.Background(), doc)
 
 	handler := reviewHandler(claudeHome, st, nil)
 
@@ -649,7 +649,7 @@ func TestReviewHandler_StructuredSuggestions(t *testing.T) {
 
 func TestQueryKB_NilStore(t *testing.T) {
 	t.Parallel()
-	result := queryKB(nil, "hooks", 3)
+	result := queryKB(context.Background(), nil, "hooks", 3)
 	if result != nil {
 		t.Errorf("expected nil for nil store, got %v", result)
 	}
@@ -666,9 +666,9 @@ func TestQueryKB_WithResults(t *testing.T) {
 		SourceType:  "docs",
 	}
 	doc.ContentHash = store.ContentHashOf(doc.Content)
-	st.UpsertDoc(doc)
+	st.UpsertDoc(context.Background(), doc)
 
-	snippets := queryKB(st, "hooks lifecycle", 3)
+	snippets := queryKB(context.Background(), st, "hooks lifecycle", 3)
 	if len(snippets) == 0 {
 		t.Fatal("expected at least one snippet")
 	}

@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestSeedFTS_AllPages(t *testing.T) {
 				CrawledAt:   sf.CrawledAt,
 				TTLDays:     365,
 			}
-			if _, _, err := st.UpsertDoc(doc); err != nil {
+			if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 				t.Fatalf("UpsertDoc %q: %v", sec.Path, err)
 			}
 			total++
@@ -57,7 +58,7 @@ func TestSeedFTS_AllPages(t *testing.T) {
 		if query == "" {
 			continue
 		}
-		results, err := st.SearchDocsFTS(query, "", 50)
+		results, err := st.SearchDocsFTS(context.Background(),query, "", 50)
 		if err != nil {
 			t.Errorf("FTS5 %q (url=%s): error=%v", query, src.URL, err)
 			continue
@@ -98,7 +99,7 @@ func TestSeedFTS_ProblematicQueries(t *testing.T) {
 				CrawledAt:   sf.CrawledAt,
 				TTLDays:     365,
 			}
-			if _, _, err := st.UpsertDoc(doc); err != nil {
+			if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 				t.Fatalf("UpsertDoc: %v", err)
 			}
 		}
@@ -124,7 +125,7 @@ func TestSeedFTS_ProblematicQueries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		// No t.Parallel() — subtests share the store.
-		results, err := st.SearchDocsFTS(tt.query, "", 10)
+		results, err := st.SearchDocsFTS(context.Background(),tt.query, "", 10)
 		if err != nil {
 			t.Errorf("[%s] SearchDocsFTS(%q): unexpected error: %v", tt.name, tt.query, err)
 			continue
@@ -197,7 +198,7 @@ func TestSeedFTS_SanitizeThenMatchNeverErrors(t *testing.T) {
 		SourceType:  "docs",
 		TTLDays:     365,
 	}
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
@@ -221,7 +222,7 @@ func TestSeedFTS_SanitizeThenMatchNeverErrors(t *testing.T) {
 	}
 	for _, q := range queries {
 		// No t.Parallel() — subtests share the store.
-		_, err := st.SearchDocsFTS(q, "", 5)
+		_, err := st.SearchDocsFTS(context.Background(),q, "", 5)
 		if err != nil {
 			t.Errorf("SearchDocsFTS(%q): unexpected error: %v", q, err)
 		}

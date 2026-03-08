@@ -21,9 +21,10 @@ func alfredHookEntries(binPath string) map[string]any {
 			map[string]any{
 				"hooks": []any{
 					map[string]any{
-						"type":    "command",
-						"command": binPath + " hook SessionStart",
-						"timeout": 5,
+						"type":          "command",
+						"command":       binPath + " hook SessionStart",
+						"statusMessage": "alfred: restoring session context...",
+						"timeout":       5,
 					},
 				},
 			},
@@ -32,9 +33,10 @@ func alfredHookEntries(binPath string) map[string]any {
 			map[string]any{
 				"hooks": []any{
 					map[string]any{
-						"type":    "command",
-						"command": binPath + " hook PreCompact",
-						"timeout": 10,
+						"type":          "command",
+						"command":       binPath + " hook PreCompact",
+						"statusMessage": "alfred: saving session state...",
+						"timeout":       10,
 					},
 				},
 			},
@@ -44,9 +46,10 @@ func alfredHookEntries(binPath string) map[string]any {
 				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{
 					map[string]any{
-						"type":    "command",
-						"command": binPath + " hook PreToolUse",
-						"timeout": 2,
+						"type":          "command",
+						"command":       binPath + " hook PreToolUse",
+						"statusMessage": "alfred: checking config access...",
+						"timeout":       2,
 					},
 				},
 			},
@@ -57,9 +60,10 @@ func alfredHookEntries(binPath string) map[string]any {
 			map[string]any{
 				"hooks": []any{
 					map[string]any{
-						"type":    "command",
-						"command": binPath + " hook UserPromptSubmit",
-						"timeout": 3,
+						"type":          "command",
+						"command":       binPath + " hook UserPromptSubmit",
+						"statusMessage": "alfred: searching knowledge...",
+						"timeout":       3,
 					},
 				},
 			},
@@ -69,9 +73,10 @@ func alfredHookEntries(binPath string) map[string]any {
 			map[string]any{
 				"hooks": []any{
 					map[string]any{
-						"type":    "command",
-						"command": binPath + " hook Stop",
-						"timeout": 3,
+						"type":          "command",
+						"command":       binPath + " hook Stop",
+						"statusMessage": "alfred: saving session memory...",
+						"timeout":       3,
 					},
 				},
 			},

@@ -269,6 +269,20 @@ type transcriptEntry struct {
 	} `json:"message"`
 }
 
+// entryFromRaw constructs a transcriptEntry from an already-parsed map,
+// avoiding a second json.Unmarshal on the same line.
+func entryFromRaw(raw map[string]any) transcriptEntry {
+	var e transcriptEntry
+	e.Type, _ = raw["type"].(string)
+	e.Role, _ = raw["role"].(string)
+	e.Content = raw["content"]
+	if msg, ok := raw["message"].(map[string]any); ok {
+		e.Message.Role, _ = msg["role"].(string)
+		e.Message.Content = msg["content"]
+	}
+	return e
+}
+
 // extractTextContent extracts readable text from a transcript entry.
 // Handles both string content and structured content blocks.
 func extractTextContent(entry transcriptEntry) string {

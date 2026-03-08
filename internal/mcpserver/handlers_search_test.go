@@ -22,7 +22,7 @@ func TestKnowledgeHandler_LimitDefault(t *testing.T) {
 			SourceType:  "docs",
 		}
 		doc.ContentHash = store.ContentHashOf(doc.Content)
-		if _, _, err := st.UpsertDoc(doc); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 			t.Fatalf("UpsertDoc: %v", err)
 		}
 	}
@@ -56,7 +56,7 @@ func TestKnowledgeHandler_LimitNegativeDefaultsTo5(t *testing.T) {
 		SourceType:  "docs",
 	}
 	doc.ContentHash = store.ContentHashOf(doc.Content)
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestKnowledgeHandler_CustomLimit(t *testing.T) {
 			SourceType:  "docs",
 		}
 		doc.ContentHash = store.ContentHashOf(doc.Content)
-		if _, _, err := st.UpsertDoc(doc); err != nil {
+		if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 			t.Fatalf("UpsertDoc: %v", err)
 		}
 	}
@@ -120,7 +120,7 @@ func TestKnowledgeHandler_VersionAndFreshness(t *testing.T) {
 		CrawledAt:   recentTime,
 	}
 	doc.ContentHash = store.ContentHashOf(doc.Content)
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestKnowledgeHandler_StalenessWarning(t *testing.T) {
 		CrawledAt:   oldTime,
 	}
 	doc.ContentHash = store.ContentHashOf(doc.Content)
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
@@ -194,7 +194,7 @@ func TestKnowledgeHandler_CrawledAtSQLiteFormat(t *testing.T) {
 		CrawledAt:   "2020-01-01 00:00:00", // old enough for staleness warning
 	}
 	doc.ContentHash = store.ContentHashOf(doc.Content)
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
@@ -230,7 +230,7 @@ func TestKnowledgeHandler_NoVersionOmitted(t *testing.T) {
 		SourceType:  "docs",
 	}
 	doc.ContentHash = store.ContentHashOf(doc.Content)
-	if _, _, err := st.UpsertDoc(doc); err != nil {
+	if _, _, err := st.UpsertDoc(context.Background(), doc); err != nil {
 		t.Fatalf("UpsertDoc: %v", err)
 	}
 
