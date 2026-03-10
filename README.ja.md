@@ -21,7 +21,7 @@ Claude Code の執事。
 
 **永続メモリ** — 過去のセッション・意思決定・メモをプロジェクト横断で記憶。セッション要約と設計決定を自動的に永続メモリとして保存。`recall` ツールで過去の経験を検索 — alfred がセッション開始時に関連する記憶を自動で提示。
 
-**自動クロール** — ナレッジベースをバックグラウンドで自動リフレッシュ。SessionStart で最終クロール日時をチェックし、一定期間（デフォルト 7 日）経過していればバックグラウンドプロセスで再クロールを実行。手動で `alfred init` を実行する必要がない。
+**自動クロール** — ナレッジベースをバックグラウンドで自動リフレッシュ。SessionStart で最終クロール日時をチェックし、一定期間（デフォルト 7 日）経過していればバックグラウンドプロセスで再クロールを実行。`alfred harvest` で即時手動リフレッシュも可能。ソース: 公式ドキュメント、CHANGELOG、Engineering ブログ、Claude 製品ブログ、Anthropic ニュース、Agent SDK ドキュメント。
 
 **Compact 耐性** — PreCompact hook が決定を自動検出し、変更ファイルを追跡し、Next Steps の完了状態を自動更新し、activeContext 形式でセッション状態を保存。SessionStart hook が Compact 後にフルコンテキストを復元。
 
@@ -352,7 +352,7 @@ cat ~/.claude-alfred/debug.log  # ログを確認
 | serve 時に "no seed docs found" | ナレッジベース未初期化 | `alfred init` を実行 |
 | Hook タイムアウト警告 | FTS 検索が遅い、または transcript が大きい | `~/.claude-alfred/debug.log` を確認 |
 | init 時に "VOYAGE_API_KEY is required" | API キー未設定 | `alfred settings` で設定、または `export VOYAGE_API_KEY=your-key` |
-| ナレッジ検索結果が古い | 自動クロールが未実行または失敗 | `debug.log` を確認。`alfred init` で強制リフレッシュ |
+| ナレッジ検索結果が古い | 自動クロールが未実行または失敗 | `alfred harvest` で強制リフレッシュ。`debug.log` を確認 |
 | Hook が発火しない | プラグイン未インストール | `/plugin install alfred` を実行して再起動 |
 
 ### 環境変数

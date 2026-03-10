@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.63.8] - 2026-03-10
+
+### Added
+- `alfred harvest` CLI command: manual live crawl with progress display
+- Crawl source: `claude.com/blog/` (Claude product blog, source_type=claude-blog)
+- Crawl source: `anthropic.com/news` (official announcements, source_type=news)
+- Crawl source: `platform.claude.com/docs/en/agent-sdk/` (15 Agent SDK doc pages, source_type=agent-sdk)
+
+### Fixed
+- `custom` source_type falling through to error in `crawlPageConditional` switch
+- Harvest progress display: overlapping text from `\r` without line clear (now uses ANSI `\033[2K`)
+
 ## [0.63.7] - 2026-03-10
 
 ### Added
@@ -563,7 +575,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.63.7...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.63.8...HEAD
+[0.63.8]: https://github.com/hir4ta/claude-alfred/compare/v0.63.7...v0.63.8
 [0.63.7]: https://github.com/hir4ta/claude-alfred/compare/v0.63.6...v0.63.7
 [0.63.6]: https://github.com/hir4ta/claude-alfred/compare/v0.63.5...v0.63.6
 [0.63.5]: https://github.com/hir4ta/claude-alfred/compare/v0.63.4...v0.63.5

@@ -57,6 +57,8 @@ func run() error {
 		return runAnalytics()
 	case "doctor":
 		return runDoctor()
+	case "harvest":
+		return runHarvest()
 	case "crawl-seed":
 		output := "internal/install/seed_docs.json"
 		if len(os.Args) > 2 {
@@ -202,6 +204,7 @@ Commands:
   memory         Manage memories (prune, stats)
   settings       Configure API keys and preferences
   analytics      Show feedback loop stats and injection activity
+  harvest        Crawl live docs and refresh knowledge base
   doctor         Diagnose common issues (DB, hooks, API keys)
   update         Update alfred to the latest version
   version        Show version

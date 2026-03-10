@@ -21,6 +21,7 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding)
 | `cmd/alfred/export.go` | Data export (memories + specs as JSON) |
 | `cmd/alfred/memory.go` | Memory management (prune, stats) |
 | `cmd/alfred/analytics.go` | Feedback loop analytics (injection stats, boost/penalty ranking) |
+| `cmd/alfred/harvest.go` | Manual live crawl (docs, blog, news, Agent SDK → DB + embeddings) |
 | `cmd/alfred/doctor.go` | System diagnostics (11 checks: DB, schema, FTS, plugin, hooks, Voyage, embeddings, crawl) |
 | `cmd/alfred/config.go` | Per-project config resolution (`.alfred/config.json` > env > default) |
 | `cmd/alfred/settings.go` | Interactive settings (API key management) |

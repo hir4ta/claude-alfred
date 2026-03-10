@@ -42,6 +42,9 @@ const (
 	docsIndexURL    = "https://code.claude.com/docs/llms.txt"
 	changelogURL    = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
 	engineeringURL  = "https://www.anthropic.com/engineering"
+	claudeBlogURL    = "https://claude.com/blog"
+	anthropicNewsURL = "https://www.anthropic.com/news"
+	agentSDKBaseURL  = "https://platform.claude.com/docs/en/agent-sdk"
 	fetchTimeout    = 30 * time.Second
 	maxSectionChars = 4000 // truncate very long sections for effective embedding
 )
@@ -50,8 +53,11 @@ var httpClient = &http.Client{Timeout: fetchTimeout}
 
 // CrawlProgress provides callbacks for crawl progress reporting.
 type CrawlProgress struct {
-	OnDocsPage func(done, total int)
-	OnBlogPost func(done, total int)
+	OnDocsPage  func(done, total int)
+	OnBlogPost  func(done, total int)
+	OnClaudeBlog func(done, total int)
+	OnNews       func(done, total int)
+	OnAgentSDK   func(done, total int)
 }
 
 // CrawlStats tracks conditional fetch statistics.
@@ -145,7 +151,74 @@ func Crawl(ctx context.Context, progress *CrawlProgress, st *store.Store, custom
 		}
 	}
 
-	// 4. Fetch custom user sources (HTTPS only, no private IPs).
+	// 4. Fetch Claude product blog posts (claude.com/blog).
+	claudeBlogURLs, err := fetchClaudeBlogIndex()
+	if err == nil {
+		for i, postURL := range claudeBlogURLs {
+			if progress != nil && progress.OnClaudeBlog != nil {
+				progress.OnClaudeBlog(i+1, len(claudeBlogURLs))
+			}
+
+			src, skipped, err := crawlPageConditional(ctx, st, postURL, postURL, "claude-blog", now)
+			if err != nil {
+				continue
+			}
+			if skipped {
+				stats.NotModified++
+				continue
+			}
+			stats.Fetched++
+			if src != nil && len(src.Sections) > 0 {
+				sf.Sources = append(sf.Sources, *src)
+			}
+		}
+	}
+
+	// 5. Fetch Anthropic news articles (anthropic.com/news).
+	newsURLs, err := fetchAnthropicNewsIndex()
+	if err == nil {
+		for i, newsItemURL := range newsURLs {
+			if progress != nil && progress.OnNews != nil {
+				progress.OnNews(i+1, len(newsURLs))
+			}
+
+			src, skipped, err := crawlPageConditional(ctx, st, newsItemURL, newsItemURL, "news", now)
+			if err != nil {
+				continue
+			}
+			if skipped {
+				stats.NotModified++
+				continue
+			}
+			stats.Fetched++
+			if src != nil && len(src.Sections) > 0 {
+				sf.Sources = append(sf.Sources, *src)
+			}
+		}
+	}
+
+	// 6. Fetch Agent SDK documentation (platform.claude.com/docs/en/agent-sdk/).
+	agentSDKPages := agentSDKPageURLs()
+	for i, sdkURL := range agentSDKPages {
+		if progress != nil && progress.OnAgentSDK != nil {
+			progress.OnAgentSDK(i+1, len(agentSDKPages))
+		}
+
+		src, skipped, err := crawlPageConditional(ctx, st, sdkURL, sdkURL, "agent-sdk", now)
+		if err != nil {
+			continue
+		}
+		if skipped {
+			stats.NotModified++
+			continue
+		}
+		stats.Fetched++
+		if src != nil && len(src.Sections) > 0 {
+			sf.Sources = append(sf.Sources, *src)
+		}
+	}
+
+	// 7. Fetch custom user sources (HTTPS only, no private IPs).
 	for _, cs := range customSources {
 		if cs.URL == "" {
 			continue
@@ -241,7 +314,7 @@ func crawlPageConditional(ctx context.Context, st *store.Store, canonicalURL, fe
 			SourceType: "docs",
 			Sections:   sections,
 		}, false, nil
-	case "engineering":
+	case "engineering", "claude-blog", "news", "agent-sdk", "custom":
 		content := extractArticleContent(body)
 		if content == "" {
 			return nil, false, fmt.Errorf("no article content found")
@@ -254,7 +327,7 @@ func crawlPageConditional(ctx context.Context, st *store.Store, canonicalURL, fe
 		sections := SplitMarkdownSections(title, content)
 		return &SeedSource{
 			URL:        canonicalURL,
-			SourceType: "engineering",
+			SourceType: sourceType,
 			Sections:   sections,
 		}, false, nil
 	default:
@@ -316,7 +389,16 @@ func CrawlSeed(outputPath string) error {
 			fmt.Printf("\r  Crawling docs [%d/%d]", done, total)
 		},
 		OnBlogPost: func(done, total int) {
-			fmt.Printf("\r  Crawling blog [%d/%d]", done, total)
+			fmt.Printf("\r  Crawling engineering blog [%d/%d]", done, total)
+		},
+		OnClaudeBlog: func(done, total int) {
+			fmt.Printf("\r  Crawling Claude blog [%d/%d]", done, total)
+		},
+		OnNews: func(done, total int) {
+			fmt.Printf("\r  Crawling news [%d/%d]", done, total)
+		},
+		OnAgentSDK: func(done, total int) {
+			fmt.Printf("\r  Crawling Agent SDK [%d/%d]", done, total)
 		},
 	}, nil, nil)
 	if sf == nil {
@@ -615,6 +697,83 @@ func crawlBlogPost(url string) (*SeedSource, error) {
 		SourceType: "engineering",
 		Sections:   sections,
 	}, nil
+}
+
+// --- Claude Product Blog (claude.com/blog) ---
+
+var claudeBlogLinkRe = regexp.MustCompile(`href="(/blog/[a-z0-9][a-z0-9-]*)"`)
+
+// fetchClaudeBlogIndex fetches the Claude blog page and extracts post URLs.
+func fetchClaudeBlogIndex() ([]string, error) {
+	body, err := FetchPage(claudeBlogURL)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	var urls []string
+	for _, match := range claudeBlogLinkRe.FindAllStringSubmatch(body, -1) {
+		path := match[1]
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		urls = append(urls, "https://claude.com"+path)
+	}
+	return urls, nil
+}
+
+// --- Anthropic Newsroom (anthropic.com/news) ---
+
+var newsLinkRe = regexp.MustCompile(`href="(/news/[a-z0-9][a-z0-9-]*)"`)
+
+// fetchAnthropicNewsIndex fetches the Anthropic newsroom and extracts article URLs.
+func fetchAnthropicNewsIndex() ([]string, error) {
+	body, err := FetchPage(anthropicNewsURL)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	var urls []string
+	for _, match := range newsLinkRe.FindAllStringSubmatch(body, -1) {
+		path := match[1]
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		urls = append(urls, "https://www.anthropic.com"+path)
+	}
+	return urls, nil
+}
+
+// --- Agent SDK Documentation (platform.claude.com) ---
+
+// agentSDKPageURLs returns the known Agent SDK documentation page URLs.
+// Since there is no llms.txt index for these pages, we maintain an explicit list.
+func agentSDKPageURLs() []string {
+	pages := []string{
+		"overview",
+		"quickstart",
+		"hooks",
+		"subagents",
+		"mcp",
+		"permissions",
+		"user-input",
+		"sessions",
+		"skills",
+		"slash-commands",
+		"modifying-system-prompts",
+		"plugins",
+		"typescript",
+		"python",
+		"migration-guide",
+	}
+	urls := make([]string, len(pages))
+	for i, p := range pages {
+		urls[i] = agentSDKBaseURL + "/" + p
+	}
+	return urls
 }
 
 // --- Markdown Parsing Helpers ---

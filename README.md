@@ -21,7 +21,7 @@ Works silently in the background — surfacing relevant knowledge, catching scop
 
 **Persistent Memory** — Remembers past sessions, decisions, and notes across projects. Automatically saves session summaries and design decisions as permanent memory. Search past experience with the `recall` tool — alfred automatically surfaces relevant memories at session start.
 
-**Auto-Crawl** — Knowledge base automatically refreshes in the background. SessionStart checks when docs were last crawled and spawns a background process if they're stale (default: 7 days). No manual `alfred init` needed to stay current.
+**Auto-Crawl** — Knowledge base automatically refreshes in the background. SessionStart checks when docs were last crawled and spawns a background process if they're stale (default: 7 days). Run `alfred harvest` for an immediate manual refresh. Sources: official docs, changelog, engineering blog, Claude product blog, Anthropic news, and Agent SDK docs.
 
 **Compact Resilience** — PreCompact hook auto-extracts decisions, tracks modified files, saves session state in activeContext format, and auto-updates Next Steps completion status. SessionStart hook restores full context after compaction.
 
@@ -353,7 +353,7 @@ cat ~/.claude-alfred/debug.log  # View logs
 | "no seed docs found" on serve | Knowledge base not initialized | Run `alfred init` |
 | Hook timeout warnings | Slow FTS search or large transcript | Check `~/.claude-alfred/debug.log` |
 | "VOYAGE_API_KEY is required" on init | API key not set | Run `alfred settings` or `export VOYAGE_API_KEY=your-key` |
-| Knowledge results feel stale | Auto-crawl hasn't run or failed | Check `debug.log`; run `alfred init` to force refresh |
+| Knowledge results feel stale | Auto-crawl hasn't run or failed | Run `alfred harvest` to force refresh; check `debug.log` |
 | Hook not firing | Plugin not installed | Run `/plugin install alfred` and restart |
 
 ### Environment variables
