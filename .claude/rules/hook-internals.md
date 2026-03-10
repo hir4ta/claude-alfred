@@ -11,7 +11,7 @@ paths:
 
 | Event | Timeout | Internal | Rationale |
 |---|---|---|---|
-| SessionStart | 5s | 4.5s | CLAUDE.md ingestion + spec context + auto-crawl check |
+| SessionStart | 5s | 4.5s | CLAUDE.md ingestion + spec context + auto-crawl check (parallel via WaitGroup) |
 | PreCompact | 10s | 9s | Transcript parsing + decision extraction + session.md |
 | UserPromptSubmit | 3s | 2.5s | FTS-only keyword search (no Voyage API) |
 | SessionEnd | 3s | 2.5s | Session summary + memory save, skips on reason=clear |

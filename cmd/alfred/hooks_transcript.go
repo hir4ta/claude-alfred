@@ -88,54 +88,45 @@ var architectureTerms = []string{
 	"レイヤー", "データフロー", "ワークフロー", "ライフサイクル",
 }
 
+// confidenceSignal groups related markers with their scoring weight.
+type confidenceSignal struct {
+	markers []string
+	weight  float64
+}
+
+// decisionSignals defines all confidence scoring signals in one place.
+// Positive weights boost confidence; negative weights penalize.
+var decisionSignals = []confidenceSignal{
+	{markers: rationaleMarkers, weight: +0.25},
+	{markers: alternativeMarkers, weight: +0.30},
+	{markers: architectureTerms, weight: +0.15},
+	{markers: []string{
+		"just ", "simply ", "quickly ", "also ",
+		"とりあえず", "一旦", "まず", "ちょっと", "簡単に",
+	}, weight: -0.10},
+}
+
 // scoreDecisionConfidence returns a confidence score (0.0-1.0) for whether
 // a sentence represents a real design decision vs an implementation action.
 func scoreDecisionConfidence(sentence string) float64 {
 	lower := strings.ToLower(sentence)
 	score := decisionBaseScore // base score for having a decision keyword
 
-	// Rationale clause: strong positive signal.
-	for _, marker := range rationaleMarkers {
-		if strings.Contains(lower, marker) {
-			score += 0.25
-			break
+	for _, sig := range decisionSignals {
+		for _, marker := range sig.markers {
+			if strings.Contains(lower, marker) {
+				score += sig.weight
+				break
+			}
 		}
 	}
 
-	// Alternative comparison: strong positive signal.
-	for _, marker := range alternativeMarkers {
-		if strings.Contains(lower, marker) {
-			score += 0.3
-			break
-		}
-	}
-
-	// Architecture vocabulary: moderate positive signal.
-	for _, term := range architectureTerms {
-		if strings.Contains(lower, term) {
-			score += 0.15
-			break
-		}
-	}
-
-	// Code artifact penalty: backticks, file paths, camelCase.
+	// Code artifact penalties (regex-like, not marker-based).
 	if strings.Contains(sentence, "`") {
 		score -= 0.15
 	}
 	if strings.Contains(sentence, "/") && strings.Contains(sentence, ".") {
-		// Likely a file path like "src/main.go".
 		score -= 0.1
-	}
-
-	// Hedging words penalty: "just", "simply", "quickly".
-	for _, hedge := range []string{
-		"just ", "simply ", "quickly ", "also ",
-		"とりあえず", "一旦", "まず", "ちょっと", "簡単に",
-	} {
-		if strings.Contains(lower, hedge) {
-			score -= 0.1
-			break
-		}
 	}
 
 	return min(max(score, 0), 1.0)

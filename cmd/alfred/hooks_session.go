@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,16 +34,26 @@ func handleSessionStart(ctx context.Context, ev *hookEvent) {
 		debugf("hook store open failed: %v", err)
 		return
 	}
-	ingestProjectClaudeMD(ctx, st, ev.ProjectPath)
+	// Run independent operations in parallel to minimize timeout risk.
+	// All three are fail-open (errors logged internally, never fatal).
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		ingestProjectClaudeMD(ctx, st, ev.ProjectPath)
+	}()
+	go func() {
+		defer wg.Done()
+		checkAndSpawnCrawl(st)
+	}()
+	go func() {
+		defer wg.Done()
+		ensureUserRules()
+	}()
+	wg.Wait()
 
-	// Check if knowledge base needs refreshing (background crawl).
-	checkAndSpawnCrawl(st)
-
-	// Ensure rules are installed in ~/.claude/rules/ (auto-install on first run).
-	ensureUserRules()
-
-	// Inject spec context if active spec exists.
-	// After compact, inject richer context for full recovery.
+	// Inject spec context after parallel ops complete.
+	// Must be serial: writes JSON to stdout (protocol integrity).
 	injectSpecContext(ctx, ev.ProjectPath, ev.Source, st)
 }
 

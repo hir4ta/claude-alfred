@@ -214,9 +214,9 @@ func (s *SpecDir) ReadFile(f SpecFile) (string, error) {
 
 // lockSpecDir acquires an advisory flock on a .lock file in the spec directory.
 // Returns the lock file handle (caller must defer unlock+close) or an error.
-// Uses non-blocking lock with 5 retries (200ms apart, 1s total) to handle
-// concurrent hook invocations (e.g., PreCompact + SessionEnd overlap).
-// Note: 1s worst-case consumes ~40% of SessionEnd's 2.5s budget; callers
+// Uses non-blocking lock with exponential backoff (50/100/200/400ms, 750ms total)
+// to handle concurrent hook invocations (e.g., PreCompact + SessionEnd overlap).
+// Note: 750ms worst-case consumes ~30% of SessionEnd's 2.5s budget; callers
 // fall back to unprotected write if the lock times out.
 func (s *SpecDir) lockSpecDir() (*os.File, error) {
 	lockPath := filepath.Join(s.Dir(), ".lock")
@@ -224,13 +224,15 @@ func (s *SpecDir) lockSpecDir() (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}
-	for attempt := range 5 {
+	// Exponential backoff: short contention resolves faster, total ~750ms.
+	delays := [4]time.Duration{50 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond}
+	for attempt, delay := range delays {
 		err = syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
 			return lf, nil
 		}
-		if attempt < 4 {
-			time.Sleep(200 * time.Millisecond)
+		if attempt < len(delays)-1 {
+			time.Sleep(delay)
 		}
 	}
 	lf.Close()
@@ -255,6 +257,7 @@ func (s *SpecDir) WriteFile(f SpecFile, content string) error {
 		if DebugLog != nil {
 			DebugLog("spec: lock timeout for %s/%s, falling back to unprotected write: %v", s.TaskSlug, f, err)
 		}
+		fmt.Fprintf(os.Stderr, "[alfred] warning: spec lock contention on %s — concurrent write possible\n", f)
 		return s.writeFileUnlocked(f, content)
 	}
 	defer unlockSpecDir(lf)
@@ -288,6 +291,7 @@ func (s *SpecDir) AppendFile(f SpecFile, content string) error {
 		if DebugLog != nil {
 			DebugLog("spec: lock timeout for %s/%s, falling back to unprotected append: %v", s.TaskSlug, f, err)
 		}
+		fmt.Fprintf(os.Stderr, "[alfred] warning: spec lock contention on %s — concurrent write possible\n", f)
 		return s.appendFileUnlocked(f, content)
 	}
 	defer unlockSpecDir(lf)

@@ -59,7 +59,7 @@ go vet ./...                  # Static analysis
 ### Hooks & Events
 
 - Hook handler: short-lived process, no Voyage API calls. ALFRED_DEBUG=1 for debug log
-- SessionStart: CLAUDE.md ingestion + spec context injection + auto-crawl check
+- SessionStart: CLAUDE.md ingestion + spec context injection + auto-crawl check (3 ops parallel via WaitGroup)
 - SessionEnd: persists session summary as permanent memory; matcher excludes reason=clear
 - PreCompact: auto-updates Next Steps completion status from transcript
 - Multi-agent architecture: review (3 sub-reviewers), brainstorm (2-4 specialists + synthesis), plan (2-4 specialists + mediator)
@@ -77,7 +77,7 @@ go vet ./...                  # Static analysis
 - spec delete: dry-run preview (default) → `confirm=true` for actual deletion
 - spec.ValidSlug: exported regex for slug validation across packages
 - spec tool: DestructiveHint=false (safety via 2-phase delete confirm, not MCP annotation)
-- Spec file locking: advisory flock on `.lock` file (5 retries x 200ms, graceful fallback)
+- Spec file locking: advisory flock on `.lock` file (exponential backoff 50/100/200/400ms, graceful fallback + stderr warning)
 - Spec version history: `.history/` dir with max 20 versions per file; rollback saves current first
 - Spec tool actions: init / update / status / switch / delete / history / rollback
 
