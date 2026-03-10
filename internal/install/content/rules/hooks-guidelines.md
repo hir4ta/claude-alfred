@@ -1,9 +1,8 @@
 ---
 description: Constraints and best practices when editing hooks.json
 paths:
-  - "**/hooks/hooks.json"
   - "**/.claude/hooks.json"
-  - "**/hooks.json"
+  - "hooks.json"
 ---
 
 # Hooks Guidelines

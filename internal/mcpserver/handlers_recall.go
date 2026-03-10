@@ -27,7 +27,7 @@ func WaitBackground() { bgEmbedWG.Wait() }
 // past sessions, decisions, and explicitly saved notes.
 func recallHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		action := req.GetString("action", "")
+		action := req.GetString("action", "search")
 
 		switch action {
 		case "search":

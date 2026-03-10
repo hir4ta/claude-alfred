@@ -45,6 +45,10 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("store: open %s: %w", dbPath, err)
 	}
 
+	// SQLite is single-writer; limit the pool to prevent SQLITE_BUSY contention.
+	db.SetMaxOpenConns(2)
+	db.SetMaxIdleConns(1)
+
 	pragmas := []string{
 		"PRAGMA journal_mode=WAL",
 		"PRAGMA foreign_keys=ON",

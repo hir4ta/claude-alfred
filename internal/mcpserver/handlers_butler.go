@@ -252,12 +252,13 @@ func specDoSwitch(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 		return mcp.NewToolResultError(fmt.Sprintf("invalid task_slug: %q (pattern: ^[a-z0-9][a-z0-9-]{0,63}$)", taskSlug)), nil
 	}
 
-	// Record switch-away in the old primary's session.md
+	// Record switch-away in the old primary's session.md.
+	// ReadActive error is non-fatal: no old task simply means nothing to annotate.
 	oldSlug, _ := spec.ReadActive(projectPath)
 	if oldSlug != "" && oldSlug != taskSlug {
 		oldSD := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: oldSlug}
 		if oldSD.Exists() {
-			_ = oldSD.AppendFile(ctx, spec.FileSession, fmt.Sprintf("\n## Switched away\nSwitched to %s\n", taskSlug))
+			_ = oldSD.AppendFile(ctx, spec.FileSession, fmt.Sprintf("\n## Switched away\nSwitched to %s\n", taskSlug)) // best-effort annotation; switch proceeds regardless
 		}
 	}
 
@@ -299,7 +300,7 @@ func specDoDelete(ctx context.Context, req mcp.CallToolRequest, st *store.Store)
 			return mcp.NewToolResultError(fmt.Sprintf("spec not found: %s", taskSlug)), nil
 		}
 
-		sections, _ := sd.AllSections()
+		sections, _ := sd.AllSections() // best-effort: empty preview on error is acceptable for dry-run
 		var files []string
 		totalBytes := 0
 		for _, s := range sections {

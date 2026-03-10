@@ -216,13 +216,19 @@ func injectSpecContext(ctx context.Context, projectPath, source string, st *stor
 			}()
 			hintWG.Wait()
 
-			if hints != "" {
-				buf.WriteString(hints)
-			}
-			if memHints != "" {
+			// Cap total injection to avoid context overload.
+			// Priority: memory hints (project-specific) > proactive hints > cross-project.
+			const maxHintSections = 2
+			injected := 0
+			if memHints != "" && injected < maxHintSections {
 				buf.WriteString(memHints)
+				injected++
 			}
-			if crossHints != "" {
+			if hints != "" && injected < maxHintSections {
+				buf.WriteString(hints)
+				injected++
+			}
+			if crossHints != "" && injected < maxHintSections {
 				buf.WriteString(crossHints)
 			}
 		}
@@ -760,12 +766,20 @@ func spawnCrawlAsync() {
 
 	cmd := execCommand(exe, "crawl-async")
 	cmd.Stdout = nil
-	cmd.Stderr = nil
+	logW := asyncCrawlLogWriter()
+	cmd.Stderr = logW // capture stderr for diagnostics (nil = discard)
 	if err := cmd.Start(); err != nil {
+		if logW != nil {
+			logW.Close()
+		}
 		_ = f.Close()
 		_ = os.Remove(lockPath)
 		debugf("spawnCrawlAsync: start error: %v", err)
 		return
+	}
+	// Close parent's copy of log fd — the child inherited its own.
+	if logW != nil {
+		logW.Close()
 	}
 	pid := cmd.Process.Pid
 	// Write actual PID immediately so isCrawlRunning() can detect the process.

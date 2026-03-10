@@ -59,7 +59,8 @@ go vet ./...                  # Static analysis
 ### Hooks & Events
 
 - Hook handler: short-lived process, no Voyage API calls. ALFRED_DEBUG=1 for debug log
-- SessionStart: CLAUDE.md ingestion + spec context injection + auto-crawl check (3 ops parallel via WaitGroup)
+- SessionStart: CLAUDE.md ingestion + spec context injection + auto-crawl check (3 ops parallel via WaitGroup); proactive hints capped at 2 sections
+- Auto-crawl: stderr captured to ~/.claude-alfred/crawl-errors.log for diagnostics
 - SessionEnd: persists session summary as permanent memory; matcher excludes reason=clear
 - PreCompact: auto-updates Next Steps completion status from transcript
 - Multi-agent architecture: review (3 sub-reviewers), brainstorm (2-4 specialists + synthesis), plan (2-4 specialists + mediator)
@@ -86,6 +87,7 @@ go vet ./...                  # Static analysis
 - Memory persistence: source_type="memory" in docs table, TTL=0 (permanent)
 - Feedback loop: doc_feedback tracks injection>reference signals, applies +/-0.15 boost with time decay (linear, 180-day floor at 50%); applied in BOTH UserPromptSubmit hook AND MCP knowledge search pipeline
 - Recency signal: post-rerank exponential decay for memory (60d half-life) and changelog (30d half-life); docs not decayed (crawled_at is fetch time, not feature age); floor at 50%
+- Decision extraction: base score 0.35, min confidence 0.4 — bare keyword matches require at least one positive signal (rationale/alternative/arch term)
 - Cross-project learning: SessionStart proactively searches memories from other projects
 
 ### Crawl & Seed

@@ -219,6 +219,7 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 
 	st, err := openStore()
 	if err != nil {
+		notifyUser("warning: knowledge search unavailable: %v", err)
 		debugf("UserPromptSubmit: store open failed: %v", err)
 		return
 	}
@@ -241,13 +242,18 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	}
 
 	// Supplemental: also search with prompt keywords (no expansion) for coverage.
-	keywords := extractSearchKeywords(prompt, 6)
-	if keywords != "" {
-		docs, err := st.SearchDocsFTS(ctx, keywords, store.SourceDocs, 3)
-		if err != nil {
-			debugf("UserPromptSubmit: FTS supplemental search failed: %v", err)
+	// Skip if context deadline already exceeded — use whatever we have.
+	if ctx.Err() == nil {
+		keywords := extractSearchKeywords(prompt, 6)
+		if keywords != "" {
+			docs, err := st.SearchDocsFTS(ctx, keywords, store.SourceDocs, 3)
+			if err != nil {
+				debugf("UserPromptSubmit: FTS supplemental search failed: %v", err)
+			}
+			allDocs = append(allDocs, docs...)
 		}
-		allDocs = append(allDocs, docs...)
+	} else {
+		debugf("UserPromptSubmit: skipping supplemental search (timeout)")
 	}
 
 	if len(allDocs) == 0 {
@@ -284,7 +290,10 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	}
 
 	// Implicit feedback: check if previous injection's topic was referenced in this prompt.
-	evaluateInjectionFeedback(ctx, prompt, st)
+	// Skip on timeout — scoring results is more valuable than feedback tracking.
+	if ctx.Err() == nil {
+		evaluateInjectionFeedback(ctx, prompt, st)
+	}
 
 	// Apply feedback boost BEFORE maxResults selection so boosted docs
 	// can be promoted into the top results.

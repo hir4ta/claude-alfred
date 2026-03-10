@@ -16,15 +16,8 @@ import (
 
 const serverInstructions = `alfred is your silent butler for Claude Code.
 
-He works silently in the background, and provides powerful tools when needed:
-
-  knowledge      — Search Claude Code docs and best practices
-  config-review  — Deep audit of .claude/ config against best practices
-  spec           — Unified spec management (action: init/update/status/switch/delete/history/rollback)
-  recall         — Memory search and save (past sessions, decisions, notes)
-
 When to use alfred tools:
-- Questions specifically about Claude Code configuration or best practices → call knowledge FIRST
+- Questions about Claude Code configuration or best practices → call knowledge FIRST
   (hooks, skills, rules, agents, plugins, MCP, CLAUDE.md, memory, permissions, settings, compaction)
 - Evaluating or auditing .claude/ configuration → call config-review
 - Creating or modifying .claude/ configuration files → call knowledge for best practices, THEN make changes
@@ -102,26 +95,10 @@ Response: {"project_path", "claude_md": {"exists", "size_bytes?", "lines?", "sec
 			Tool: mcp.NewTool("spec",
 				mcp.WithDescription(`Unified spec management for development tasks. Persists context across compaction and sessions.
 
-Actions:
-- status: Get active task state — READ-ONLY, safe to call anytime
-- init: Create a new spec (requires task_slug, e.g. "auth-refactor")
-- update: Write to a spec file (requires file + content, mode: "append" or "replace"; optional task_slug, defaults to active task)
-- switch: Change active task (requires task_slug)
-- delete: Remove a task spec (requires task_slug; first call previews, add confirm=true to execute) — DESTRUCTIVE
-- history: List version history for a spec file (requires file; optional task_slug, defaults to active task)
-- rollback: Restore a previous version of a spec file (requires file + version timestamp; optional task_slug, defaults to active task)
+Actions: status (read-only), init, update, switch, delete (2-phase: preview then confirm=true), history, rollback.
 
 task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).
-
-Note: "status", "history" are read-only. "init", "update", "switch", "delete", "rollback" modify state.
-
-Response (status): {"task_slug", "active", "spec_dir", "requirements", "design", "decisions", "session"}
-Response (init): {"task_slug", "spec_dir", "files", "db_synced", "db_embedded"}
-Response (update): {"task_slug", "file", "mode", "db_synced"}
-Response (delete preview): {"task_slug", "files", "total_size", "db_docs"}
-Response (delete confirm): {"task_slug", "deleted_files", "deleted_db_docs"}
-Response (history): {"task_slug", "file", "versions": [{"timestamp", "size_bytes"}], "count"}
-Response (rollback): {"task_slug", "file", "restored", "message"}`),
+"status"/"history" are read-only. "init"/"update"/"switch"/"delete"/"rollback" modify state.`),
 				mcp.WithTitleAnnotation("Spec Management"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(false),

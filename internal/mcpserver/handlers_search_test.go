@@ -142,9 +142,9 @@ func TestKnowledgeHandler_VersionAndFreshness(t *testing.T) {
 	if first["freshness_days"] == nil {
 		t.Error("expected freshness_days for doc with CrawledAt")
 	}
-	// Recent doc: no staleness_warning expected.
-	if m["staleness_warning"] != nil {
-		t.Errorf("unexpected staleness_warning for recent doc")
+	// Recent doc: no warning expected.
+	if m["warning"] != nil {
+		t.Errorf("unexpected warning for recent doc")
 	}
 }
 
@@ -174,9 +174,9 @@ func TestKnowledgeHandler_StalenessWarning(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	m := resultJSON(t, res)
-	warning, _ := m["staleness_warning"].(string)
+	warning, _ := m["warning"].(string)
 	if warning == "" {
-		t.Error("expected staleness_warning for doc older than 30 days")
+		t.Error("expected warning for doc older than 30 days")
 	}
 }
 
@@ -213,8 +213,8 @@ func TestKnowledgeHandler_CrawledAtSQLiteFormat(t *testing.T) {
 	if first["freshness_days"] == nil {
 		t.Error("expected freshness_days even with SQLite datetime format")
 	}
-	if m["staleness_warning"] == nil {
-		t.Error("expected staleness_warning for very old doc")
+	if m["warning"] == nil {
+		t.Error("expected warning for very old doc")
 	}
 }
 

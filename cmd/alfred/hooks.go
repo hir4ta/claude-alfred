@@ -36,7 +36,7 @@ func debugf(format string, args ...any) {
 	debugOnce.Do(func() {
 		home, _ := os.UserHomeDir()
 		dir := filepath.Join(home, ".claude-alfred")
-		_ = os.MkdirAll(dir, 0755)
+		_ = os.MkdirAll(dir, 0755) // best-effort: OpenFile below will fail if dir creation fails
 		f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return
@@ -58,22 +58,32 @@ func closeDebugWriter() {
 	}
 }
 
-// asyncEmbedLogWriter returns a writer for background embed subprocess stderr.
-// Logs to ~/.claude-alfred/embed-errors.log so failures are diagnosable without
+// asyncLogWriter returns a writer for a background subprocess stderr log.
+// Logs to ~/.claude-alfred/<name> so failures are diagnosable without
 // ALFRED_DEBUG. Returns nil (discard) if the log file cannot be opened.
-func asyncEmbedLogWriter() *os.File {
+func asyncLogWriter(name string) *os.File {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
 	}
 	dir := filepath.Join(home, ".claude-alfred")
-	_ = os.MkdirAll(dir, 0o755)
-	logPath := filepath.Join(dir, "embed-errors.log")
+	_ = os.MkdirAll(dir, 0o755) // best-effort: OpenFile below will fail if dir creation fails
+	logPath := filepath.Join(dir, name)
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil
 	}
 	return f
+}
+
+// asyncEmbedLogWriter returns a writer for background embed subprocess stderr.
+func asyncEmbedLogWriter() *os.File {
+	return asyncLogWriter("embed-errors.log")
+}
+
+// asyncCrawlLogWriter returns a writer for background crawl subprocess stderr.
+func asyncCrawlLogWriter() *os.File {
+	return asyncLogWriter("crawl-errors.log")
 }
 
 // hookEvent is the minimal structure of a Claude Code hook stdin payload.
@@ -189,6 +199,7 @@ func runHook(event string) error {
 	elapsed := time.Since(start)
 	headroom := timeout - elapsed
 	if headroom < 0 {
+		notifyUser("warning: hook %s overtime by %dms", event, (-headroom).Milliseconds())
 		debugf("hook event=%s completed in %s (timeout=%s, OVERTIME by %s)",
 			event, elapsed.Round(time.Millisecond), timeout, (-headroom).Round(time.Millisecond))
 	} else {

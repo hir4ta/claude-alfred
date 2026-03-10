@@ -11,14 +11,14 @@ import (
 // ---------------------------------------------------------------------------
 
 // Decision confidence scoring constants.
-// Both values are 0.4: a sentence with ONLY a decision keyword (no rationale,
-// no alternative comparison, no architecture terms) is at the exact threshold.
-// Any positive signal (rationale +0.25, alternative +0.3, arch term +0.15) pushes it above;
-// any negative signal (backtick -0.15, hedge -0.1) drops it below. This design ensures
-// only decisions with supporting evidence survive.
+// A sentence with ONLY a decision keyword (no rationale, no alternative
+// comparison, no architecture terms) scores 0.35 — below the 0.4 threshold.
+// At least one positive signal is required to pass:
+//   rationale +0.25, alternative +0.30, arch term +0.15.
+// This prevents bare keyword matches from being treated as decisions.
 const (
 	// decisionBaseScore is the starting confidence for having a decision keyword.
-	decisionBaseScore = 0.4
+	decisionBaseScore = 0.35
 	// decisionMinConfidence is the minimum score to keep a decision.
 	decisionMinConfidence = 0.4
 )

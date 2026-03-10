@@ -103,8 +103,8 @@ func docsSearchHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandl
 			"search_method": searchMethod,
 		}
 		if maxAgeDays > stalenessWarningDays {
-			result["staleness_warning"] = fmt.Sprintf(
-				"Results include docs from %d days ago. Run 'alfred init' to refresh.", maxAgeDays)
+			warnings = append(warnings, fmt.Sprintf(
+				"Results include docs from %d days ago. Run 'alfred init' to refresh.", maxAgeDays))
 		}
 		if len(warnings) > 0 {
 			result["warning"] = strings.Join(warnings, "; ")
