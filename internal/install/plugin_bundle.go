@@ -213,7 +213,9 @@ CACHED_BIN="${CACHE_DIR}/alfred"
 # 1. Binary in PATH with matching version? (e.g. Homebrew, go install)
 if command -v alfred >/dev/null 2>&1; then
   PATH_VER=$(alfred version --short 2>/dev/null || echo "")
-  if [ "$PATH_VER" = "$VERSION" ] || [ "$PATH_VER" = "dev" ]; then
+  # Strip build metadata (+dirty, +dev, etc.) for comparison
+  PATH_VER_BASE="${PATH_VER%%+*}"
+  if [ "$PATH_VER_BASE" = "$VERSION" ] || [ "$PATH_VER" = "dev" ]; then
     exec alfred "$@"
   fi
 fi
@@ -221,7 +223,8 @@ fi
 # 2. Cached binary exists and matches version?
 if [ -x "$CACHED_BIN" ]; then
   CACHED_VER=$("$CACHED_BIN" version --short 2>/dev/null || echo "")
-  if [ "$CACHED_VER" = "$VERSION" ]; then
+  CACHED_VER_BASE="${CACHED_VER%%+*}"
+  if [ "$CACHED_VER_BASE" = "$VERSION" ]; then
     exec "$CACHED_BIN" "$@"
   fi
 fi

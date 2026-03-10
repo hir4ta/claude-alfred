@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.64.3] - 2026-03-11
+
+### Fixed
+- `run.sh` bootstrapper: `+dirty`/`+dev` build metadata suffix caused version mismatch, falling through to GitHub download (404 on unreleased versions)
+- RRF order preservation, context deadline propagation, model versioning, feedback/recency scoring
+- Error handling unification, context injection control, observability improvements
+
 ## [0.64.2] - 2026-03-11
 
 ### Added
@@ -643,7 +650,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.64.2...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.64.3...HEAD
+[0.64.3]: https://github.com/hir4ta/claude-alfred/compare/v0.64.2...v0.64.3
 [0.64.2]: https://github.com/hir4ta/claude-alfred/compare/v0.64.1...v0.64.2
 [0.64.1]: https://github.com/hir4ta/claude-alfred/compare/v0.64.0...v0.64.1
 [0.64.0]: https://github.com/hir4ta/claude-alfred/compare/v0.63.10...v0.64.0
