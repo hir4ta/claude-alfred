@@ -13,7 +13,6 @@ const runCmd = `"${CLAUDE_PLUGIN_ROOT}/bin/run.sh"`
 
 // alfredHookEntries returns the hook configuration for plugin distribution.
 // SessionStart: CLAUDE.md auto-import.
-// PreToolUse: .claude/ config access reminder.
 // UserPromptSubmit: Claude Code config keyword detection.
 func alfredHookEntries(binPath string) map[string]any {
 	return map[string]any{
@@ -37,19 +36,6 @@ func alfredHookEntries(binPath string) map[string]any {
 						"command":       binPath + " hook PreCompact",
 						"statusMessage": "alfred: saving session state...",
 						"timeout":       10,
-					},
-				},
-			},
-		},
-		"PreToolUse": []any{
-			map[string]any{
-				"matcher": "Edit|Write|MultiEdit",
-				"hooks": []any{
-					map[string]any{
-						"type":          "command",
-						"command":       binPath + " hook PreToolUse",
-						"statusMessage": "alfred: checking config access...",
-						"timeout":       2,
 					},
 				},
 			},
@@ -132,7 +118,7 @@ func Bundle(outputDir, version string) error {
 
 	// 3. Write hooks.json — commands invoke the guard/setup wrapper.
 	hooksJSON := map[string]any{
-		"description": "Proactive hooks — auto-import, config access reminder, knowledge injection, spec session persistence, memory persistence",
+		"description": "Proactive hooks — auto-import, knowledge injection, spec session persistence, memory persistence",
 		"hooks":       alfredHookEntries(runCmd),
 	}
 	if err := writeJSON(filepath.Join(outputDir, "hooks", "hooks.json"), hooksJSON); err != nil {

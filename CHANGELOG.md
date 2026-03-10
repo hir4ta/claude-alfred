@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.63.6] - 2026-03-10
+
+### Improved
+- Spec tool description: added missing `history` and `rollback` actions with response schemas
+- Spec `update` action: accepts optional `task_slug` parameter (defaults to active task)
+- Config-review maturity scoring: absent skills/rules scored at 50 baseline instead of 0 (absence is not a deficiency)
+- Review skill: self-contained protocol (no fragile disk read of code-reviewer agent)
+- CLAUDE.md slimmed down: hook timeouts and env defaults moved to `.claude/rules/hook-internals.md`
+
+### Changed
+- CLAUDE.md and `.claude/` rules now committed to git (previously in .gitignore)
+- PreToolUse hook removed (redundant with `alfred.md` rule; saves 2s timeout per Edit/Write)
+- Config-review suggestion wording softened: "Consider adding..." instead of imperative "Add..."
+
+### Added
+- `plugin/settings.json` (empty, signals intentional plugin configuration)
+- `.claude/rules/hook-internals.md` (path-scoped rule for hook timeout/env reference)
+
 ## [0.63.5] - 2026-03-10
 
 ### Fixed
@@ -524,7 +542,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.63.5...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.63.6...HEAD
+[0.63.6]: https://github.com/hir4ta/claude-alfred/compare/v0.63.5...v0.63.6
 [0.63.5]: https://github.com/hir4ta/claude-alfred/compare/v0.63.4...v0.63.5
 [0.63.4]: https://github.com/hir4ta/claude-alfred/compare/v0.63.3...v0.63.4
 [0.63.3]: https://github.com/hir4ta/claude-alfred/compare/v0.63.2...v0.63.3

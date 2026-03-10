@@ -4,6 +4,5 @@
 .DS_Store
 dist/
 *.db
-CLAUDE.md
-.claude/
+.claude/settings.json
 .alfred/

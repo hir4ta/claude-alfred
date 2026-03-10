@@ -1,5 +1,5 @@
 {
-  "description": "Proactive hooks — auto-import, config access reminder, knowledge injection, spec session persistence, memory persistence",
+  "description": "Proactive hooks — auto-import, knowledge injection, spec session persistence, memory persistence",
   "hooks": {
     "PreCompact": [
       {
@@ -11,19 +11,6 @@
             "type": "command"
           }
         ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/run.sh\" hook PreToolUse",
-            "statusMessage": "alfred: checking config access...",
-            "timeout": 2,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write|MultiEdit"
       }
     ],
     "SessionEnd": [

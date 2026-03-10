@@ -132,9 +132,18 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 		return mcp.NewToolResultError(fmt.Sprintf("invalid file: %s (valid: requirements.md, design.md, decisions.md, session.md)", fileName)), nil
 	}
 
-	taskSlug, err := spec.ReadActive(projectPath)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("no active spec: %v", err)), nil
+	// Accept optional task_slug; fall back to active task if not provided.
+	taskSlug := req.GetString("task_slug", "")
+	if taskSlug != "" {
+		if !spec.ValidSlug.MatchString(taskSlug) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid task_slug: %q (pattern: ^[a-z0-9][a-z0-9-]{0,63}$)", taskSlug)), nil
+		}
+	} else {
+		var err error
+		taskSlug, err = spec.ReadActive(projectPath)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("no active spec: %v", err)), nil
+		}
 	}
 
 	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}

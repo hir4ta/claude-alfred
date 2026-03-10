@@ -27,7 +27,7 @@ and workflow optimization.
 
 - **knowledge** — Search Claude Code documentation and best practices (hybrid vector + FTS5)
 - **config-review** — Audit a project's .claude/ configuration against best practices from the knowledge base
-- **spec** — Unified spec management for development tasks (init, update, status, switch, delete)
+- **spec** — Unified spec management for development tasks (init, update, status, switch, delete, history, rollback)
 - **recall** — Memory search and save (past sessions, decisions, notes)
 
 ## Guardrails

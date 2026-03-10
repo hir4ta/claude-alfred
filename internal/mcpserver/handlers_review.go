@@ -529,7 +529,7 @@ func generateReviewSuggestions(ctx context.Context, report map[string]any, st *s
 		suggestions = append(suggestions, Suggestion{
 			Severity: "info",
 			Category: "skills",
-			Message:  "Add custom skills (.claude/skills/) to automate repetitive workflows",
+			Message:  "Consider adding custom skills (.claude/skills/) if you have repetitive workflows to automate",
 		})
 	} else {
 		if invalid, ok := skills["invalid_skills"].([]string); ok && len(invalid) > 0 {
@@ -561,7 +561,7 @@ func generateReviewSuggestions(ctx context.Context, report map[string]any, st *s
 		suggestions = append(suggestions, Suggestion{
 			Severity: "info",
 			Category: "rules",
-			Message:  "Add rules (.claude/rules/) to enforce coding standards automatically",
+			Message:  "Consider adding rules (.claude/rules/) if you have coding standards to enforce automatically",
 		})
 	} else {
 		if details, ok := rules["rule_details"].([]ruleInfo); ok {
@@ -663,7 +663,7 @@ func computeMaturityScore(report map[string]any, suggestions []Suggestion) map[s
 		}
 	}
 
-	// Skills: count>0=40, all valid frontmatter=30, no size warnings=30
+	// Skills: absent=N/A (50 baseline), count>0=40, all valid frontmatter=30, no size warnings=30
 	if sk, ok := report["skills"].(map[string]any); ok {
 		if count, _ := sk["count"].(int); count > 0 {
 			scores["skills"] += 40
@@ -682,10 +682,13 @@ func computeMaturityScore(report map[string]any, suggestions []Suggestion) map[s
 			if !hasWarning {
 				scores["skills"] += 30
 			}
+		} else {
+			// No skills is not inherently bad — baseline score.
+			scores["skills"] = 50
 		}
 	}
 
-	// Rules: count>0=50, no size warnings=50
+	// Rules: absent=N/A (50 baseline), count>0=50, no size warnings=50
 	if ru, ok := report["rules"].(map[string]any); ok {
 		if count, _ := ru["count"].(int); count > 0 {
 			scores["rules"] += 50
@@ -701,6 +704,9 @@ func computeMaturityScore(report map[string]any, suggestions []Suggestion) map[s
 			if !hasWarning {
 				scores["rules"] += 50
 			}
+		} else {
+			// No rules is not inherently bad — baseline score.
+			scores["rules"] = 50
 		}
 	}
 

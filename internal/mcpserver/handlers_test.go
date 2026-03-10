@@ -883,7 +883,7 @@ func TestComputeMaturityScore(t *testing.T) {
 				"mcp_servers": map[string]any{"count": 0},
 			},
 			nil,
-			0, 0,
+			20, 20, // skills=50, rules=50 baseline; overall=(0+50+50+0+0)/5=20
 		},
 		{
 			"warnings reduce score",

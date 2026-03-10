@@ -105,26 +105,30 @@ Response: {"categories": [{"name", "score", "item_count", "suggestions": [{"type
 Actions:
 - status: Get active task state — READ-ONLY, safe to call anytime
 - init: Create a new spec (requires task_slug, e.g. "auth-refactor")
-- update: Write to a spec file (requires file + content, mode: "append" or "replace")
+- update: Write to a spec file (requires file + content, mode: "append" or "replace"; optional task_slug, defaults to active task)
 - switch: Change active task (requires task_slug)
 - delete: Remove a task spec (requires task_slug; first call previews, add confirm=true to execute) — DESTRUCTIVE
+- history: List version history for a spec file (requires file; operates on active task)
+- rollback: Restore a previous version of a spec file (requires file + version timestamp; use history to list versions)
 
 task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).
 
-Note: "status" is read-only. Only "init", "update", "switch", and "delete" modify state.
+Note: "status", "history" are read-only. "init", "update", "switch", "delete", "rollback" modify state.
 
 Response (status): {"task_slug", "active", "spec_dir", "requirements", "design", "decisions", "session"}
 Response (init): {"task_slug", "spec_dir", "files", "db_synced", "db_embedded"}
 Response (update): {"task_slug", "file", "mode", "db_synced"}
 Response (delete preview): {"task_slug", "files", "total_size", "db_docs"}
-Response (delete confirm): {"task_slug", "deleted_files", "deleted_db_docs"}`),
+Response (delete confirm): {"task_slug", "deleted_files", "deleted_db_docs"}
+Response (history): {"task_slug", "file", "versions": [{"timestamp", "size_bytes"}], "count"}
+Response (rollback): {"task_slug", "file", "restored", "message"}`),
 				mcp.WithTitleAnnotation("Spec Management"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete"), mcp.Required()),
+				mcp.WithString("action", mcp.Description("Action to perform: init, update, status, switch, delete, history, rollback"), mcp.Required()),
 				mcp.WithString("project_path", mcp.Description("Absolute path to the project root")),
-				mcp.WithString("task_slug", mcp.Description("Task identifier (required for init, switch, delete)")),
+				mcp.WithString("task_slug", mcp.Description("Task identifier (required for init, switch, delete; optional for update — defaults to active task)")),
 				mcp.WithString("description", mcp.Description("Brief task description (for init)")),
 				mcp.WithString("file", mcp.Description("Spec file to update: requirements.md, design.md, decisions.md, session.md (for update)")),
 				mcp.WithString("content", mcp.Description("Content to write (for update)")),

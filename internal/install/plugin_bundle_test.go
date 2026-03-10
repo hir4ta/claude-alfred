@@ -34,7 +34,7 @@ func TestBundle(t *testing.T) {
 		}
 	})
 
-	// Verify hooks.json has only SessionStart.
+	// Verify hooks.json has expected events.
 	t.Run("hooks.json", func(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(outputDir, "hooks", "hooks.json"))
 		if err != nil {
@@ -49,22 +49,13 @@ func TestBundle(t *testing.T) {
 			t.Fatal("hooks key missing or wrong type")
 		}
 
-		for _, event := range []string{"SessionStart", "PreCompact", "PreToolUse", "UserPromptSubmit", "SessionEnd"} {
+		for _, event := range []string{"SessionStart", "PreCompact", "UserPromptSubmit", "SessionEnd"} {
 			if _, ok := hooks[event]; !ok {
 				t.Errorf("missing event: %s", event)
 			}
 		}
-		if len(hooks) != 5 {
-			t.Errorf("expected 5 hook events, got %d", len(hooks))
-		}
-
-		// Verify PreToolUse has correct matcher.
-		if preToolUse, ok := hooks["PreToolUse"].([]any); ok && len(preToolUse) > 0 {
-			if entry, ok := preToolUse[0].(map[string]any); ok {
-				if matcher, _ := entry["matcher"].(string); matcher != "Edit|Write|MultiEdit" {
-					t.Errorf("PreToolUse matcher = %q, want %q", matcher, "Edit|Write|MultiEdit")
-				}
-			}
+		if len(hooks) != 4 {
+			t.Errorf("expected 4 hook events, got %d", len(hooks))
 		}
 
 		// Verify SessionEnd has matcher excluding clear.
