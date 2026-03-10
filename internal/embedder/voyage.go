@@ -88,13 +88,16 @@ type voyageResponse struct {
 
 type voyageErrorResponse struct {
 	Detail string `json:"detail"`
+	Type   string `json:"type,omitempty"`
+	Code   string `json:"code,omitempty"`
 }
 
 // voyageError wraps a Voyage API error with status code for retry decisions.
 type voyageError struct {
-	status int
-	detail string
-	raw    string // full response body for debugging
+	status   int
+	detail   string
+	raw      string              // full response body for debugging
+	errResp  *voyageErrorResponse // structured error fields (type, code) if parseable
 }
 
 func (e *voyageError) Error() string {
@@ -108,23 +111,56 @@ func (e *voyageError) Error() string {
 	return fmt.Sprintf("embedder: voyage returned %d: %s", e.status, e.detail)
 }
 
-// isVoyageTransient reports whether a 400-status error detail indicates a transient
-// Voyage-side model failure (e.g. "Request to model ... failed") rather than a
-// client validation error. Uses multiple patterns for resilience against API wording changes.
+// transientErrorTypes maps structured error type/code fields that indicate
+// transient failures, independent of message wording.
+var transientErrorTypes = map[string]bool{
+	"temporary_error":    true,
+	"transient_error":    true,
+	"overloaded":         true,
+	"rate_limited":       true,
+	"capacity_exceeded":  true,
+	"service_unavailable": true,
+}
+
+// transientMessagePatterns are substring patterns for detecting transient errors
+// from the error detail/message. Multiple patterns for resilience against wording changes.
+// False-positive matches are acceptable: retryVoyage caps at 3 attempts total,
+// so worst case is 2 extra API calls before a permanent error surfaces.
+var transientMessagePatterns = []string{
+	"request to model",     // current Voyage transient error pattern
+	"model is overloaded",  // potential future pattern
+	"temporarily",          // generic transient indicator
+	"try again",            // generic retry suggestion
+	"service unavailable",  // generic 503-like in body
+	"internal server error", // server-side failure (broad, but bounded by max 3 retries)
+	"over capacity",        // capacity-related transient failures
+}
+
+// isVoyageTransient reports whether a Voyage API error indicates a transient
+// server-side failure rather than a client validation error.
+// Checks structured error type/code fields first (stable across API changes),
+// then falls back to message substring matching.
 func isVoyageTransient(detail string) bool {
 	lower := strings.ToLower(detail)
-	for _, pattern := range []string{
-		"request to model",    // current Voyage transient error pattern
-		"model is overloaded", // potential future pattern
-		"temporarily",         // generic transient indicator
-		"try again",           // generic retry suggestion
-		"service unavailable",  // generic 503-like in body
-		"internal server error", // server-side failure (scoped to avoid matching client validation errors)
-		"over capacity",        // capacity-related transient failures
-	} {
+	for _, pattern := range transientMessagePatterns {
 		if strings.Contains(lower, pattern) {
 			return true
 		}
+	}
+	return false
+}
+
+// isVoyageTransientStructured checks the structured type/code fields of an error
+// response for known transient error indicators.
+func isVoyageTransientStructured(errResp *voyageErrorResponse) bool {
+	if errResp == nil {
+		return false
+	}
+	if transientErrorTypes[strings.ToLower(errResp.Type)] {
+		return true
+	}
+	if transientErrorTypes[strings.ToLower(errResp.Code)] {
+		return true
 	}
 	return false
 }
@@ -154,7 +190,7 @@ func retryVoyage[T any](ctx context.Context, fn func() (T, error)) (T, error) {
 			switch {
 			case ve.status == 429, ve.status >= 500:
 				continue
-			case ve.status == 400 && isVoyageTransient(ve.detail):
+			case ve.status == 400 && (isVoyageTransient(ve.detail) || isVoyageTransientStructured(ve.errResp)):
 				continue
 			default:
 				return zero, err
@@ -200,7 +236,7 @@ func (c *voyageClient) doEmbed(ctx context.Context, payload []byte) ([][]float32
 		raw := string(respBody)
 		var errResp voyageErrorResponse
 		if json.Unmarshal(respBody, &errResp) == nil && errResp.Detail != "" {
-			return nil, &voyageError{status: resp.StatusCode, detail: errResp.Detail, raw: raw}
+			return nil, &voyageError{status: resp.StatusCode, detail: errResp.Detail, raw: raw, errResp: &errResp}
 		}
 		return nil, &voyageError{status: resp.StatusCode, detail: raw, raw: raw}
 	}
@@ -297,7 +333,7 @@ func (c *voyageClient) doRerank(ctx context.Context, payload []byte) ([]RerankRe
 		raw := string(respBody)
 		var errResp voyageErrorResponse
 		if json.Unmarshal(respBody, &errResp) == nil && errResp.Detail != "" {
-			return nil, &voyageError{status: resp.StatusCode, detail: errResp.Detail, raw: raw}
+			return nil, &voyageError{status: resp.StatusCode, detail: errResp.Detail, raw: raw, errResp: &errResp}
 		}
 		return nil, &voyageError{status: resp.StatusCode, detail: raw, raw: raw}
 	}

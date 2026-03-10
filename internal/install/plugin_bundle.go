@@ -82,7 +82,10 @@ func Bundle(outputDir, version string) error {
 	for _, file := range deprecatedRuleFiles {
 		_ = os.Remove(filepath.Join(outputDir, "rules", file))
 	}
-	_ = os.Remove(filepath.Join(outputDir, "settings.json")) // empty, no longer needed
+	// settings.json only supports the "agent" key — setting it would activate
+	// the alfred agent as default for all sessions, violating the "silent butler"
+	// philosophy (never interrupt unless called). Intentionally omitted.
+	_ = os.Remove(filepath.Join(outputDir, "settings.json"))
 
 	// 1. Create directory structure.
 	dirs := []string{

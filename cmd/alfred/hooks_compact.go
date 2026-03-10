@@ -659,6 +659,13 @@ func truncateDecision(d string, maxLen int) string {
 // payloads, while preventing extreme outliers from bloating the DB.
 const maxChapterSectionBytes = 32 * 1024
 
+// chapterMemoryTTLDays is the TTL for chapter memory entries (90 days).
+// Chapter memories are verbose per-compact-cycle snapshots; unlike condensed
+// session summaries (permanent), they auto-expire to prevent DB bloat.
+// Expiration is enforced by DeleteExpiredDocs, called during auto-crawl,
+// manual harvest, and init.
+const chapterMemoryTTLDays = 90
+
 // persistChapterMemory saves the current session context as permanent memory
 // "chapter" sections before session.md is overwritten by the new compact cycle.
 //
@@ -707,7 +714,7 @@ func persistChapterMemory(ctx context.Context, projectPath, taskSlug string, sd 
 			SectionPath: sectionPath,
 			Content:     content,
 			SourceType:  store.SourceMemory,
-			TTLDays:     0,
+			TTLDays:     chapterMemoryTTLDays,
 		})
 		if err != nil {
 			debugf("persistChapterMemory: session state upsert error: %v", err)
@@ -734,7 +741,7 @@ func persistChapterMemory(ctx context.Context, projectPath, taskSlug string, sd 
 				SectionPath: sectionPath,
 				Content:     content,
 				SourceType:  store.SourceMemory,
-				TTLDays:     0,
+				TTLDays:     chapterMemoryTTLDays,
 			})
 			if err != nil {
 				debugf("persistChapterMemory: user context %d upsert error: %v", i+1, err)

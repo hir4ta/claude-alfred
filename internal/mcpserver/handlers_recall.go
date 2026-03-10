@@ -87,12 +87,20 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 	return marshalResult(result)
 }
 
+// maxContentBytes limits content size for MCP write operations (256KB).
+// Shared by recall save and spec update to prevent oversized payloads
+// from bloating the DB and embedding pipeline.
+const maxContentBytes = 256 * 1024
+
 // recallSave saves a new memory entry to the knowledge base.
 // If an embedder is available, it asynchronously generates an embedding for semantic search.
 func recallSave(ctx context.Context, st *store.Store, emb *embedder.Embedder, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	content := req.GetString("content", "")
 	if content == "" {
 		return mcp.NewToolResultError("content parameter is required for save"), nil
+	}
+	if len(content) > maxContentBytes {
+		return mcp.NewToolResultError(fmt.Sprintf("content too large: %d bytes (max %d bytes / 256KB)", len(content), maxContentBytes)), nil
 	}
 	label := req.GetString("label", "")
 	if label == "" {

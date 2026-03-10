@@ -122,6 +122,9 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 	if content == "" {
 		return mcp.NewToolResultError("content is required"), nil
 	}
+	if len(content) > maxContentBytes {
+		return mcp.NewToolResultError(fmt.Sprintf("content too large: %d bytes (max %d bytes / 256KB)", len(content), maxContentBytes)), nil
+	}
 	mode := req.GetString("mode", "append")
 	if mode != "append" && mode != "replace" {
 		return mcp.NewToolResultError("mode must be 'append' or 'replace'"), nil

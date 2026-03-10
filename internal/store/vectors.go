@@ -5,9 +5,22 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+// envIntOrDefault reads an integer from an environment variable, returning
+// fallback if the variable is unset, empty, or not a valid positive integer.
+func envIntOrDefault(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return fallback
+}
 
 // CountEmbeddings returns the total number of stored embeddings.
 func (s *Store) CountEmbeddings() (int, error) {
@@ -49,13 +62,21 @@ func (s *Store) GetEmbedding(source string, sourceID int64) ([]float32, error) {
 // so the vector search stage optimizes for recall. Lowering risks noise; raising misses edge cases.
 const minSimilarity = 0.3
 
-// maxVectorCandidates caps the number of embeddings loaded into memory per search.
-// At 2048 dims × 4 bytes × 10000 rows ≈ 80 MB — a reasonable upper bound for the
-// expected knowledge base size (~1000-5000 docs). Beyond this, consider sqlite-vec.
-const maxVectorCandidates = 10000
+// defaultMaxVectorCandidates caps the number of embeddings scanned per search.
+// At 2048 dims × 4 bytes × 10000 rows ≈ 80 MB scan — a reasonable upper bound for
+// the expected knowledge base size (~1000-5000 docs). Beyond this, consider sqlite-vec.
+// Override with ALFRED_MAX_VECTOR_CANDIDATES env var for larger corpora.
+const defaultMaxVectorCandidates = 10000
+
+// earlyStopThreshold is the cosine similarity above which a candidate is
+// considered "high quality". When we accumulate 2x the requested limit
+// of high-quality candidates, we stop scanning early.
+const earlyStopThreshold = 0.7
 
 // VectorSearch performs a generic vector search on a given source table.
 // Returns (sourceID, score) pairs sorted by descending similarity.
+// Supports early termination when enough high-quality candidates are found,
+// and configurable scan limit via ALFRED_MAX_VECTOR_CANDIDATES env var.
 func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source string, limit int) ([]VectorMatch, error) {
 	if queryVec == nil {
 		return nil, nil
@@ -64,14 +85,20 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 		limit = 10
 	}
 
-	rows, err := s.db.QueryContext(ctx, `SELECT source_id, vector FROM embeddings WHERE source = ? LIMIT ?`, source, maxVectorCandidates)
+	maxCandidates := envIntOrDefault("ALFRED_MAX_VECTOR_CANDIDATES", defaultMaxVectorCandidates)
+	// Minimum 50 high-quality candidates before early stop to ensure sufficient
+	// ranking diversity — SQLite returns rows in insertion order (not similarity),
+	// so small thresholds risk missing better matches at higher row IDs.
+	earlyStopCount := max(limit*3, 50)
+
+	rows, err := s.db.QueryContext(ctx, `SELECT source_id, vector FROM embeddings WHERE source = ? LIMIT ?`, source, maxCandidates)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	var candidates []VectorMatch
-	var rowsScanned int
+	var rowsScanned, highQualityCount int
 	for rows.Next() {
 		rowsScanned++
 		var sourceID int64
@@ -94,15 +121,23 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 			continue
 		}
 		candidates = append(candidates, VectorMatch{SourceID: sourceID, Score: sim})
+		if sim >= earlyStopThreshold {
+			highQualityCount++
+			if highQualityCount >= earlyStopCount {
+				if DebugLog != nil {
+					DebugLog("store: VectorSearch: early stop after %d rows (%d high-quality candidates)", rowsScanned, highQualityCount)
+				}
+				break
+			}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return candidates, fmt.Errorf("store: vector search iteration: %w", err)
 	}
 
-	// Warn if DB returned exactly maxVectorCandidates rows — recall may be
-	// silently degraded because higher-ID embeddings were never considered.
-	if rowsScanned >= maxVectorCandidates && DebugLog != nil {
-		DebugLog("store: VectorSearch: hit maxVectorCandidates (%d) for source=%q — consider sqlite-vec for larger datasets", maxVectorCandidates, source)
+	// Warn if scan hit the configured limit — recall may be degraded.
+	if rowsScanned >= maxCandidates && DebugLog != nil {
+		DebugLog("store: VectorSearch: hit maxVectorCandidates (%d) for source=%q — set ALFRED_MAX_VECTOR_CANDIDATES or consider sqlite-vec", maxCandidates, source)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
