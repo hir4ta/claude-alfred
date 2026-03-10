@@ -349,10 +349,10 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	boosts := st.FeedbackBoostBatch(ctx, boostIDs)
 	for i := range candidates {
 		if b, ok := boosts[candidates[i].doc.ID]; ok {
-			// Additive boost (not multiplicative) to avoid death spiral:
-			// multiplicative ×0.9 on a threshold-marginal score (0.40) drops to 0.36,
-			// permanently excluding the doc. Additive ±0.1 keeps scores recoverable.
-			candidates[i].score = max(0, candidates[i].score+b-1.0)
+			// Additive boost: b is 1.0 ± ratio*0.1, so (b - 1.0) gives ±0.1 range.
+			// No floor at 0 — let the threshold filter handle exclusion symmetrically
+			// for both boosted and penalized docs.
+			candidates[i].score += b - 1.0
 		}
 	}
 

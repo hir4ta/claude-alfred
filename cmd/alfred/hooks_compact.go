@@ -613,12 +613,10 @@ func persistDecisionMemory(ctx context.Context, projectPath, taskSlug string, de
 			changedIDs = append(changedIDs, id)
 		}
 	}
-	// asyncEmbedDoc spawns detached background processes (non-blocking cmd.Start).
-	// Each runs independently after this hook exits, so they don't consume our
+	// asyncEmbedDocs spawns a single detached background process (non-blocking cmd.Start).
+	// It runs independently after this hook exits, so it doesn't consume our
 	// 10s PreCompact timeout budget.
-	for _, id := range changedIDs {
-		asyncEmbedDoc(id)
-	}
+	asyncEmbedDocs(changedIDs)
 	if saved > 0 {
 		notifyUser("persisted %d decision(s) to memory (%s/%s)", saved, project, taskSlug)
 		debugf("persistDecisionMemory: saved %d decisions for %s/%s (embed: %d)", saved, project, taskSlug, len(changedIDs))
@@ -740,10 +738,8 @@ func persistChapterMemory(ctx context.Context, projectPath, taskSlug string, sd 
 		}
 	}
 
-	// Async embed all changed docs (non-blocking).
-	for _, id := range changedIDs {
-		asyncEmbedDoc(id)
-	}
+	// Async embed all changed docs in a single batch process (non-blocking).
+	asyncEmbedDocs(changedIDs)
 	if savedCount > 0 {
 		notifyUser("saved chapter %d (%d sections) for task '%s' (%s)", chapterNum, savedCount, taskSlug, ts)
 	}

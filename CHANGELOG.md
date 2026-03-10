@@ -7,6 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.63.4] - 2026-03-10
+
+### Fixed
+- Self-update: downloaded binary was extracted but never installed to executable path — now uses atomic rename
+- Self-update: checksum verification silently skipped on network error — now a hard error (refuses unverified binaries)
+- Recall tool: unsanitized `project` parameter could corrupt URL/section_path — added regex validation
+- Feedback boost formula: `max(0, ...)` floor caused asymmetric penalization — removed, threshold filter handles exclusion
+- `embed-doc` argument parsing: missing bounds-check on `--id` flag could panic — fixed with safe index advancement
+- Crawl lock TOCTOU: redundant `lockFileExists` pre-check could race with `isCrawlRunning` stale cleanup — removed
+
+### Changed
+- `asyncEmbedDoc` → `asyncEmbedDocs`: batch multiple doc IDs into a single background process (reduces process spawning and API connection overhead)
+- `embed-doc` subcommand accepts multiple `--id` flags for batch embedding
+- Vocabulary cache capped at 5,000 terms to bound Levenshtein scan in UserPromptSubmit hot path
+- `downloadRelease` renamed to `installRelease` to reflect full download+install responsibility
+
 ## [0.63.3] - 2026-03-10
 
 ### Added
@@ -492,7 +508,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.63.3...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.63.4...HEAD
+[0.63.4]: https://github.com/hir4ta/claude-alfred/compare/v0.63.3...v0.63.4
 [0.63.3]: https://github.com/hir4ta/claude-alfred/compare/v0.63.2...v0.63.3
 [0.63.2]: https://github.com/hir4ta/claude-alfred/compare/v0.63.1...v0.63.2
 [0.63.1]: https://github.com/hir4ta/claude-alfred/compare/v0.63.0...v0.63.1

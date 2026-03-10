@@ -182,6 +182,10 @@ func (s *Store) loadVocab() map[string]bool {
 	return s.vocabTerms
 }
 
+// maxVocabTerms caps the vocabulary size to prevent O(vocab × query_words)
+// Levenshtein scans from becoming a bottleneck in the UserPromptSubmit hot path.
+const maxVocabTerms = 5000
+
 func (s *Store) buildVocab() map[string]bool {
 	terms := make(map[string]bool, 2000)
 
@@ -200,6 +204,9 @@ func (s *Store) buildVocab() map[string]bool {
 			lw := strings.ToLower(w)
 			if len(lw) >= 2 {
 				terms[lw] = true
+				if len(terms) >= maxVocabTerms {
+					return terms
+				}
 			}
 		}
 	}

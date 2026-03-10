@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,14 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
+
+// validProject matches safe project names: lowercase letters, digits, hyphens.
+// Consistent with spec.ValidSlug to prevent path traversal and section_path parsing issues.
+var validProject = regexp.MustCompile(`^[a-z0-9][a-z0-9\-]{0,63}$`)
+
+func isValidProject(s string) bool {
+	return validProject.MatchString(s)
+}
 
 // recallHandler provides memory-specific search and save operations.
 // Unlike the general "knowledge" tool, recall focuses on user memories:
@@ -92,6 +101,11 @@ func recallSave(ctx context.Context, st *store.Store, req mcp.CallToolRequest) (
 		return mcp.NewToolResultError("label parameter is required for save (short description)"), nil
 	}
 	project := req.GetString("project", "general")
+
+	// Validate project name to prevent path traversal and section_path parsing issues.
+	if !isValidProject(project) {
+		return mcp.NewToolResultError("invalid project name: use lowercase letters, digits, and hyphens only (max 64 chars)"), nil
+	}
 
 	date := time.Now().Format("2006-01-02")
 	url := fmt.Sprintf("memory://user/%s/manual/%s", project, date)

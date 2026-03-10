@@ -426,14 +426,20 @@ func proactiveCrossProjectHints(ctx context.Context, currentProject, taskSlug st
 // Called as a background process by asyncEmbedSession.
 func runEmbedAsync() error {
 	var projectPath, taskSlug, fileName string
-	for i := 2; i < len(os.Args)-1; i++ {
+	for i := 2; i < len(os.Args); i++ {
+		if i+1 >= len(os.Args) {
+			break
+		}
 		switch os.Args[i] {
 		case "--project":
-			projectPath = os.Args[i+1]
+			i++
+			projectPath = os.Args[i]
 		case "--task":
-			taskSlug = os.Args[i+1]
+			i++
+			taskSlug = os.Args[i]
 		case "--file":
-			fileName = os.Args[i+1]
+			i++
+			fileName = os.Args[i]
 		}
 	}
 	if projectPath == "" || taskSlug == "" || fileName == "" {
@@ -476,41 +482,55 @@ func runEmbedAsync() error {
 	return fmt.Errorf("embed-async: all retries failed for %s/%s: %w", taskSlug, fileName, lastErr)
 }
 
-// asyncEmbedDoc spawns a background process to generate embeddings for a
-// doc already stored in the docs table. This mirrors asyncEmbedSession but
-// works with arbitrary doc IDs rather than spec files.
-func asyncEmbedDoc(docID int64) {
+// asyncEmbedDocs spawns a single background process to generate embeddings
+// for multiple docs already stored in the docs table. Batching avoids
+// spawning N processes (and N Voyage API connections) per compact cycle.
+func asyncEmbedDocs(docIDs []int64) {
+	if len(docIDs) == 0 {
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
-		debugf("asyncEmbedDoc: executable path error: %v", err)
+		debugf("asyncEmbedDocs: executable path error: %v", err)
 		return
 	}
 
-	cmd := execCommand(exe, "embed-doc", "--id", fmt.Sprintf("%d", docID))
+	args := []string{"embed-doc"}
+	for _, id := range docIDs {
+		args = append(args, "--id", fmt.Sprintf("%d", id))
+	}
+	cmd := execCommand(exe, args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Start(); err != nil {
-		debugf("asyncEmbedDoc: start error: %v", err)
+		debugf("asyncEmbedDocs: start error: %v", err)
 		return
 	}
 	pid := cmd.Process.Pid
 	_ = cmd.Process.Release()
-	debugf("asyncEmbedDoc: spawned pid=%d for doc_id=%d", pid, docID)
+	debugf("asyncEmbedDocs: spawned pid=%d for %d doc(s)", pid, len(docIDs))
 }
 
 // runEmbedDoc is the entry point for the embed-doc subcommand.
-// Generates embeddings for a single doc by ID with retry on transient failures.
+// Generates embeddings for one or more docs by ID with retry on transient failures.
+// Accepts multiple --id flags: alfred embed-doc --id 1 --id 2 --id 3
 func runEmbedDoc() error {
-	var docID int64
-	for i := 2; i < len(os.Args)-1; i++ {
+	var docIDs []int64
+	for i := 2; i < len(os.Args); i++ {
 		if os.Args[i] == "--id" {
-			if _, err := fmt.Sscanf(os.Args[i+1], "%d", &docID); err != nil {
-				return fmt.Errorf("invalid --id: %w", err)
+			if i+1 >= len(os.Args) {
+				return fmt.Errorf("--id requires a value")
 			}
+			i++
+			var id int64
+			if _, err := fmt.Sscanf(os.Args[i], "%d", &id); err != nil {
+				return fmt.Errorf("invalid --id %q: %w", os.Args[i], err)
+			}
+			docIDs = append(docIDs, id)
 		}
 	}
-	if docID == 0 {
-		return fmt.Errorf("usage: alfred embed-doc --id DOC_ID")
+	if len(docIDs) == 0 {
+		return fmt.Errorf("usage: alfred embed-doc --id DOC_ID [--id DOC_ID ...]")
 	}
 
 	st, err := store.OpenDefault()
@@ -524,17 +544,37 @@ func runEmbedDoc() error {
 		return fmt.Errorf("embedder: %w", err)
 	}
 
-	docs, err := st.GetDocsByIDs(context.Background(), []int64{docID})
-	if err != nil || len(docs) == 0 {
-		return fmt.Errorf("doc not found: id=%d", docID)
+	docs, err := st.GetDocsByIDs(context.Background(), docIDs)
+	if err != nil {
+		return fmt.Errorf("load docs: %w", err)
 	}
-	doc := docs[0]
+	if len(docs) < len(docIDs) {
+		debugf("embed-doc: requested %d docs, found %d (some may have been deleted)", len(docIDs), len(docs))
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Timeout scales with batch size: 30s base + 10s per additional doc.
+	timeout := 30*time.Second + time.Duration(max(len(docs)-1, 0))*10*time.Second
+	if timeout > 5*time.Minute {
+		timeout = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	text := doc.SectionPath + "\n" + doc.Content
+	var errs []string
+	for _, doc := range docs {
+		text := doc.SectionPath + "\n" + doc.Content
+		if err := embedDocWithRetry(ctx, st, emb, doc.ID, text); err != nil {
+			errs = append(errs, fmt.Sprintf("doc_id=%d: %v", doc.ID, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("embed-doc: %d/%d failed: %s", len(errs), len(docs), strings.Join(errs, "; "))
+	}
+	debugf("embed-doc: all %d docs embedded successfully", len(docs))
+	return nil
+}
 
+func embedDocWithRetry(ctx context.Context, st *store.Store, emb *embedder.Embedder, docID int64, text string) error {
 	var lastErr error
 	for attempt := range 3 {
 		if attempt > 0 {
@@ -544,16 +584,16 @@ func runEmbedDoc() error {
 		vec, err := emb.EmbedForStorage(ctx, text)
 		if err != nil {
 			lastErr = err
-			debugf("embed-doc: attempt %d failed: %v", attempt+1, err)
+			debugf("embed-doc: attempt %d failed for doc_id=%d: %v", attempt+1, docID, err)
 			continue
 		}
 		if err := st.InsertEmbedding("docs", docID, emb.Model(), vec); err != nil {
-			return fmt.Errorf("embed-doc: insert embedding: %w", err)
+			return fmt.Errorf("insert embedding: %w", err)
 		}
 		debugf("embed-doc: success for doc_id=%d", docID)
 		return nil
 	}
-	return fmt.Errorf("embed-doc: all retries failed for doc_id=%d: %w", docID, lastErr)
+	return fmt.Errorf("all retries failed: %w", lastErr)
 }
 
 // ---------------------------------------------------------------------------
@@ -592,8 +632,10 @@ func checkAndSpawnCrawl(st *store.Store) {
 		debugf("checkAndSpawnCrawl: no lock path, skipping")
 		return
 	}
-	if isCrawlRunning(lockPath) || lockFileExists(lockPath) {
-		debugf("checkAndSpawnCrawl: crawl already running or lock held")
+	// Rely on isCrawlRunning (PID check + stale cleanup) + O_EXCL in spawnCrawlAsync.
+	// lockFileExists was redundant and could race with isCrawlRunning's stale removal.
+	if isCrawlRunning(lockPath) {
+		debugf("checkAndSpawnCrawl: crawl already running")
 		return
 	}
 
@@ -610,15 +652,6 @@ func crawlLockPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".claude-alfred", "crawl.lock")
-}
-
-// lockFileExists reports whether the lock file exists at all.
-// Used as a fast pre-check before the more expensive isCrawlRunning (signal 0).
-// Catches the brief window between lock creation and process start where
-// isCrawlRunning might not yet detect the process.
-func lockFileExists(lockPath string) bool {
-	_, err := os.Stat(lockPath)
-	return err == nil
 }
 
 // crawlLockMaxAge is the maximum age for a crawl lock file before it is
@@ -854,7 +887,7 @@ func persistSessionSummary(ctx context.Context, projectPath, taskSlug, session s
 	}
 	if changed {
 		notifyUser("saved session summary to memory (%s/%s)", project, taskSlug)
-		asyncEmbedDoc(id)
+		asyncEmbedDocs([]int64{id})
 		debugf("persistSessionSummary: saved session summary for %s/%s", project, taskSlug)
 	}
 }

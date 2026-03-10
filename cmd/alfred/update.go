@@ -272,7 +272,7 @@ func doInstall(version string) tea.Cmd {
 		}
 
 		// Direct download from GitHub Releases.
-		if err := downloadRelease(version); err == nil {
+		if err := installRelease(version); err == nil {
 			regenPluginBundle()
 			return installDoneMsg{}
 		}
@@ -310,9 +310,9 @@ func isBrewInstalled() bool {
 	return strings.HasPrefix(resolved, strings.TrimSpace(string(brewPrefix)))
 }
 
-// downloadRelease downloads the alfred binary from GitHub Releases
+// installRelease downloads the alfred binary from GitHub Releases
 // and verifies the SHA256 checksum against checksums.txt.
-func downloadRelease(version string) error {
+func installRelease(version string) error {
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 	archiveName := fmt.Sprintf("alfred_%s_%s.tar.gz", goos, goarch)
@@ -347,23 +347,74 @@ func downloadRelease(version string) error {
 		return fmt.Errorf("curl or wget not found")
 	}
 
-	// Verify SHA256 checksum (best-effort: warn but don't block on fetch failure).
-	if expected, err := fetchExpectedChecksum(checksumURL, archiveName); err == nil {
-		if err := verifyFileChecksum(tarGzPath, expected); err != nil {
-			os.Remove(tarGzPath)
-			return fmt.Errorf("checksum verification failed: %w", err)
-		}
-		debugf("downloadRelease: checksum verified for %s", archiveName)
-	} else {
-		debugf("downloadRelease: could not fetch checksums.txt: %v (continuing without verification)", err)
+	// Verify SHA256 checksum (hard error on failure — never install unverified binaries).
+	expected, err := fetchExpectedChecksum(checksumURL, archiveName)
+	if err != nil {
+		os.Remove(tarGzPath)
+		return fmt.Errorf("checksum fetch failed (refusing to install unverified binary): %w", err)
 	}
+	if err := verifyFileChecksum(tarGzPath, expected); err != nil {
+		os.Remove(tarGzPath)
+		return fmt.Errorf("checksum verification failed: %w", err)
+	}
+	debugf("installRelease: checksum verified for %s", archiveName)
 
-	// Extract.
+	// Extract to cache dir.
 	cmd := exec.Command("tar", "xzf", tarGzPath, "-C", cacheDir, "alfred")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("extract failed: %w: %s", err, out)
 	}
 	os.Remove(tarGzPath) // cleanup archive
+
+	// Install: copy extracted binary to the current executable's location.
+	srcBin := filepath.Join(cacheDir, "alfred")
+	dstBin, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot determine install path: %w", err)
+	}
+	// Resolve symlinks to find the real path. Fall back to Clean if the
+	// symlink target no longer exists (e.g., partial previous update).
+	if resolved, err := filepath.EvalSymlinks(dstBin); err == nil {
+		dstBin = resolved
+	} else {
+		dstBin = filepath.Clean(dstBin)
+	}
+
+	// If extracted binary is already at the install location, nothing to do.
+	srcAbs, _ := filepath.Abs(srcBin)
+	dstAbs, _ := filepath.Abs(dstBin)
+	if srcAbs == dstAbs {
+		debugf("installRelease: src and dst are the same path, skipping copy")
+		return nil
+	}
+
+	src, err := os.Open(srcBin)
+	if err != nil {
+		return fmt.Errorf("open downloaded binary: %w", err)
+	}
+	defer src.Close()
+
+	// Write to a temp file next to the destination, then atomic rename.
+	tmpBin := dstBin + ".tmp"
+	dst, err := os.OpenFile(tmpBin, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return fmt.Errorf("create temp binary: %w", err)
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		os.Remove(tmpBin)
+		return fmt.Errorf("copy binary: %w", err)
+	}
+	if err := dst.Close(); err != nil {
+		os.Remove(tmpBin)
+		return fmt.Errorf("close temp binary: %w", err)
+	}
+	if err := os.Rename(tmpBin, dstBin); err != nil {
+		os.Remove(tmpBin)
+		return fmt.Errorf("install binary: %w", err)
+	}
+
+	os.Remove(srcBin) // cleanup extracted binary (safe: srcBin != dstBin)
 	return nil
 }
 
