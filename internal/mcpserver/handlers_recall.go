@@ -167,10 +167,16 @@ func recallSave(ctx context.Context, st *store.Store, emb *embedder.Embedder, re
 		}()
 	}
 
+	embeddingStatus := "none"
+	if emb != nil && changed {
+		embeddingStatus = "pending"
+	}
+
 	return marshalResult(map[string]any{
-		"status":       status,
-		"id":           id,
-		"section_path": sectionPath,
-		"url":          url,
+		"status":           status,
+		"id":               id,
+		"section_path":     sectionPath,
+		"url":              url,
+		"embedding_status": embeddingStatus,
 	})
 }

@@ -252,6 +252,7 @@ func extractDecisionsFromData(data []byte) []string {
 	allLines := strings.Split(string(data), "\n")
 	if !checkTranscriptFormat(allLines) {
 		debugf("extractDecisions: transcript format guard triggered")
+		notifyUser("info: transcript format unrecognized, skipping decision extraction")
 		return nil
 	}
 

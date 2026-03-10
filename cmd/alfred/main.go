@@ -134,8 +134,9 @@ func runServe() error {
 		fmt.Fprintln(os.Stderr, "Warning: VOYAGE_API_KEY not set — running in FTS-only mode (no vector search or reranking). Run 'alfred settings' to configure.")
 	} else {
 		emb = e
-		// Set expected dimensions so InsertEmbedding validates vector sizes.
+		// Set expected dimensions and model so searches validate compatibility.
 		st.ExpectedDims = e.Dims()
+		st.ExpectedModel = e.Model()
 	}
 
 	if count, _ := st.SeedDocsCount(); count == 0 {

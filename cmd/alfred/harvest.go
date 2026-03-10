@@ -81,6 +81,7 @@ func runHarvest() error {
 	if e, err := embedder.NewEmbedder(); err == nil {
 		emb = e
 		st.ExpectedDims = e.Dims()
+		st.ExpectedModel = e.Model()
 	}
 
 	res, err := install.ApplySeedData(ctx, st, emb, sf, &install.SeedProgress{

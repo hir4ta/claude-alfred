@@ -27,6 +27,11 @@ type Store struct {
 	// When > 0, InsertEmbedding validates that vectors match this size.
 	ExpectedDims int
 
+	// ExpectedModel is the current embedding model name (e.g., "voyage-4-large").
+	// When set, VectorSearch logs a warning if stored embeddings use a different model
+	// with the same dimensions (silent correctness degradation risk).
+	ExpectedModel string
+
 	vocabMu    sync.Mutex
 	vocabReady bool
 	vocabTerms map[string]bool

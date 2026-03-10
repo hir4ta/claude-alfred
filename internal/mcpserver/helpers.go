@@ -125,7 +125,7 @@ type scoredDoc struct {
 // then multiplied by the recency factor. This preserves semantic relevance as the
 // primary signal while giving a boost to newer memories and changelogs.
 func applyRecencySignal(docs []store.DocRow, now time.Time) []store.DocRow {
-	if len(docs) <= 1 {
+	if len(docs) == 0 {
 		return docs
 	}
 
@@ -149,10 +149,13 @@ func applyRecencySignal(docs []store.DocRow, now time.Time) []store.DocRow {
 		scored[i] = scoredDoc{doc: d, score: posScore * rf}
 	}
 
-	// SliceStable preserves original (relevance) order on score ties.
-	sort.SliceStable(scored, func(i, j int) bool {
-		return scored[i].score > scored[j].score
-	})
+	// Single doc: apply factor but skip sort.
+	if len(scored) > 1 {
+		// SliceStable preserves original (relevance) order on score ties.
+		sort.SliceStable(scored, func(i, j int) bool {
+			return scored[i].score > scored[j].score
+		})
+	}
 
 	result := make([]store.DocRow, len(scored))
 	for i, s := range scored {
@@ -199,21 +202,18 @@ func hybridSearchPipeline(ctx context.Context, st *store.Store, emb *embedder.Em
 			if fetchErr != nil {
 				res.Warnings = append(res.Warnings, fmt.Sprintf("doc fetch failed, using FTS-only: %v", fetchErr))
 			} else {
-				// Preserve RRF ordering (GetDocsByIDs may reorder).
-				if len(docs) > 1 {
-					docMap := make(map[int64]store.DocRow, len(docs))
-					for _, d := range docs {
-						docMap[d.ID] = d
-					}
-					ordered := make([]store.DocRow, 0, len(ids))
-					for _, id := range ids {
-						if d, ok := docMap[id]; ok {
-							ordered = append(ordered, d)
-						}
-					}
-					docs = ordered
+				// Preserve RRF ordering (GetDocsByIDs returns unordered).
+				docMap := make(map[int64]store.DocRow, len(docs))
+				for _, d := range docs {
+					docMap[d.ID] = d
 				}
-				res.Docs = docs
+				ordered := make([]store.DocRow, 0, len(ids))
+				for _, id := range ids {
+					if d, ok := docMap[id]; ok {
+						ordered = append(ordered, d)
+					}
+				}
+				res.Docs = ordered
 				res.SearchMethod = "hybrid_rrf"
 
 				// Stage 2: Rerank via Voyage rerank API.
@@ -251,8 +251,8 @@ func hybridSearchPipeline(ctx context.Context, st *store.Store, emb *embedder.Em
 		}
 	}
 
-	// Stage 3: Apply feedback boost (promote docs with positive user feedback).
-	if len(res.Docs) > 1 {
+	// Stage 3: Apply feedback boost (promote/demote docs based on user feedback).
+	if len(res.Docs) > 0 {
 		ids := make([]int64, len(res.Docs))
 		for i, d := range res.Docs {
 			ids[i] = d.ID

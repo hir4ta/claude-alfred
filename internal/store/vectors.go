@@ -122,6 +122,15 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 	}
 	defer rows.Close()
 
+	// One-time model mismatch check: warn if stored embeddings use a different model.
+	if s.ExpectedModel != "" && DebugLog != nil {
+		var storedModel string
+		_ = s.db.QueryRowContext(ctx, "SELECT model FROM embeddings WHERE source = ? LIMIT 1", source).Scan(&storedModel)
+		if storedModel != "" && storedModel != s.ExpectedModel {
+			DebugLog("store: VectorSearch: model mismatch: stored=%q, current=%q — consider re-embedding with 'alfred init'", storedModel, s.ExpectedModel)
+		}
+	}
+
 	var candidates []VectorMatch
 	var rowsScanned, highQualityCount, dimMismatchCount int
 	for rows.Next() {

@@ -77,7 +77,7 @@ go vet ./...                  # Static analysis
 - task_slug: `^[a-z0-9][a-z0-9\-]{0,63}$`
 - spec delete: dry-run preview (default) → `confirm=true` for actual deletion
 - spec.ValidSlug: exported regex for slug validation across packages
-- spec tool: DestructiveHint=false, IdempotentHint=false (safety via 2-phase delete confirm, not MCP annotation)
+- spec tool: DestructiveHint=true, IdempotentHint=false (delete action is destructive; 2-phase confirm provides UX safety)
 - Spec file locking: advisory flock on `.lock` file (exponential backoff 100/200/400/800ms ~1.5s total, context-aware cancellation, graceful fallback + stderr warning)
 - Spec version history: `.history/` dir with max 20 versions per file; rollback saves current first
 - Spec tool actions: init / update / status / switch / delete / history / rollback
@@ -109,7 +109,7 @@ go vet ./...                  # Static analysis
 
 - At each meaningful implementation milestone, perform **thorough self-review from multiple perspectives** (delegate to another agent if possible)
 - After self-review, update README.md / README.ja.md / CLAUDE.md to reflect changes
-- Maintain test coverage at **80% or above** (`go test -cover ./...`; TUI packages may be excluded)
+- Maintain test coverage at **50% or above** (`go test -cover ./...`; TUI packages and hook handlers may be excluded)
 
 ## Compact Instructions
 

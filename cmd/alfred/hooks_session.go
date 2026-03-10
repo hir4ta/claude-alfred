@@ -36,21 +36,19 @@ func handleSessionStart(ctx context.Context, ev *hookEvent) {
 	}
 	// Run independent operations in parallel to minimize timeout risk.
 	// All three are fail-open (errors logged internally, never fatal).
-	var wg sync.WaitGroup
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		ingestProjectClaudeMD(ctx, st, ev.ProjectPath)
-	}()
-	go func() {
-		defer wg.Done()
-		checkAndSpawnCrawl(st)
-	}()
-	go func() {
-		defer wg.Done()
-		ensureUserRules()
-	}()
-	wg.Wait()
+	// Channel-based pattern respects context deadline (WaitGroup.Wait cannot).
+	done := make(chan struct{}, 3)
+	go func() { ingestProjectClaudeMD(ctx, st, ev.ProjectPath); done <- struct{}{} }()
+	go func() { checkAndSpawnCrawl(st); done <- struct{}{} }()
+	go func() { ensureUserRules(); done <- struct{}{} }()
+	for i := 0; i < 3; i++ {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			debugf("handleSessionStart: context expired, %d/%d ops completed", i, 3)
+			return
+		}
+	}
 
 	// Inject spec context after parallel ops complete.
 	// Must be serial: writes JSON to stdout (protocol integrity).
@@ -490,6 +488,7 @@ func runEmbedAsync() error {
 		return fmt.Errorf("embedder: %w", err)
 	}
 	st.ExpectedDims = emb.Dims()
+	st.ExpectedModel = emb.Model()
 
 	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
 	sf := spec.SpecFile(fileName)
@@ -587,6 +586,7 @@ func runEmbedDoc() error {
 		return fmt.Errorf("embedder: %w", err)
 	}
 	st.ExpectedDims = emb.Dims()
+	st.ExpectedModel = emb.Model()
 
 	docs, err := st.GetDocsByIDs(context.Background(), docIDs)
 	if err != nil {
@@ -908,6 +908,7 @@ func persistSessionSummary(ctx context.Context, projectPath, taskSlug, session s
 
 	st, err := store.OpenDefaultCached()
 	if err != nil {
+		notifyUser("warning: session memory save skipped (DB error)")
 		debugf("persistSessionSummary: DB open error: %v", err)
 		return
 	}

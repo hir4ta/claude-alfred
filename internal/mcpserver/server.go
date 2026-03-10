@@ -102,7 +102,7 @@ task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64
 				mcp.WithTitleAnnotation("Spec Management"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(false),
-				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithDestructiveHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("action", mcp.Description("Action to perform"), mcp.Required(), mcp.Enum("init", "update", "status", "switch", "delete", "history", "rollback")),
 				mcp.WithString("project_path", mcp.Description("Project root path (defaults to current working directory if omitted)")),
