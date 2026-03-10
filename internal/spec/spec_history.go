@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,7 +110,7 @@ func (s *SpecDir) Rollback(f SpecFile, timestamp string) error {
 	// Acquire lock first, then save history + write atomically to avoid
 	// a TOCTOU where a concurrent WriteFile could slip between saveHistory
 	// and the actual write.
-	lf, err := s.lockSpecDir()
+	lf, err := s.lockSpecDir(context.Background())
 	if err == nil {
 		defer unlockSpecDir(lf)
 	}

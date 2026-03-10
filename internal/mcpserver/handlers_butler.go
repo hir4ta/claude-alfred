@@ -16,9 +16,10 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
-// validateProjectPath checks that project_path is absolute and clean.
+// validateProjectPath checks that project_path is absolute and clean,
+// resolving symlinks to prevent path traversal via symbolic links.
 // Falls back to the current working directory when raw is empty.
-// Returns the cleaned path or an error result.
+// Returns the resolved path or an error result.
 func validateProjectPath(raw string) (string, *mcp.CallToolResult) {
 	if raw == "" {
 		cwd, err := os.Getwd()
@@ -31,7 +32,15 @@ func validateProjectPath(raw string) (string, *mcp.CallToolResult) {
 	if !filepath.IsAbs(cleaned) {
 		return "", mcp.NewToolResultError("project_path must be an absolute path")
 	}
-	return cleaned, nil
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		// Path may not exist yet (e.g., spec init); fall back to cleaned path.
+		if errors.Is(err, os.ErrNotExist) {
+			return cleaned, nil
+		}
+		return "", mcp.NewToolResultError(fmt.Sprintf("project_path resolution failed: %v", err))
+	}
+	return resolved, nil
 }
 
 // validSpecFiles maps allowed file name strings to spec.SpecFile constants.
@@ -156,11 +165,11 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 
 	switch mode {
 	case "replace":
-		if err := sd.WriteFile(sf, content); err != nil {
+		if err := sd.WriteFile(ctx, sf, content); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("write failed: %v", err)), nil
 		}
 	default: // append
-		if err := sd.AppendFile(sf, content); err != nil {
+		if err := sd.AppendFile(ctx, sf, content); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("append failed: %v", err)), nil
 		}
 	}
@@ -248,7 +257,7 @@ func specDoSwitch(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	if oldSlug != "" && oldSlug != taskSlug {
 		oldSD := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: oldSlug}
 		if oldSD.Exists() {
-			_ = oldSD.AppendFile(spec.FileSession, fmt.Sprintf("\n## Switched away\nSwitched to %s\n", taskSlug))
+			_ = oldSD.AppendFile(context.Background(), spec.FileSession, fmt.Sprintf("\n## Switched away\nSwitched to %s\n", taskSlug))
 		}
 	}
 

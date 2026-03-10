@@ -22,7 +22,7 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding)
 | `cmd/alfred/memory.go` | Memory management (prune, stats) |
 | `cmd/alfred/analytics.go` | Feedback loop analytics (injection stats, boost/penalty ranking) |
 | `cmd/alfred/harvest.go` | Manual live crawl (docs, blog, news, Agent SDK → DB + embeddings) |
-| `cmd/alfred/doctor.go` | System diagnostics (11 checks: DB, schema, FTS, plugin, hooks, Voyage, embeddings, crawl) |
+| `cmd/alfred/doctor.go` | System diagnostics (12 checks: DB, schema, FTS, plugin, hooks, Voyage, embeddings, crawl, MCP reachability) |
 | `cmd/alfred/config.go` | Per-project config resolution (`.alfred/config.json` > env > default) |
 | `cmd/alfred/settings.go` | Interactive settings (API key management) |
 | `cmd/alfred/update.go` | Self-update (Homebrew > download > go install) |
@@ -77,14 +77,15 @@ go vet ./...                  # Static analysis
 - spec delete: dry-run preview (default) → `confirm=true` for actual deletion
 - spec.ValidSlug: exported regex for slug validation across packages
 - spec tool: DestructiveHint=false (safety via 2-phase delete confirm, not MCP annotation)
-- Spec file locking: advisory flock on `.lock` file (exponential backoff 50/100/200/400ms, graceful fallback + stderr warning)
+- Spec file locking: advisory flock on `.lock` file (exponential backoff 50/100/200/400ms, context-aware cancellation, graceful fallback + stderr warning)
 - Spec version history: `.history/` dir with max 20 versions per file; rollback saves current first
 - Spec tool actions: init / update / status / switch / delete / history / rollback
 
 ### Memory & Feedback
 
 - Memory persistence: source_type="memory" in docs table, TTL=0 (permanent)
-- Implicit feedback loop: doc_feedback table tracks injection>reference signals, applies +/-0.1 boost
+- Implicit feedback loop: doc_feedback table tracks injection>reference signals, applies +/-0.15 boost with time decay (linear, 180-day floor at 50%)
+- Recency signal: post-rerank exponential decay for memory (60d half-life) and changelog (30d half-life); docs not decayed (crawled_at is fetch time, not feature age); floor at 50%
 - Cross-project learning: SessionStart proactively searches memories from other projects
 
 ### Crawl & Seed
@@ -94,7 +95,11 @@ go vet ./...                  # Static analysis
 
 ### Misc
 
-- config-review: maturity score (0-100) per category; absent categories scored at 50 baseline (not 0)
+- config-review: maturity score (0-100) per 7 categories (claude_md, skills, rules, hooks, agents, mcp, permissions); absent categories scored at 50 baseline (not 0)
+- config-review: permissions review inspects .claude/settings.json + settings.local.json allow/deny lists with conflict detection (intra-file=warning, cross-file=info, feature flags)
+- config-review: hook content validation (event names, type, command non-empty, timeout range, matcher regex)
+- config-review: agent deep analysis (.claude/agents/ + ~/.claude/agents/): description, model, tools, bypassPermissions warning
+- doctor: MCP reachability check — verifies stdio server commands via exec.LookPath, notes package runners (npx/uvx/bunx)
 - Katakana>English dictionary: built-in + user-defined override via `~/.claude-alfred/dictionary.json`
 - Transcript format guard: 20-line sample, 70% parse + 50% structural validity thresholds
 

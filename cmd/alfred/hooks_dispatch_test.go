@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -40,7 +41,7 @@ func TestRunHook_SessionStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spec.Init: %v", err)
 	}
-	sd.WriteFile(spec.FileSession, "# Session: dispatch-test\n\n## Status\nactive\n\n## Currently Working On\nTesting dispatch\n")
+	sd.WriteFile(context.Background(), spec.FileSession, "# Session: dispatch-test\n\n## Status\nactive\n\n## Currently Working On\nTesting dispatch\n")
 
 	feedStdin(t, hookEvent{
 		ProjectPath: dir,

@@ -375,7 +375,10 @@ func (s *Store) RecordFeedback(ctx context.Context, docID int64, positive bool) 
 				negative_hits = negative_hits + 1,
 				last_feedback = excluded.last_feedback`, docID, now)
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("store: record feedback (doc_id=%d, positive=%v): %w", docID, positive, err)
+	}
+	return nil
 }
 
 // GetRecentInjections returns doc IDs injected within the last duration.
@@ -411,15 +414,23 @@ func (s *Store) FeedbackBoost(ctx context.Context, docID int64) float64 {
 	return 1.0
 }
 
+// feedbackBoostScale controls the maximum boost/penalty magnitude (±0.15 range: 0.85-1.15).
+const feedbackBoostScale = 0.15
+
+// feedbackDecayDays controls time decay: feedback linearly decays from full
+// weight to 50% over this many days (floor at 0.5).
+const feedbackDecayDays = 180.0
+
 // FeedbackBoostBatch returns relevance boost factors for multiple docs in a
 // single query. Missing entries default to 1.0 (neutral).
+// Applies linear time decay: full weight at day 0, 50% weight at 180 days.
 func (s *Store) FeedbackBoostBatch(ctx context.Context, docIDs []int64) map[int64]float64 {
 	result := make(map[int64]float64, len(docIDs))
 	if len(docIDs) == 0 {
 		return result
 	}
 
-	query := "SELECT doc_id, positive_hits, negative_hits FROM doc_feedback WHERE doc_id IN ("
+	query := "SELECT doc_id, positive_hits, negative_hits, last_feedback FROM doc_feedback WHERE doc_id IN ("
 	args := make([]any, len(docIDs))
 	for i, id := range docIDs {
 		if i > 0 {
@@ -439,10 +450,12 @@ func (s *Store) FeedbackBoostBatch(ctx context.Context, docIDs []int64) map[int6
 	}
 	defer rows.Close()
 
+	now := time.Now()
 	for rows.Next() {
 		var docID int64
 		var pos, neg int
-		if err := rows.Scan(&docID, &pos, &neg); err != nil {
+		var lastFeedback sql.NullString
+		if err := rows.Scan(&docID, &pos, &neg, &lastFeedback); err != nil {
 			if DebugLog != nil {
 				DebugLog("store: FeedbackBoostBatch scan error: %v", err)
 			}
@@ -453,7 +466,16 @@ func (s *Store) FeedbackBoostBatch(ctx context.Context, docIDs []int64) map[int6
 			continue
 		}
 		ratio := float64(pos-neg) / float64(total)
-		result[docID] = 1.0 + ratio*0.1
+
+		// Time decay: recent feedback has full weight, older feedback decays.
+		decay := 1.0
+		if lastFeedback.Valid {
+			if t, err := time.Parse(time.RFC3339, lastFeedback.String); err == nil {
+				days := now.Sub(t).Hours() / 24
+				decay = max(0.5, 1.0-days/feedbackDecayDays)
+			}
+		}
+		result[docID] = 1.0 + ratio*feedbackBoostScale*decay
 	}
 	if err := rows.Err(); err != nil {
 		if DebugLog != nil {
@@ -875,7 +897,7 @@ func (s *Store) TopFeedbackDocs(ctx context.Context, limit int, ascending bool) 
 		}
 		total := d.Positive + d.Negative
 		if total > 0 {
-			d.BoostFactor = 1.0 + float64(d.Positive-d.Negative)/float64(total)*0.1
+			d.BoostFactor = 1.0 + float64(d.Positive-d.Negative)/float64(total)*feedbackBoostScale
 		} else {
 			d.BoostFactor = 1.0
 		}

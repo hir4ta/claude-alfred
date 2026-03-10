@@ -4,11 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sort"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/store"
+)
+
+// Recency signal constants.
+// Applied post-rerank to boost newer memories and changelogs.
+// Docs (crawled reference material) are not decayed because crawled_at
+// reflects fetch time, not feature authoring time.
+const (
+	recencyHalfLifeMemory    = 60.0  // days: memory half-life
+	recencyHalfLifeChangelog = 30.0  // days: changelog half-life
+	recencyFloor             = 0.5   // minimum multiplier (never suppress below 50%)
 )
 
 // KBSnippet is a compact knowledge base search result.
@@ -60,6 +73,92 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+// recencyHalfLife returns the half-life in days for a given source type.
+// Returns 0 for source types that should not be decayed.
+func recencyHalfLife(sourceType string) float64 {
+	switch sourceType {
+	case store.SourceMemory:
+		return recencyHalfLifeMemory
+	case store.SourceChangelog:
+		return recencyHalfLifeChangelog
+	default:
+		return 0 // no decay
+	}
+}
+
+// recencyFactor computes a multiplicative recency signal for a document.
+// Uses exponential decay: factor = max(floor, exp(-ln2 * ageDays / halfLife)).
+// Returns 1.0 for source types with no decay or missing timestamps.
+func recencyFactor(crawledAt string, sourceType string, now time.Time) float64 {
+	halfLife := recencyHalfLife(sourceType)
+	if halfLife <= 0 {
+		return 1.0
+	}
+	t, err := time.Parse(time.RFC3339, crawledAt)
+	if err != nil {
+		t, err = time.Parse("2006-01-02 15:04:05", crawledAt)
+		if err != nil {
+			return 1.0
+		}
+	}
+	ageDays := now.Sub(t).Hours() / 24
+	if ageDays <= 0 {
+		return 1.0
+	}
+	factor := math.Exp(-math.Ln2 * ageDays / halfLife)
+	if factor < recencyFloor {
+		return recencyFloor
+	}
+	return factor
+}
+
+// scoredDoc pairs a DocRow with a sortable score for recency-based reordering.
+type scoredDoc struct {
+	doc   store.DocRow
+	score float64 // original position score * recency factor
+}
+
+// applyRecencySignal reorders docs by applying a recency boost.
+// Original ordering (from rerank or RRF) is encoded as a position-based score,
+// then multiplied by the recency factor. This preserves semantic relevance as the
+// primary signal while giving a boost to newer memories and changelogs.
+func applyRecencySignal(docs []store.DocRow, now time.Time) []store.DocRow {
+	if len(docs) <= 1 {
+		return docs
+	}
+
+	// Check if any doc needs recency adjustment.
+	needsAdjust := false
+	for _, d := range docs {
+		if recencyHalfLife(d.SourceType) > 0 {
+			needsAdjust = true
+			break
+		}
+	}
+	if !needsAdjust {
+		return docs
+	}
+
+	scored := make([]scoredDoc, len(docs))
+	for i, d := range docs {
+		// Position-based score: first doc = 1.0, last = 1/n.
+		posScore := 1.0 / float64(i+1)
+		rf := recencyFactor(d.CrawledAt, d.SourceType, now)
+		scored[i] = scoredDoc{doc: d, score: posScore * rf}
+	}
+
+	// SliceStable preserves original (relevance) order on score ties.
+	sort.SliceStable(scored, func(i, j int) bool {
+		return scored[i].score > scored[j].score
+	})
+
+	result := make([]store.DocRow, len(scored))
+	for i, s := range scored {
+		result[i] = s.doc
+	}
+	return result
 }
 
 // hybridSearchResult holds the output of a hybrid search pipeline.
@@ -151,6 +250,9 @@ func hybridSearchPipeline(ctx context.Context, st *store.Store, emb *embedder.Em
 			res.Docs = docs
 		}
 	}
+
+	// Stage 3: Apply recency signal (boost newer memories/changelogs).
+	res.Docs = applyRecencySignal(res.Docs, time.Now())
 
 	// Trim to requested limit.
 	if len(res.Docs) > limit {

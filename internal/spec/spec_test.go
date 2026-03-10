@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,7 @@ func TestAppendFile(t *testing.T) {
 	}
 
 	appendContent := "\n## New Decision\n- **Chosen:** Go\n"
-	if err := sd.AppendFile(FileDecisions, appendContent); err != nil {
+	if err := sd.AppendFile(context.Background(), FileDecisions, appendContent); err != nil {
 		t.Fatalf("AppendFile failed: %v", err)
 	}
 
@@ -296,7 +297,7 @@ func TestWriteFileAtomic(t *testing.T) {
 	}
 
 	content := "# Updated Session\n\n## Status\nactive\n"
-	if err := sd.WriteFile(FileSession, content); err != nil {
+	if err := sd.WriteFile(context.Background(), FileSession, content); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

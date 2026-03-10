@@ -7,6 +7,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-03-10
+
+### Added
+- Recency signal for knowledge search: exponential decay boosts newer memories (60-day half-life) and changelogs (30-day half-life); docs unaffected
+- Hook content validation in config-review: event name, type, command non-empty, timeout range, matcher regex checks
+- Agent deep analysis in config-review: description, model, tools, bypassPermissions, body length inspection
+- MCP reachability check in doctor (#12): exec.LookPath for stdio transport, info for http/sse
+- Settings conflict detection in config-review: intra-file allow+deny (warning), cross-file (info), disableAllHooks+hooks (warning), allowManagedHooksOnly+project hooks (warning)
+- Agent maturity scoring category (7 categories total, up from 6)
+- `helpers_test.go`: 11 tests for recency signal (recencyFactor, recencyHalfLife, applyRecencySignal)
+
+### Fixed
+- `parseSKILLFrontmatter`: integer and float64 values silently dropped (e.g. `maxTurns: 50`)
+- `detectSettingsConflicts`: eliminated double file read by passing pre-parsed `[]settingsSource`
+- SessionStart parallelization, spec lock exponential backoff, confidence scoring restructure
+- Spec version param handling, rollback path traversal guard, RecordInjection batch, proactive hints parallelization
+
 ## [0.63.10] - 2026-03-10
 
 ### Fixed
@@ -595,7 +612,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.63.10...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.64.0...HEAD
+[0.64.0]: https://github.com/hir4ta/claude-alfred/compare/v0.63.10...v0.64.0
 [0.63.10]: https://github.com/hir4ta/claude-alfred/compare/v0.63.9...v0.63.10
 [0.63.9]: https://github.com/hir4ta/claude-alfred/compare/v0.63.8...v0.63.9
 [0.63.8]: https://github.com/hir4ta/claude-alfred/compare/v0.63.7...v0.63.8

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -298,7 +300,98 @@ func runChecks() []checkResult {
 		checks = append(checks, checkResult{"Config dir", "warn", "~/.claude-alfred/ not found"})
 	}
 
+	// 12. MCP server reachability.
+	checks = append(checks, checkMCPReachability()...)
+
 	return checks
+}
+
+// knownPackageRunners are commands that download and run packages at runtime.
+// exec.LookPath confirms the runner exists but cannot verify package availability.
+var knownPackageRunners = map[string]bool{
+	"npx": true, "uvx": true, "bunx": true, "pipx": true,
+}
+
+// checkMCPReachability verifies that MCP server commands in .mcp.json are accessible.
+func checkMCPReachability() []checkResult {
+	// Walk upward from CWD to find .mcp.json.
+	mcpPath := findMCPConfig()
+	if mcpPath == "" {
+		return []checkResult{{"MCP servers", "ok", "no .mcp.json found"}}
+	}
+
+	data, err := os.ReadFile(mcpPath)
+	if err != nil {
+		return []checkResult{{"MCP servers", "warn", fmt.Sprintf("cannot read %s: %v", mcpPath, err)}}
+	}
+
+	var config struct {
+		MCPServers map[string]struct {
+			Command string `json:"command"`
+			URL     string `json:"url"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return []checkResult{{"MCP servers", "warn", fmt.Sprintf("invalid JSON in %s", mcpPath)}}
+	}
+
+	if len(config.MCPServers) == 0 {
+		return []checkResult{{"MCP servers", "ok", "no servers configured"}}
+	}
+
+	var results []checkResult
+	for name, srv := range config.MCPServers {
+		label := "MCP:" + name
+		if srv.Command != "" {
+			// stdio transport: check command accessibility.
+			bin := strings.Fields(srv.Command)[0]
+			resolved, err := exec.LookPath(bin)
+			if err != nil {
+				results = append(results, checkResult{label, "warn", fmt.Sprintf("command not found: %s", bin)})
+			} else {
+				msg := resolved
+				if knownPackageRunners[bin] {
+					msg += " (package availability not verified)"
+				}
+				results = append(results, checkResult{label, "ok", msg})
+			}
+		} else if srv.URL != "" {
+			// http/sse transport: no binary to check.
+			results = append(results, checkResult{label, "info", fmt.Sprintf("http transport: %s", srv.URL)})
+		} else {
+			results = append(results, checkResult{label, "warn", "no command or url configured"})
+		}
+	}
+	return results
+}
+
+// findMCPConfig walks upward from CWD to find .mcp.json.
+func findMCPConfig() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, ".mcp.json")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	// Also check ~/.claude/.mcp.json as fallback.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	candidate := filepath.Join(home, ".claude", ".mcp.json")
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return ""
 }
 
 func runDoctor() error {

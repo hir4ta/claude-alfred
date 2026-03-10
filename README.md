@@ -104,8 +104,8 @@ Backend for skills and agents. Claude calls these automatically as needed.
 
 | Tool | Description |
 |------|-------------|
-| `knowledge` | Hybrid vector + FTS5 + Voyage rerank document search |
-| `config-review` | Deep audit of .claude/ config (file contents + KB cross-reference) |
+| `knowledge` | Hybrid vector + FTS5 + Voyage rerank document search (with recency signal for memories/changelogs) |
+| `config-review` | Deep audit of .claude/ config (file contents, hooks validation, agent analysis, permissions conflict detection, KB cross-reference) |
 | `spec` | Unified spec management (action: init / update / status / switch / delete / history / rollback) |
 | `recall` | Memory search and save — past sessions, decisions, and notes |
 
@@ -126,7 +126,7 @@ Run automatically during Claude Code lifecycle. No user action needed.
 |---------|-------------|
 | `init` | Initialize knowledge base (interactive API key setup + TUI progress) |
 | `status [--verbose]` | Show system status — DB stats, API key, active tasks, paths |
-| `doctor` | Run 11 diagnostic checks — DB, schema, FTS, plugin, hooks, Voyage, embeddings, crawl |
+| `doctor` | Run 12 diagnostic checks — DB, schema, FTS, plugin, hooks, Voyage, embeddings, crawl, MCP reachability |
 | `analytics` | Show feedback loop stats — injection activity, top boosted/penalized docs |
 | `export [--all]` | Export memories to JSON (`--all` includes specs) |
 | `memory prune [--confirm]` | Remove old memories (dry-run by default, `--max-age DAYS` supported) |

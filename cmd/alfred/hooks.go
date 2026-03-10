@@ -137,6 +137,17 @@ func runHook(event string) error {
 		debugf("hook stop_hook_active=true, exiting")
 		return nil
 	}
+	// Validate and sanitize ProjectPath (defense-in-depth: Claude Code provides
+	// this value, but we clean it to prevent any path traversal issues).
+	if ev.ProjectPath != "" {
+		ev.ProjectPath = filepath.Clean(ev.ProjectPath)
+		if !filepath.IsAbs(ev.ProjectPath) {
+			debugf("hook: non-absolute project path %q, clearing", ev.ProjectPath)
+			ev.ProjectPath = ""
+		} else if resolved, err := filepath.EvalSymlinks(ev.ProjectPath); err == nil {
+			ev.ProjectPath = resolved
+		}
+	}
 	debugf("hook project=%s", ev.ProjectPath)
 
 	// Internal context timeout per hook event.

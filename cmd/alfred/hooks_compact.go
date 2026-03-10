@@ -70,7 +70,7 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 	// Build activeContext session.md with rich context, then enforce size limit.
 	session := buildActiveContextSession(sd, taskSlug, txCtx, decisions, modifiedFiles, customInstructions)
 	session = enforceSessionSizeLimit(session)
-	if err := sd.WriteFile(spec.FileSession, session); err != nil {
+	if err := sd.WriteFile(ctx, spec.FileSession, session); err != nil {
 		debugf("PreCompact: write session error: %v", err)
 		return
 	}
@@ -345,7 +345,7 @@ func autoAppendDecisions(sd *spec.SpecDir, decisions []string) {
 		buf.WriteString(fmt.Sprintf("- %s\n", d))
 	}
 
-	if err := sd.AppendFile(spec.FileDecisions, buf.String()); err != nil {
+	if err := sd.AppendFile(context.Background(), spec.FileDecisions, buf.String()); err != nil {
 		debugf("autoAppendDecisions: %v", err)
 	} else {
 		debugf("autoAppendDecisions: added %d decisions", len(newDecisions))

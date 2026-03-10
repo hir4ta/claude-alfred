@@ -794,16 +794,16 @@ func TestFeedbackBoost(t *testing.T) {
 	if boost <= 1.0 {
 		t.Errorf("FeedbackBoost(positive) = %f, want > 1.0", boost)
 	}
-	if boost > 1.1 {
-		t.Errorf("FeedbackBoost(positive) = %f, want <= 1.1", boost)
+	if boost > 1.15 {
+		t.Errorf("FeedbackBoost(positive) = %f, want <= 1.15", boost)
 	}
 
 	boost = st.FeedbackBoost(ctx, negID)
 	if boost >= 1.0 {
 		t.Errorf("FeedbackBoost(negative) = %f, want < 1.0", boost)
 	}
-	if boost < 0.9 {
-		t.Errorf("FeedbackBoost(negative) = %f, want >= 0.9", boost)
+	if boost < 0.85 {
+		t.Errorf("FeedbackBoost(negative) = %f, want >= 0.85", boost)
 	}
 
 	boost = st.FeedbackBoost(ctx, neutralID)

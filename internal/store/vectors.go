@@ -77,7 +77,9 @@ const earlyStopThreshold = 0.7
 // Returns (sourceID, score) pairs sorted by descending similarity.
 // Supports early termination when enough high-quality candidates are found,
 // and configurable scan limit via ALFRED_MAX_VECTOR_CANDIDATES env var.
-func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source string, limit int) ([]VectorMatch, error) {
+// Optional docSourceTypes filters by doc source_type via JOIN (pre-filter),
+// reducing wasted cosine computations on irrelevant document types.
+func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source string, limit int, docSourceTypes ...string) ([]VectorMatch, error) {
 	if queryVec == nil {
 		return nil, nil
 	}
@@ -91,7 +93,30 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 	// so small thresholds risk missing better matches at higher row IDs.
 	earlyStopCount := max(limit*3, 50)
 
-	rows, err := s.db.QueryContext(ctx, `SELECT source_id, vector FROM embeddings WHERE source = ? LIMIT ?`, source, maxCandidates)
+	// Build query: optionally JOIN with docs to pre-filter by source_type,
+	// avoiding cosine computation on irrelevant document types.
+	var queryStr string
+	var queryArgs []any
+	if len(docSourceTypes) > 0 {
+		var qb strings.Builder
+		qb.WriteString("SELECT e.source_id, e.vector FROM embeddings e JOIN docs d ON d.id = e.source_id WHERE e.source = ? AND d.source_type IN (")
+		queryArgs = append(queryArgs, source)
+		for i, st := range docSourceTypes {
+			if i > 0 {
+				qb.WriteByte(',')
+			}
+			qb.WriteByte('?')
+			queryArgs = append(queryArgs, st)
+		}
+		qb.WriteString(") LIMIT ?")
+		queryArgs = append(queryArgs, maxCandidates)
+		queryStr = qb.String()
+	} else {
+		queryStr = `SELECT source_id, vector FROM embeddings WHERE source = ? LIMIT ?`
+		queryArgs = []any{source, maxCandidates}
+	}
+
+	rows, err := s.db.QueryContext(ctx, queryStr, queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -219,10 +244,10 @@ func (s *Store) HybridSearch(ctx context.Context, queryVec []float32, ftsQuery s
 
 	scores := make(map[int64]float64)
 
-	// Vector search — all embeddings are stored with source="docs" in the
-	// embeddings table (the "source" column refers to the source table, not
-	// the doc's source_type). Search once with "docs".
-	matches, err := s.VectorSearch(ctx, queryVec, "docs", overRetrieve)
+	// Vector search — pre-filter by doc source_type via JOIN when specified,
+	// so irrelevant document types don't consume RRF candidate slots.
+	types := parseSourceTypes(sourceType)
+	matches, err := s.VectorSearch(ctx, queryVec, "docs", overRetrieve, types...)
 	if err == nil {
 		for rank, m := range matches {
 			scores[m.SourceID] += 1.0 / float64(rrfK+rank+1)
@@ -252,10 +277,9 @@ func (s *Store) HybridSearch(ctx context.Context, queryVec []float32, ftsQuery s
 		return candidates[i].RRFScore > candidates[j].RRFScore
 	})
 
-	// Filter by doc source_type when specific types are requested.
-	// Vector results may include docs with non-matching source_types
-	// since all embeddings share source="docs" in the embeddings table.
-	types := parseSourceTypes(sourceType)
+	// Safety net: filter by doc source_type post-fusion if types were specified.
+	// Pre-filtered at VectorSearch level, but FTS results may still include
+	// cross-type matches if the FTS query doesn't perfectly filter.
 	if len(types) > 0 {
 		candidates = s.filterByDocSourceType(ctx, candidates, types)
 	}

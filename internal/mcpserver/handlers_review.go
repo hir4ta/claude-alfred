@@ -3,8 +3,10 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -32,13 +34,16 @@ func reviewHandler(claudeHome string, st *store.Store, _ *embedder.Embedder) ser
 		// 2. Check .claude/ directory (skills, rules, agents)
 		report["skills"] = reviewSkills(projectPath)
 		report["rules"] = reviewRules(projectPath)
-		report["agents"] = reviewDir(projectPath, ".claude", "agents")
+		report["agents"] = reviewAgents(projectPath, claudeHome)
 
 		// 3. Check hooks (project-level .claude/hooks.json + user settings)
 		report["hooks"] = reviewHooks(claudeHome, projectPath)
 
 		// 4. Check MCP servers
 		report["mcp_servers"] = reviewMCP(projectPath)
+
+		// 5. Check permissions settings
+		report["permissions"] = reviewPermissions(claudeHome, projectPath)
 
 		// Generate improvement suggestions with KB cross-reference.
 		suggestions := generateReviewSuggestions(ctx, report, st)
@@ -273,6 +278,10 @@ func parseSKILLFrontmatter(content string) map[string]string {
 			} else {
 				result[k] = "false"
 			}
+		case int:
+			result[k] = fmt.Sprintf("%d", val)
+		case float64:
+			result[k] = fmt.Sprintf("%g", val)
 		}
 	}
 	return result
@@ -286,6 +295,7 @@ type ruleInfo struct {
 	Name        string `json:"name"`
 	Lines       int    `json:"lines"`
 	HasGlob     bool   `json:"has_glob"`
+	HasPaths    bool   `json:"has_paths"`
 	SizeWarning string `json:"size_warning,omitempty"`
 }
 
@@ -319,16 +329,18 @@ func reviewRules(projectPath string) map[string]any {
 		lines := countLines(content)
 		hasGlob := false
 
-		// Check for glob frontmatter.
+		// Check for glob/paths frontmatter (path-scoped rules).
 		fm := parseSKILLFrontmatter(content) // reuse YAML frontmatter parser
 		if fm["globs"] != "" || fm["glob"] != "" {
 			hasGlob = true
 		}
+		hasPaths := fm["paths"] != ""
 
 		ri := ruleInfo{
-			Name:    e.Name(),
-			Lines:   lines,
-			HasGlob: hasGlob,
+			Name:     e.Name(),
+			Lines:    lines,
+			HasGlob:  hasGlob,
+			HasPaths: hasPaths,
 		}
 		if lines < 3 {
 			ri.SizeWarning = "rule is too short to be useful"
@@ -355,10 +367,139 @@ func reviewRules(projectPath string) map[string]any {
 // recommendedEvents lists hook events that provide significant value when configured.
 var recommendedEvents = []string{"SessionStart", "PreCompact", "UserPromptSubmit"}
 
+// validHookEvents lists all documented Claude Code hook events.
+var validHookEvents = map[string]bool{
+	"PreToolUse":        true,
+	"PostToolUse":       true,
+	"Notification":      true,
+	"Stop":              true,
+	"SubagentStop":      true,
+	"SessionStart":      true,
+	"SessionEnd":        true,
+	"PreCompact":        true,
+	"UserPromptSubmit":  true,
+	"PreAPIRequest":     true,
+	"PostAPIRequest":    true,
+	"UIRender":          true,
+}
+
+// validHookTypes lists known hook handler types.
+var validHookTypes = map[string]bool{
+	"command": true,
+	"prompt":  true,
+	"agent":   true,
+	"http":    true,
+}
+
+// defaultHookTimeoutMs is the default timeout per hook type in milliseconds.
+var defaultHookTimeoutMs = map[string]int{
+	"command": 600000,
+	"prompt":  30000,
+	"agent":   60000,
+	"http":    30000,
+}
+
+// hookIssue describes a structural problem in a hook configuration.
+type hookIssue struct {
+	Event    string `json:"event"`
+	Severity string `json:"severity"` // "warning" or "info"
+	Message  string `json:"message"`
+}
+
 func reviewHooks(claudeHome, projectPath string) map[string]any {
 	result := map[string]any{"count": 0}
 
 	allEvents := make(map[string]bool)
+	var issues []hookIssue
+
+	// parseHooksConfig validates hook entries within a hooks config map.
+	parseHooksConfig := func(hooks map[string]any, source string) {
+		for event, matchers := range hooks {
+			allEvents[event] = true
+
+			// Validate event name.
+			if !validHookEvents[event] {
+				issues = append(issues, hookIssue{
+					Event:    event,
+					Severity: "warning",
+					Message:  fmt.Sprintf("unknown hook event %q in %s (may be ignored by Claude Code)", event, source),
+				})
+			}
+
+			// Parse matchers array.
+			matcherList, ok := matchers.([]any)
+			if !ok {
+				continue
+			}
+			for _, m := range matcherList {
+				matcher, ok := m.(map[string]any)
+				if !ok {
+					continue
+				}
+				// Validate matcher regex if present.
+				if matcherStr, ok := matcher["matcher"].(string); ok && matcherStr != "" {
+					if _, err := regexp.Compile(matcherStr); err != nil {
+						issues = append(issues, hookIssue{
+							Event:    event,
+							Severity: "warning",
+							Message:  fmt.Sprintf("invalid matcher regex %q in %s %s: %v", matcherStr, source, event, err),
+						})
+					}
+				}
+				// Parse nested hooks array.
+				hookEntries, ok := matcher["hooks"].([]any)
+				if !ok {
+					continue
+				}
+				for _, h := range hookEntries {
+					entry, ok := h.(map[string]any)
+					if !ok {
+						continue
+					}
+					hookType, _ := entry["type"].(string)
+					if hookType == "" {
+						issues = append(issues, hookIssue{
+							Event:    event,
+							Severity: "warning",
+							Message:  fmt.Sprintf("hook entry missing 'type' field in %s %s", source, event),
+						})
+						continue
+					}
+					if !validHookTypes[hookType] {
+						issues = append(issues, hookIssue{
+							Event:    event,
+							Severity: "warning",
+							Message:  fmt.Sprintf("unknown hook type %q in %s %s (expected: command, prompt, agent)", hookType, source, event),
+						})
+					}
+					// Validate command non-empty for command type.
+					if hookType == "command" {
+						cmd, _ := entry["command"].(string)
+						if strings.TrimSpace(cmd) == "" {
+							issues = append(issues, hookIssue{
+								Event:    event,
+								Severity: "warning",
+								Message:  fmt.Sprintf("command hook has empty 'command' field in %s %s", source, event),
+							})
+						}
+					}
+					// Validate timeout range: 1s absolute floor, 10x default ceiling.
+					if timeout, ok := entry["timeout"].(float64); ok {
+						timeoutMs := int(timeout * 1000)
+						if defMs, ok := defaultHookTimeoutMs[hookType]; ok {
+							if timeoutMs < 1000 || timeoutMs > defMs*10 {
+								issues = append(issues, hookIssue{
+									Event:    event,
+									Severity: "info",
+									Message:  fmt.Sprintf("unusual timeout %.0fs for %s hook in %s %s (default: %ds)", timeout, hookType, source, event, defMs/1000),
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
 	// 1. Check project-level .claude/hooks.json (preferred location).
 	if projectPath != "" {
@@ -368,9 +509,7 @@ func reviewHooks(claudeHome, projectPath string) map[string]any {
 				Hooks map[string]any `json:"hooks"`
 			}
 			if json.Unmarshal(data, &hooksConfig) == nil && hooksConfig.Hooks != nil {
-				for event := range hooksConfig.Hooks {
-					allEvents[event] = true
-				}
+				parseHooksConfig(hooksConfig.Hooks, "project hooks.json")
 				result["project_hooks"] = projectHooksPath
 			}
 		}
@@ -382,9 +521,7 @@ func reviewHooks(claudeHome, projectPath string) map[string]any {
 		var settings map[string]any
 		if json.Unmarshal(data, &settings) == nil {
 			if hooks, ok := settings["hooks"].(map[string]any); ok {
-				for event := range hooks {
-					allEvents[event] = true
-				}
+				parseHooksConfig(hooks, "user settings.json")
 			}
 		}
 	}
@@ -407,43 +544,282 @@ func reviewHooks(claudeHome, projectPath string) map[string]any {
 		result["missing_recommended"] = missing
 	}
 
+	if len(issues) > 0 {
+		result["hook_issues"] = issues
+	}
+
 	return result
 }
 
 // ---------------------------------------------------------------------------
-// Directory listing (agents only — rules now uses reviewRules)
+// Agent analysis (deep inspection of .claude/agents/*.md)
 // ---------------------------------------------------------------------------
 
-func reviewDir(projectPath, base, sub string) map[string]any {
+// agentInfo describes a parsed agent file.
+type agentInfo struct {
+	Name             string `json:"name"`
+	HasDesc          bool   `json:"has_description"`
+	HasModel         bool   `json:"has_model"`
+	Model            string `json:"model,omitempty"`
+	HasTools         bool   `json:"has_tools"`
+	PermissionBypass bool   `json:"permission_bypass,omitempty"`
+	BodyLines        int    `json:"body_lines"`
+	SizeWarning      string `json:"size_warning,omitempty"`
+	Source           string `json:"source"` // "project" or "user"
+}
+
+func reviewAgents(projectPath, claudeHome string) map[string]any {
 	result := map[string]any{"count": 0}
-	if projectPath == "" {
-		return result
-	}
 
-	dir := filepath.Join(projectPath, base, sub)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return result
-	}
-
+	var agents []agentInfo
 	var names []string
-	for _, e := range entries {
-		if !e.IsDir() {
-			names = append(names, e.Name())
-		} else {
-			// Skills are directories containing SKILL.md
-			skillFile := filepath.Join(dir, e.Name(), "SKILL.md")
-			if _, err := os.Stat(skillFile); err == nil {
-				names = append(names, e.Name())
+	var invalid []string
+
+	scanDir := func(dir, source string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				continue
+			}
+			content := string(data)
+			fm := parseSKILLFrontmatter(content)
+			bodyLines := countBodyLines(content)
+
+			name := strings.TrimSuffix(e.Name(), ".md")
+			names = append(names, name)
+
+			ai := agentInfo{
+				Name:      name,
+				HasDesc:   fm["description"] != "",
+				HasModel:  fm["model"] != "",
+				Model:     fm["model"],
+				HasTools:  fm["tools"] != "",
+				BodyLines: bodyLines,
+				Source:    source,
+			}
+
+			if fm["permissionMode"] == "bypassPermissions" {
+				ai.PermissionBypass = true
+			}
+
+			if bodyLines > 200 {
+				ai.SizeWarning = fmt.Sprintf("agent body is %d lines (consider splitting into sub-agents)", bodyLines)
+			} else if bodyLines < 5 && bodyLines > 0 {
+				ai.SizeWarning = fmt.Sprintf("agent body is only %d lines (may be too brief for effective delegation)", bodyLines)
+			}
+
+			if !ai.HasDesc {
+				invalid = append(invalid, name)
+			}
+
+			agents = append(agents, ai)
+		}
+	}
+
+	if projectPath != "" {
+		scanDir(filepath.Join(projectPath, ".claude", "agents"), "project")
+	}
+	if claudeHome != "" {
+		scanDir(filepath.Join(claudeHome, "agents"), "user")
+	}
+
+	result["count"] = len(agents)
+	if len(names) > 0 {
+		result["items"] = names
+	}
+	if len(agents) > 0 {
+		result["agent_details"] = agents
+	}
+	if len(invalid) > 0 {
+		result["invalid_agents"] = invalid
+	}
+	return result
+}
+
+// ---------------------------------------------------------------------------
+// Permissions analysis (.claude/settings.json + .claude/settings.local.json)
+// ---------------------------------------------------------------------------
+
+// fullSettings is the complete settings structure for conflict detection.
+// Parsed once in reviewPermissions and passed to detectSettingsConflicts.
+type fullSettings struct {
+	Permissions struct {
+		Allow []string `json:"allow,omitempty"`
+		Deny  []string `json:"deny,omitempty"`
+	} `json:"permissions"`
+	DisableAllHooks       bool           `json:"disableAllHooks"`
+	AllowManagedHooksOnly bool           `json:"allowManagedHooksOnly"`
+	Hooks                 map[string]any `json:"hooks"`
+}
+
+// settingsSource pairs a parsed settings file with its origin label.
+type settingsSource struct {
+	name string
+	s    *fullSettings
+}
+
+func reviewPermissions(claudeHome, projectPath string) map[string]any {
+	result := map[string]any{"configured": false}
+
+	readFull := func(path string) *fullSettings {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		var s fullSettings
+		if json.Unmarshal(data, &s) != nil {
+			return nil
+		}
+		return &s
+	}
+
+	// Parse all settings files once.
+	var allSources []settingsSource
+	var sourceNames []string
+
+	if projectPath != "" {
+		if s := readFull(filepath.Join(projectPath, ".claude", "settings.json")); s != nil {
+			allSources = append(allSources, settingsSource{"project", s})
+			p := s.Permissions
+			if len(p.Allow) > 0 || len(p.Deny) > 0 {
+				result["configured"] = true
+				result["project_allow"] = p.Allow
+				result["project_deny"] = p.Deny
+				sourceNames = append(sourceNames, "project")
+			}
+		}
+		if s := readFull(filepath.Join(projectPath, ".claude", "settings.local.json")); s != nil {
+			allSources = append(allSources, settingsSource{"local", s})
+			p := s.Permissions
+			if len(p.Allow) > 0 || len(p.Deny) > 0 {
+				result["configured"] = true
+				result["local_allow"] = p.Allow
+				result["local_deny"] = p.Deny
+				sourceNames = append(sourceNames, "local")
+			}
+		}
+	}
+	if claudeHome != "" {
+		if s := readFull(filepath.Join(claudeHome, "settings.json")); s != nil {
+			allSources = append(allSources, settingsSource{"user", s})
+			p := s.Permissions
+			if len(p.Allow) > 0 || len(p.Deny) > 0 {
+				result["user_allow"] = p.Allow
+				result["user_deny"] = p.Deny
+				sourceNames = append(sourceNames, "user")
 			}
 		}
 	}
 
-	result["count"] = len(names)
-	if len(names) > 0 {
-		result["items"] = names
+	if len(sourceNames) > 0 {
+		result["sources"] = sourceNames
 	}
+
+	// Detect conflicts using already-parsed data (no re-read).
+	result["conflicts"] = detectSettingsConflicts(allSources, projectPath)
+
 	return result
+}
+
+// settingsConflict describes a contradiction between settings entries.
+type settingsConflict struct {
+	Pattern  string `json:"pattern"`
+	Type     string `json:"type"`     // "intra_file", "cross_file", or "feature_flag"
+	Severity string `json:"severity"` // "warning" or "info"
+	Detail   string `json:"detail"`
+}
+
+// detectSettingsConflicts finds contradictions within and across settings files.
+// Takes already-parsed settings to avoid double file reads.
+func detectSettingsConflicts(sources []settingsSource, projectPath string) []settingsConflict {
+	var conflicts []settingsConflict
+
+	// 1. Intra-file allow+deny exact match.
+	for _, src := range sources {
+		deny := make(map[string]bool, len(src.s.Permissions.Deny))
+		for _, d := range src.s.Permissions.Deny {
+			deny[d] = true
+		}
+		for _, a := range src.s.Permissions.Allow {
+			if deny[a] {
+				conflicts = append(conflicts, settingsConflict{
+					Pattern:  a,
+					Type:     "intra_file",
+					Severity: "warning",
+					Detail:   fmt.Sprintf("%q in both allow and deny in %s settings (deny takes precedence)", a, src.name),
+				})
+			}
+		}
+	}
+
+	// 2. Cross-file allow vs deny exact match.
+	type permEntry struct {
+		list   string // "allow" or "deny"
+		source string
+	}
+	allEntries := make(map[string][]permEntry)
+	for _, src := range sources {
+		for _, a := range src.s.Permissions.Allow {
+			allEntries[a] = append(allEntries[a], permEntry{"allow", src.name})
+		}
+		for _, d := range src.s.Permissions.Deny {
+			allEntries[d] = append(allEntries[d], permEntry{"deny", src.name})
+		}
+	}
+	for pattern, entries := range allEntries {
+		var allowSrc, denySrc string
+		for _, e := range entries {
+			if e.list == "allow" {
+				allowSrc = e.source
+			}
+			if e.list == "deny" {
+				denySrc = e.source
+			}
+		}
+		if allowSrc != "" && denySrc != "" && allowSrc != denySrc {
+			conflicts = append(conflicts, settingsConflict{
+				Pattern:  pattern,
+				Type:     "cross_file",
+				Severity: "info",
+				Detail:   fmt.Sprintf("%q allowed in %s but denied in %s (local overrides may be intentional)", pattern, allowSrc, denySrc),
+			})
+		}
+	}
+
+	// 3. Feature flag conflicts.
+	for _, src := range sources {
+		if src.s.DisableAllHooks && len(src.s.Hooks) > 0 {
+			conflicts = append(conflicts, settingsConflict{
+				Type:     "feature_flag",
+				Severity: "warning",
+				Detail:   fmt.Sprintf("disableAllHooks=true in %s settings but hooks are configured in the same file", src.name),
+			})
+		}
+	}
+	// AllowManagedHooksOnly: check if project-level hooks exist.
+	for _, src := range sources {
+		if src.s.AllowManagedHooksOnly {
+			if projectPath != "" {
+				if _, err := os.Stat(filepath.Join(projectPath, ".claude", "hooks.json")); err == nil {
+					conflicts = append(conflicts, settingsConflict{
+						Type:     "feature_flag",
+						Severity: "warning",
+						Detail:   fmt.Sprintf("allowManagedHooksOnly=true in %s settings but .claude/hooks.json exists (project hooks will be ignored)", src.name),
+					})
+				}
+			}
+			break
+		}
+	}
+
+	return conflicts
 }
 
 // ---------------------------------------------------------------------------
@@ -487,10 +863,12 @@ func reviewMCP(projectPath string) map[string]any {
 
 // kbQueries maps suggestion categories to FTS5 queries for best practices.
 var kbQueries = map[string]string{
-	"claude_md": "CLAUDE.md best practices project instructions sections",
-	"skills":    "skills SKILL.md frontmatter allowed-tools support files",
-	"rules":     "rules coding standards configuration best practices",
-	"hooks":     "hooks lifecycle events configuration automation",
+	"claude_md":   "CLAUDE.md best practices project instructions sections",
+	"skills":      "skills SKILL.md frontmatter allowed-tools support files",
+	"rules":       "rules coding standards configuration best practices",
+	"hooks":       "hooks lifecycle events configuration automation",
+	"agents":      "sub-agents model description tools delegation configuration",
+	"permissions": "permissions settings allow deny tool access control",
 }
 
 func generateReviewSuggestions(ctx context.Context, report map[string]any, st *store.Store) []Suggestion {
@@ -578,6 +956,39 @@ func generateReviewSuggestions(ctx context.Context, report map[string]any, st *s
 		}
 	}
 
+	// Agent checks.
+	agents, _ := report["agents"].(map[string]any)
+	if count, _ := agents["count"].(int); count > 0 {
+		if invalid, ok := agents["invalid_agents"].([]string); ok && len(invalid) > 0 {
+			suggestions = append(suggestions, Suggestion{
+				Severity: "warning",
+				Category: "agents",
+				Message:  "Agents missing description (won't be auto-selected): " + strings.Join(invalid, ", "),
+				Affected: invalid,
+			})
+		}
+		if details, ok := agents["agent_details"].([]agentInfo); ok {
+			for _, a := range details {
+				if a.PermissionBypass {
+					suggestions = append(suggestions, Suggestion{
+						Severity: "warning",
+						Category: "agents",
+						Message:  fmt.Sprintf("Agent '%s' uses bypassPermissions — skips all permission checks", a.Name),
+						Affected: []string{".claude/agents/" + a.Name + ".md"},
+					})
+				}
+				if a.SizeWarning != "" {
+					suggestions = append(suggestions, Suggestion{
+						Severity: "info",
+						Category: "agents",
+						Message:  fmt.Sprintf("Agent '%s': %s", a.Name, a.SizeWarning),
+						Affected: []string{".claude/agents/" + a.Name + ".md"},
+					})
+				}
+			}
+		}
+	}
+
 	// Hooks checks.
 	hooks, _ := report["hooks"].(map[string]any)
 	if count, _ := hooks["count"].(int); count == 0 {
@@ -592,6 +1003,51 @@ func generateReviewSuggestions(ctx context.Context, report map[string]any, st *s
 				Severity: "warning",
 				Category: "hooks",
 				Message:  "Missing recommended alfred hook events: " + strings.Join(missing, ", "),
+			})
+		}
+		// Hook content validation issues.
+		if issues, ok := hooks["hook_issues"].([]hookIssue); ok {
+			for _, issue := range issues {
+				suggestions = append(suggestions, Suggestion{
+					Severity: issue.Severity,
+					Category: "hooks",
+					Message:  issue.Message,
+				})
+			}
+		}
+	}
+
+	// Permissions checks.
+	perms, _ := report["permissions"].(map[string]any)
+	if configured, _ := perms["configured"].(bool); !configured {
+		suggestions = append(suggestions, Suggestion{
+			Severity: "info",
+			Category: "permissions",
+			Message:  "Consider configuring .claude/settings.json with permissions (allow/deny lists) for tool access control",
+		})
+	} else {
+		// Check for overly permissive settings.
+		if allow, ok := perms["project_allow"].([]string); ok {
+			for _, a := range allow {
+				if a == "*" || a == "Bash(*)" {
+					suggestions = append(suggestions, Suggestion{
+						Severity: "warning",
+						Category: "permissions",
+						Message:  "Overly permissive allow rule: " + a + " — consider narrowing scope",
+						Affected: []string{".claude/settings.json"},
+					})
+				}
+			}
+		}
+	}
+
+	// Settings conflict checks.
+	if conflicts, ok := perms["conflicts"].([]settingsConflict); ok {
+		for _, c := range conflicts {
+			suggestions = append(suggestions, Suggestion{
+				Severity: c.Severity,
+				Category: "permissions",
+				Message:  "Settings conflict: " + c.Detail,
 			})
 		}
 	}
@@ -640,11 +1096,13 @@ func enrichWithKB(ctx context.Context, suggestions []Suggestion, st *store.Store
 // computeMaturityScore derives a 0-100 score per category and overall from the review report.
 func computeMaturityScore(report map[string]any, suggestions []Suggestion) map[string]any {
 	scores := map[string]int{
-		"claude_md": 0,
-		"skills":    0,
-		"rules":     0,
-		"hooks":     0,
-		"mcp":       0,
+		"claude_md":   0,
+		"skills":      0,
+		"rules":       0,
+		"hooks":       0,
+		"agents":      0,
+		"mcp":         0,
+		"permissions": 0,
 	}
 
 	// CLAUDE.md: exists=40, no size warning=20, has commands section=20, sections>2=20
@@ -710,6 +1168,30 @@ func computeMaturityScore(report map[string]any, suggestions []Suggestion) map[s
 		}
 	}
 
+	// Agents: absent=50 baseline, count>0=50, all have desc=25, no bypass=25
+	if ag, ok := report["agents"].(map[string]any); ok {
+		if count, _ := ag["count"].(int); count > 0 {
+			scores["agents"] += 50
+			if _, hasInvalid := ag["invalid_agents"]; !hasInvalid {
+				scores["agents"] += 25
+			}
+			hasBypass := false
+			if details, ok := ag["agent_details"].([]agentInfo); ok {
+				for _, a := range details {
+					if a.PermissionBypass {
+						hasBypass = true
+						break
+					}
+				}
+			}
+			if !hasBypass {
+				scores["agents"] += 25
+			}
+		} else {
+			scores["agents"] = 50 // baseline
+		}
+	}
+
 	// Hooks: count>0=60, no missing recommended=40
 	if hk, ok := report["hooks"].(map[string]any); ok {
 		if count, _ := hk["count"].(int); count > 0 {
@@ -724,6 +1206,26 @@ func computeMaturityScore(report map[string]any, suggestions []Suggestion) map[s
 	if mc, ok := report["mcp_servers"].(map[string]any); ok {
 		if count, _ := mc["count"].(int); count > 0 {
 			scores["mcp"] = 100
+		}
+	}
+
+	// Permissions: configured=60, no overly permissive=40; absent=50 baseline
+	if pm, ok := report["permissions"].(map[string]any); ok {
+		if configured, _ := pm["configured"].(bool); configured {
+			scores["permissions"] = 60
+			// Gets to 100 if no warnings deducted below.
+			hasPermWarning := false
+			for _, s := range suggestions {
+				if s.Category == "permissions" && s.Severity == "warning" {
+					hasPermWarning = true
+					break
+				}
+			}
+			if !hasPermWarning {
+				scores["permissions"] += 40
+			}
+		} else {
+			scores["permissions"] = 50 // baseline
 		}
 	}
 

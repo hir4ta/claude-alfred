@@ -41,7 +41,7 @@ func TestSyncToDB(t *testing.T) {
 	}
 
 	// Modify and re-sync: 1 upserted
-	if err := sd.AppendFile(FileDecisions, "## New decision\n"); err != nil {
+	if err := sd.AppendFile(context.Background(), FileDecisions, "## New decision\n"); err != nil {
 		t.Fatal(err)
 	}
 	result3, err := SyncToDB(context.Background(), sd, st, nil)
@@ -88,7 +88,7 @@ func TestSyncSingleFile(t *testing.T) {
 	}
 
 	// Modify and sync again.
-	sd.WriteFile(FileSession, "# Updated session\n\n## Status\ncompleted\n")
+	sd.WriteFile(context.Background(), FileSession, "# Updated session\n\n## Status\ncompleted\n")
 	err = SyncSingleFile(context.Background(), sd, FileSession, st, nil)
 	if err != nil {
 		t.Fatal(err)

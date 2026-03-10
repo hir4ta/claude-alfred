@@ -178,7 +178,7 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	}
 
 	// Quiet mode: suppress knowledge injection (spec recovery & session persistence still run).
-	if resolveBool(quietPtr, "ALFRED_QUIET", "0") {
+	if resolveBool(quietPtr, "ALFRED_QUIET") {
 		debugf("UserPromptSubmit: quiet mode, skipping")
 		return
 	}

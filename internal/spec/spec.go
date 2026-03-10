@@ -3,6 +3,7 @@
 package spec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -216,9 +217,10 @@ func (s *SpecDir) ReadFile(f SpecFile) (string, error) {
 // Returns the lock file handle (caller must defer unlock+close) or an error.
 // Uses non-blocking lock with exponential backoff (50/100/200/400ms, 750ms total)
 // to handle concurrent hook invocations (e.g., PreCompact + SessionEnd overlap).
+// Respects context cancellation to avoid wasting budget on tight timeouts.
 // Note: 750ms worst-case consumes ~30% of SessionEnd's 2.5s budget; callers
 // fall back to unprotected write if the lock times out.
-func (s *SpecDir) lockSpecDir() (*os.File, error) {
+func (s *SpecDir) lockSpecDir(ctx context.Context) (*os.File, error) {
 	lockPath := filepath.Join(s.Dir(), ".lock")
 	lf, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
@@ -231,8 +233,16 @@ func (s *SpecDir) lockSpecDir() (*os.File, error) {
 		if err == nil {
 			return lf, nil
 		}
+		if ctx.Err() != nil {
+			break
+		}
 		if attempt < len(delays)-1 {
-			time.Sleep(delay)
+			select {
+			case <-ctx.Done():
+				lf.Close()
+				return nil, fmt.Errorf("spec lock cancelled: %w", ctx.Err())
+			case <-time.After(delay):
+			}
 		}
 	}
 	lf.Close()
@@ -250,8 +260,9 @@ func unlockSpecDir(lf *os.File) {
 
 // WriteFile writes content to a spec file using atomic rename to prevent
 // partial writes from concurrent hook invocations. Protected by advisory flock.
-func (s *SpecDir) WriteFile(f SpecFile, content string) error {
-	lf, err := s.lockSpecDir()
+// Pass context to respect cancellation during lock acquisition.
+func (s *SpecDir) WriteFile(ctx context.Context, f SpecFile, content string) error {
+	lf, err := s.lockSpecDir(ctx)
 	if err != nil {
 		// Fall back to unprotected write if lock fails (concurrent access risk accepted).
 		if DebugLog != nil {
@@ -284,8 +295,8 @@ func (s *SpecDir) writeFileRaw(f SpecFile, content string) error {
 
 // AppendFile appends content to a spec file via read-append-rename.
 // Protected by advisory flock to prevent lost updates from concurrent callers.
-func (s *SpecDir) AppendFile(f SpecFile, content string) error {
-	lf, err := s.lockSpecDir()
+func (s *SpecDir) AppendFile(ctx context.Context, f SpecFile, content string) error {
+	lf, err := s.lockSpecDir(ctx)
 	if err != nil {
 		// Fall back to unprotected append if lock fails (concurrent access risk accepted).
 		if DebugLog != nil {

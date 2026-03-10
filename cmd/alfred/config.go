@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/hir4ta/claude-alfred/internal/install"
 )
@@ -63,8 +64,8 @@ func resolveInt(project *int, envKey string, defaultVal int) int {
 	return envInt(envKey, defaultVal)
 }
 
-// resolveBool returns the first available value from: project config > env var > default.
-func resolveBool(project *bool, envKey, defaultVal string) bool {
+// resolveBool returns the first available value from: project config > env var.
+func resolveBool(project *bool, envKey string) bool {
 	if project != nil {
 		return *project
 	}
@@ -99,14 +100,9 @@ func envInt(key string, defaultVal int) int {
 	if v == "" {
 		return defaultVal
 	}
-	n := 0
-	for _, c := range v {
-		if c < '0' || c > '9' {
-			return defaultVal
-		}
-		n = n*10 + int(c-'0')
-	}
-	if n <= 0 {
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		debugf("envInt: invalid %s=%q, using default %d", key, v, defaultVal)
 		return defaultVal
 	}
 	return n

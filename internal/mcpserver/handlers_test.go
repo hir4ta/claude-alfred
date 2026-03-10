@@ -728,34 +728,85 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
-func TestReviewDir_Agents(t *testing.T) {
+func TestReviewAgents(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
 	// Empty: no agents dir.
-	result := reviewDir(dir, ".claude", "agents")
+	result := reviewAgents(dir, "")
 	if count, _ := result["count"].(int); count != 0 {
 		t.Errorf("empty dir should have count 0, got %d", count)
 	}
 
-	// With an agent file.
+	// With agent files: one valid, one missing description, one with bypassPermissions.
 	agentsDir := filepath.Join(dir, ".claude", "agents")
 	os.MkdirAll(agentsDir, 0o755)
-	os.WriteFile(filepath.Join(agentsDir, "alfred.md"), []byte("# Alfred"), 0o644)
+	os.WriteFile(filepath.Join(agentsDir, "good-agent.md"), []byte(`---
+description: A well-configured agent
+model: sonnet
+tools: Read,Grep,Glob
+---
+You are a helpful agent that searches code.
+This agent does X and Y.
+It has enough body lines.
+Line 4.
+Line 5.
+Line 6.
+`), 0o644)
+	os.WriteFile(filepath.Join(agentsDir, "no-desc.md"), []byte(`---
+model: opus
+---
+Minimal agent.
+`), 0o644)
+	os.WriteFile(filepath.Join(agentsDir, "risky.md"), []byte(`---
+description: A risky agent
+permissionMode: bypassPermissions
+---
+This agent bypasses permissions.
+Line 2.
+Line 3.
+Line 4.
+Line 5.
+`), 0o644)
 
-	result = reviewDir(dir, ".claude", "agents")
-	if count, _ := result["count"].(int); count != 1 {
-		t.Errorf("agents count = %d, want 1", count)
+	result = reviewAgents(dir, "")
+	if count, _ := result["count"].(int); count != 3 {
+		t.Errorf("agents count = %d, want 3", count)
 	}
-	items, _ := result["items"].([]string)
-	if len(items) != 1 || items[0] != "alfred.md" {
-		t.Errorf("items = %v, want [alfred.md]", items)
+
+	// Check invalid agents (missing description).
+	invalid, _ := result["invalid_agents"].([]string)
+	if len(invalid) != 1 || invalid[0] != "no-desc" {
+		t.Errorf("invalid_agents = %v, want [no-desc]", invalid)
+	}
+
+	// Check agent details.
+	details, _ := result["agent_details"].([]agentInfo)
+	if len(details) != 3 {
+		t.Fatalf("agent_details count = %d, want 3", len(details))
+	}
+
+	// Find risky agent and verify bypassPermissions detection.
+	for _, a := range details {
+		if a.Name == "risky" {
+			if !a.PermissionBypass {
+				t.Error("risky agent should have PermissionBypass=true")
+			}
+		}
+		if a.Name == "good-agent" {
+			if !a.HasDesc || !a.HasModel || !a.HasTools {
+				t.Errorf("good-agent should have all fields: desc=%v model=%v tools=%v", a.HasDesc, a.HasModel, a.HasTools)
+			}
+			if a.Model != "sonnet" {
+				t.Errorf("good-agent model = %q, want sonnet", a.Model)
+			}
+		}
 	}
 }
 
-func TestReviewDir_Empty(t *testing.T) {
+func TestReviewAgents_Empty(t *testing.T) {
 	t.Parallel()
-	result := reviewDir("", ".claude", "agents")
+	result := reviewAgents("", "")
 	if count, _ := result["count"].(int); count != 0 {
 		t.Errorf("empty projectPath should have count 0")
 	}
@@ -840,6 +891,8 @@ func TestParseSKILLFrontmatter(t *testing.T) {
 		{"no frontmatter", "# Just markdown\ncontent\n", "name", ""},
 		{"multiline value", "---\nname: test\ndescription: >\n  a long description\n---\n", "description", "a long description"},
 		{"no closing", "---\nname: test\nno close\n", "name", ""},
+		{"integer value", "---\nname: agent\nmaxTurns: 50\n---\n", "maxTurns", "50"},
+		{"boolean value", "---\nname: skill\ndisable-model-invocation: true\n---\n", "disable-model-invocation", "true"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -864,11 +917,12 @@ func TestComputeMaturityScore(t *testing.T) {
 		{
 			"full setup",
 			map[string]any{
-				"claude_md":   map[string]any{"exists": true, "section_count": 5, "key_sections": map[string]bool{"commands": true}},
-				"skills":      map[string]any{"count": 2, "skill_details": []skillInfo{{Name: "s1", HasName: true, HasDesc: true}}},
-				"rules":       map[string]any{"count": 3, "rule_details": []ruleInfo{{Name: "r1", Lines: 20}}},
-				"hooks":       map[string]any{"count": 4},
-				"mcp_servers": map[string]any{"count": 1},
+				"claude_md":    map[string]any{"exists": true, "section_count": 5, "key_sections": map[string]bool{"commands": true}},
+				"skills":       map[string]any{"count": 2, "skill_details": []skillInfo{{Name: "s1", HasName: true, HasDesc: true}}},
+				"rules":        map[string]any{"count": 3, "rule_details": []ruleInfo{{Name: "r1", Lines: 20}}},
+				"hooks":        map[string]any{"count": 4},
+				"mcp_servers":  map[string]any{"count": 1},
+				"permissions":  map[string]any{"configured": true},
 			},
 			nil,
 			80, 100,
@@ -876,29 +930,33 @@ func TestComputeMaturityScore(t *testing.T) {
 		{
 			"empty project",
 			map[string]any{
-				"claude_md":   map[string]any{"exists": false},
-				"skills":      map[string]any{"count": 0},
-				"rules":       map[string]any{"count": 0},
-				"hooks":       map[string]any{"count": 0},
-				"mcp_servers": map[string]any{"count": 0},
+				"claude_md":    map[string]any{"exists": false},
+				"skills":       map[string]any{"count": 0},
+				"rules":        map[string]any{"count": 0},
+				"hooks":        map[string]any{"count": 0},
+				"agents":       map[string]any{"count": 0},
+				"mcp_servers":  map[string]any{"count": 0},
+				"permissions":  map[string]any{"configured": false},
 			},
 			nil,
-			20, 20, // skills=50, rules=50 baseline; overall=(0+50+50+0+0)/5=20
+			28, 29, // skills=50, rules=50, agents=50, permissions=50 baseline; overall=(0+50+50+0+50+0+50)/7=28
 		},
 		{
 			"warnings reduce score",
 			map[string]any{
-				"claude_md":   map[string]any{"exists": true, "section_count": 5, "key_sections": map[string]bool{"commands": true}},
-				"skills":      map[string]any{"count": 1},
-				"rules":       map[string]any{"count": 1},
-				"hooks":       map[string]any{"count": 1},
-				"mcp_servers": map[string]any{"count": 1},
+				"claude_md":    map[string]any{"exists": true, "section_count": 5, "key_sections": map[string]bool{"commands": true}},
+				"skills":       map[string]any{"count": 1},
+				"rules":        map[string]any{"count": 1},
+				"hooks":        map[string]any{"count": 1},
+				"agents":       map[string]any{"count": 0},
+				"mcp_servers":  map[string]any{"count": 1},
+				"permissions":  map[string]any{"configured": true},
 			},
 			[]Suggestion{
 				{Severity: "warning", Category: "claude_md"},
 				{Severity: "warning", Category: "skills"},
 			},
-			85, 100, // -10 per warning on 2 categories, base ~100 each
+			60, 100, // 7 categories now, -10 per warning on 2
 		},
 	}
 	for _, tt := range tests {
@@ -910,5 +968,202 @@ func TestComputeMaturityScore(t *testing.T) {
 				t.Errorf("overall = %d, want [%d, %d]; scores=%v", overall, tt.wantMin, tt.wantMax, result["scores"])
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Hook validation tests
+// ---------------------------------------------------------------------------
+
+func TestReviewHooks_ContentValidation(t *testing.T) {
+	t.Parallel()
+	claudeHome := t.TempDir()
+	projectDir := t.TempDir()
+
+	hooksDir := filepath.Join(projectDir, ".claude")
+	os.MkdirAll(hooksDir, 0o755)
+
+	hooksJSON := map[string]any{
+		"hooks": map[string]any{
+			"SessionStart": []any{
+				map[string]any{
+					"matcher": "",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": "alfred hook --event SessionStart",
+							"timeout": 5,
+						},
+					},
+				},
+			},
+			"InvalidEvent": []any{
+				map[string]any{
+					"hooks": []any{
+						map[string]any{
+							"type":    "unknown_type",
+							"command": "",
+						},
+					},
+				},
+			},
+			"PreToolUse": []any{
+				map[string]any{
+					"matcher": "[invalid regex",
+					"hooks": []any{
+						map[string]any{
+							"type":    "command",
+							"command": "",
+						},
+					},
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(hooksJSON)
+	os.WriteFile(filepath.Join(hooksDir, "hooks.json"), data, 0o644)
+
+	result := reviewHooks(claudeHome, projectDir)
+
+	issues, ok := result["hook_issues"].([]hookIssue)
+	if !ok {
+		t.Fatal("expected hook_issues in result")
+	}
+
+	// Should find: unknown event, unknown type, empty command, invalid regex.
+	var hasUnknownEvent, hasUnknownType, hasEmptyCmd, hasInvalidRegex bool
+	for _, issue := range issues {
+		switch {
+		case strings.Contains(issue.Message, "unknown hook event"):
+			hasUnknownEvent = true
+		case strings.Contains(issue.Message, "unknown hook type"):
+			hasUnknownType = true
+		case strings.Contains(issue.Message, "empty 'command'"):
+			hasEmptyCmd = true
+		case strings.Contains(issue.Message, "invalid matcher regex"):
+			hasInvalidRegex = true
+		}
+	}
+	if !hasUnknownEvent {
+		t.Error("expected unknown event issue for 'InvalidEvent'")
+	}
+	if !hasUnknownType {
+		t.Error("expected unknown type issue for 'unknown_type'")
+	}
+	if !hasEmptyCmd {
+		t.Error("expected empty command issue")
+	}
+	if !hasInvalidRegex {
+		t.Error("expected invalid regex issue for '[invalid regex'")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Settings conflict tests
+// ---------------------------------------------------------------------------
+
+func TestDetectSettingsConflicts_IntraFile(t *testing.T) {
+	t.Parallel()
+
+	sources := []settingsSource{
+		{
+			name: "settings.json",
+			s: &fullSettings{
+				Permissions: struct {
+					Allow []string `json:"allow,omitempty"`
+					Deny  []string `json:"deny,omitempty"`
+				}{
+					Allow: []string{"Bash(git push *)", "Read"},
+					Deny:  []string{"Bash(git push *)"},
+				},
+			},
+		},
+	}
+
+	conflicts := detectSettingsConflicts(sources, "")
+
+	found := false
+	for _, c := range conflicts {
+		if c.Type == "intra_file" && c.Pattern == "Bash(git push *)" {
+			found = true
+			if c.Severity != "warning" {
+				t.Errorf("intra-file conflict severity = %q, want warning", c.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected intra-file conflict for 'Bash(git push *)'")
+	}
+}
+
+func TestDetectSettingsConflicts_CrossFile(t *testing.T) {
+	t.Parallel()
+
+	sources := []settingsSource{
+		{
+			name: "settings.json",
+			s: &fullSettings{
+				Permissions: struct {
+					Allow []string `json:"allow,omitempty"`
+					Deny  []string `json:"deny,omitempty"`
+				}{
+					Allow: []string{"Bash(npm run *)"},
+				},
+			},
+		},
+		{
+			name: "settings.local.json",
+			s: &fullSettings{
+				Permissions: struct {
+					Allow []string `json:"allow,omitempty"`
+					Deny  []string `json:"deny,omitempty"`
+				}{
+					Deny: []string{"Bash(npm run *)"},
+				},
+			},
+		},
+	}
+
+	conflicts := detectSettingsConflicts(sources, "")
+
+	found := false
+	for _, c := range conflicts {
+		if c.Type == "cross_file" && c.Pattern == "Bash(npm run *)" {
+			found = true
+			if c.Severity != "info" {
+				t.Errorf("cross-file conflict severity = %q, want info", c.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected cross-file conflict for 'Bash(npm run *)'")
+	}
+}
+
+func TestDetectSettingsConflicts_DisableAllHooks(t *testing.T) {
+	t.Parallel()
+
+	sources := []settingsSource{
+		{
+			name: "settings.json",
+			s: &fullSettings{
+				DisableAllHooks: true,
+				Hooks: map[string]any{
+					"SessionStart": []any{},
+				},
+			},
+		},
+	}
+
+	conflicts := detectSettingsConflicts(sources, "")
+
+	found := false
+	for _, c := range conflicts {
+		if c.Type == "feature_flag" && strings.Contains(c.Detail, "disableAllHooks") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected feature_flag conflict for disableAllHooks")
 	}
 }

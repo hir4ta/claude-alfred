@@ -538,7 +538,7 @@ func TestBuildActiveContextSessionMergesDecisions(t *testing.T) {
 
 	// Write existing session with decisions.
 	existing := "# Session: test-task\n\n## Status\nactive\n\n## Recent Decisions (last 3)\n1. Old decision A\n2. Old decision B\n"
-	if err := sd.WriteFile("session.md", existing); err != nil {
+	if err := sd.WriteFile(context.Background(), "session.md", existing); err != nil {
 		t.Fatalf("write session: %v", err)
 	}
 
@@ -558,7 +558,7 @@ func TestBuildActiveContextSessionLegacyFormat(t *testing.T) {
 
 	// Write legacy-format session.md.
 	legacy := "# Session: legacy-task\n\n## Current Position\nWorking on auth\n\n## Pending\n1. Fix bug\n\n## Unresolved Issues\nAPI rate limit\n"
-	if err := sd.WriteFile("session.md", legacy); err != nil {
+	if err := sd.WriteFile(context.Background(), "session.md", legacy); err != nil {
 		t.Fatalf("write session: %v", err)
 	}
 
@@ -955,17 +955,17 @@ func TestInjectSpecContextCompact(t *testing.T) {
 	}
 
 	// Write meaningful content to all 4 spec files.
-	if err := sd.WriteFile(spec.FileRequirements, "# Requirements\n\nBuild a search engine with hybrid vector + FTS5."); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileRequirements, "# Requirements\n\nBuild a search engine with hybrid vector + FTS5."); err != nil {
 		t.Fatalf("write requirements: %v", err)
 	}
-	if err := sd.WriteFile(spec.FileDesign, "# Design\n\nUse SQLite for storage with ncruces/go-sqlite3."); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileDesign, "# Design\n\nUse SQLite for storage with ncruces/go-sqlite3."); err != nil {
 		t.Fatalf("write design: %v", err)
 	}
-	if err := sd.WriteFile(spec.FileDecisions, "# Decisions\n\n## 2026-01-01 Storage Engine\n- **Chosen:** SQLite"); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileDecisions, "# Decisions\n\n## 2026-01-01 Storage Engine\n- **Chosen:** SQLite"); err != nil {
 		t.Fatalf("write decisions: %v", err)
 	}
 	sessionContent := "# Session: compact-ctx\n\n## Status\nactive\n\n## Currently Working On\nSearch implementation\n\n## Compact Marker [2026-01-01 10:00:00]\nfirst compact\n---\n"
-	if err := sd.WriteFile(spec.FileSession, sessionContent); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileSession, sessionContent); err != nil {
 		t.Fatalf("write session: %v", err)
 	}
 
@@ -992,7 +992,7 @@ func TestInjectSpecContextCompact(t *testing.T) {
 
 	// Add a second compact marker to session.md to simulate subsequent compact.
 	sessionContent2 := sessionContent + "\n## Compact Marker [2026-01-01 11:00:00]\nsecond compact\n---\n"
-	if err := sd.WriteFile(spec.FileSession, sessionContent2); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileSession, sessionContent2); err != nil {
 		t.Fatalf("write session: %v", err)
 	}
 
@@ -1024,12 +1024,12 @@ func TestInjectSpecContextNormal(t *testing.T) {
 	}
 
 	sessionContent := "# Session: normal-ctx\n\n## Status\nactive\n\n## Currently Working On\nNormal startup test\n"
-	if err := sd.WriteFile(spec.FileSession, sessionContent); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileSession, sessionContent); err != nil {
 		t.Fatalf("write session: %v", err)
 	}
 
 	// Write requirements to verify they are NOT injected on normal startup.
-	if err := sd.WriteFile(spec.FileRequirements, "# Requirements\n\nShould not appear in normal startup."); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileRequirements, "# Requirements\n\nShould not appear in normal startup."); err != nil {
 		t.Fatalf("write requirements: %v", err)
 	}
 
@@ -1474,7 +1474,7 @@ func TestHandleSessionStartWithSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spec.Init: %v", err)
 	}
-	if err := sd.WriteFile(spec.FileSession, "# Session: session-test\n\n## Status\nactive\n\n## Currently Working On\nTesting session start\n"); err != nil {
+	if err := sd.WriteFile(context.Background(), spec.FileSession, "# Session: session-test\n\n## Status\nactive\n\n## Currently Working On\nTesting session start\n"); err != nil {
 		t.Fatalf("write session: %v", err)
 	}
 
@@ -1847,7 +1847,7 @@ func TestAutoAppendDecisions(t *testing.T) {
 	// Write initial decisions.md with a long-enough entry (≥20 runes)
 	// so substring dedup can reliably match without false positives.
 	initial := "# Decisions: auto-dec\n\n## [2026-01-01] Initial\n- Use SQLite for persistent storage\n"
-	if err := sd.WriteFile("decisions.md", initial); err != nil {
+	if err := sd.WriteFile(context.Background(), "decisions.md", initial); err != nil {
 		t.Fatalf("write decisions: %v", err)
 	}
 
@@ -2239,7 +2239,7 @@ func TestPersistChapterMemory(t *testing.T) {
 
 	// Write session.md with existing content and a compact marker.
 	session := "# Session: chapter-test\n\n## Status\nactive\n\n## Currently Working On\nImplementing hybrid search with FTS5 + vector\n\n## Compact Marker [2026-03-09 14:00:00]\n### Pre-Compact Context Snapshot\nLast user directive:\nAdd Japanese support\n---\n"
-	if err := sd.WriteFile("session.md", session); err != nil {
+	if err := sd.WriteFile(context.Background(), "session.md", session); err != nil {
 		t.Fatalf("write session: %v", err)
 	}
 

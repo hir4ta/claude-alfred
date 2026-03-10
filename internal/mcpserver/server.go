@@ -85,15 +85,15 @@ Response: {"query", "results": [{"section_path", "content", "url", "source_type"
 			Tool: mcp.NewTool("config-review",
 				mcp.WithDescription(`Deep audit of .claude/ configuration against best practices. Reads file contents, checks skill sizes and structure, validates rules, and cross-references findings with the knowledge base. Returns structured suggestions with severity levels and documentation references.
 
-Checks: CLAUDE.md quality, skills (size/frontmatter), rules (path scoping), hooks (performance/patterns), MCP server config, and settings.json.
+Checks: CLAUDE.md quality, skills (size/frontmatter), rules (path scoping), hooks (content validation: event names, types, timeouts, matcher regex), agents (description, model, bypassPermissions), MCP server config, permissions (allow/deny lists with conflict detection), and settings.json.
 Requires project_path to locate .claude/ directory. If omitted, uses current working directory.
 
-Response: {"project_path", "claude_md": {"exists", "size_bytes?", "lines?", "sections?", "key_sections?"}, "skills": {"count", "items?", "skill_details?"}, "rules": {"count", "items?", "rule_details?"}, "agents": {"count", "items?"}, "hooks": {"count", "events?", "missing_recommended?"}, "mcp_servers": {"count", "servers?"}, "suggestions": [{"severity", "category", "message", "affected?", "best_practice?"}], "suggestion_count", "maturity": {"overall", "scores", "warnings", "info"}, "summary?"}`),
+Response: {"project_path", "claude_md": {"exists", "size_bytes?", "lines?", "sections?", "key_sections?"}, "skills": {"count", "items?", "skill_details?"}, "rules": {"count", "items?", "rule_details?"}, "agents": {"count", "items?", "agent_details?", "invalid_agents?"}, "hooks": {"count", "events?", "missing_recommended?", "hook_issues?"}, "permissions": {"configured", "conflicts?"}, "mcp_servers": {"count", "servers?"}, "suggestions": [{"severity", "category", "message", "affected?", "best_practice?"}], "suggestion_count", "maturity": {"overall", "scores", "warnings", "info"}, "summary?"}`),
 				mcp.WithTitleAnnotation("Config Review"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithIdempotentHintAnnotation(true),
 				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("project_path", mcp.Description("Project root path (cwd)")),
+				mcp.WithString("project_path", mcp.Description("Project root path (defaults to current working directory if omitted)")),
 			),
 			Handler: reviewHandler(defaultClaudeHome(), st, emb),
 		},
@@ -127,7 +127,7 @@ Response (rollback): {"task_slug", "file", "restored", "message"}`),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
 				mcp.WithString("action", mcp.Description("Action to perform"), mcp.Required(), mcp.Enum("init", "update", "status", "switch", "delete", "history", "rollback")),
-				mcp.WithString("project_path", mcp.Description("Absolute path to the project root")),
+				mcp.WithString("project_path", mcp.Description("Project root path (defaults to current working directory if omitted)")),
 				mcp.WithString("task_slug", mcp.Description("Task identifier (required for init, switch, delete; optional for update — defaults to active task)")),
 				mcp.WithString("description", mcp.Description("Brief task description (for init)")),
 				mcp.WithString("file", mcp.Description("Spec file (for update/history/rollback)"), mcp.Enum("requirements.md", "design.md", "decisions.md", "session.md")),
@@ -141,13 +141,16 @@ Response (rollback): {"task_slug", "file", "restored", "message"}`),
 
 		server.ServerTool{
 			Tool: mcp.NewTool("recall",
-				mcp.WithDescription(`Memory search and save — your persistent memory across sessions.
+				mcp.WithDescription(`Memory search and save — your persistent memory across sessions and projects.
 
 Actions:
 - search (default): Search past memories — decisions, session summaries, saved notes (READ-ONLY, idempotent)
 - save: Save a new memory entry for future retrieval (WRITE, not idempotent)
 
-Memories persist permanently and are searchable across projects. Use for:
+Memories persist permanently and are searchable across ALL projects (cross-project learning).
+The "project" parameter is for tagging context when saving; searches return results from all projects.
+
+Use for:
 - "Have I worked on something like this before?"
 - "What decisions did I make about authentication?"
 - "Remember this approach for future reference"
