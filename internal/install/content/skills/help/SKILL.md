@@ -85,6 +85,28 @@ Onboarding reference materials?
   → /alfred:ingest        — CSV, TXT, PDF → structured persistent knowledge
 ```
 
+## Example
+
+User: `/alfred:help hooks`
+
+```
+## Hooks
+
+**What**: Shell commands or LLM prompts that run automatically during Claude Code events.
+
+**When to use**:
+- Enforce coding standards before every edit
+- Auto-format on save
+- Block dangerous commands
+
+**Setup** (copy-pasteable):
+{ "hooks": { "PreToolUse": [{ "matcher": "Edit", "hooks": [{ "type": "command", "command": "./lint.sh" }] }] } }
+
+**Tips**:
+- Keep hooks fast (< 2s for synchronous)
+- Use `matcher` to scope which tools trigger
+```
+
 **Typical flow:** brainstorm → refine → plan → implement → review
 **Autonomous flow:** /alfred:develop (runs the full pipeline automatically)
 

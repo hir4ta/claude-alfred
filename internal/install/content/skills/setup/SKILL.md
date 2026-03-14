@@ -100,6 +100,25 @@ Alfred welcomes you and sets up the project for Claude Code.
 - **Knowledge returns no results**: Use the best-practices.md reference file as fallback.
 - **Generated config conflicts with existing**: Always read existing files first; merge, don't overwrite.
 
+## Example
+
+User: `/alfred:setup`
+
+```
+Current setup: [x] CLAUDE.md  [ ] Skills  [x] Rules  [ ] Hooks  [ ] MCP
+
+Detected: Go project (go.mod found)
+
+What would you like to configure?
+> [x] Hooks  [x] Skills  [ ] MCP
+
+Created:
+- .claude/hooks.json (3 hooks: SessionStart, PreToolUse, PostToolUse)
+- .claude/skills/deploy/SKILL.md (deployment workflow)
+
+Setup Score: 7/10 (was 4/10)
+```
+
 ## Guardrails
 
 - Do NOT overwrite existing files without asking

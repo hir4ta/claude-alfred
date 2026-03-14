@@ -20,6 +20,7 @@ You are an autonomous development orchestrator. Execute the FULL workflow below
 without asking the user for input (except once at the start if needed).
 
 - For spec creation agent prompts, see [spec-agents.md](spec-agents.md)
+- For example workflows (basic flow, BLOCKED recovery, resume), see [examples.md](examples.md)
 - For review prompt templates, see [review-prompts.md](review-prompts.md)
 - For BLOCKED recovery and error handling, see [recovery.md](recovery.md)
 

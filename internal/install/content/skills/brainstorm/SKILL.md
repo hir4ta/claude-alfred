@@ -121,6 +121,38 @@ theme maps to a clear task slug, save the brainstorm output for seamless `/alfre
 If the user declines to save or the theme is too vague for a slug, skip this step.
 The brainstorm output in the conversation is always usable directly.
 
+## Example
+
+User: `/alfred:brainstorm auth strategy for our API`
+
+```
+# Brainstorm Output: Auth Strategy for API
+
+## Perspectives (3-agent synthesis)
+
+### Visionary — Bold possibilities
+- Passkey-first auth (WebAuthn) — eliminate passwords entirely
+- Decentralized identity (DID) — user-owned credentials
+- ...
+
+### Pragmatist — Proven approaches
+- OAuth2 + PKCE — industry standard, battle-tested
+- API keys + rate limiting — simplest for M2M
+- ...
+
+### Critic — Risks & blind spots
+- OAuth complexity: 6-month implementation, not 2-week
+- Token storage: JWTs in localStorage = XSS vector
+- ...
+
+## Top Ideas (ranked by synthesis)
+1. OAuth2 + PKCE (pragmatist + architect consensus)
+2. Passkey as progressive enhancement (visionary + pragmatist hybrid)
+3. ...
+
+Next: /alfred:refine to converge on a decision
+```
+
 ## Troubleshooting
 
 - **Agent fails or returns empty**: Re-read the prompt and retry once. If still fails, proceed with 2 agents and note the missing perspective.
