@@ -169,6 +169,32 @@ Non-fixable (require human judgment):
 - D1: Splitting large files — requires understanding of content
 - E1-E4: Instruction quality — suggest but don't modify
 
+## Example
+
+User: `/alfred:skill-review --all`
+
+```
+## Skill Review: brainstorm
+
+**Score: 14/14 (100%)**
+**Status: PASS**
+
+| # | Check | Status | Detail |
+|---|-------|--------|--------|
+| A1 | name kebab-case | OK | "brainstorm" |
+| A3 | No XML brackets | OK | Clean |
+| B2 | Includes WHEN | OK | "Use when you need more ideas..." |
+| E4 | Negative triggers | OK | "NOT for convergent decision-making" |
+
+## Summary
+
+| Skill | Score | Status | Critical | High | Medium |
+|-------|-------|--------|----------|------|--------|
+| brainstorm | 100% | PASS | 0 | 0 | 0 |
+| configure | 100% | PASS | 0 | 0 | 0 |
+| ... | ... | ... | ... | ... | ... |
+```
+
 ## Guardrails
 
 - ALWAYS call `knowledge` first — never review with stale criteria
