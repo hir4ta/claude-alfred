@@ -3,6 +3,9 @@ name: help
 description: >
   Show all available alfred capabilities and when to use each one.
   Quick reference for skills, agents, MCP tools, and CLI commands.
+  Use when the user asks what alfred can do, wants to list available commands,
+  or needs guidance on which skill to use. NOT for executing tasks (use the
+  specific skill instead).
 user-invocable: true
 argument-hint: "[feature-name]"
 allowed-tools: mcp__plugin_alfred_alfred__knowledge
@@ -20,11 +23,14 @@ then output a focused explanation. Otherwise, show the full reference below.
 | Skill | Purpose | When to use |
 |-------|---------|-------------|
 | **plan** | Multi-agent spec generation | Starting a new task, organizing a design |
+| **develop** | Autonomous development orchestrator | End-to-end: spec → implement → review → commit |
+| **review** | Profile-based quality review (6 profiles) | Before committing, after a milestone, auditing config/security |
+| **skill-review** | Skill audit against official guide | Auditing skills before publishing, checking quality |
 | **brainstorm** | Divergent thinking (3 agents) | Need ideas, surface risks, expand options |
 | **refine** | Convergent decision-making | Stuck on a choice, need to resolve a blocker |
-| **review** | Multi-agent code review | Before committing, after a milestone |
 | **configure** | Single config file generation | Create/polish one skill, rule, hook, etc. |
 | **setup** | Project-wide setup wizard | First-time project setup, feature explanation |
+| **ingest** | Reference material processor | Onboarding large files, docs, CSV into persistent knowledge |
 | **help** | This reference | Discover what alfred can do |
 
 ## Agents (auto-delegated by Claude)
@@ -58,23 +64,29 @@ then output a focused explanation. Otherwise, show the full reference below.
 
 ```
 Starting a new task?
-  → /alfred:plan        — Multi-agent spec generation
+  → /alfred:plan          — Multi-agent spec generation
+  → /alfred:develop       — Full autonomous pipeline (spec → code → review → commit)
 
 Have a vague idea, need to explore?
-  → /alfred:brainstorm  — Divergent thinking (3 agents)
+  → /alfred:brainstorm    — Divergent thinking (3 agents)
 
 Have options but can't choose?
-  → /alfred:refine      — Narrowing, scoring, deciding
+  → /alfred:refine        — Narrowing, scoring, deciding
 
 Ready to commit code?
-  → /alfred:review      — Multi-agent code review
+  → /alfred:review        — Profile-based quality review (code/config/security/docs/arch/testing)
+  → /alfred:skill-review  — Audit skills against official best practices
 
 Need to set up Claude Code config?
-  → /alfred:setup       — Project-wide wizard
-  → /alfred:configure   — Single file (skill, rule, hook, etc.)
+  → /alfred:setup         — Project-wide wizard
+  → /alfred:configure     — Single file (skill, rule, hook, etc.)
+
+Onboarding reference materials?
+  → /alfred:ingest        — CSV, TXT, PDF → structured persistent knowledge
 ```
 
 **Typical flow:** brainstorm → refine → plan → implement → review
+**Autonomous flow:** /alfred:develop (runs the full pipeline automatically)
 
 ## Environment Variables
 

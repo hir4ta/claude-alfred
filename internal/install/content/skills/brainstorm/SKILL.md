@@ -6,7 +6,7 @@ description: >
   Follow up with /alfred:refine to converge on a decision.
 user-invocable: true
 disable-model-invocation: true
-argument-hint: "<theme or rough prompt>"
+argument-hint: "theme or rough prompt"
 allowed-tools: Read, Glob, Grep, AskUserQuestion, Agent, WebSearch, WebFetch, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: fork
 model: sonnet
@@ -192,6 +192,13 @@ theme maps to a clear task slug, save the brainstorm output for seamless `/alfre
 
 If the user declines to save or the theme is too vague for a slug, skip this step.
 The brainstorm output in the conversation is always usable directly.
+
+## Troubleshooting
+
+- **Agent fails or returns empty**: Re-read the prompt and retry once. If still fails, proceed with 2 agents and note the missing perspective.
+- **Synthesis agent repeats agents' output**: Prompt explicitly: "Do NOT restate. Focus only on tensions, blind spots, and hybrid ideas."
+- **User wants to go deeper on one idea**: This is convergence territory — redirect to `/alfred:refine`.
+- **Too few ideas generated**: Lower the threshold, ask each agent for 3 more ideas with relaxed constraints.
 
 ## Exit Criteria
 - All 3 specialist agents completed

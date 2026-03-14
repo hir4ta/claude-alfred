@@ -17,7 +17,7 @@ Claude Code の執事。
 
 **Alfred Protocol** — Compact/セッション喪失に強い構造化 spec 管理。要件・設計・決定・セッション状態を `.alfred/specs/` に保存し、自動的にコンテキストを保持・復帰する。
 
-**マルチエージェントコードレビュー** — 3つの特化サブレビューア（セキュリティ、ロジック、設計）が並列で実行、結果を集約・重複排除。各レビューアにLLM盲点の明示的チェックリストを装備。spec とナレッジベースとの照合も実施。
+**プロファイルベース品質レビュー** — 6つの専門レビュープロファイル（code, config, security, docs, architecture, testing）を装備。各プロファイルにナレッジベースから最新化されるチェックリストを搭載。git diff から関連プロファイルを自動検出し、並列でサブレビューアを実行、スコア付きレポートを生成。
 
 **永続メモリ** — 過去のセッション・意思決定・メモをプロジェクト横断で記憶。セッション要約と設計決定を自動的に永続メモリとして保存。`recall` ツールで過去の経験を検索 — alfred がセッション開始時に関連する記憶を自動で提示。
 
@@ -79,18 +79,21 @@ alfred update
 バイナリ（Homebrew または直接ダウンロード）とプラグインバンドルを自動で更新する。
 更新後、Claude Code を再起動すれば完了。
 
-## スキル (7)
+## スキル (10)
 
 Claude Code 内で `/alfred:<スキル名>` で呼び出す。
 
 | スキル | 内容 |
 |--------|------|
-| `/alfred:configure <種類> [名前]` | 単一の設定ファイルを作成・更新（skill, rule, hook, agent, MCP, CLAUDE.md, memory）+ 独立レビュー |
-| `/alfred:setup` | プロジェクト全体のセットアップウィザード — 複数ファイルのスキャン+設定、または Claude Code 機能の解説 |
+| `/alfred:plan <task-slug>` | Alfred Protocol — マルチエージェント spec 生成（Architect + Devil's Advocate + Researcher が設計を議論） |
+| `/alfred:develop <task-slug>` | 完全自律開発オーケストレーター — spec 作成、レビューゲート付き実装、セルフレビュー、テストゲート、自動コミット |
+| `/alfred:review [プロファイル]` | プロファイルベース品質レビュー — 6プロファイル（code, config, security, docs, architecture, testing）+チェックリスト |
+| `/alfred:skill-review [パス]` | Anthropic 公式 33 ページスキル設計ガイドに基づくスキル監査 — 21 チェック項目、スコアレポート、--fix 自動修正 |
 | `/alfred:brainstorm <テーマ>` | マルチエージェント発散 — 3専門家（Visionary, Pragmatist, Critic）が並列でアイデア生成→議論 |
 | `/alfred:refine <テーマ>` | 壁打ち（収束）— 論点を固定し、選択肢を絞り、決定を出す |
-| `/alfred:plan <task-slug>` | Alfred Protocol — マルチエージェント spec 生成（Architect + Devil's Advocate + Researcher が設計を議論） |
-| `/alfred:review [focus]` | マルチエージェントコードレビュー — 3サブレビューア（セキュリティ、ロジック、設計）並列実行 |
+| `/alfred:configure <種類> [名前]` | 単一の設定ファイルを作成・更新（skill, rule, hook, agent, MCP, CLAUDE.md, memory）+ 独立レビュー |
+| `/alfred:setup` | プロジェクト全体のセットアップウィザード — 複数ファイルのスキャン+設定、または Claude Code 機能の解説 |
+| `/alfred:ingest <ファイル>` | 参照資料（CSV, TXT, PDF, docs）を構造化ナレッジに変換、Compact/セッション喪失に耐える |
 | `/alfred:help [機能名]` | 全機能のクイックリファレンス — スキル、エージェント、MCP ツール、CLI コマンド |
 
 ## エージェント (2)
@@ -317,6 +320,7 @@ IDE 自動補完は [JSON Schema](schema/config.schema.json) で利用可能（`
 | `high_confidence_threshold` | `0.65` | 1件ではなく2件注入するための閾値 |
 | `single_keyword_dampen` | `0.80` | 単一キーワードマッチの減衰率（ノイズ低減） |
 | `quiet` | `false` | ナレッジ注入を抑制（hook の状態保存は継続） |
+| `context_boost_disable` | `false` | spec/session コンテキストブーストを無効化 |
 | `custom_sources` | `[]` | クロール対象の追加ドキュメント URL（HTTPS のみ） |
 
 全フィールドはオプション — 指定した値のみがデフォルトをオーバーライドする。
@@ -377,6 +381,7 @@ cat ~/.claude-alfred/debug.log  # ログを確認
 | `ALFRED_HIGH_CONFIDENCE_THRESHOLD` | `0.65` | 2 件注入のスコア閾値 |
 | `ALFRED_SINGLE_KEYWORD_DAMPEN` | `0.80` | 単一キーワードマッチのダンプニング係数 |
 | `ALFRED_QUIET` | `0` | `1` に設定するとナレッジ注入を抑制 |
+| `ALFRED_CONTEXT_BOOST_DISABLE` | `0` | `1` に設定すると spec/session コンテキストブーストを無効化 |
 | `ALFRED_MEMORY_MAX_AGE_DAYS` | `180` | `alfred memory prune` のデフォルト経過日数 |
 
 ### 情報の探し方

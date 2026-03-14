@@ -17,7 +17,7 @@ Works silently in the background — surfacing relevant knowledge, catching scop
 
 **Alfred Protocol** — Structured spec management resilient to Compact and session loss. Saves requirements, design, decisions, and session state to `.alfred/specs/`, with automatic context preservation and recovery.
 
-**Multi-Agent Code Review** — 3 specialized sub-reviewers (security, logic, design) run in parallel, then findings are aggregated and deduplicated. Each reviewer has explicit checklists for LLM blind spots. Cross-checks against active specs and knowledge base.
+**Profile-Based Quality Review** — 6 specialized review profiles (code, config, security, docs, architecture, testing), each with curated checklists refreshed from the knowledge base. Auto-detects relevant profiles from git diff, spawns parallel sub-reviewers, and produces scored reports with actionable fixes.
 
 **Persistent Memory** — Remembers past sessions, decisions, and notes across projects. Automatically saves session summaries and design decisions as permanent memory. Search past experience with the `recall` tool — alfred automatically surfaces relevant memories at session start.
 
@@ -79,18 +79,21 @@ alfred update
 Updates both the binary (via Homebrew or direct download) and the plugin bundle automatically.
 Restart Claude Code after updating.
 
-## Skills (7)
+## Skills (10)
 
 Invoke with `/alfred:<skill>` in Claude Code.
 
 | Skill | Description |
 |-------|-------------|
-| `/alfred:configure <type> [name]` | Create or polish a single config file (skill, rule, hook, agent, MCP, CLAUDE.md, memory) with independent review |
-| `/alfred:setup` | Project-wide setup wizard — multi-file scan + configuration, or Claude Code feature explainer |
+| `/alfred:plan <task-slug>` | Alfred Protocol — multi-agent spec generation (Architect + Devil's Advocate + Researcher deliberate on design) |
+| `/alfred:develop <task-slug>` | Fully autonomous development orchestrator — spec creation, implementation with review gates, self-review, test gate, and auto-commit |
+| `/alfred:review [profile]` | Profile-based quality review — 6 profiles (code, config, security, docs, architecture, testing) with curated checklists |
+| `/alfred:skill-review [path]` | Audit skills against Anthropic's official 33-page skill design guide — 21 checks, scored report, --fix auto-repair |
 | `/alfred:brainstorm <theme>` | Multi-agent divergent thinking — 3 specialists (Visionary, Pragmatist, Critic) generate ideas in parallel, then debate |
 | `/alfred:refine <theme>` | Convergent thinking — fix the issue, narrow options, score, and decide |
-| `/alfred:plan <task-slug>` | Alfred Protocol — multi-agent spec generation (Architect + Devil's Advocate + Researcher deliberate on design) |
-| `/alfred:review [focus]` | Multi-agent code review — 3 sub-reviewers (security, logic, design) in parallel |
+| `/alfred:configure <type> [name]` | Create or polish a single config file (skill, rule, hook, agent, MCP, CLAUDE.md, memory) with independent review |
+| `/alfred:setup` | Project-wide setup wizard — multi-file scan + configuration, or Claude Code feature explainer |
+| `/alfred:ingest <files>` | Ingest reference materials (CSV, TXT, PDF, docs) into structured knowledge that survives compaction |
 | `/alfred:help [feature]` | Quick reference for all capabilities — skills, agents, MCP tools, CLI commands |
 
 ## Agents (2)

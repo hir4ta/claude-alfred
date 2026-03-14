@@ -194,6 +194,9 @@ func Bundle(outputDir, version string) error {
 	}
 	for _, sf := range loadSkillSupportFiles() {
 		p := filepath.Join(outputDir, "skills", sf.Dir, sf.File)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return fmt.Errorf("create skill support dir %s/%s: %w", sf.Dir, sf.File, err)
+		}
 		if err := os.WriteFile(p, []byte(sf.Data), 0o644); err != nil {
 			return fmt.Errorf("write skill support file %s/%s: %w", sf.Dir, sf.File, err)
 		}

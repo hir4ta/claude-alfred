@@ -1,12 +1,14 @@
 ---
 name: refine
 description: >
-  Convergent decision-making: narrow options to 3, score with criteria, decide and move forward.
-  Use when stuck, choosing between options, or turning brainstorm output into actionable decisions.
-  Decisions are saved to spec automatically.
+  Convergent decision-making: narrow options to 3, score with criteria, decide
+  and move forward. Use when stuck, choosing between options, or turning
+  brainstorm output into actionable decisions. Decisions are saved to spec
+  automatically. NOT for divergent thinking (use /alfred:brainstorm). NOT for
+  full implementation planning (use /alfred:plan).
 user-invocable: true
 disable-model-invocation: true
-argument-hint: "<theme or current messy notes>"
+argument-hint: "theme or notes"
 allowed-tools: Read, Glob, Grep, AskUserQuestion, Agent, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 model: sonnet
 context: current
@@ -102,6 +104,13 @@ Always use this structure:
 - Completion criteria:
 - Reference @file / commands:
 ```
+
+## Troubleshooting
+
+- **User can't choose between options**: Add more evaluation criteria or run a quick web search for evidence.
+- **All options score equally**: Ask the user for a tiebreaker criterion ("If you could only optimize for one thing, what would it be?").
+- **Brainstorm handoff fails**: If decisions.md doesn't contain brainstorm output, fall back to Phase 0 intake.
+- **Spec save fails**: Proceed with the decision in conversation; the user can save manually later.
 
 ## Exit Criteria
 - One-line issue is agreed

@@ -66,7 +66,7 @@ go vet ./...                  # Static analysis
 - Auto-crawl: stderr captured to ~/.claude-alfred/crawl-errors.log for diagnostics
 - SessionEnd: persists session summary as permanent memory + extracts instinct patterns; matcher excludes reason=clear
 - PreCompact: auto-updates Next Steps completion status from transcript
-- Multi-agent architecture: review (3 sub-reviewers), brainstorm (2-4 specialists + synthesis), plan (2-4 specialists + mediator)
+- Multi-agent architecture: review (6 profiles: code/config/security/docs/architecture/testing with checklist system), brainstorm (3 specialists + synthesis), plan (3 specialists + mediator), develop (spec→implement→review→commit orchestrator)
 - Proactive workflow: plan/review skills auto-visible to Claude (disable-model-invocation removed); Stop hook enforces quality gate
 - Auto-crawl: every SessionStart spawns background crawl (lock file prevents concurrent runs)
 - Workflow detection: UserPromptSubmit detects large task / review intent → suggests appropriate skills

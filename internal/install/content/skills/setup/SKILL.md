@@ -91,6 +91,13 @@ Alfred welcomes you and sets up the project for Claude Code.
    base will help provide better answers.
    ```
 
+## Troubleshooting
+
+- **config-review fails or times out**: Proceed without it; manually check for existing files with Glob.
+- **Stack not detected**: Ask the user what language/framework they use.
+- **Knowledge returns no results**: Use the best-practices.md reference file as fallback.
+- **Generated config conflicts with existing**: Always read existing files first; merge, don't overwrite.
+
 ## Guardrails
 
 - Do NOT overwrite existing files without asking

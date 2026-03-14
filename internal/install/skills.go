@@ -6,7 +6,7 @@ import (
 	"path"
 )
 
-//go:embed content/skills/*/SKILL.md content/skills/*/*.md
+//go:embed content/skills/*/SKILL.md content/skills/*/*.md content/skills/*/checklists/*.md
 var skillsFS embed.FS
 
 type skillDef struct {
@@ -40,7 +40,8 @@ func loadSkills() []skillDef {
 	return skills
 }
 
-// loadSkillSupportFiles reads all non-SKILL.md files from skill directories.
+// loadSkillSupportFiles reads all non-SKILL.md files from skill directories,
+// including files in subdirectories (e.g., checklists/*.md).
 func loadSkillSupportFiles() []skillFileDef {
 	var files []skillFileDef
 	entries, err := fs.ReadDir(skillsFS, "content/skills")
@@ -51,22 +52,33 @@ func loadSkillSupportFiles() []skillFileDef {
 		if !e.IsDir() {
 			continue
 		}
-		dirEntries, err := fs.ReadDir(skillsFS, path.Join("content/skills", e.Name()))
+		skillDir := path.Join("content/skills", e.Name())
+		collectFiles(skillsFS, skillDir, e.Name(), "", &files)
+	}
+	return files
+}
+
+// collectFiles recursively reads files from a skill directory.
+func collectFiles(fsys fs.FS, dir, skillDir, prefix string, files *[]skillFileDef) {
+	dirEntries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return
+	}
+	for _, f := range dirEntries {
+		relName := path.Join(prefix, f.Name())
+		if f.IsDir() {
+			collectFiles(fsys, path.Join(dir, f.Name()), skillDir, relName, files)
+			continue
+		}
+		if f.Name() == "SKILL.md" && prefix == "" {
+			continue
+		}
+		data, err := fs.ReadFile(fsys, path.Join(dir, f.Name()))
 		if err != nil {
 			continue
 		}
-		for _, f := range dirEntries {
-			if f.IsDir() || f.Name() == "SKILL.md" {
-				continue
-			}
-			data, err := fs.ReadFile(skillsFS, path.Join("content/skills", e.Name(), f.Name()))
-			if err != nil {
-				continue
-			}
-			files = append(files, skillFileDef{Dir: e.Name(), File: f.Name(), Data: string(data)})
-		}
+		*files = append(*files, skillFileDef{Dir: skillDir, File: relName, Data: string(data)})
 	}
-	return files
 }
 
 // deprecatedSkillDirs lists skill directories from previous versions that
