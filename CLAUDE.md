@@ -67,7 +67,7 @@ go vet ./...                  # Static analysis
 - SessionEnd: persists session summary as permanent memory + extracts instinct patterns; matcher excludes reason=clear
 - PreCompact: auto-updates Next Steps completion status from transcript
 - Multi-agent architecture: review (6 profiles: code/config/security/docs/architecture/testing with checklist system), brainstorm (3 specialists + synthesis), plan (3 specialists + mediator), develop (spec→implement→review→commit orchestrator)
-- Proactive workflow: plan/review skills auto-visible to Claude (disable-model-invocation removed); Stop hook enforces quality gate
+- Proactive workflow: plan/review skills auto-visible to Claude (disable-model-invocation removed)
 - Auto-crawl: every SessionStart spawns background crawl (lock file prevents concurrent runs)
 - Workflow detection: UserPromptSubmit detects large task / review intent → suggests appropriate skills
 - Proactive knowledge push: UserPromptSubmit uses Voyage semantic search (embed prompt → hybrid RRF → feedback boost → context boost); keyword gate removed; FTS fallback removed; `ALFRED_CONTEXT_BOOST_DISABLE=1` to disable spec/session context boost

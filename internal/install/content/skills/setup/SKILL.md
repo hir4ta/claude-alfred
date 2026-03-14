@@ -3,7 +3,9 @@ name: setup
 description: >
   Project-wide Claude Code setup wizard, or explain any Claude Code feature
   with examples. Scans the whole project and guides multi-file configuration.
-  For single-file work, use /alfred:configure instead.
+  Use when setting up a new project, wanting a full config audit with guided
+  fixes, or needing a Claude Code feature explained. NOT for single-file
+  creation (use /alfred:configure). NOT for code review (use /alfred:review).
 user-invocable: true
 argument-hint: "[feature | --wizard]"
 allowed-tools: Read, Write, Edit, Glob, AskUserQuestion, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__config-review

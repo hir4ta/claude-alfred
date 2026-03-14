@@ -13,32 +13,7 @@ const runCmd = `"${CLAUDE_PLUGIN_ROOT}/bin/run.sh"`
 
 // alfredHookEntries returns the hook configuration for plugin distribution.
 func alfredHookEntries(binPath string) map[string]any {
-	// Stop hook prompt for quality gate.
-	stopPrompt := `You are a quality gate for a development workflow. Check the conversation transcript ($ARGUMENTS).
-
-FIRST: Determine if code was actually written or modified in this session (look for Edit/Write tool calls that changed source files). If NO code was changed — only analysis, Q&A, discussion, or planning — respond {"ok": true} immediately.
-
-ONLY if significant code was written or modified, check:
-1. Was a review done? Look for /alfred:review, self-review discussion, or explicit review.
-2. If a spec is active (.alfred/specs/), was session.md updated with current progress?
-
-If all applicable conditions are met, respond: {"ok": true}
-If a genuinely important step was skipped, respond: {"ok": false, "reason": "Suggestion: [concise action]"}
-
-IMPORTANT: Respond with ONLY raw JSON. No markdown, no code fences, no explanation.`
-
 	return map[string]any{
-		"Stop": []any{
-			map[string]any{
-				"hooks": []any{
-					map[string]any{
-						"type":    "prompt",
-						"prompt":  stopPrompt,
-						"timeout": 30,
-					},
-				},
-			},
-		},
 		"SessionStart": []any{
 			map[string]any{
 				"hooks": []any{

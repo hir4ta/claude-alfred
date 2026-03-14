@@ -2,8 +2,10 @@
 name: configure
 description: >
   Create or polish a single Claude Code configuration file (skill, rule, hook,
-  agent, MCP server, CLAUDE.md, or memory) with independent review.
-  For project-wide setup, use /alfred:setup instead.
+  agent, MCP server, CLAUDE.md, or memory) with independent review. Use when
+  creating a new config file, polishing an existing one, or wanting best-practice
+  guidance for a specific config type. NOT for project-wide setup (use
+  /alfred:setup). NOT for auditing existing config (use /alfred:review config).
 user-invocable: true
 argument-hint: "type [name]"
 context: current
