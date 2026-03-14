@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/spec"
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
@@ -1252,6 +1253,11 @@ func TestExtractTextContent(t *testing.T) {
 }
 
 func TestHandleUserPromptSubmitEarlyReturns(t *testing.T) {
+	// Disable semantic search for early-return tests.
+	origEmb := newEmbedder
+	newEmbedder = func() *embedder.Embedder { return nil }
+	t.Cleanup(func() { newEmbedder = origEmb })
+
 	// Test config reminder path.
 	output := captureStdout(t, func() {
 		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: ".claude/hooks.json を確認して"})
@@ -1268,7 +1274,7 @@ func TestHandleUserPromptSubmitEarlyReturns(t *testing.T) {
 		t.Errorf("short prompt should produce no output, got %q", output)
 	}
 
-	// Test unrelated prompt (keyword filter rejects).
+	// Test unrelated prompt — no semantic search, no keyword match → no output.
 	output = captureStdout(t, func() {
 		handleUserPromptSubmit(context.Background(), &hookEvent{Prompt: "Fix the login bug in the authentication service please"})
 	})
@@ -1309,7 +1315,8 @@ func TestHandleUserPromptSubmitKeywordFilter(t *testing.T) {
 }
 
 func TestHandleUserPromptSubmitFTSPath(t *testing.T) {
-	// Set up a temp DB with seed docs to exercise the FTS search path.
+	// Disable semantic search — this tests the legacy FTS path (no longer the primary path).
+	t.Skip("FTS path removed in v5 semantic-first design; handleUserPromptSubmit uses Voyage only")
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 	st, err := store.Open(dbPath)
@@ -1347,6 +1354,7 @@ func TestHandleUserPromptSubmitFTSPath(t *testing.T) {
 }
 
 func TestHandleUserPromptSubmitFTSNoResults(t *testing.T) {
+	t.Skip("FTS path removed in v5 semantic-first design")
 	// Empty DB: FTS search returns 0 results.
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "empty.db")
@@ -1369,6 +1377,7 @@ func TestHandleUserPromptSubmitFTSNoResults(t *testing.T) {
 }
 
 func TestHandleUserPromptSubmitFTSLowRelevance(t *testing.T) {
+	t.Skip("FTS path removed in v5 semantic-first design")
 	// DB has docs but they're irrelevant to the prompt.
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "irrelevant.db")
@@ -1401,6 +1410,7 @@ func TestHandleUserPromptSubmitFTSLowRelevance(t *testing.T) {
 }
 
 func TestHandleUserPromptSubmitWordBoundary(t *testing.T) {
+	t.Skip("FTS path removed in v5 semantic-first design")
 	// Prompt with "webhook" should NOT trigger injection (word boundary).
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "boundary.db")
@@ -1433,6 +1443,11 @@ func TestHandleUserPromptSubmitWordBoundary(t *testing.T) {
 }
 
 func TestHandleUserPromptSubmitConfigReminder(t *testing.T) {
+	// Disable semantic search so non-config prompts produce no output.
+	origEmb := newEmbedder
+	newEmbedder = func() *embedder.Embedder { return nil }
+	t.Cleanup(func() { newEmbedder = origEmb })
+
 	tests := []struct {
 		name   string
 		prompt string

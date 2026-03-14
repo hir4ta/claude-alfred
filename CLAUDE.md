@@ -53,7 +53,7 @@ go vet ./...                  # Static analysis
 
 ### Configuration & API
 
-- VOYAGE_API_KEY optional for serve and init (FTS-only fallback); init prompts interactively if unset
+- VOYAGE_API_KEY required for UserPromptSubmit semantic search; optional for serve and init (FTS-only fallback); init prompts interactively if unset
 - `alfred settings` saves API key to shell profile (~/.zshrc or ~/.bashrc)
 - Per-project config: `.alfred/config.json` overrides env vars (pointer fields for absent-vs-zero distinction)
 - Custom knowledge sources: `.alfred/config.json` `custom_sources` (per-project) + `~/.claude-alfred/sources.json` (global)
@@ -61,7 +61,7 @@ go vet ./...                  # Static analysis
 
 ### Hooks & Events
 
-- Hook handler: short-lived process, no Voyage API calls. ALFRED_DEBUG=1 for debug log
+- Hook handler: short-lived process. UserPromptSubmit uses Voyage API (semantic search). ALFRED_DEBUG=1 for debug log
 - SessionStart: CLAUDE.md ingestion + spec context injection + auto-crawl check + instinct promotion (4 ops parallel via channels); proactive hints capped at 2 sections
 - Auto-crawl: stderr captured to ~/.claude-alfred/crawl-errors.log for diagnostics
 - SessionEnd: persists session summary as permanent memory + extracts instinct patterns; matcher excludes reason=clear
@@ -70,7 +70,7 @@ go vet ./...                  # Static analysis
 - Proactive workflow: plan/review skills auto-visible to Claude (disable-model-invocation removed); Stop hook enforces quality gate
 - Auto-crawl: every SessionStart spawns background crawl (lock file prevents concurrent runs)
 - Workflow detection: UserPromptSubmit detects large task / review intent → suggests appropriate skills
-- Proactive knowledge push: UserPromptSubmit uses spec/session context keywords for supplemental FTS search + post-scoring tiebreaker boost (cap +0.15, ±0.10 range); `ALFRED_CONTEXT_BOOST_DISABLE=1` or `.alfred/config.json` `context_boost_disable` to disable
+- Proactive knowledge push: UserPromptSubmit uses Voyage semantic search (embed prompt → hybrid RRF → feedback boost → context boost); keyword gate removed; FTS fallback removed; `ALFRED_CONTEXT_BOOST_DISABLE=1` to disable spec/session context boost
 - Spec alignment nudge: PreCompact surfaces requirements goals + open success criteria via additionalContext; progressive cooldown (full → summary → hidden after 2 shows); `<!-- alignment-ack -->` in session.md to suppress; state markers persist through session.md rebuild
 
 ### Database & Schema

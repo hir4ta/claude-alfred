@@ -176,7 +176,7 @@ func runHook(event string) error {
 	case "PreCompact":
 		timeout = 9 * time.Second // 1s headroom before 10s external timeout
 	case "UserPromptSubmit":
-		timeout = 2500 * time.Millisecond // 500ms headroom before 3s external timeout
+		timeout = 9 * time.Second // 1s headroom before 10s external timeout (Voyage API)
 	case "SessionEnd":
 		timeout = 2500 * time.Millisecond // 500ms headroom before 3s external timeout
 	case "PostToolUse":

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -61,20 +60,20 @@ func envFloat(key string, defaultVal float64) float64 {
 // ---------------------------------------------------------------------------
 // Architecture note: Hook vs MCP knowledge injection
 //
-// UserPromptSubmit hook (this file):
+// UserPromptSubmit hook (this file + hooks_semantic.go):
 //   - Passive/proactive: fires automatically on every prompt
-//   - Lightweight: FTS5 only, no Voyage API calls
+//   - When VOYAGE_API_KEY is set: semantic search (embed + hybrid RRF)
+//   - When unavailable: fallback to FTS5 keyword pipeline
 //   - Scope: injects up to 2 short snippets (300 chars each)
 //   - Purpose: surface relevant context BEFORE Claude starts working
 //
 // MCP "knowledge" tool (mcpserver/handlers_search.go):
 //   - Active: called explicitly by Claude or user
-//   - Heavyweight: hybrid vector + FTS5 + Voyage rerank
+//   - Full pipeline: hybrid vector + FTS5 + Voyage rerank
 //   - Scope: returns full search results with scores
 //   - Purpose: deep research when Claude needs detailed information
 //
-// These are complementary, not redundant. The hook primes Claude with
-// lightweight hints; the MCP tool provides deep answers on demand.
+// The hook provides semantic priming; the MCP tool provides deep answers.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -163,51 +162,39 @@ func scoreRelevance(matchedKeywords []string, promptLower string, doc store.DocR
 }
 
 // handleUserPromptSubmit emits config reminders and proactively injects
-// relevant knowledge from the FTS index based on the user's prompt.
+// relevant knowledge using Voyage semantic search (embed + hybrid RRF).
 //
-// Precision design (v4):
-// 1. Detect Claude Code keywords with word boundary + framework negation (Gate 1)
-// 2. Search FTS using ONLY matched keywords — no synonym expansion (Gate 2)
-// 3. Score with kagome tokenizer + keyword-aware relevance, threshold 0.40 (Gate 3)
-//    Single-keyword matches dampened (×0.7) to require content coverage
-// 4. Inject 1 result by default; 2 only if top score >= 0.65
+// Semantic-first design (v5):
+// 1. Embed prompt via Voyage API → hybrid search (vector + FTS via RRF)
+// 2. Apply feedback boost + spec/session context boost
+// 3. Inject 1-2 results based on confidence
+//
+// If VOYAGE_API_KEY is not set, knowledge injection is skipped entirely.
+// Workflow hints, remember hints, and instincts still work without Voyage.
 func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
-	// Resolve per-project thresholds: .alfred/config.json > env var > default.
 	cfg := loadProjectConfig(ev.ProjectPath)
 	var quietPtr *bool
-	var relPtr, highPtr, dampenPtr *float64
 	if cfg != nil {
 		quietPtr = cfg.Quiet
-		relPtr = cfg.RelevanceThreshold
-		highPtr = cfg.HighConfidenceThreshold
-		dampenPtr = cfg.SingleKeywordDampen
 	}
 
-	// Quiet mode: suppress knowledge injection (spec recovery & session persistence still run).
 	if resolveBool(quietPtr, "ALFRED_QUIET") {
 		debugf("UserPromptSubmit: quiet mode, skipping")
 		return
 	}
 
-	relevanceThreshold := resolveFloat(relPtr, "ALFRED_RELEVANCE_THRESHOLD", defaultRelevanceThreshold)
-	highConfidenceThreshold := resolveFloat(highPtr, "ALFRED_HIGH_CONFIDENCE_THRESHOLD", defaultHighConfidenceThreshold)
-	skDampen := resolveFloat(dampenPtr, "ALFRED_SINGLE_KEYWORD_DAMPEN", defaultSingleKeywordDampen)
-
 	if shouldRemindPrompt(ev.Prompt) {
-		debugf("UserPromptSubmit: reminding about alfred for prompt")
 		emitAdditionalContext("UserPromptSubmit", configReminder)
-		return // config reminder is sufficient, skip knowledge injection
+		return
 	}
 
 	prompt := strings.TrimSpace(ev.Prompt)
 	if len([]rune(prompt)) < 10 {
-		return // too short to search meaningfully (rune-based for CJK)
+		return
 	}
 
 	// Detect workflow opportunities and suggest skills proactively.
 	workflowHint := detectWorkflowOpportunity(prompt, ev.ProjectPath)
-
-	// Check context pressure.
 	if ctxHint := estimateContextPressure(ev); ctxHint != "" {
 		if workflowHint != "" {
 			workflowHint += "\n\n" + ctxHint
@@ -219,12 +206,11 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	// Detect "remember this" intent for recall tool suggestion.
 	rememberHint := ""
 	if detectRememberIntent(prompt) {
-		debugf("UserPromptSubmit: remember intent detected")
 		rememberHint = "User wants to save information. Use the recall tool with action=save to persist this as permanent memory. " +
 			"Parameters: content (what to save), label (short description), project (optional context)."
 	}
 
-	// Load spec/session context for proactive knowledge push (non-blocking).
+	// Load spec/session context for proactive knowledge push.
 	var specCtx *specContext
 	var ctxBoostDisable *bool
 	if cfg != nil {
@@ -234,221 +220,26 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 		specCtx = loadSpecContext(ev.ProjectPath)
 	}
 
-	// Gate 1: Detect Claude Code keywords with word boundary matching.
-	// Only the matched keywords are used as search terms — no synonym expansion.
-	matched := detectClaudeCodeKeywords(prompt)
-	if len(matched) == 0 {
-		hints := workflowHint
-		if rememberHint != "" {
-			if hints != "" {
-				hints += "\n\n"
-			}
-			hints += rememberHint
-		}
-		if hints != "" {
-			emitAdditionalContext("UserPromptSubmit", hints)
-		}
-		debugf("UserPromptSubmit: no Claude Code keywords detected, skipping")
+	// Semantic search: embed prompt → hybrid search → boost → inject.
+	// If Voyage is unavailable, only workflow/remember hints are emitted.
+	if handleSemanticSearch(ctx, ev, cfg, prompt, specCtx, workflowHint, rememberHint) {
 		return
 	}
 
-	st, err := openStore()
-	if err != nil {
-		notifyUser("warning: knowledge search unavailable: %v", err)
-		debugf("UserPromptSubmit: store open failed: %v", err)
-		return
-	}
-
-	// Gate 2: Search FTS using matched Claude Code keywords only.
-	// Translate katakana keywords to English for searching the English KB.
-	var ftsTerms []string
-	for _, kw := range matched {
-		if en, ok := store.TranslateTerm(kw); ok {
-			ftsTerms = append(ftsTerms, en)
-		} else {
-			ftsTerms = append(ftsTerms, kw)
-		}
-	}
-	ftsQuery := store.JoinFTS5Terms(ftsTerms)
-	// Retrieve 8 candidates: enough diversity for scoring, but bounded to keep hook fast.
-	allDocs, ftsErr := st.SearchDocsFTS(ctx, ftsQuery, store.SourceDocs, 8)
-	if ftsErr != nil {
-		debugf("UserPromptSubmit: FTS keyword search failed: %v", ftsErr)
-	}
-
-	// Supplemental: also search with prompt keywords (no expansion) for coverage.
-	// Skip if context deadline already exceeded — use whatever we have.
-	if ctx.Err() == nil {
-		keywords := extractSearchKeywords(prompt, 6)
-		if keywords != "" {
-			docs, err := st.SearchDocsFTS(ctx, keywords, store.SourceDocs, 3)
-			if err != nil {
-				debugf("UserPromptSubmit: FTS supplemental search failed: %v", err)
-			}
-			allDocs = append(allDocs, docs...)
-		}
-	} else {
-		debugf("UserPromptSubmit: skipping supplemental search (timeout)")
-	}
-
-	// Proactive knowledge push: search with spec/session context keywords.
-	if specCtx != nil && ctx.Err() == nil {
-		ctxDocs := searchSpecContext(ctx, specCtx, st)
-		allDocs = append(allDocs, ctxDocs...)
-	}
-
-	if len(allDocs) == 0 {
-		debugf("UserPromptSubmit: FTS search returned 0 results")
-		return
-	}
-
-	// Deduplicate by doc ID.
-	seen := make(map[int64]bool)
-	var uniqueDocs []store.DocRow
-	for _, d := range allDocs {
-		if !seen[d.ID] {
-			seen[d.ID] = true
-			uniqueDocs = append(uniqueDocs, d)
-		}
-	}
-
-	// Gate 3: Score with keyword-aware relevance (primary: keywords in doc, secondary: prompt coverage).
-	promptLower := strings.ToLower(prompt)
-	var candidates []scored
-	for _, doc := range uniqueDocs {
-		s := scoreRelevance(matched, promptLower, doc, skDampen)
-		if s >= relevanceThreshold {
-			candidates = append(candidates, scored{doc, s})
-		}
-	}
-	if len(candidates) == 0 {
-		debugf("UserPromptSubmit: no relevant matches (all below %.2f threshold)", relevanceThreshold)
-		return
-	}
-
-	// Implicit feedback: check if previous injection's topic was referenced in this prompt.
-	// Skip on timeout — scoring results is more valuable than feedback tracking.
-	if ctx.Err() == nil {
-		evaluateInjectionFeedback(ctx, prompt, st)
-	}
-
-	// Apply feedback boost BEFORE maxResults selection so boosted docs
-	// can be promoted into the top results.
-	boostIDs := make([]int64, len(candidates))
-	for i := range candidates {
-		boostIDs[i] = candidates[i].doc.ID
-	}
-	boosts := st.FeedbackBoostBatch(ctx, boostIDs)
-	for i := range candidates {
-		if b, ok := boosts[candidates[i].doc.ID]; ok {
-			// Additive boost: b is 1.0 ± ratio*0.1, so (b - 1.0) gives ±0.1 range.
-			// No floor at 0 — let the threshold filter handle exclusion symmetrically
-			// for both boosted and penalized docs.
-			candidates[i].score += b - 1.0
-		}
-	}
-
-	// Apply spec/session context boost (post-scoring, tiebreaker semantics).
-	ctxBoostedIDs := applyContextBoost(candidates, specCtx)
-	if len(ctxBoostedIDs) > 0 {
-		debugf("UserPromptSubmit: context boost applied to %d candidates", len(ctxBoostedIDs))
-	}
-
-	// Re-sort after boost and re-apply threshold.
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].score > candidates[j].score
-	})
-	var filtered []scored
-	for _, c := range candidates {
-		if c.score >= relevanceThreshold {
-			filtered = append(filtered, c)
-		}
-	}
-	candidates = filtered
-	if len(candidates) == 0 {
-		debugf("UserPromptSubmit: no relevant matches after feedback boost")
-		return
-	}
-
-	// Confidence-based injection: 1 result by default, 2 if top score is high.
-	maxResults := 1
-	if len(candidates) > 1 && candidates[0].score >= highConfidenceThreshold {
-		maxResults = 2
-	}
-	if len(candidates) > maxResults {
-		candidates = candidates[:maxResults]
-	}
-
+	// Voyage unavailable — emit non-search hints only.
 	var buf strings.Builder
 	if workflowHint != "" {
-		buf.WriteString(workflowHint + "\n\n")
+		buf.WriteString(workflowHint)
 	}
 	if rememberHint != "" {
-		buf.WriteString(rememberHint + "\n\n")
-	}
-
-	// Separate context-boosted results from regular keyword-matched results.
-	var regular, contextAware []scored
-	for _, c := range candidates {
-		if ctxBoostedIDs[c.doc.ID] {
-			contextAware = append(contextAware, c)
-		} else {
-			regular = append(regular, c)
+		if buf.Len() > 0 {
+			buf.WriteString("\n\n")
 		}
+		buf.WriteString(rememberHint)
 	}
-	if len(regular) > 0 {
-		buf.WriteString("Relevant best practices from alfred knowledge base:\n")
-		for _, c := range regular {
-			snippet := safeSnippet(c.doc.Content, 300)
-			fmt.Fprintf(&buf, "- [%s] %s\n", c.doc.SectionPath, snippet)
-		}
+	if buf.Len() > 0 {
+		emitAdditionalContext("UserPromptSubmit", buf.String())
 	}
-	if len(contextAware) > 0 {
-		if len(regular) > 0 {
-			buf.WriteByte('\n')
-		}
-		buf.WriteString("Context-aware suggestions (based on current task):\n")
-		for _, c := range contextAware {
-			snippet := safeSnippet(c.doc.Content, 300)
-			fmt.Fprintf(&buf, "- [%s] %s\n", c.doc.SectionPath, snippet)
-		}
-	}
-	// Also search memories (no keyword gate — memory is small).
-	memSnippets := searchMemoryForPrompt(ctx, prompt, st)
-	if len(memSnippets) > 0 {
-		buf.WriteString("\nRelated past experience:\n")
-		for _, m := range memSnippets {
-			buf.WriteString(m)
-		}
-	}
-
-	// Search and inject relevant instincts (learned behavioral patterns).
-	instinctSnippets := searchRelevantInstincts(ctx, prompt, ev.ProjectPath, st)
-	if len(instinctSnippets) > 0 {
-		buf.WriteString("\nLearned patterns from past sessions:\n")
-		for _, s := range instinctSnippets {
-			buf.WriteString(s)
-		}
-	}
-
-	// Record which docs were injected for feedback tracking.
-	var injectedIDs []int64
-	for _, c := range candidates {
-		injectedIDs = append(injectedIDs, c.doc.ID)
-	}
-	if err := st.RecordInjection(ctx, injectedIDs); err != nil {
-		debugf("UserPromptSubmit: record injection error: %v", err)
-	}
-
-	emitAdditionalContext("UserPromptSubmit", buf.String())
-	if len(candidates) == 1 {
-		notifyUser("injected 1 knowledge snippet (score: %.2f, keywords: %v)",
-			candidates[0].score, matched)
-	} else {
-		notifyUser("injected %d knowledge snippets (scores: %.2f, %.2f; keywords: %v)",
-			len(candidates), candidates[0].score, candidates[1].score, matched)
-	}
-	debugf("UserPromptSubmit: injected %d knowledge snippets (top score: %.2f, keywords: %v), %d memory hints", len(candidates), candidates[0].score, matched, len(memSnippets))
 }
 
 // rememberKeywords are phrases indicating the user wants to save information.

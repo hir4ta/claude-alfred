@@ -13,7 +13,7 @@ paths:
 |---|---|---|---|
 | SessionStart | 5s | 4.5s | CLAUDE.md ingestion + spec context + auto-crawl + instinct promotion (4 ops parallel via channels) |
 | PreCompact | 10s | 9s | Transcript parsing + decision extraction + session.md |
-| UserPromptSubmit | 3s | 2.5s | FTS-only keyword search (no Voyage API) |
+| UserPromptSubmit | 10s | 9s | Voyage semantic search (embed + hybrid RRF + boost) |
 | SessionEnd | 3s | 2.5s | Session summary + memory save + instinct extraction, skips on reason=clear |
 | embed-async | 30s | — | Voyage API with 3x exponential backoff (background) |
 | embed-doc | 30s | — | Voyage API with 3x exponential backoff (background) |
