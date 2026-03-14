@@ -7,6 +7,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-03-14
+
+### Added
+- **Proactive Knowledge Push**: UserPromptSubmit uses spec/session context (Currently Working On, Next Steps) for supplemental search and post-scoring tiebreaker boost (cap +0.15, ±0.10 range)
+- **Spec Alignment Nudge**: PreCompact surfaces requirements goals and open success criteria via additionalContext; progressive cooldown (full → summary → hidden after 2 shows); `<!-- alignment-ack -->` to suppress
+- **Semantic-First Search**: UserPromptSubmit replaced keyword gate + FTS pipeline with Voyage semantic search (embed prompt → hybrid RRF → feedback boost → context boost); VOYAGE_API_KEY now required for knowledge injection
+- **Semantic Memory Search**: memory retrieval via vector similarity instead of FTS keyword matching
+- Context-boosted results labeled separately as "Context-aware suggestions (based on current task)"
+
+### Changed
+- UserPromptSubmit timeout: 3s → 10s (Voyage API accommodation)
+- Stop hook prompt: added explicit raw JSON instruction to reduce markdown wrapping errors
+- `scored` type promoted to package-level for cross-file use
+- `ProjectConfig`: added `context_boost_disable` field
+
+### Removed
+- Keyword gate (detectClaudeCodeKeywords) as primary injection filter — replaced by semantic similarity
+- FTS-only knowledge injection pipeline — Voyage is now the sole search mechanism
+- `scoreRelevance()` usage in main injection path (retained for legacy reference)
+
 ## [0.65.1] - 2026-03-15
 
 ### Fixed
@@ -689,7 +709,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.65.1...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.66.0...HEAD
+[0.66.0]: https://github.com/hir4ta/claude-alfred/compare/v0.65.1...v0.66.0
 [0.65.1]: https://github.com/hir4ta/claude-alfred/compare/v0.65.0...v0.65.1
 [0.65.0]: https://github.com/hir4ta/claude-alfred/compare/v0.64.3...v0.65.0
 [0.64.3]: https://github.com/hir4ta/claude-alfred/compare/v0.64.2...v0.64.3

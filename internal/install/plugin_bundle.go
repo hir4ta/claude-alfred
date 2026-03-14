@@ -23,7 +23,9 @@ func alfredHookEntries(binPath string) map[string]any {
 If ALL applicable conditions are met (or not applicable), respond: {"ok": true}
 If something important was skipped, respond: {"ok": false, "reason": "Suggestion: [what should be done before finishing, e.g. 'Run /alfred:review to review the changes' or 'Update spec session.md with current progress']"}
 
-Be pragmatic — don't block for trivial changes, quick fixes, or conversations that are just Q&A. Only flag genuinely missing workflow steps for substantial work.`
+Be pragmatic — don't block for trivial changes, quick fixes, or conversations that are just Q&A. Only flag genuinely missing workflow steps for substantial work.
+
+IMPORTANT: Respond with ONLY raw JSON. No markdown, no code fences, no explanation. Just the JSON object.`
 
 	return map[string]any{
 		"Stop": []any{
@@ -68,7 +70,7 @@ Be pragmatic — don't block for trivial changes, quick fixes, or conversations 
 						"type":          "command",
 						"command":       binPath + " hook UserPromptSubmit",
 						"statusMessage": "alfred: searching knowledge...",
-						"timeout":       3,
+						"timeout":       10,
 					},
 				},
 			},
