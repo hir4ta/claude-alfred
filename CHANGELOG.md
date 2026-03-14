@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.65.1] - 2026-03-15
+
+### Fixed
+- Instinct extraction: Japanese particle splitting without spaces (テストは, データを) now correctly detected via CJK/kana boundary analysis
+- Instinct extraction: `=` separator pattern added for technical config decisions (e.g. `floor=0.5`)
+- Instinct extraction: parenthetical content (（…）) no longer causes false particle matches
+- SessionEnd timeout: `alfred init` now sets `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=5000` (Claude Code default 1.5s was too short for memory + instinct persistence)
+
 ## [0.65.0] - 2026-03-15
 
 ### Added
@@ -681,7 +689,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PreCompact hook with transcript analysis
 - Decision extraction from conversation transcripts
 
-[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.65.0...HEAD
+[Unreleased]: https://github.com/hir4ta/claude-alfred/compare/v0.65.1...HEAD
+[0.65.1]: https://github.com/hir4ta/claude-alfred/compare/v0.65.0...v0.65.1
 [0.65.0]: https://github.com/hir4ta/claude-alfred/compare/v0.64.3...v0.65.0
 [0.64.3]: https://github.com/hir4ta/claude-alfred/compare/v0.64.2...v0.64.3
 [0.64.2]: https://github.com/hir4ta/claude-alfred/compare/v0.64.1...v0.64.2

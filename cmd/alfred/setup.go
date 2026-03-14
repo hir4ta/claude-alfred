@@ -422,5 +422,12 @@ func runSetup() error {
 		fmt.Fprintf(os.Stderr, "  ✓ Updated %d rules in ~/.claude/rules/\n", n)
 	}
 
+	// Ensure SessionEnd hook timeout is sufficient for memory + instinct persistence.
+	// Claude Code caps SessionEnd hooks at CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS (default: 1500ms).
+	if os.Getenv("CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS") == "" {
+		_ = saveEnvToProfile("CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS", "5000")
+		fmt.Fprintf(os.Stderr, "  ✓ Set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=5000 in shell profile\n")
+	}
+
 	return nil
 }

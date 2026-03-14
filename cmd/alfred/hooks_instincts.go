@@ -172,24 +172,23 @@ var rationaleMarkersForInstinct = []string{
 // Examples:
 //   - "Use table-driven tests for Go (because ...)" → trigger:"Go テスト作成時", action:"table-driven tests を使う"
 //   - "Recency floor=0.5 (0.75では...)" → trigger:"recency 設定", action:"floor=0.5"
+//   - "テストは直接構築する方式に" → trigger:"テスト", action:"直接構築する方式に"
 func splitDecisionToInstinct(decision string) (trigger, action string) {
 	lower := strings.ToLower(decision)
 
-	// Pattern 1: "X は Y で/に" (Japanese decision pattern)
+	// Pattern 1a: "X は Y" with spaces (Japanese decision pattern)
 	jpSeps := []string{" は ", " を ", " で "}
 	if idx, sep := indexAnyWithLen(lower, jpSeps); idx > 0 {
-		trigger = strings.TrimSpace(decision[:idx])
-		action = strings.TrimSpace(decision[idx+sep:])
-		// Clean up parenthetical rationale from action.
-		if pIdx := strings.Index(action, "（"); pIdx > 0 {
-			action = strings.TrimSpace(action[:pIdx])
-		}
-		if pIdx := strings.Index(action, "("); pIdx > 0 {
-			action = strings.TrimSpace(action[:pIdx])
-		}
+		trigger, action = splitAndCleanParens(decision, idx, sep)
 		if len([]rune(trigger)) >= 2 && len([]rune(action)) >= 3 {
 			return trigger, action
 		}
+	}
+
+	// Pattern 1b: Japanese particles without spaces (テストは、データを、方式で).
+	// Split at the first は/を/で that appears between non-particle characters.
+	if t, a := splitJapaneseParticle(decision); t != "" && a != "" {
+		return t, a
 	}
 
 	// Pattern 2: "Use X for Y" / "Prefer X over Y"
@@ -221,7 +220,90 @@ func splitDecisionToInstinct(decision string) (trigger, action string) {
 		}
 	}
 
+	// Pattern 5: Assignment "X=Y" (technical config decisions like "floor=0.5")
+	if idx := strings.Index(decision, "="); idx > 2 && idx < len(decision)-1 {
+		// Use the whole decision as action, derive trigger from context.
+		action = stripParenthetical(decision)
+		trigger = "関連する設定変更時"
+		if len([]rune(action)) >= 3 {
+			return trigger, action
+		}
+	}
+
 	return "", ""
+}
+
+// splitAndCleanParens splits decision at idx+sepLen and strips parenthetical rationale.
+func splitAndCleanParens(decision string, idx, sepLen int) (string, string) {
+	trigger := strings.TrimSpace(decision[:idx])
+	action := strings.TrimSpace(decision[idx+sepLen:])
+	action = stripParenthetical(action)
+	return trigger, action
+}
+
+// stripParenthetical removes trailing parenthetical rationale from text.
+func stripParenthetical(s string) string {
+	for _, open := range []string{"（", "("} {
+		if pIdx := strings.Index(s, open); pIdx > 0 {
+			s = strings.TrimSpace(s[:pIdx])
+		}
+	}
+	return s
+}
+
+// splitJapaneseParticle finds the first は/を/で particle in a Japanese sentence
+// (without requiring surrounding spaces) and splits into trigger + action.
+// Only matches particles that appear between CJK/kana characters and outside parentheses.
+func splitJapaneseParticle(decision string) (trigger, action string) {
+	runes := []rune(decision)
+	particles := []rune{'は', 'を', 'で'}
+
+	// Track parenthesis depth to skip particles inside (…) or （…）.
+	parenDepth := 0
+	for i, r := range runes {
+		switch r {
+		case '(', '（':
+			parenDepth++
+			continue
+		case ')', '）':
+			if parenDepth > 0 {
+				parenDepth--
+			}
+			continue
+		}
+		if parenDepth > 0 || i == 0 || i >= len(runes)-1 {
+			continue
+		}
+		for _, p := range particles {
+			if r != p {
+				continue
+			}
+			prev := runes[i-1]
+			if !isCJKOrKana(prev) {
+				continue
+			}
+			triggerRunes := runes[:i]
+			actionRunes := runes[i+1:]
+			if len(triggerRunes) < 2 || len(actionRunes) < 2 {
+				continue
+			}
+			trigger = strings.TrimSpace(string(triggerRunes))
+			action = strings.TrimSpace(string(actionRunes))
+			action = stripParenthetical(action)
+			if len([]rune(action)) >= 3 {
+				return trigger, action
+			}
+		}
+	}
+	return "", ""
+}
+
+// isCJKOrKana returns true if the rune is a CJK ideograph, hiragana, or katakana.
+func isCJKOrKana(r rune) bool {
+	return (r >= 0x3040 && r <= 0x309F) || // Hiragana
+		(r >= 0x30A0 && r <= 0x30FF) || // Katakana
+		(r >= 0x4E00 && r <= 0x9FFF) || // CJK Unified Ideographs
+		(r >= 0xFF00 && r <= 0xFFEF) // Fullwidth forms
 }
 
 // extractCorrectionPatterns detects correction/preference signals.
