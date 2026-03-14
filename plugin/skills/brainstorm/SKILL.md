@@ -1,11 +1,9 @@
 ---
 name: brainstorm
-description: |
-  Multi-agent divergent thinking: 3 specialist agents (Visionary, Pragmatist, Critic) generate
-  perspectives in parallel, then debate to produce richer, more grounded output.
-  Each agent researches independently via knowledge base and web search.
-  Use when: (1) unsure what to think about, (2) ideas are few or thinking is rigid,
-  (3) need to surface risks and issues, (4) need raw material for convergence (/alfred:refine).
+description: >
+  Divergent thinking with 3 agents (Visionary, Pragmatist, Critic) in parallel.
+  Use when you need more ideas, want to explore options, or surface risks before deciding.
+  Follow up with /alfred:refine to converge on a decision.
 user-invocable: true
 disable-model-invocation: true
 argument-hint: "<theme or rough prompt>"
@@ -180,6 +178,20 @@ Compile everything into this structure:
 - To create a spec: /alfred:plan
 - To explore: files to read in Plan Mode / commands to investigate
 ```
+
+## Phase 4: Save for Convergence (spec handoff)
+
+If the user has an active spec (check via `spec` with action=status), or if the brainstorm
+theme maps to a clear task slug, save the brainstorm output for seamless `/alfred:refine` pickup:
+
+1. Call `spec` with action=init if no spec exists (use theme as slug, e.g. `auth-strategy`)
+2. Call `spec` with action=update, file=decisions.md, content=the full Phase 3 output
+   (prefix with `<!-- brainstorm output, pending convergence -->\n`)
+3. Tell the user: "Brainstorm saved to spec. Run `/alfred:refine` to converge — it will
+   auto-load these results."
+
+If the user declines to save or the theme is too vague for a slug, skip this step.
+The brainstorm output in the conversation is always usable directly.
 
 ## Exit Criteria
 - All 3 specialist agents completed

@@ -157,6 +157,8 @@ func (m settingsModel) View() tea.View {
 		b.WriteString(m.list.View())
 		if m.err != nil {
 			b.WriteString("\n  " + errStyleLocal.Render("✗ Error: "+m.err.Error()) + "\n")
+			b.WriteString("  " + hintStyle.Render("Manual fallback: add to ~/.zshrc or ~/.bashrc:") + "\n")
+			b.WriteString("  " + hintStyle.Render("  export VOYAGE_API_KEY='your-key-here'") + "\n")
 		}
 
 	case settingsEditKey:

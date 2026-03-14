@@ -54,14 +54,53 @@ then output a focused explanation. Otherwise, show the full reference below.
 | `alfred settings` | Manage Voyage API key |
 | `alfred update` | Self-update binary |
 
+## Which skill should I use?
+
+```
+Starting a new task?
+  → /alfred:plan        — Multi-agent spec generation
+
+Have a vague idea, need to explore?
+  → /alfred:brainstorm  — Divergent thinking (3 agents)
+
+Have options but can't choose?
+  → /alfred:refine      — Narrowing, scoring, deciding
+
+Ready to commit code?
+  → /alfred:review      — Multi-agent code review
+
+Need to set up Claude Code config?
+  → /alfred:setup       — Project-wide wizard
+  → /alfred:configure   — Single file (skill, rule, hook, etc.)
+```
+
+**Typical flow:** brainstorm → refine → plan → implement → review
+
 ## Environment Variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `ALFRED_QUIET` | `0` | Set to `1` to suppress knowledge injection |
-| `ALFRED_RELEVANCE_THRESHOLD` | `0.40` | Minimum score for knowledge injection |
-| `ALFRED_CRAWL_INTERVAL_DAYS` | `7` | Auto-crawl interval |
-| `ALFRED_DEBUG` | unset | Set to `1` for debug logging (~/.claude-alfred/debug.log) |
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `ALFRED_QUIET` | `0` | `1` = suppress knowledge injection (hooks still save state) |
+| `ALFRED_RELEVANCE_THRESHOLD` | `0.40` | Lower = more injections (noisier). Higher = fewer, more precise |
+| `ALFRED_HIGH_CONFIDENCE_THRESHOLD` | `0.65` | Score needed to inject 2 results instead of 1 |
+| `ALFRED_SINGLE_KEYWORD_DAMPEN` | `0.80` | Multiplier for single-keyword matches (reduces noise) |
+| `ALFRED_DEBUG` | unset | `1` = debug logging to ~/.claude-alfred/debug.log |
+
+## Per-Project Config (.alfred/config.json)
+
+Override environment variables per project. All fields optional:
+
+```json
+{
+  "relevance_threshold": 0.35,
+  "high_confidence_threshold": 0.60,
+  "single_keyword_dampen": 0.80,
+  "quiet": false,
+  "custom_sources": [
+    {"url": "https://docs.example.com/api", "label": "Internal API docs"}
+  ]
+}
+```
 
 ## How It Works
 

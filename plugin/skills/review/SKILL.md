@@ -6,7 +6,6 @@ description: >
   aggregates findings. Use when: (1) before committing, (2) after a milestone,
   (3) want a second opinion on changes.
 user-invocable: true
-disable-model-invocation: true
 argument-hint: "[focus area]"
 allowed-tools: Read, Glob, Grep, Agent, Bash(git diff *, git log *, git show *, git status *), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 context: fork
@@ -152,7 +151,21 @@ If a focus area is provided in $ARGUMENTS, pass it to the sub-reviewers.
 - If ALL sub-reviewers find nothing: "No issues found. Changes look good."
 - Prefer false negatives over false positives — noise erodes trust
 
+## Post-Review: Save Learnings
+
+After the review is complete, save recurring patterns as instincts via `recall`:
+
+1. If findings reveal a **repeated mistake** (e.g., "missing error handling in HTTP handlers"),
+   call `recall` with action=save to persist as memory:
+   - label: "Review pattern: <pattern>"
+   - content: "When <trigger>, always <action>. Found in review of <task>."
+
+2. If the project has an active spec, update `decisions.md` with key review outcomes.
+
+This enables the instinct system to learn from reviews and prevent the same issues next time.
+
 ## Exit Criteria
 - All 3 sub-reviewers completed
 - Findings deduplicated and prioritized
 - Clear verdict provided
+- Recurring patterns saved as learnings (if any)

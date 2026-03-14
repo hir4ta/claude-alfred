@@ -52,7 +52,7 @@ func newDoctorModel() doctorModel {
 	columns := []table.Column{
 		{Title: "Status", Width: 8},
 		{Title: "Check", Width: 16},
-		{Title: "Details", Width: 44},
+		{Title: "Details", Width: 56},
 	}
 
 	totalWidth := 0
@@ -238,7 +238,7 @@ func runChecks() []checkResult {
 		}
 		checks = append(checks, checkResult{"Plugin", "ok", display})
 	} else {
-		checks = append(checks, checkResult{"Plugin", "fail", "not found"})
+		checks = append(checks, checkResult{"Plugin", "fail", "not found — run 'claude mcp add' or reinstall"})
 	}
 
 	// 6. Hooks registered.
@@ -247,7 +247,7 @@ func runChecks() []checkResult {
 		if _, err := os.Stat(hooksPath); err == nil {
 			checks = append(checks, checkResult{"Hooks", "ok", "hooks.json present"})
 		} else {
-			checks = append(checks, checkResult{"Hooks", "warn", "hooks.json missing"})
+			checks = append(checks, checkResult{"Hooks", "warn", "hooks.json missing — reinstall plugin"})
 		}
 	}
 
@@ -258,7 +258,7 @@ func runChecks() []checkResult {
 			if fi.Mode()&0111 != 0 {
 				checks = append(checks, checkResult{"Bootstrap", "ok", "run.sh executable"})
 			} else {
-				checks = append(checks, checkResult{"Bootstrap", "fail", "run.sh not executable"})
+				checks = append(checks, checkResult{"Bootstrap", "fail", fmt.Sprintf("run.sh not executable — chmod +x %s", runSh)})
 			}
 		} else {
 			checks = append(checks, checkResult{"Bootstrap", "warn", "run.sh not found"})
@@ -278,7 +278,7 @@ func runChecks() []checkResult {
 		if count > 0 {
 			checks = append(checks, checkResult{"Embeddings", "ok", fmt.Sprintf("%d vectors", count)})
 		} else {
-			checks = append(checks, checkResult{"Embeddings", "warn", "none"})
+			checks = append(checks, checkResult{"Embeddings", "warn", "none (normal without API key; 'alfred init' with key to enable)"})
 		}
 	}
 
@@ -287,7 +287,7 @@ func runChecks() []checkResult {
 		if t, err := st.LastCrawledAt(); err == nil {
 			checks = append(checks, checkResult{"Last crawl", "ok", t.Format("2006-01-02")})
 		} else {
-			checks = append(checks, checkResult{"Last crawl", "warn", "never crawled"})
+			checks = append(checks, checkResult{"Last crawl", "warn", "never — auto-crawls on next session, or 'alfred harvest'"})
 		}
 	}
 
@@ -297,7 +297,7 @@ func runChecks() []checkResult {
 	if _, err := os.Stat(configDir); err == nil {
 		checks = append(checks, checkResult{"Config dir", "ok", "~/.claude-alfred/"})
 	} else {
-		checks = append(checks, checkResult{"Config dir", "warn", "~/.claude-alfred/ not found"})
+		checks = append(checks, checkResult{"Config dir", "warn", "~/.claude-alfred/ not found (created on first use)"})
 	}
 
 	// 12. MCP server reachability.

@@ -91,15 +91,19 @@ func asyncCrawlLogWriter() *os.File {
 //   - SessionStart: ProjectPath, Source, TranscriptPath
 //   - PreCompact:   ProjectPath, TranscriptPath, Trigger, CustomInstructions
 //   - UserPromptSubmit: ProjectPath, Prompt
+//   - PostToolUse:  ProjectPath, ToolName, ToolInput, ToolResponse
 type hookEvent struct {
-	ProjectPath        string         `json:"cwd"`
-	Source             string         `json:"source"`              // SessionStart: startup/resume/clear/compact
-	TranscriptPath     string         `json:"transcript_path"`     // path to conversation JSONL
-	Trigger            string         `json:"trigger"`             // PreCompact: manual/auto
-	CustomInstructions string `json:"custom_instructions"` // PreCompact: user's /compact instructions
-	Prompt             string `json:"prompt"`
-	Reason             string         `json:"reason"`              // SessionEnd: clear/logout/prompt_input_exit/other
-	StopHookActive     bool           `json:"stop_hook_active"`
+	ProjectPath        string          `json:"cwd"`
+	Source             string          `json:"source"`              // SessionStart: startup/resume/clear/compact
+	TranscriptPath     string          `json:"transcript_path"`     // path to conversation JSONL
+	Trigger            string          `json:"trigger"`             // PreCompact: manual/auto
+	CustomInstructions string          `json:"custom_instructions"` // PreCompact: user's /compact instructions
+	Prompt             string          `json:"prompt"`
+	Reason             string          `json:"reason"`              // SessionEnd: clear/logout/prompt_input_exit/other
+	StopHookActive     bool            `json:"stop_hook_active"`
+	ToolName           string          `json:"tool_name"`           // PreToolUse/PostToolUse
+	ToolInput          json.RawMessage `json:"tool_input"`          // PreToolUse/PostToolUse
+	ToolResponse       json.RawMessage `json:"tool_response"`       // PostToolUse only
 }
 
 // configReminder is the additionalContext message injected when Claude Code
@@ -175,6 +179,8 @@ func runHook(event string) error {
 		timeout = 2500 * time.Millisecond // 500ms headroom before 3s external timeout
 	case "SessionEnd":
 		timeout = 2500 * time.Millisecond // 500ms headroom before 3s external timeout
+	case "PostToolUse":
+		timeout = 4500 * time.Millisecond // 500ms headroom before 5s external timeout
 	default:
 		timeout = 5 * time.Second
 	}
@@ -194,6 +200,8 @@ func runHook(event string) error {
 		handleUserPromptSubmit(ctx, &ev)
 	case "SessionEnd":
 		handleSessionEnd(ctx, &ev)
+	case "PostToolUse":
+		handlePostToolUse(ctx, &ev)
 	}
 
 	elapsed := time.Since(start)

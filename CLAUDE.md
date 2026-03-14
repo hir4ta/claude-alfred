@@ -10,12 +10,13 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding)
 
 | Package | Role |
 |---|---|
-| `internal/mcpserver` | MCP server (4 tools: knowledge, config-review, spec, recall) |
-| `internal/store` | SQLite persistence (docs + docs_fts + embeddings + doc_feedback + crawl_meta) |
+| `internal/mcpserver` | MCP server (4 tools: knowledge, config-review, spec, recall+instincts) |
+| `internal/store` | SQLite persistence (docs + docs_fts + embeddings + doc_feedback + crawl_meta + instincts) |
 | `internal/embedder` | Voyage AI (voyage-4-large, hybrid vector + FTS5 + rerank-2.5) |
 | `internal/spec` | Spec management: .alfred/specs/ (4 files: requirements/design/decisions/session) |
 | `internal/install` | Plugin bundle + seed docs |
 | `cmd/alfred/hooks*.go` | Hook handler (SessionStart / PreCompact / UserPromptSubmit / SessionEnd) |
+| `cmd/alfred/hooks_instincts.go` | Instinct learning: pattern extraction, injection, cross-project promotion |
 | `cmd/alfred/setup.go` | Init TUI (API key prompt + seed progress + onboarding) |
 | `cmd/alfred/status.go` | Status display (DB stats, API key, active tasks, --verbose) |
 | `cmd/alfred/export.go` | Data export (memories + specs as JSON) |
@@ -59,15 +60,18 @@ go vet ./...                  # Static analysis
 ### Hooks & Events
 
 - Hook handler: short-lived process, no Voyage API calls. ALFRED_DEBUG=1 for debug log
-- SessionStart: CLAUDE.md ingestion + spec context injection + auto-crawl check (3 ops parallel via WaitGroup); proactive hints capped at 2 sections
+- SessionStart: CLAUDE.md ingestion + spec context injection + auto-crawl check + instinct promotion (4 ops parallel via channels); proactive hints capped at 2 sections
 - Auto-crawl: stderr captured to ~/.claude-alfred/crawl-errors.log for diagnostics
-- SessionEnd: persists session summary as permanent memory; matcher excludes reason=clear
+- SessionEnd: persists session summary as permanent memory + extracts instinct patterns; matcher excludes reason=clear
 - PreCompact: auto-updates Next Steps completion status from transcript
 - Multi-agent architecture: review (3 sub-reviewers), brainstorm (2-4 specialists + synthesis), plan (2-4 specialists + mediator)
+- Proactive workflow: plan/review skills auto-visible to Claude (disable-model-invocation removed); Stop hook enforces quality gate
+- Auto-crawl: every SessionStart spawns background crawl (lock file prevents concurrent runs)
+- Workflow detection: UserPromptSubmit detects large task / review intent → suggests appropriate skills
 
 ### Database & Schema
 
-- DB schema V6+: incremental migration (V3+ preserves data, legacy schemas rebuilt)
+- DB schema V7+: incremental migration (V3+ preserves data, legacy schemas rebuilt)
 - Store.DB() is test-only; production code uses Store methods (no raw SQL outside internal/store)
 - @.claude/rules/store-internals.md (vector search, SQL safety, and FTS patterns)
 
@@ -81,6 +85,7 @@ go vet ./...                  # Static analysis
 - Spec file locking: advisory flock on `.lock` file (exponential backoff 100/200/400/800ms ~1.5s total, context-aware cancellation, graceful fallback + stderr warning)
 - Spec version history: `.history/` dir with max 20 versions per file; rollback saves current first
 - Spec tool actions: init / update / status / switch / delete / history / rollback
+- Spec confidence scoring: 10-point scale via `<!-- confidence: N -->` annotations (1-3 low, 4-6 medium, 7-9 high, 10 certain); status returns avg + low_items count
 
 ### Memory & Feedback
 
@@ -89,15 +94,20 @@ go vet ./...                  # Static analysis
 - Recency signal: post-rerank exponential decay for memory (60d half-life) and changelog (30d half-life); docs not decayed (crawled_at is fetch time, not feature age); floor at 50%
 - Decision extraction: base score 0.35, min confidence 0.4 — bare keyword matches require at least one positive signal (rationale/alternative/arch term)
 - Cross-project learning: SessionStart proactively searches memories from other projects
+- Instinct learning: SessionEnd extracts behavioral patterns (decisions, corrections) → instincts table (trigger + action + confidence 0-1 + domain)
+- Instinct injection: UserPromptSubmit injects relevant instincts (confidence ≥ 0.6, max 2)
+- Instinct feedback: injection→reference signal adjusts confidence (+0.05/-0.10); auto-prune below 0.2
+- Cross-project instinct promotion: 2+ projects & avg confidence ≥ 0.8 → global scope
+- Project identification: SHA-256(git remote URL)[0:12], fallback "local-<path-hash>"
 
 ### Crawl & Seed
 
-- Auto-crawl: SessionStart checks last crawl age → spawns `crawl-async` background process if stale
 - @.claude/rules/crawl-internals.md (lock, context, and custom source patterns)
 
 ### Misc
 
-- config-review: maturity score (0-100) per 7 categories (claude_md, skills, rules, hooks, agents, mcp, permissions); absent categories scored at 50 baseline (not 0)
+- config-review: maturity score (0-100) per 7 categories with labels (needs-setup/basic/functional/well-configured/exemplary); absent categories scored at 50 baseline
+- config-review: skill description length validation (>1024 chars warning — Claude Code truncation)
 - config-review: permissions review inspects .claude/settings.json + settings.local.json allow/deny lists with conflict detection (intra-file=warning, cross-file=info, feature flags)
 - config-review: hook content validation (event names, type, command non-empty, timeout range, matcher regex)
 - config-review: agent deep analysis (.claude/agents/ + ~/.claude/agents/): description, model, tools, bypassPermissions warning

@@ -198,6 +198,18 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 		return // too short to search meaningfully (rune-based for CJK)
 	}
 
+	// Detect workflow opportunities and suggest skills proactively.
+	workflowHint := detectWorkflowOpportunity(prompt, ev.ProjectPath)
+
+	// Check context pressure.
+	if ctxHint := estimateContextPressure(ev); ctxHint != "" {
+		if workflowHint != "" {
+			workflowHint += "\n\n" + ctxHint
+		} else {
+			workflowHint = ctxHint
+		}
+	}
+
 	// Detect "remember this" intent for recall tool suggestion.
 	rememberHint := ""
 	if detectRememberIntent(prompt) {
@@ -210,8 +222,15 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	// Only the matched keywords are used as search terms — no synonym expansion.
 	matched := detectClaudeCodeKeywords(prompt)
 	if len(matched) == 0 {
+		hints := workflowHint
 		if rememberHint != "" {
-			emitAdditionalContext("UserPromptSubmit", rememberHint)
+			if hints != "" {
+				hints += "\n\n"
+			}
+			hints += rememberHint
+		}
+		if hints != "" {
+			emitAdditionalContext("UserPromptSubmit", hints)
 		}
 		debugf("UserPromptSubmit: no Claude Code keywords detected, skipping")
 		return
@@ -337,6 +356,9 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	}
 
 	var buf strings.Builder
+	if workflowHint != "" {
+		buf.WriteString(workflowHint + "\n\n")
+	}
 	if rememberHint != "" {
 		buf.WriteString(rememberHint + "\n\n")
 	}
@@ -354,6 +376,15 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 		}
 	}
 
+	// Search and inject relevant instincts (learned behavioral patterns).
+	instinctSnippets := searchRelevantInstincts(ctx, prompt, ev.ProjectPath, st)
+	if len(instinctSnippets) > 0 {
+		buf.WriteString("\nLearned patterns from past sessions:\n")
+		for _, s := range instinctSnippets {
+			buf.WriteString(s)
+		}
+	}
+
 	// Record which docs were injected for feedback tracking.
 	var injectedIDs []int64
 	for _, c := range candidates {
@@ -364,7 +395,13 @@ func handleUserPromptSubmit(ctx context.Context, ev *hookEvent) {
 	}
 
 	emitAdditionalContext("UserPromptSubmit", buf.String())
-	notifyUser("injected %d knowledge snippet(s) (score: %.2f)", len(candidates), candidates[0].score)
+	if len(candidates) == 1 {
+		notifyUser("injected 1 knowledge snippet (score: %.2f, keywords: %v)",
+			candidates[0].score, matched)
+	} else {
+		notifyUser("injected %d knowledge snippets (scores: %.2f, %.2f; keywords: %v)",
+			len(candidates), candidates[0].score, candidates[1].score, matched)
+	}
 	debugf("UserPromptSubmit: injected %d knowledge snippets (top score: %.2f, keywords: %v), %d memory hints", len(candidates), candidates[0].score, matched, len(memSnippets))
 }
 

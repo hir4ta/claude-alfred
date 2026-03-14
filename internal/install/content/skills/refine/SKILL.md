@@ -1,10 +1,9 @@
 ---
 name: refine
-description: |
-  Convergent thinking: Fix the issue to one line, narrow options to 3 max, score with criteria, finalize the next output as Markdown.
-  Decisions are automatically saved to spec via the spec tool (action=update).
-  Use when: (1) stuck and can't move forward, (2) have candidates but can't choose, (3) need to define minimum scope,
-  (4) need to turn brainstorm results or notes into decisions.
+description: >
+  Convergent decision-making: narrow options to 3, score with criteria, decide and move forward.
+  Use when stuck, choosing between options, or turning brainstorm output into actionable decisions.
+  Decisions are saved to spec automatically.
 user-invocable: true
 disable-model-invocation: true
 argument-hint: "<theme or current messy notes>"
@@ -28,8 +27,12 @@ Approach: Aligned with Claude Code's Explore -> Plan -> Implement flow, this str
 - Use the `knowledge` tool to search for related best practices as decision material
 - After Phase 4 (decision), automatically record via `spec` with action=update, file=decisions.md
 - If an active spec exists, check current state via `spec` with action=status before starting
+- **Brainstorm handoff**: If decisions.md contains `<!-- brainstorm output`, pre-populate
+  Phase 2 options from the "Top Ideas (ranked)" section and skip Phase 0-1 intake
+  (the one-line issue = brainstorm theme, blocker type = "Too many options")
 
 ## Phase 0: Blocker Type Diagnosis (1 question)
+*Skip this phase if brainstorm output was auto-loaded from spec (see above).*
 Ask the user to choose:
 1) Unclear question
 2) Too many options

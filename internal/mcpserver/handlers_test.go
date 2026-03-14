@@ -971,6 +971,115 @@ func TestComputeMaturityScore(t *testing.T) {
 	}
 }
 
+func TestMaturityLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		score int
+		want  string
+	}{
+		{0, "needs setup"},
+		{29, "needs setup"},
+		{30, "basic"},
+		{49, "basic"},
+		{50, "functional"},
+		{69, "functional"},
+		{70, "well-configured"},
+		{89, "well-configured"},
+		{90, "exemplary"},
+		{100, "exemplary"},
+	}
+	for _, tt := range tests {
+		if got := maturityLabel(tt.score); got != tt.want {
+			t.Errorf("maturityLabel(%d) = %q, want %q", tt.score, got, tt.want)
+		}
+	}
+}
+
+func TestComputeMaturityScore_Labels(t *testing.T) {
+	t.Parallel()
+	report := map[string]any{
+		"claude_md":   map[string]any{"exists": true, "section_count": 5, "key_sections": map[string]bool{"commands": true}},
+		"skills":      map[string]any{"count": 2, "skill_details": []skillInfo{{Name: "s1"}}},
+		"rules":       map[string]any{"count": 1, "rule_details": []ruleInfo{{Name: "r1"}}},
+		"hooks":       map[string]any{"count": 1},
+		"mcp_servers": map[string]any{"count": 1},
+		"permissions": map[string]any{"configured": true},
+	}
+	result := computeMaturityScore(report, nil)
+
+	// overall_label must be present and match the score.
+	label, ok := result["overall_label"].(string)
+	if !ok || label == "" {
+		t.Fatal("overall_label missing from maturity result")
+	}
+	overall := result["overall"].(int)
+	if label != maturityLabel(overall) {
+		t.Errorf("overall_label = %q, want %q for score %d", label, maturityLabel(overall), overall)
+	}
+
+	// labels map must exist with all 7 categories.
+	labels, ok := result["labels"].(map[string]string)
+	if !ok {
+		t.Fatal("labels map missing from maturity result")
+	}
+	for _, cat := range []string{"claude_md", "skills", "rules", "hooks", "agents", "mcp", "permissions"} {
+		if _, exists := labels[cat]; !exists {
+			t.Errorf("labels[%q] missing", cat)
+		}
+	}
+
+	// guide must be present.
+	if _, ok := result["guide"].(map[string]string); !ok {
+		t.Error("guide map missing from maturity result")
+	}
+}
+
+func TestParseConfidenceScores(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with annotations", func(t *testing.T) {
+		t.Parallel()
+		content := `## Goals <!-- confidence: 9 -->
+Build a REST API
+
+## Authentication <!-- confidence: 3 -->
+OAuth2 or API Key (undecided)
+
+## Database <!-- confidence: 7 -->
+PostgreSQL with pgx driver
+`
+		cs := parseConfidenceScores(content)
+		if cs.Total != 3 {
+			t.Errorf("total = %d, want 3", cs.Total)
+		}
+		if cs.LowCount != 1 {
+			t.Errorf("low_items = %d, want 1 (Authentication=3)", cs.LowCount)
+		}
+		// avg = (9+3+7)/3 = 6.33
+		if cs.Avg < 6.0 || cs.Avg > 6.5 {
+			t.Errorf("avg = %.2f, want ~6.33", cs.Avg)
+		}
+	})
+
+	t.Run("no annotations", func(t *testing.T) {
+		t.Parallel()
+		cs := parseConfidenceScores("## Goals\nBuild something\n")
+		if cs.Total != 0 {
+			t.Errorf("total = %d, want 0 for no annotations", cs.Total)
+		}
+	})
+
+	t.Run("edge scores", func(t *testing.T) {
+		t.Parallel()
+		content := "## X <!-- confidence: 1 -->\n## Y <!-- confidence: 10 -->\n## Z <!-- confidence: 11 -->\n"
+		cs := parseConfidenceScores(content)
+		// score 11 is out of range (1-10), should be skipped
+		if cs.Total != 2 {
+			t.Errorf("total = %d, want 2 (11 out of range)", cs.Total)
+		}
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Hook validation tests
 // ---------------------------------------------------------------------------

@@ -383,8 +383,8 @@ func TestTUI_SetupModel_NewWithKey(t *testing.T) {
 func TestTUI_SetupModel_NewWithoutKey(t *testing.T) {
 	t.Parallel()
 	m := newSetupModel(false)
-	if m.phase != phaseKeyPrompt {
-		t.Errorf("newSetupModel(false).phase = %d, want phaseKeyPrompt (%d)", m.phase, phaseKeyPrompt)
+	if m.phase != phaseWelcome {
+		t.Errorf("newSetupModel(false).phase = %d, want phaseWelcome (%d)", m.phase, phaseWelcome)
 	}
 }
 
@@ -400,9 +400,33 @@ func TestTUI_SetupModel_Update(t *testing.T) {
 		}
 	})
 
+	t.Run("enter at welcome advances to keyPrompt", func(t *testing.T) {
+		t.Parallel()
+		m := newSetupModel(false)
+		result, _ := m.Update(keyMsg("enter"))
+		sm := result.(setupModel)
+		if sm.phase != phaseKeyPrompt {
+			t.Errorf("phase = %d, want phaseKeyPrompt (%d)", sm.phase, phaseKeyPrompt)
+		}
+	})
+
+	t.Run("esc at welcome skips to ftsOnly init", func(t *testing.T) {
+		t.Parallel()
+		m := newSetupModel(false)
+		result, _ := m.Update(keyMsg("esc"))
+		sm := result.(setupModel)
+		if !sm.ftsOnly {
+			t.Error("expected ftsOnly=true after esc at phaseWelcome")
+		}
+		if sm.phase != phaseInit {
+			t.Errorf("phase = %d, want phaseInit (%d)", sm.phase, phaseInit)
+		}
+	})
+
 	t.Run("esc at keyPrompt sets ftsOnly", func(t *testing.T) {
 		t.Parallel()
 		m := newSetupModel(false)
+		m.phase = phaseKeyPrompt
 		result, _ := m.Update(keyMsg("esc"))
 		sm := result.(setupModel)
 		if !sm.ftsOnly {
@@ -416,6 +440,7 @@ func TestTUI_SetupModel_Update(t *testing.T) {
 	t.Run("enter with empty at keyPrompt sets ftsOnly", func(t *testing.T) {
 		t.Parallel()
 		m := newSetupModel(false)
+		m.phase = phaseKeyPrompt
 		// keyInput value is empty by default
 		result, _ := m.Update(keyMsg("enter"))
 		sm := result.(setupModel)
@@ -481,9 +506,19 @@ func TestTUI_SetupModel_Update(t *testing.T) {
 func TestTUI_SetupModel_View(t *testing.T) {
 	t.Parallel()
 
+	t.Run("welcome phase", func(t *testing.T) {
+		t.Parallel()
+		m := newSetupModel(false)
+		v := viewString(m.View())
+		if !strings.Contains(v, "Welcome to alfred") {
+			t.Error("welcome view should contain 'Welcome to alfred'")
+		}
+	})
+
 	t.Run("keyPrompt phase", func(t *testing.T) {
 		t.Parallel()
 		m := newSetupModel(false)
+		m.phase = phaseKeyPrompt
 		v := viewString(m.View())
 		if !strings.Contains(v, "Voyage API Key") {
 			t.Error("keyPrompt view should contain 'Voyage API Key'")

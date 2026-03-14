@@ -33,7 +33,8 @@ type (
 type setupPhase int
 
 const (
-	phaseKeyPrompt setupPhase = iota
+	phaseWelcome setupPhase = iota
+	phaseKeyPrompt
 	phaseInit
 	phaseSeeding
 	phaseEmbedding
@@ -83,7 +84,7 @@ func newSetupModel(hasKey bool) setupModel {
 
 	sw := stopwatch.New(stopwatch.WithInterval(time.Second))
 
-	phase := phaseKeyPrompt
+	phase := phaseWelcome
 	keyReady := make(chan struct{})
 	keyClosed := &atomic.Bool{}
 	if hasKey {
@@ -104,7 +105,7 @@ func newSetupModel(hasKey bool) setupModel {
 }
 
 func (m setupModel) Init() tea.Cmd {
-	if m.phase == phaseKeyPrompt {
+	if m.phase == phaseWelcome || m.phase == phaseKeyPrompt {
 		return m.keyInput.Focus()
 	}
 	return tea.Batch(
@@ -122,6 +123,25 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel()
 			}
 			return m, tea.Quit
+		}
+
+		if m.phase == phaseWelcome {
+			switch key {
+			case "enter":
+				m.phase = phaseKeyPrompt
+				return m, m.keyInput.Focus()
+			case "esc":
+				// Skip API key, go straight to FTS-only init.
+				m.ftsOnly = true
+				m.phase = phaseInit
+				if m.keyClosed.CompareAndSwap(false, true) {
+					close(m.keyReady)
+				}
+				return m, tea.Batch(
+					m.spinner.Tick,
+					m.stopwatch.Start(),
+				)
+			}
 		}
 
 		if m.phase == phaseKeyPrompt {
@@ -225,11 +245,27 @@ func (m setupModel) View() tea.View {
 
 	b.WriteString("\n  " + titleStyle.Render("⚡ alfred init") + "\n\n")
 
+	// Welcome phase.
+	if m.phase == phaseWelcome {
+		b.WriteString("  Welcome to alfred — your silent butler for Claude Code.\n\n")
+		b.WriteString("  " + dimStyle.Render("What happens next:") + "\n")
+		b.WriteString("  " + dimStyle.Render("  1. Voyage API key (optional) — enables semantic search + reranking") + "\n")
+		b.WriteString("  " + dimStyle.Render("     Free at https://dash.voyageai.com/ · Cost: ~$0.01 for initial setup") + "\n")
+		b.WriteString("  " + dimStyle.Render("  2. Knowledge base setup — ingests Claude Code docs (10-30 sec)") + "\n\n")
+		enterKey := keyEnter
+		enterKey.SetHelp("enter", "continue")
+		escKey := keyEsc
+		escKey.SetHelp("esc", "skip API key (FTS-only)")
+		b.WriteString("  " + h.View(simpleKeyMap{enterKey, escKey}) + "\n")
+		return tea.NewView(b.String())
+	}
+
 	// Key prompt phase.
 	if m.phase == phaseKeyPrompt {
 		b.WriteString("  Voyage API Key (for semantic search + reranking):\n\n")
 		b.WriteString("  " + m.keyInput.View() + "\n\n")
-		b.WriteString("  " + dimStyle.Render("Get a key at https://dash.voyageai.com/") + "\n\n")
+		b.WriteString("  " + dimStyle.Render("Get a key at https://dash.voyageai.com/") + "\n")
+		b.WriteString("  " + dimStyle.Render("Press Enter with empty input to skip (FTS-only mode)") + "\n\n")
 		keys := simpleKeyMap{keyEnter, keyEsc}
 		b.WriteString("  " + h.View(keys) + "\n")
 		return tea.NewView(b.String())
@@ -302,7 +338,7 @@ func (m setupModel) View() tea.View {
 				total, m.result.Embedded))
 		}
 		b.WriteString("  " + dimStyle.Render("What's next:") + "\n")
-		b.WriteString("  " + dimStyle.Render("  Ask about Claude Code  → alfred injects relevant docs automatically") + "\n")
+		b.WriteString("  " + dimStyle.Render("  /alfred:help           → see all capabilities at a glance") + "\n")
 		b.WriteString("  " + dimStyle.Render("  /alfred:setup          → project-wide configuration wizard") + "\n")
 		b.WriteString("  " + dimStyle.Render("  /alfred:plan <task>    → start a spec-driven development task") + "\n")
 		b.WriteString("  " + dimStyle.Render("  alfred status          → check system state anytime") + "\n\n")

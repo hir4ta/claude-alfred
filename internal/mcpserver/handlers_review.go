@@ -124,6 +124,8 @@ type skillInfo struct {
 	Name          string   `json:"name"`
 	HasName       bool     `json:"has_name"`
 	HasDesc       bool     `json:"has_description"`
+	DescLength    int      `json:"desc_length,omitempty"`
+	DescWarning   string   `json:"desc_warning,omitempty"`
 	HasTrigger    bool     `json:"has_trigger"`
 	HasAllowed    bool     `json:"has_allowed_tools"`
 	UserInvocable bool     `json:"user_invocable"`
@@ -197,6 +199,12 @@ func reviewSkills(projectPath string) map[string]any {
 
 			if bodyLines > 150 {
 				si.SizeWarning = "skill body exceeds 150 lines; consider splitting into support files"
+			}
+			if desc := fm["description"]; desc != "" {
+				si.DescLength = len(desc)
+				if len(desc) > 1024 {
+					si.DescWarning = fmt.Sprintf("description length %d exceeds 1024 chars (may be truncated by Claude Code)", len(desc))
+				}
 			}
 
 			skills = append(skills, si)
@@ -938,6 +946,14 @@ func generateReviewSuggestions(ctx context.Context, report map[string]any, st *s
 						Affected: []string{".claude/skills/" + si.Name + "/SKILL.md"},
 					})
 				}
+				if si.DescWarning != "" {
+					suggestions = append(suggestions, Suggestion{
+						Severity: "info",
+						Category: "skills",
+						Message:  "Skill '" + si.Name + "': " + si.DescWarning,
+						Affected: []string{".claude/skills/" + si.Name + "/SKILL.md"},
+					})
+				}
 			}
 		}
 	}
@@ -1251,11 +1267,42 @@ func computeMaturityScore(report map[string]any, suggestions []Suggestion) map[s
 	}
 	overall := total / len(scores)
 
+	// Per-category interpretation labels.
+	labels := make(map[string]string, len(scores))
+	for cat, score := range scores {
+		labels[cat] = maturityLabel(score)
+	}
+
 	return map[string]any{
-		"overall":  overall,
-		"scores":   scores,
-		"warnings": countSeverity(suggestions, "warning"),
-		"info":     countSeverity(suggestions, "info"),
+		"overall":       overall,
+		"overall_label": maturityLabel(overall),
+		"scores":        scores,
+		"labels":        labels,
+		"warnings":      countSeverity(suggestions, "warning"),
+		"info":          countSeverity(suggestions, "info"),
+		"guide": map[string]string{
+			"0-29":   "needs setup",
+			"30-49":  "basic",
+			"50-69":  "functional",
+			"70-89":  "well-configured",
+			"90-100": "exemplary",
+		},
+	}
+}
+
+// maturityLabel returns a human-readable interpretation for a 0-100 maturity score.
+func maturityLabel(score int) string {
+	switch {
+	case score >= 90:
+		return "exemplary"
+	case score >= 70:
+		return "well-configured"
+	case score >= 50:
+		return "functional"
+	case score >= 30:
+		return "basic"
+	default:
+		return "needs setup"
 	}
 }
 

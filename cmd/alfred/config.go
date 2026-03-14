@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/hir4ta/claude-alfred/internal/install"
@@ -65,10 +66,21 @@ func loadProjectConfig(projectPath string) *ProjectConfig {
 	configWarned.Do(func() {
 		var raw map[string]json.RawMessage
 		if err := json.Unmarshal(data, &raw); err == nil {
+			var unknowns []string
 			for key := range raw {
 				if !knownConfigKeys[key] {
-					notifyUser("warning: unknown key %q in .alfred/config.json", key)
+					unknowns = append(unknowns, key)
 				}
+			}
+			if len(unknowns) > 0 {
+				var validKeys []string
+				for k := range knownConfigKeys {
+					validKeys = append(validKeys, k)
+				}
+				sort.Strings(validKeys)
+				sort.Strings(unknowns)
+				notifyUser("warning: unknown key(s) %v in .alfred/config.json (valid: %s)",
+					unknowns, strings.Join(validKeys, ", "))
 			}
 		}
 		validateConfigRanges(&cfg)
@@ -76,11 +88,20 @@ func loadProjectConfig(projectPath string) *ProjectConfig {
 	return &cfg
 }
 
+// configDescriptions provides brief help for each config key (used in warnings).
+var configDescriptions = map[string]string{
+	"relevance_threshold":       "min score for knowledge injection, default 0.40",
+	"high_confidence_threshold": "score needed for 2 results instead of 1, default 0.65",
+	"single_keyword_dampen":     "multiplier for single-keyword matches, default 0.80",
+	"crawl_interval_days":       "ignored (crawl runs every session start)",
+}
+
 // validateConfigRanges warns about out-of-range config values and clamps them.
 func validateConfigRanges(cfg *ProjectConfig) {
 	clampFloat := func(name string, v *float64) {
 		if v != nil && (*v < 0 || *v > 1) {
-			notifyUser("warning: %s=%.2f out of range [0,1], clamping", name, *v)
+			desc := configDescriptions[name]
+			notifyUser("warning: %s=%.2f out of range [0,1], clamping (%s)", name, *v, desc)
 			clamped := max(0, min(1, *v))
 			*v = clamped
 		}
@@ -89,7 +110,8 @@ func validateConfigRanges(cfg *ProjectConfig) {
 	clampFloat("high_confidence_threshold", cfg.HighConfidenceThreshold)
 	clampFloat("single_keyword_dampen", cfg.SingleKeywordDampen)
 	if cfg.CrawlIntervalDays != nil && *cfg.CrawlIntervalDays <= 0 {
-		notifyUser("warning: crawl_interval_days=%d must be positive, ignoring", *cfg.CrawlIntervalDays)
+		notifyUser("warning: crawl_interval_days=%d must be positive, ignoring (%s)",
+			*cfg.CrawlIntervalDays, configDescriptions["crawl_interval_days"])
 		cfg.CrawlIntervalDays = nil
 	}
 }
@@ -100,14 +122,6 @@ func resolveFloat(project *float64, envKey string, defaultVal float64) float64 {
 		return *project
 	}
 	return envFloat(envKey, defaultVal)
-}
-
-// resolveInt returns the first available value from: project config > env var > default.
-func resolveInt(project *int, envKey string, defaultVal int) int {
-	if project != nil && *project > 0 {
-		return *project
-	}
-	return envInt(envKey, defaultVal)
 }
 
 // resolveBool returns the first available value from: project config > env var.
@@ -140,16 +154,3 @@ func loadGlobalCustomSources() []install.CustomSource {
 	return result
 }
 
-// envInt returns the environment variable as int or the default value.
-func envInt(key string, defaultVal int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return defaultVal
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n <= 0 {
-		debugf("envInt: invalid %s=%q, using default %d", key, v, defaultVal)
-		return defaultVal
-	}
-	return n
-}

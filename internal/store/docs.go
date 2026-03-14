@@ -123,6 +123,13 @@ func escapeLIKEPrefix(prefix string) string {
 	return r.Replace(prefix) + "%"
 }
 
+// escapeLIKEContains escapes LIKE special characters and wraps with % for
+// substring matching. Use with ESCAPE '\' clause.
+func escapeLIKEContains(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return "%" + r.Replace(s) + "%"
+}
+
 // DeleteDocsByURLPrefix removes all docs (and their embeddings) whose URL starts with the given prefix.
 // Returns the number of deleted document rows.
 func (s *Store) DeleteDocsByURLPrefix(ctx context.Context, prefix string) (int64, error) {

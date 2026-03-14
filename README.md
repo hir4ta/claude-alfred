@@ -21,7 +21,7 @@ Works silently in the background — surfacing relevant knowledge, catching scop
 
 **Persistent Memory** — Remembers past sessions, decisions, and notes across projects. Automatically saves session summaries and design decisions as permanent memory. Search past experience with the `recall` tool — alfred automatically surfaces relevant memories at session start.
 
-**Auto-Crawl** — Knowledge base automatically refreshes in the background. SessionStart checks when docs were last crawled and spawns a background process if they're stale (default: 7 days). Run `alfred harvest` for an immediate manual refresh. Sources: official docs, changelog, engineering blog, Claude product blog, Anthropic news, and Agent SDK docs.
+**Auto-Crawl** — Knowledge base refreshes in the background on every session start (lock file prevents concurrent runs). Run `alfred harvest` for an immediate manual refresh. Sources: official docs, changelog, engineering blog, Claude product blog, Anthropic news, and Agent SDK docs.
 
 **Compact Resilience** — PreCompact hook auto-extracts decisions, tracks modified files, saves session state in activeContext format, and auto-updates Next Steps completion status. SessionStart hook restores full context after compaction.
 
@@ -115,7 +115,7 @@ Run automatically during Claude Code lifecycle. No user action needed.
 
 | Event | Action |
 |-------|--------|
-| SessionStart | Auto-ingest CLAUDE.md + spec context injection (adaptive recovery) + past memory hints + auto-crawl check |
+| SessionStart | Auto-ingest CLAUDE.md + spec context injection (adaptive recovery) + past memory hints + auto-crawl + instinct promotion |
 | PreCompact | Extract context from transcript + auto-detect decisions + track modified files + auto-update Next Steps completion → save session.md → persist decisions as memory → emit compaction instructions → async embedding |
 | UserPromptSubmit | Keyword-gated FTS knowledge injection + memory search — auto-surfaces best practices and past experience (suppressed by `ALFRED_QUIET=1`) |
 | SessionEnd | Persist session summary as permanent memory for future recall (skips on `reason=clear`) |
@@ -294,19 +294,29 @@ Recent assistant actions:
 
 ## Per-Project Configuration
 
-Create `.alfred/config.json` in any project root to override default thresholds and add custom knowledge sources:
+Create `.alfred/config.json` in any project root to override default thresholds and add custom knowledge sources.
+IDE autocomplete is available via the [JSON Schema](schema/config.schema.json) (`"$schema": "./path/to/schema/config.schema.json"`).
 
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/hir4ta/claude-alfred/main/schema/config.schema.json",
   "relevance_threshold": 0.35,
   "high_confidence_threshold": 0.60,
-  "crawl_interval_days": 3,
+  "single_keyword_dampen": 0.80,
   "quiet": false,
   "custom_sources": [
     { "url": "https://example.com/docs/page", "label": "Internal API docs" }
   ]
 }
 ```
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| `relevance_threshold` | `0.40` | Min score for knowledge injection. Lower = more results (noisier) |
+| `high_confidence_threshold` | `0.65` | Score needed to inject 2 results instead of 1 |
+| `single_keyword_dampen` | `0.80` | Multiplier for single-keyword matches (reduces noise) |
+| `quiet` | `false` | Suppress knowledge injection (hooks still save state) |
+| `custom_sources` | `[]` | Additional documentation URLs to crawl (HTTPS only) |
 
 All fields are optional — only specified values override the defaults.
 
@@ -365,9 +375,20 @@ cat ~/.claude-alfred/debug.log  # View logs
 | `ALFRED_RELEVANCE_THRESHOLD` | `0.40` | Minimum score for knowledge injection |
 | `ALFRED_HIGH_CONFIDENCE_THRESHOLD` | `0.65` | Score threshold for injecting 2 results |
 | `ALFRED_SINGLE_KEYWORD_DAMPEN` | `0.80` | Dampening factor for single-keyword matches |
-| `ALFRED_CRAWL_INTERVAL_DAYS` | `7` | Auto-crawl interval in days |
 | `ALFRED_QUIET` | `0` | Set to `1` to suppress knowledge injection |
 | `ALFRED_MEMORY_MAX_AGE_DAYS` | `180` | Default cutoff age for `alfred memory prune` |
+
+### Where to find things
+
+| Topic | Where to look |
+|-------|--------------|
+| All capabilities overview | `/alfred:help` in Claude Code |
+| Current system state | `alfred status` (or `--verbose` for details) |
+| Threshold tuning | `.alfred/config.json` (per-project override) |
+| Hook timeouts & internals | `.claude/rules/hook-internals.md` |
+| Search pipeline details | `.claude/rules/store-internals.md` |
+| Debug logs | `~/.claude-alfred/debug.log` (set `ALFRED_DEBUG=1`) |
+| System diagnostics | `alfred doctor` (12 automated checks) |
 
 ## License
 

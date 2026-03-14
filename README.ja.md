@@ -293,19 +293,29 @@ Recent assistant actions:
 
 ## プロジェクト別設定
 
-プロジェクトルートに `.alfred/config.json` を作成すると、デフォルトの閾値をオーバーライドしたり、カスタムナレッジソースを追加できる:
+プロジェクトルートに `.alfred/config.json` を作成すると、デフォルトの閾値をオーバーライドしたり、カスタムナレッジソースを追加できる。
+IDE 自動補完は [JSON Schema](schema/config.schema.json) で利用可能（`"$schema": "./path/to/schema/config.schema.json"`）。
 
 ```json
 {
+  "$schema": "https://raw.githubusercontent.com/hir4ta/claude-alfred/main/schema/config.schema.json",
   "relevance_threshold": 0.35,
   "high_confidence_threshold": 0.60,
-  "crawl_interval_days": 3,
+  "single_keyword_dampen": 0.80,
   "quiet": false,
   "custom_sources": [
     { "url": "https://example.com/docs/page", "label": "社内 API ドキュメント" }
   ]
 }
 ```
+
+| キー | デフォルト | 効果 |
+|------|-----------|------|
+| `relevance_threshold` | `0.40` | ナレッジ注入の最小スコア。低い = 多い（ノイジー） |
+| `high_confidence_threshold` | `0.65` | 1件ではなく2件注入するための閾値 |
+| `single_keyword_dampen` | `0.80` | 単一キーワードマッチの減衰率（ノイズ低減） |
+| `quiet` | `false` | ナレッジ注入を抑制（hook の状態保存は継続） |
+| `custom_sources` | `[]` | クロール対象の追加ドキュメント URL（HTTPS のみ） |
 
 全フィールドはオプション — 指定した値のみがデフォルトをオーバーライドする。
 
@@ -364,9 +374,20 @@ cat ~/.claude-alfred/debug.log  # ログを確認
 | `ALFRED_RELEVANCE_THRESHOLD` | `0.40` | ナレッジ注入の最小スコア |
 | `ALFRED_HIGH_CONFIDENCE_THRESHOLD` | `0.65` | 2 件注入のスコア閾値 |
 | `ALFRED_SINGLE_KEYWORD_DAMPEN` | `0.80` | 単一キーワードマッチのダンプニング係数 |
-| `ALFRED_CRAWL_INTERVAL_DAYS` | `7` | 自動クロール間隔（日数） |
 | `ALFRED_QUIET` | `0` | `1` に設定するとナレッジ注入を抑制 |
 | `ALFRED_MEMORY_MAX_AGE_DAYS` | `180` | `alfred memory prune` のデフォルト経過日数 |
+
+### 情報の探し方
+
+| トピック | 参照先 |
+|---------|--------|
+| 全機能一覧 | Claude Code 内で `/alfred:help` |
+| 現在のシステム状態 | `alfred status`（`--verbose` で詳細） |
+| 閾値チューニング | `.alfred/config.json`（プロジェクト別） |
+| Hook タイムアウト・内部仕様 | `.claude/rules/hook-internals.md` |
+| 検索パイプライン詳細 | `.claude/rules/store-internals.md` |
+| デバッグログ | `~/.claude-alfred/debug.log`（`ALFRED_DEBUG=1`） |
+| システム診断 | `alfred doctor`（12 項目の自動チェック） |
 
 ## ライセンス
 

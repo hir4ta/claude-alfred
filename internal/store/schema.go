@@ -16,14 +16,15 @@ type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-// schemaVersion 6 = added doc_feedback table for implicit relevance signals.
-// Changes from V5:
-//   - Added doc_feedback table (doc_id → positive/negative hit counts)
+// schemaVersion 7 = added instincts table for behavioral pattern learning.
+// Changes from V6:
+//   - Added instincts table (trigger + action + confidence + domain + scope)
+//   - Added indexes for scope/project_hash, domain, confidence
 //
 // Migration policy (V4+):
 //   - Incremental migrations preserve existing data (docs, embeddings).
 //   - Legacy schemas (< 3) are still rebuilt from scratch.
-const schemaVersion = 6
+const schemaVersion = 7
 
 // minIncrementalVersion is the lowest version from which we can migrate
 // incrementally (without data loss). Versions below this are rebuilt.
@@ -115,6 +116,27 @@ CREATE TABLE IF NOT EXISTS doc_feedback (
     last_injected  TEXT,
     last_feedback  TEXT
 );
+
+-- ==========================================================
+-- Instincts (behavioral pattern learning)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS instincts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    trigger        TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    confidence     REAL NOT NULL DEFAULT 0.5,
+    domain         TEXT NOT NULL DEFAULT 'general',
+    scope          TEXT NOT NULL DEFAULT 'project',
+    project_hash   TEXT NOT NULL DEFAULT '',
+    source_session TEXT DEFAULT '',
+    evidence       TEXT DEFAULT '',
+    times_applied  INTEGER DEFAULT 0,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_instincts_scope ON instincts(scope, project_hash);
+CREATE INDEX IF NOT EXISTS idx_instincts_domain ON instincts(domain);
+CREATE INDEX IF NOT EXISTS idx_instincts_confidence ON instincts(confidence);
 `
 
 // legacyTables are tables from previous versions that no longer exist.
@@ -181,6 +203,26 @@ var incrementalMigrations = map[int][]string{
 			last_injected  TEXT,
 			last_feedback  TEXT
 		)`,
+	},
+	6: {
+		// V6 → V7: add instincts table for behavioral pattern learning.
+		`CREATE TABLE IF NOT EXISTS instincts (
+			id             INTEGER PRIMARY KEY AUTOINCREMENT,
+			trigger        TEXT NOT NULL,
+			action         TEXT NOT NULL,
+			confidence     REAL NOT NULL DEFAULT 0.5,
+			domain         TEXT NOT NULL DEFAULT 'general',
+			scope          TEXT NOT NULL DEFAULT 'project',
+			project_hash   TEXT NOT NULL DEFAULT '',
+			source_session TEXT DEFAULT '',
+			evidence       TEXT DEFAULT '',
+			times_applied  INTEGER DEFAULT 0,
+			created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_instincts_scope ON instincts(scope, project_hash)`,
+		`CREATE INDEX IF NOT EXISTS idx_instincts_domain ON instincts(domain)`,
+		`CREATE INDEX IF NOT EXISTS idx_instincts_confidence ON instincts(confidence)`,
 	},
 }
 

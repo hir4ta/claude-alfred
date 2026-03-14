@@ -81,7 +81,9 @@ Response: {"query", "results": [{"section_path", "content", "url", "source_type"
 Checks: CLAUDE.md quality, skills (size/frontmatter), rules (path scoping), hooks (content validation: event names, types, timeouts, matcher regex), agents (description, model, bypassPermissions), MCP server config, permissions (allow/deny lists with conflict detection), and settings.json.
 Requires project_path to locate .claude/ directory. If omitted, uses current working directory.
 
-Response: {"project_path", "claude_md": {"exists", "size_bytes?", "lines?", "sections?", "key_sections?"}, "skills": {"count", "items?", "skill_details?"}, "rules": {"count", "items?", "rule_details?"}, "agents": {"count", "items?", "agent_details?", "invalid_agents?"}, "hooks": {"count", "events?", "missing_recommended?", "hook_issues?"}, "permissions": {"configured", "conflicts?"}, "mcp_servers": {"count", "servers?"}, "suggestions": [{"severity", "category", "message", "affected?", "best_practice?"}], "suggestion_count", "maturity": {"overall", "scores", "warnings", "info"}, "summary?"}`),
+Do NOT use for: individual code reviews, non-.claude configuration, general code quality checks.
+
+Response: {"project_path", "claude_md": {"exists", "size_bytes?", "lines?", "sections?", "key_sections?"}, "skills": {"count", "items?", "skill_details?"}, "rules": {"count", "items?", "rule_details?"}, "agents": {"count", "items?", "agent_details?", "invalid_agents?"}, "hooks": {"count", "events?", "missing_recommended?", "hook_issues?"}, "permissions": {"configured", "conflicts?"}, "mcp_servers": {"count", "servers?"}, "suggestions": [{"severity", "category", "message", "affected?", "best_practice?"}], "suggestion_count", "maturity": {"overall", "overall_label", "scores", "labels", "guide", "warnings", "info"}, "summary?"}`),
 				mcp.WithTitleAnnotation("Config Review"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithIdempotentHintAnnotation(true),
@@ -122,29 +124,33 @@ task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64
 				mcp.WithDescription(`Memory search and save — your persistent memory across sessions and projects.
 
 Actions:
-- search (default): Search past memories — decisions, session summaries, saved notes (READ-ONLY, idempotent)
-- save: Save a new memory entry for future retrieval (WRITE, not idempotent)
+- search (default): Search past memories — decisions, session summaries, saved notes
+- save: Save a new memory entry for future retrieval
+- instincts: List/search learned behavioral patterns (auto-extracted from sessions)
+- instinct-feedback: Manually adjust instinct confidence (+/- 0.0-1.0)
 
 Memories persist permanently and are searchable across ALL projects (cross-project learning).
-The "project" parameter is for tagging context when saving; searches return results from all projects.
+Instincts are behavioral patterns auto-learned from your sessions (trigger → action, with confidence scoring).
 
 Use for:
 - "Have I worked on something like this before?"
 - "What decisions did I make about authentication?"
 - "Remember this approach for future reference"
+- "What patterns have I learned?" (instincts action)
 
-Response (search): {"query", "results": [{"section_path", "content", "url"}], "count", "search_method"}
-Response (save): {"status", "id", "url", "section_path"}`),
+Do NOT use for: searching documentation (use knowledge instead), file operations.`),
 				mcp.WithTitleAnnotation("Memory Recall"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("action", mcp.Description("Action: search or save"), mcp.Required(), mcp.Enum("search", "save")),
-				mcp.WithString("query", mcp.Description("Search query (required for search)")),
+				mcp.WithString("action", mcp.Description("Action: search, save, instincts, or instinct-feedback"), mcp.Required(), mcp.Enum("search", "save", "instincts", "instinct-feedback")),
+				mcp.WithString("query", mcp.Description("Search query (for search/instincts)")),
 				mcp.WithString("content", mcp.Description("Content to save (required for save)")),
 				mcp.WithString("label", mcp.Description("Short label/description for saved memory (required for save)")),
 				mcp.WithString("project", mcp.Description("Project name for context (default: 'general')")),
 				mcp.WithNumber("limit", mcp.Description("Maximum search results (default: 10)")),
+				mcp.WithNumber("instinct_id", mcp.Description("Instinct ID (for instinct-feedback)")),
+				mcp.WithNumber("adjustment", mcp.Description("Confidence adjustment -1.0 to 1.0 (for instinct-feedback)")),
 			),
 			Handler: recallHandler(st, emb),
 		},

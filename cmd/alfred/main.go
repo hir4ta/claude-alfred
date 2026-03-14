@@ -197,18 +197,23 @@ func resolvedDate() string {
 func printUsage() {
 	fmt.Println(`alfred - Your silent butler for Claude Code
 
+Quick start:
+  alfred init        Set up the knowledge base (first time)
+  alfred status      Check system health
+  /alfred:help       See all capabilities in Claude Code
+
 Usage:
   alfred [command]
 
 Commands:
   init           Initialize knowledge base (seed docs + generate embeddings)
   status         Show system status (DB, API keys, active tasks)
+  doctor         Diagnose common issues (DB, hooks, API keys)
+  settings       Configure API keys and preferences
+  harvest        Crawl live docs and refresh knowledge base
   export         Export memories to JSON (--all includes specs)
   memory         Manage memories (prune, stats)
-  settings       Configure API keys and preferences
   analytics      Show feedback loop stats and injection activity
-  harvest        Crawl live docs and refresh knowledge base
-  doctor         Diagnose common issues (DB, hooks, API keys)
   update         Update alfred to the latest version
   version        Show version
   help           Show this help

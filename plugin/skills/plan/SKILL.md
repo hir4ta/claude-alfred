@@ -1,12 +1,10 @@
 ---
 name: plan
 description: >
-  Alfred Protocol: Multi-agent spec generation. Requirements gathering (interactive),
-  then 3 specialist agents (Architect, Devil's Advocate, Researcher) deliberate on
-  design in parallel, debate, and converge into a robust spec saved to .alfred/specs/.
-  Use when: (1) starting a new task, (2) organizing a design, (3) planning before resuming work.
+  Multi-agent spec generation with 3 specialists (Architect, Devil's Advocate, Researcher).
+  Creates requirements, design, decisions, and session files in .alfred/specs/.
+  Use when starting a new task, organizing a design, or planning before implementation.
 user-invocable: true
-disable-model-invocation: true
 argument-hint: "<task-slug> [description]"
 allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, WebSearch, WebFetch, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__spec
 model: sonnet
@@ -147,7 +145,34 @@ when the trade-off is genuinely subjective.
    - **design.md**: Unified design (from Step 6 synthesis), alternatives considered
    - **decisions.md**: All agreed decisions with rationale + alternatives + source
      (Architect/Advocate/Researcher). Flag unresolved conflicts.
-   - **session.md**: Current position + task breakdown as Next Steps
+   - **session.md**: Current position + auto-generated task breakdown as Next Steps
+
+4. **Auto-decompose tasks** in session.md's Next Steps:
+   - Break the design into concrete implementation tasks
+   - Order by dependency (what must come first)
+   - Estimate effort: S (< 30 min), M (30 min - 2 hrs), L (> 2 hrs)
+   - Format as checklist for progress tracking:
+   ```markdown
+   ## Next Steps
+   1. [ ] [S] Create database schema migration
+   2. [ ] [M] Implement API endpoints (GET /users, POST /users)
+   3. [ ] [M] Add authentication middleware
+   4. [ ] [L] Build frontend components
+   5. [ ] [S] Write integration tests
+   6. [ ] [S] Update CLAUDE.md with new patterns
+   ```
+   PreCompact hook auto-marks completed items with [x] based on modified files.
+
+3. **Assign confidence scores** (1-10) to each section using HTML comments:
+   ```markdown
+   ## API設計 <!-- confidence: 8 -->
+   RESTful + OpenAPI 3.0 (Architect + Researcher agreed, evidence from prior art)
+
+   ## 認証方式 <!-- confidence: 3 -->
+   OAuth2 or API Key — unresolved conflict (needs user decision)
+   ```
+   Scale: 1-3 low (speculation), 4-6 medium (inference), 7-9 high (evidence), 10 certain.
+   Items scoring ≤ 5 are flagged in Step 8 output for user attention.
 
 ### 8. [OUTPUT] Confirm to user
 
@@ -158,6 +183,9 @@ Design deliberation: 3 agents consulted (Architect, Devil's Advocate, Researcher
 - Agreements: N decisions settled
 - Conflicts resolved: N (by evidence)
 - Escalated to you: N (need your input)
+
+Confidence: requirements avg X.X (N items ≤ 5), design avg X.X
+[Items with confidence ≤ 5 need your attention — listed below]
 
 Spec files: .alfred/specs/{task-slug}/
 - requirements.md ✓

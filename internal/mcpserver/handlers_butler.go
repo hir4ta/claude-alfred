@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -227,6 +229,7 @@ func specDoStatus(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	}
 
 	// Read all 4 spec files for complete context restoration.
+	confidence := map[string]any{}
 	for _, f := range spec.AllFiles {
 		content, err := sd.ReadFile(f)
 		if err != nil {
@@ -234,6 +237,16 @@ func specDoStatus(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		}
 		key := strings.TrimSuffix(string(f), ".md")
 		result[key] = content
+
+		// Parse confidence annotations for requirements and design.
+		if f == spec.FileRequirements || f == spec.FileDesign {
+			if cs := parseConfidenceScores(content); cs.Total > 0 {
+				confidence[key] = cs
+			}
+		}
+	}
+	if len(confidence) > 0 {
+		result["confidence"] = confidence
 	}
 
 	return marshalResult(result)
@@ -451,4 +464,83 @@ func specDoRollback(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		"restored":  version,
 		"message":   "current version saved to history before rollback (undoable)",
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Spec confidence scoring (10-point scale)
+// ---------------------------------------------------------------------------
+
+// confidenceSummary holds parsed confidence statistics for a spec file.
+type confidenceSummary struct {
+	Avg      float64           `json:"avg"`
+	Total    int               `json:"total_items"`
+	LowCount int              `json:"low_items"`  // items with score <= 5
+	Items    []confidenceItem  `json:"items,omitempty"`
+}
+
+type confidenceItem struct {
+	Section string `json:"section"`
+	Score   int    `json:"score"`
+}
+
+// confidenceRe matches <!-- confidence: N --> annotations after section headers.
+var confidenceRe = regexp.MustCompile(`<!--\s*confidence:\s*(\d{1,2})\s*-->`)
+
+// parseConfidenceScores extracts confidence annotations from spec file content.
+// Format: <!-- confidence: N --> where N is 1-10, placed after ## section headers.
+//
+// Scale interpretation:
+//   1-3: Low (speculation, needs discussion)
+//   4-6: Medium (reasonable inference, needs validation)
+//   7-9: High (evidence-based, confirmed)
+//   10:  Certain (explicitly confirmed or derived from code)
+func parseConfidenceScores(content string) confidenceSummary {
+	lines := strings.Split(content, "\n")
+	var items []confidenceItem
+	currentSection := ""
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			currentSection = strings.TrimPrefix(trimmed, "## ")
+			// Strip inline confidence annotation from section name.
+			if idx := strings.Index(currentSection, "<!--"); idx > 0 {
+				currentSection = strings.TrimSpace(currentSection[:idx])
+			}
+		}
+
+		matches := confidenceRe.FindStringSubmatch(trimmed)
+		if len(matches) < 2 {
+			continue
+		}
+		score, err := strconv.Atoi(matches[1])
+		if err != nil || score < 1 || score > 10 {
+			continue
+		}
+		section := currentSection
+		if section == "" {
+			section = "(unnamed)"
+		}
+		items = append(items, confidenceItem{Section: section, Score: score})
+	}
+
+	if len(items) == 0 {
+		return confidenceSummary{}
+	}
+
+	total := 0
+	lowCount := 0
+	for _, item := range items {
+		total += item.Score
+		if item.Score <= 5 {
+			lowCount++
+		}
+	}
+
+	return confidenceSummary{
+		Avg:      float64(total) / float64(len(items)),
+		Total:    len(items),
+		LowCount: lowCount,
+		Items:    items,
+	}
 }

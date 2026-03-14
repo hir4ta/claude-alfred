@@ -37,15 +37,16 @@ func handleSessionStart(ctx context.Context, ev *hookEvent) {
 	// Run independent operations in parallel to minimize timeout risk.
 	// All three are fail-open (errors logged internally, never fatal).
 	// Channel-based pattern respects context deadline (WaitGroup.Wait cannot).
-	done := make(chan struct{}, 3)
+	done := make(chan struct{}, 4)
 	go func() { ingestProjectClaudeMD(ctx, st, ev.ProjectPath); done <- struct{}{} }()
 	go func() { checkAndSpawnCrawl(st); done <- struct{}{} }()
 	go func() { ensureUserRules(); done <- struct{}{} }()
-	for i := 0; i < 3; i++ {
+	go func() { checkInstinctPromotion(ctx, st, ev.ProjectPath); done <- struct{}{} }()
+	for i := 0; i < 4; i++ {
 		select {
 		case <-done:
 		case <-ctx.Done():
-			debugf("handleSessionStart: context expired, %d/%d ops completed", i, 3)
+			debugf("handleSessionStart: context expired, %d/%d ops completed", i, 4)
 			return
 		}
 	}
@@ -644,29 +645,12 @@ func embedDocWithRetry(ctx context.Context, st *store.Store, emb *embedder.Embed
 // Background auto-crawl: refresh knowledge base periodically
 // ---------------------------------------------------------------------------
 
-// defaultCrawlIntervalDays is the default interval between automatic crawls.
-const defaultCrawlIntervalDays = 7
-
-// crawlIntervalDays returns the configured crawl interval from env or default.
-func crawlIntervalDays() int {
-	return envInt("ALFRED_CRAWL_INTERVAL_DAYS", defaultCrawlIntervalDays)
-}
-
-// checkAndSpawnCrawl checks the last crawl timestamp and spawns a background
-// crawl process if the knowledge base is stale. This adds ~10-20ms to
-// SessionStart (DB query + optional process spawn).
+// checkAndSpawnCrawl spawns a background crawl process on every session start.
+// Always crawls to keep the knowledge base fresh (lock file prevents concurrent runs).
 func checkAndSpawnCrawl(st *store.Store) {
-	lastCrawl, err := st.LastCrawledAt()
-	if err != nil {
+	if _, err := st.LastCrawledAt(); err != nil {
 		// No docs at all — user hasn't run 'alfred init' yet.
 		debugf("checkAndSpawnCrawl: no crawl timestamp: %v", err)
-		return
-	}
-
-	age := time.Since(lastCrawl)
-	interval := time.Duration(crawlIntervalDays()) * 24 * time.Hour
-	if age < interval {
-		debugf("checkAndSpawnCrawl: last crawl %s ago (interval %dd), skipping", age.Round(time.Hour), crawlIntervalDays())
 		return
 	}
 
@@ -676,14 +660,12 @@ func checkAndSpawnCrawl(st *store.Store) {
 		debugf("checkAndSpawnCrawl: no lock path, skipping")
 		return
 	}
-	// Rely on isCrawlRunning (PID check + stale cleanup) + O_EXCL in spawnCrawlAsync.
-	// lockFileExists was redundant and could race with isCrawlRunning's stale removal.
 	if isCrawlRunning(lockPath) {
 		debugf("checkAndSpawnCrawl: crawl already running")
 		return
 	}
 
-	debugf("checkAndSpawnCrawl: last crawl %s ago, spawning background crawl", age.Round(time.Hour))
+	debugf("checkAndSpawnCrawl: spawning background crawl")
 	spawnCrawlAsync()
 }
 
@@ -895,6 +877,7 @@ func handleSessionEnd(ctx context.Context, ev *hookEvent) {
 	}
 
 	persistSessionSummary(ctx, ev.ProjectPath, taskSlug, session)
+	extractAndSaveInstincts(ctx, ev.ProjectPath, taskSlug, session)
 }
 
 // persistSessionSummary saves a condensed session summary as permanent memory.
