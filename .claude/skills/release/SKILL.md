@@ -105,6 +105,13 @@ Always push individually.
 3. Commit: `chore: update marketplace to v<VERSION>`
 4. Push: `git push origin main`
 
+## Homebrew
+
+GoReleaser の `brews` セクションにより、リリースCI成功後に `hir4ta/homebrew-alfred` の formula が自動更新される。
+ユーザーは `brew tap hir4ta/alfred && brew install alfred` でインストール、`brew upgrade alfred` で更新可能。
+
+手動操作不要。CI が `HOMEBREW_TAP_TOKEN` シークレットを使って formula を push する。
+
 ## Completion Report
 
 Display the following on release completion:
@@ -115,3 +122,4 @@ Display the following on release completion:
 | Commit | <hash> |
 | CI | success/failure (duration) |
 | Release URL | https://github.com/hir4ta/claude-alfred/releases/tag/v<VERSION> |
+| Homebrew | auto-updated via GoReleaser |
