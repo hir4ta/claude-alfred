@@ -216,7 +216,10 @@ func TestAllTasksIncludesCompleted(t *testing.T) {
 	m := New(ds)
 	m.width = 120
 	m.height = 40
-	m.refreshData()
+	// Simulate async data load: execute the command and apply the result.
+	cmd := m.loadDataCmd()
+	msg := cmd().(dataLoadedMsg)
+	m.applyDataLoaded(msg)
 
 	// allTasks should include both active and completed.
 	if len(m.allTasks) != 2 {

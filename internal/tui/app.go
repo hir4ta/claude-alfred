@@ -48,6 +48,19 @@ type searchResultMsg []KnowledgeEntry
 // debounceTickMsg triggers a debounced search after typing pauses.
 type debounceTickMsg struct{ seq int }
 
+// dataLoadedMsg carries refreshed data from async loading.
+type dataLoadedMsg struct {
+	activeSlug string
+	allTasks   []TaskDetail
+	specs      []SpecEntry
+	knowledge  []KnowledgeEntry
+	activity   []ActivityEntry
+	knStats    KnowledgeStats
+	epics      []EpicSummary
+	decisions  []DecisionEntry
+	specGroups []specTaskGroup
+}
+
 // Model is the root bubbletea model.
 type Model struct {
 	ds     DataSource
@@ -159,51 +172,74 @@ func New(ds DataSource) Model {
 	}
 }
 
-func (m *Model) refreshData() {
-	m.activeSlug = m.ds.ActiveTask()
+// loadDataCmd returns a tea.Cmd that loads data asynchronously in a goroutine.
+// All I/O (DB queries, file reads) happens off the UI thread.
+func (m *Model) loadDataCmd() tea.Cmd {
+	ds := m.ds
+	searching := m.searching
+	searchQuery := m.searchQuery
+	searchBusy := m.searchBusy
+	return func() tea.Msg {
+		var msg dataLoadedMsg
+		msg.activeSlug = ds.ActiveTask()
+		msg.allTasks = ds.TaskDetails()
 
-	m.allTasks = m.ds.TaskDetails()
+		// Build spec groups.
+		specs := ds.Specs()
+		msg.specs = specs
+		groupMap := make(map[string]*specTaskGroup)
+		var groupOrder []string
+		for _, s := range specs {
+			g, ok := groupMap[s.TaskSlug]
+			if !ok {
+				g = &specTaskGroup{Slug: s.TaskSlug}
+				groupMap[s.TaskSlug] = g
+				groupOrder = append(groupOrder, s.TaskSlug)
+			}
+			g.FileCount++
+			g.TotalSize += s.Size
+			g.Files = append(g.Files, s)
+		}
+		groups := make([]specTaskGroup, 0, len(groupOrder))
+		for _, slug := range groupOrder {
+			groups = append(groups, *groupMap[slug])
+		}
+		msg.specGroups = groups
+
+		msg.activity = ds.RecentActivity(50)
+		msg.knStats = ds.KnowledgeStats()
+		msg.epics = ds.Epics()
+		msg.decisions = ds.AllDecisions(20)
+
+		if !searching && searchQuery == "" && !searchBusy {
+			msg.knowledge = ds.RecentKnowledge(100)
+		}
+
+		return msg
+	}
+}
+
+// applyDataLoaded applies a dataLoadedMsg to the model (in-memory only, no I/O).
+func (m *Model) applyDataLoaded(msg dataLoadedMsg) {
+	m.loading = false
+	m.activeSlug = msg.activeSlug
+	m.allTasks = msg.allTasks
+	m.specs = msg.specs
+	m.specGroups = msg.specGroups
 	if m.taskCursor >= len(m.allTasks) {
 		m.taskCursor = max(0, len(m.allTasks)-1)
-	}
-
-	// Build spec groups (all tasks, including completed).
-	m.specs = m.ds.Specs()
-	groupMap := make(map[string]*specTaskGroup)
-	var groupOrder []string
-	for _, s := range m.specs {
-		g, ok := groupMap[s.TaskSlug]
-		if !ok {
-			g = &specTaskGroup{Slug: s.TaskSlug}
-			groupMap[s.TaskSlug] = g
-			groupOrder = append(groupOrder, s.TaskSlug)
-		}
-		g.FileCount++
-		g.TotalSize += s.Size
-		g.Files = append(g.Files, s)
-	}
-	m.specGroups = make([]specTaskGroup, 0, len(groupOrder))
-	for _, slug := range groupOrder {
-		m.specGroups = append(m.specGroups, *groupMap[slug])
 	}
 	if m.specGroupCursor >= len(m.specGroups) {
 		m.specGroupCursor = max(0, len(m.specGroups)-1)
 	}
-
-	// Refresh activity timeline.
-	m.activity = m.ds.RecentActivity(50)
-
-	// Knowledge stats + epics + decisions.
-	m.knStats = m.ds.KnowledgeStats()
-	m.epics = m.ds.Epics()
-	m.decisions = m.ds.AllDecisions(20)
-
-	// Refresh knowledge only when not in active search.
-	if !m.searching && m.searchQuery == "" && !m.searchBusy {
-		m.knowledge = m.ds.RecentKnowledge(100)
+	m.activity = msg.activity
+	m.knStats = msg.knStats
+	m.epics = msg.epics
+	m.decisions = msg.decisions
+	if msg.knowledge != nil {
+		m.knowledge = msg.knowledge
 	}
-
-	// Promotion candidates from knowledge entries.
+	// Compute promotion candidates from knowledge.
 	m.promotions = m.promotions[:0]
 	for _, k := range m.knowledge {
 		if k.Source == "memory" {
@@ -212,11 +248,7 @@ func (m *Model) refreshData() {
 			}
 		}
 	}
-
-	// Rebuild tasks viewport content.
 	m.rebuildTasksViewport()
-
-	m.loading = false
 }
 
 func (m *Model) rebuildTasksViewport() {
@@ -385,14 +417,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			progress.WithWidth(min(20, m.width/4)),
 			progress.WithFillCharacters('#', '-'),
 		)
-		m.refreshData()
+		return m, m.loadDataCmd()
+
+	case dataLoadedMsg:
+		m.applyDataLoaded(msg)
 		return m, nil
 
 	case tickMsg:
-		m.refreshData()
-		return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
-			return tickMsg(t)
-		})
+		return m, tea.Batch(
+			m.loadDataCmd(),
+			tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+				return tickMsg(t)
+			}),
+		)
 
 	case searchResultMsg:
 		m.knowledge = []KnowledgeEntry(msg)
