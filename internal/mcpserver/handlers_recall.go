@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -32,8 +33,14 @@ func recallHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFu
 			return recallSearch(ctx, st, emb, req)
 		case "save":
 			return recallSave(ctx, st, emb, req)
+		case "promote":
+			return recallPromote(ctx, st, req)
+		case "candidates":
+			return recallCandidates(ctx, st)
+		case "reflect":
+			return recallReflect(ctx, st, emb)
 		default:
-			return mcp.NewToolResultError(fmt.Sprintf("unknown action %q: use 'search' or 'save'", action)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("unknown action %q: use search, save, promote, candidates, or reflect", action)), nil
 		}
 	}
 }
@@ -63,10 +70,13 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 	}
 
 	// Search both memories and past specs — long-term knowledge that grows with use.
-	sr := searchPipeline(ctx, st, emb, query, store.SourceMemory+","+store.SourceSpec, limit, overRetrieve)
+	sr := SearchPipeline(ctx, st, emb, query, store.SourceMemory+","+store.SourceSpec, limit, overRetrieve)
 	docs := sr.Docs
 	searchMethod := sr.SearchMethod
 	warnings := sr.Warnings
+
+	// Track hit counts for search results (not during benchmarks).
+	TrackHitCounts(ctx, st, docs)
 
 	// Post-filter by sub_type if requested.
 	if subType := req.GetString("sub_type", ""); subType != "" {
@@ -212,4 +222,146 @@ func recallSave(ctx context.Context, st *store.Store, emb *embedder.Embedder, re
 		"url":              url,
 		"embedding_status": embeddingStatus,
 	})
+}
+
+// recallPromote promotes a memory's sub_type (general→pattern or pattern→rule).
+func recallPromote(ctx context.Context, st *store.Store, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	id := int64(req.GetInt("id", 0))
+	if id <= 0 {
+		return mcp.NewToolResultError("id parameter is required (positive integer)"), nil
+	}
+	newSubType := req.GetString("sub_type", "")
+	if newSubType == "" {
+		return mcp.NewToolResultError("sub_type parameter is required (pattern or rule)"), nil
+	}
+
+	if err := st.PromoteSubType(ctx, id, newSubType); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("promotion failed: %v", err)), nil
+	}
+	return marshalResult(map[string]any{
+		"status":       "promoted",
+		"id":           id,
+		"new_sub_type": newSubType,
+	})
+}
+
+// recallCandidates returns memories that qualify for sub_type promotion.
+func recallCandidates(ctx context.Context, st *store.Store) (*mcp.CallToolResult, error) {
+	docs, err := st.GetPromotionCandidates(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed: %v", err)), nil
+	}
+
+	results := make([]map[string]any, 0, len(docs))
+	for _, d := range docs {
+		suggested := store.SubTypePattern
+		if d.SubType == store.SubTypePattern {
+			suggested = store.SubTypeRule
+		}
+		results = append(results, map[string]any{
+			"id":            d.ID,
+			"section_path":  d.SectionPath,
+			"hit_count":     d.HitCount,
+			"current_type":  d.SubType,
+			"suggested":     suggested,
+			"last_accessed": d.LastAccessed,
+			"content":       truncate(d.Content, 200),
+		})
+	}
+	return marshalResult(map[string]any{
+		"candidates": results,
+		"count":      len(results),
+		"thresholds": map[string]int{
+			"general_to_pattern": store.PromoteToPatternHits,
+			"pattern_to_rule":    store.PromoteToRuleHits,
+		},
+	})
+}
+
+// recallReflect generates a read-only health report for the knowledge base.
+func recallReflect(ctx context.Context, st *store.Store, emb *embedder.Embedder) (*mcp.CallToolResult, error) {
+	result := map[string]any{}
+
+	// 1. Memory stats.
+	stats, err := st.GetMemoryStats(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("stats failed: %v", err)), nil
+	}
+	topAccessed := make([]map[string]any, 0, len(stats.TopAccessed))
+	for _, d := range stats.TopAccessed {
+		topAccessed = append(topAccessed, map[string]any{
+			"section_path": d.SectionPath,
+			"hit_count":    d.HitCount,
+			"sub_type":     d.SubType,
+		})
+	}
+	result["summary"] = map[string]any{
+		"total_memories": stats.Total,
+		"by_sub_type":    stats.BySubType,
+		"avg_hit_count":  math.Round(stats.AvgHitCount*100) / 100,
+		"most_accessed":  topAccessed,
+	}
+
+	// 2. Conflicts (requires embeddings).
+	if emb != nil {
+		conflicts, err := st.DetectConflicts(ctx, 0.75)
+		if err != nil {
+			result["conflicts_warning"] = fmt.Sprintf("conflict detection failed: %v", err)
+		} else {
+			conflictList := make([]map[string]any, 0, len(conflicts))
+			for _, c := range conflicts {
+				conflictList = append(conflictList, map[string]any{
+					"doc_a":      truncate(c.DocA.SectionPath, 80),
+					"doc_b":      truncate(c.DocB.SectionPath, 80),
+					"similarity": math.Round(c.Similarity*1000) / 1000,
+				})
+			}
+			result["conflicts"] = conflictList
+		}
+	} else {
+		result["conflicts_warning"] = "conflict detection requires VOYAGE_API_KEY (embeddings needed for cosine similarity)"
+	}
+
+	// 3. Stale memories.
+	stale, err := st.GetStaleMemories(ctx, 90)
+	if err != nil {
+		result["stale_warning"] = fmt.Sprintf("stale detection failed: %v", err)
+	} else {
+		staleList := make([]map[string]any, 0, len(stale))
+		for _, d := range stale {
+			accessDate := d.LastAccessed
+			if accessDate == "" {
+				accessDate = d.CrawledAt + " (created, never accessed)"
+			}
+			staleList = append(staleList, map[string]any{
+				"id":            d.ID,
+				"section_path":  d.SectionPath,
+				"last_accessed": accessDate,
+				"hit_count":     d.HitCount,
+			})
+		}
+		result["stale"] = staleList
+	}
+
+	// 4. Promotion candidates.
+	candidates, err := st.GetPromotionCandidates(ctx)
+	if err == nil && len(candidates) > 0 {
+		candList := make([]map[string]any, 0, len(candidates))
+		for _, d := range candidates {
+			suggested := store.SubTypePattern
+			if d.SubType == store.SubTypePattern {
+				suggested = store.SubTypeRule
+			}
+			candList = append(candList, map[string]any{
+				"id":           d.ID,
+				"section_path": d.SectionPath,
+				"hit_count":    d.HitCount,
+				"current":      d.SubType,
+				"suggested":    suggested,
+			})
+		}
+		result["promotion_candidates"] = candList
+	}
+
+	return marshalResult(result)
 }

@@ -24,6 +24,7 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TU
 | `cmd/alfred/hooks_transcript.go` | Transcript parsing: rich context extraction, decision detection |
 | `cmd/alfred/dashboard.go` | TUI dashboard entry point (`alfred dashboard`) |
 | `cmd/alfred/export.go` | Knowledge export (`alfred export` → .alfred/knowledge/memories.yaml) |
+| `cmd/alfred/search_eval.go` | Search quality benchmark (`alfred search-eval`) |
 
 ## Commands
 
@@ -32,6 +33,7 @@ go install ./cmd/alfred        # Build & install
 go test ./...                 # All tests
 go vet ./...                  # Static analysis
 alfred export                 # Export memories to Git-shareable YAML
+alfred search-eval            # Run search quality benchmark
 ```
 
 ## Release
@@ -63,7 +65,7 @@ alfred export                 # Export memories to Git-shareable YAML
 
 ### Database & Schema
 
-- DB schema V3: sub_type column + session_links table (V2→V3 additive migration)
+- DB schema V4: hit_count + last_accessed columns (V3→V4 additive migration)
 - Tables: records (memories/specs/project), embeddings (vector search), records_fts (FTS5), tag_aliases (search expansion), session_links (compaction continuity)
 - Store.DB() is test-only; production code uses Store methods (no raw SQL outside internal/store)
 - @.claude/rules/store-internals.md (vector search, SQL safety patterns)
@@ -118,7 +120,13 @@ alfred export                 # Export memories to Git-shareable YAML
 
 - Memory persistence: source_type="memory" in records table, TTL=0 (permanent), sub_type classification (general/decision/pattern/rule)
 - Memory sub_type boost: rule=2.0x, decision=1.5x, pattern=1.3x, general=1.0x (search relevance)
-- Search pipeline: Voyage vector search → rerank → recency signal → FTS5 fallback → keyword fallback
+- Knowledge maturity: hit_count tracks search result appearances, last_accessed for staleness detection
+- Knowledge promotion: general→pattern (5+ hits), pattern→rule (15+ hits); manual confirmation via ledger promote
+- Ledger tool actions: search, save, promote, candidates, reflect
+- Knowledge health (ledger reflect): stats + conflict detection + stale memories + promotion candidates
+- Search quality benchmark: `alfred search-eval` CLI subcommand with .alfred/search-eval.yaml test cases
+- PreCompact promotion injection: candidates above threshold surfaced in additionalContext
+- Search pipeline: Voyage vector search → rerank → recency signal → hit_count tracking → FTS5 fallback → keyword fallback
 - FTS5: records_fts virtual table with bm25 ranking, auto-synced via triggers
 - Tag alias expansion: auth→authentication/login/認証, 16 categories bilingual (EN/JP)
 - Fuzzy search: Levenshtein distance on section_path (max dist = min(2, len/3))
@@ -141,10 +149,8 @@ alfred export                 # Export memories to Git-shareable YAML
 
 ### Agent Spawning (Rate Limit Mitigation)
 
-- All multi-agent skills use staggered batch spawning (max 2 parallel)
-- Research/critique agents: model: haiku (lower rate limits)
-- Synthesis/integration agents: model: sonnet
-- Pattern: Batch 1 (2 agents) → wait → Batch 2 (1-2 agents with Batch 1 context)
+- brief skill: inline multi-perspective deliberation (no sub-agents, rate limit prevention)
+- Other multi-agent skills: staggered batch spawning (max 2 parallel), haiku for research, sonnet for synthesis
 
 ### Misc
 

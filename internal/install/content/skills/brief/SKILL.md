@@ -1,32 +1,30 @@
 ---
 name: brief
 description: >
-  Multi-agent spec generation with 3 specialists (Architect, Devil's Advocate,
-  Researcher). Creates requirements, design, decisions, and session files in
-  .alfred/specs/. Use when starting a new task, organizing a design, planning
-  before implementation, or wanting a structured development plan. NOT for
-  divergent brainstorming (use /alfred:salon). NOT for autonomous
-  implementation (use /alfred:attend).
+  Structured spec generation with multi-perspective deliberation (no sub-agents).
+  Creates requirements, design, decisions, and session files in .alfred/specs/.
+  Use when starting a new task, organizing a design, planning before implementation,
+  or wanting a structured development plan. NOT for divergent brainstorming
+  (use /alfred:salon). NOT for autonomous implementation (use /alfred:attend).
 user-invocable: true
 argument-hint: "task-slug [description]"
-allowed-tools: Read, Write, Edit, Glob, Grep, AskUserQuestion, Agent, WebSearch, WebFetch, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier
+allowed-tools: Read, Edit, Glob, Grep, AskUserQuestion, WebSearch, WebFetch, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier
 model: sonnet
 context: current
 ---
 
-# /alfred:brief — Multi-Agent Spec Generator
+# /alfred:brief — Spec Generator with Multi-Perspective Deliberation
 
-Interactively generate a spec with multi-agent design deliberation, creating a
-development plan resilient to Compact/session loss.
+Generate a structured spec through systematic deliberation from 3 perspectives
+(Architect, Devil's Advocate, Researcher), creating a development plan resilient
+to Compact/session loss.
 
-## Supporting Files
-
-- **[agent-prompts.md](agent-prompts.md)** — Prompt templates for Architect, Devil's Advocate, Researcher, and Mediator agents
+**No sub-agents are spawned.** All deliberation happens inline to avoid rate limits.
 
 ## Core Principle
 **What Compact loses most: reasoning process, rationale for design decisions, dead-end
-explorations, implicit agreements.** By explicitly writing these to files AND having
-multiple agents debate the design, we create specs that are both robust and well-reasoned.
+explorations, implicit agreements.** By explicitly writing these to files with
+multi-perspective analysis, we create specs that are both robust and well-reasoned.
 
 ## Steps
 
@@ -36,7 +34,7 @@ multiple agents debate the design, we create specs that are both robust and well
 - If no arguments, confirm via AskUserQuestion
 
 ### 2. [CHECK] Call `dossier` with action=status
-- If active spec exists for this slug -> resume mode (skip to Step 8)
+- If active spec exists for this slug -> resume mode (skip to Step 7)
 - If no spec -> creation mode (continue)
 
 ### 3. [REQUIREMENTS] Interactive gathering (max 3 questions)
@@ -44,57 +42,79 @@ multiple agents debate the design, we create specs that are both robust and well
 - What does success look like? (measurable criteria)
 - What is explicitly out of scope?
 
-### 4. [RESEARCH] Knowledge base + web search
+### 4. [RESEARCH] Knowledge base + codebase exploration
 - Call `knowledge` to search for relevant best practices and patterns
+- Read key source files relevant to the task
 - Note any relevant prior art or conventions
 
-### 5. [DESIGN DELIBERATION] Spawn specialist agents (staggered)
+### 5. [DELIBERATION] Multi-perspective analysis (inline, single pass)
 
-Using the prompts from [agent-prompts.md](agent-prompts.md), spawn agents in **2 batches**
-to avoid rate limits:
+Analyze the requirements from 3 perspectives in a single structured response.
+Do NOT spawn sub-agents. Think through each perspective yourself:
 
-1. **Batch 1**: Spawn **Architect** + **Devil's Advocate** in a single message (model: haiku)
-2. Wait for both to complete
-3. **Batch 2**: Spawn **Researcher** (model: haiku) with Batch 1 outputs as additional context
+#### Perspective 1: Architect
+- Propose a concrete architecture (components, data flow, interfaces)
+- Name specific files, functions, data structures — no hand-waving
+- List 2-3 alternative approaches considered and why rejected
+- Define key technical decisions with rationale
+- Propose task breakdown ordered by dependency
 
-### 6. [DEBATE] Cross-critique round (parent-mediated)
+#### Perspective 2: Devil's Advocate
+- List 5-7 things that could go wrong with the proposed architecture
+- Identify hidden complexity and underestimated effort
+- Surface edge cases the requirements don't mention
+- Challenge assumptions: is the scope right? Are success criteria measurable?
+- For each concern, state WHY it's a problem and how to mitigate
 
-After collecting all 3 agents' output, spawn the **Mediator agent** (model: sonnet) using
-the mediator prompt from [agent-prompts.md](agent-prompts.md) with all 3 outputs.
+#### Perspective 3: Researcher
+- Search the codebase for existing patterns that apply
+- Identify reusable code, libraries, or infrastructure
+- Find applicable design patterns and their trade-offs
+- Recommend proven approaches to adopt vs build custom
 
-### 7. [CREATE SPEC] Save to .alfred/specs/
+#### Synthesis
+After considering all 3 perspectives:
+1. List points of AGREEMENT (settled decisions)
+2. List points of CONFLICT and for each:
+   - State both sides clearly
+   - Resolve with rationale, or flag for user decision
+3. Produce a unified design incorporating:
+   - The Architect's structure
+   - Mitigations for the Devil's Advocate's concerns
+   - The Researcher's proven patterns
 
-1. Call `dossier` with action=init to create the spec directory
+### 6. [CREATE SPEC] Save to .alfred/specs/
+
+1. Call `dossier` with action=init to create the spec directory (skip if already exists)
 2. Call `dossier` with action=update for each file:
    - **requirements.md**: Goals, success criteria, out of scope (from Step 3)
-   - **design.md**: Unified design (from Step 6 synthesis), alternatives considered
-   - **decisions.md**: All agreed decisions with rationale + alternatives + source
-     (Architect/Advocate/Researcher). Flag unresolved conflicts.
+   - **design.md**: Unified design (from Step 5 synthesis), alternatives considered
+   - **decisions.md**: All decisions with rationale + alternatives + which perspective
+     proposed each. Flag unresolved conflicts.
    - **session.md**: Current position + task breakdown as Next Steps
 
 3. **Assign confidence scores** (1-10) to each section using HTML comments:
    ```markdown
    ## API設計 <!-- confidence: 8 -->
-   RESTful + OpenAPI 3.0 (Architect + Researcher agreed, evidence from prior art)
+   Structure approach (Architect + Researcher aligned, prior art confirms)
 
    ## 認証方式 <!-- confidence: 3 -->
-   OAuth2 or API Key — unresolved conflict (needs user decision)
+   OAuth2 or API Key — unresolved (needs user decision)
    ```
    Scale: 1-3 low (speculation), 4-6 medium (inference), 7-9 high (evidence), 10 certain.
-   Items scoring ≤ 5 are flagged in Step 8 output for user attention.
+   Items scoring ≤ 5 are flagged in Step 7 output for user attention.
 
-### 8. [OUTPUT] Confirm to user
+### 7. [OUTPUT] Confirm to user
 
 ```
-Alfred Protocol initialized for '{task-slug}'.
+Spec created for '{task-slug}'.
 
-Design deliberation: 3 agents consulted (Architect, Devil's Advocate, Researcher)
-- Agreements: N decisions settled
+Deliberation: 3 perspectives analyzed (Architect, Devil's Advocate, Researcher)
+- Settled decisions: N
 - Conflicts resolved: N (by evidence)
 - Escalated to you: N (need your input)
 
 Confidence: requirements avg X.X (N items ≤ 5), design avg X.X
-[Items with confidence ≤ 5 need your attention — listed below]
 
 Spec files: .alfred/specs/{task-slug}/
 - requirements.md ✓
@@ -102,15 +122,13 @@ Spec files: .alfred/specs/{task-slug}/
 - decisions.md ✓
 - session.md ✓
 
-Compact resilience: Active.
-
 [If escalated conflicts exist:]
 Before starting, please decide on these open questions:
 1. <conflict description> — Option A vs Option B
 2. ...
 ```
 
-### 9. [APPROVAL GATE] Wait for user review
+### 8. [APPROVAL GATE] Wait for user review
 
 After spec creation, set the task to pending review and wait for user approval:
 
@@ -118,15 +136,14 @@ After spec creation, set the task to pending review and wait for user approval:
    - Add `## Review Status\npending` to session.md
 2. Tell the user:
    ```
-   Spec ready for review. Open `alfred dashboard` → Specs tab → select files → press 'r' to review.
-   Comment on any line, then Approve or Request Changes.
-   Tell me "承認した" or "approved" when done.
+   Spec ready for review. Open `alfred dashboard` → Specs tab → press 'r' to review.
+   Or review the files directly and tell me "approved" or your feedback.
    ```
 3. **STOP and wait** — do not proceed until the user confirms.
 4. When the user says they've reviewed, call `dossier` with action=review to check:
    - If `review_status: approved` → done, present completion summary
-   - If `review_status: changes_requested` → read comments, apply fixes, then go back to step 9
-   - If `review_status: pending` → remind the user to review in the dashboard
+   - If `review_status: changes_requested` → read comments, apply fixes, then go back to step 8
+   - If `review_status: pending` → remind the user to review
 
 ## Resume Mode (from Step 2)
 
@@ -142,41 +159,16 @@ If an active spec already exists:
 
 ## Troubleshooting
 
-- **Agent fails or returns empty**: Re-read the prompt from agent-prompts.md and retry once. If still fails, proceed with 2 agents' output and note the gap.
-- **Agents all agree (no conflict)**: Still run the Mediator to confirm consensus and check for blind spots.
 - **Spec init fails**: Check if `.alfred/specs/{slug}` already exists. Use `dossier` action=status first.
 - **User doesn't answer requirements questions**: Proceed with reasonable defaults, flag assumptions with low confidence scores (1-3).
-
-## Example
-
-User: `/alfred:brief auth-refactor Add OAuth2 to the API gateway`
-
-```
-Alfred Protocol initialized for 'auth-refactor'.
-
-Design deliberation: 3 agents consulted (Architect, Devil's Advocate, Researcher)
-- Agreements: 4 decisions settled
-- Conflicts resolved: 2 (by evidence)
-- Escalated to you: 1 (need your input)
-
-Confidence: requirements avg 8.2 (0 items ≤ 5), design avg 6.8 (2 items ≤ 5)
-
-Spec files: .alfred/specs/auth-refactor/
-- requirements.md ✓
-- design.md ✓
-- decisions.md ✓
-- session.md ✓
-
-Before starting, please decide:
-1. Token storage — PostgreSQL (Architect) vs Redis (Researcher). Trade-off: durability vs latency.
-```
 
 ## Guardrails
 
 - Do NOT skip requirements gathering — even for "obvious" tasks
-- Do NOT leave decisions.md empty — record ALL design deliberation outcomes
+- Do NOT spawn sub-agents — all deliberation is inline (rate limit prevention)
+- Do NOT leave decisions.md empty — record ALL deliberation outcomes
 - Do NOT create tasks without success criteria
-- ALWAYS record alternatives considered with rationale (from all 3 agents)
-- ALWAYS record the source of each decision (which agent proposed, what evidence)
+- ALWAYS record alternatives considered with rationale
+- ALWAYS record which perspective proposed each decision
 - ALWAYS update session.md with current position after plan completion
-- Maximum 20 turns total — force convergence if debate is not settling
+- Maximum 20 turns total — force convergence if analysis is not settling

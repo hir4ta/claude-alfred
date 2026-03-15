@@ -95,6 +95,9 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 		return
 	}
 
+	// Inject promotion candidates if any exist.
+	injectPromotionCandidates(ctx, st)
+
 	// Expire old chapter memories (90-day TTL).
 	st.DeleteExpiredDocs(ctx)
 
@@ -173,6 +176,28 @@ func rotateCompactMarkers(content string, maxMarkers int) string {
 		result.WriteString(m)
 	}
 	return result.String()
+}
+
+// injectPromotionCandidates checks for memories that qualify for sub_type promotion
+// and injects a notification into additionalContext during PreCompact.
+func injectPromotionCandidates(ctx context.Context, st *store.Store) {
+	candidates, err := st.GetPromotionCandidates(ctx)
+	if err != nil || len(candidates) == 0 {
+		return
+	}
+
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("Knowledge promotion candidates: %d memories qualify for upgrade\n", len(candidates)))
+	for _, d := range candidates {
+		suggested := store.SubTypePattern
+		if d.SubType == store.SubTypePattern {
+			suggested = store.SubTypeRule
+		}
+		buf.WriteString(fmt.Sprintf("- \"%s\" (hit: %d) → %s candidate [id=%d]\n",
+			truncateStr(d.SectionPath, 60), d.HitCount, suggested, d.ID))
+	}
+	buf.WriteString("Use: ledger action=promote id=ID sub_type=TYPE\n")
+	emitAdditionalContext("PreCompact", buf.String())
 }
 
 // emitCompactionInstructions outputs spec-aware instructions to stdout

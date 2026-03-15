@@ -48,6 +48,12 @@ func run() error {
 		return install.Bundle(outputDir, version)
 	case "export":
 		return runExport()
+	case "search-eval":
+		evalFile := ".alfred/search-eval.yaml"
+		if len(os.Args) > 2 {
+			evalFile = os.Args[2]
+		}
+		return runSearchEval(evalFile)
 	case "embed-async":
 		return runEmbedAsync()
 	case "embed-doc":
@@ -182,6 +188,7 @@ Usage:
   alfred serve      Start MCP server (called by Claude Code plugin)
   alfred hook       Handle hook events (called by Claude Code)
   alfred export     Export memories to .alfred/knowledge/ (Git-shareable YAML)
+  alfred search-eval  Run search quality benchmark (.alfred/search-eval.yaml)
   alfred version    Show version
 
 Environment:

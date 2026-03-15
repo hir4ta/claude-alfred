@@ -16,9 +16,9 @@ type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-// schemaVersion 3 = sub_type column on records + session_links table.
-// V2→V3: additive (new column with default, new table).
-const schemaVersion = 3
+// schemaVersion 4 = hit_count + last_accessed columns on records.
+// V3→V4: additive (new columns with defaults).
+const schemaVersion = 4
 
 const ddl = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS records (
     version      TEXT,
     crawled_at   TEXT NOT NULL,
     ttl_days     INTEGER DEFAULT 7,
-    sub_type     TEXT NOT NULL DEFAULT 'general',
+    sub_type      TEXT NOT NULL DEFAULT 'general',
+    hit_count     INTEGER NOT NULL DEFAULT 0,
+    last_accessed TEXT NOT NULL DEFAULT '',
     UNIQUE(url, section_path)
 );
 
@@ -181,17 +183,28 @@ func Migrate(db *sql.DB) error {
 	defer tx.Rollback()
 
 	switch current {
+	case 3:
+		// V3→V4: additive migration (hit_count, last_accessed columns).
+		if err := migrateV3toV4(tx); err != nil {
+			return err
+		}
 	case 2:
-		// V2→V3: additive migration (sub_type column, session_links table).
+		// V2→V3→V4: chain migrations.
 		if err := migrateV2toV3(tx); err != nil {
 			return err
 		}
+		if err := migrateV3toV4(tx); err != nil {
+			return err
+		}
 	case 1:
-		// V1→V2→V3: chain migrations.
+		// V1→V2→V3→V4: chain migrations.
 		if err := migrateV1toV2(tx); err != nil {
 			return err
 		}
 		if err := migrateV2toV3(tx); err != nil {
+			return err
+		}
+		if err := migrateV3toV4(tx); err != nil {
 			return err
 		}
 	default:
@@ -273,6 +286,20 @@ func migrateV2toV3(db execer) error {
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("store: v2→v3 migration: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateV3toV4 adds hit_count and last_accessed columns to records.
+func migrateV3toV4(db execer) error {
+	stmts := []string{
+		`ALTER TABLE records ADD COLUMN hit_count INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE records ADD COLUMN last_accessed TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("store: v3→v4 migration: %w", err)
 		}
 	}
 	return nil

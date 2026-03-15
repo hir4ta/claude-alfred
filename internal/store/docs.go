@@ -26,17 +26,25 @@ const (
 
 // DocRow represents a row in the records table.
 type DocRow struct {
-	ID          int64
-	URL         string
-	SectionPath string
-	Content     string
-	ContentHash string
-	SourceType  string // SourceMemory, SourceSpec, SourceProject
-	SubType     string // SubTypeGeneral, SubTypeDecision, SubTypePattern, SubTypeRule
-	Version     string
-	CrawledAt   string
-	TTLDays     int
+	ID           int64
+	URL          string
+	SectionPath  string
+	Content      string
+	ContentHash  string
+	SourceType   string // SourceMemory, SourceSpec, SourceProject
+	SubType      string // SubTypeGeneral, SubTypeDecision, SubTypePattern, SubTypeRule
+	Version      string
+	CrawledAt    string
+	TTLDays      int
+	HitCount     int
+	LastAccessed string
 }
+
+// Promotion thresholds: minimum hit_count to qualify as a promotion candidate.
+const (
+	PromoteToPatternHits = 5  // general → pattern
+	PromoteToRuleHits    = 15 // pattern → rule
+)
 
 // ContentHashOf returns the SHA-256 hex hash of content for change detection.
 func ContentHashOf(content string) string {
@@ -304,6 +312,186 @@ func (s *Store) SearchMemoriesKeyword(ctx context.Context, query string, limit i
 			continue
 		}
 		d.Version = version.String
+		docs = append(docs, d)
+	}
+	return docs, rows.Err()
+}
+
+// IncrementHitCount atomically increments hit_count and updates last_accessed
+// for the given record IDs. Uses a single batch UPDATE for efficiency.
+func (s *Store) IncrementHitCount(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, now)
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(
+		`UPDATE records SET hit_count = hit_count + 1, last_accessed = ? WHERE id IN (%s)`,
+		strings.Join(placeholders, ","),
+	)
+	_, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("store: increment hit count: %w", err)
+	}
+	return nil
+}
+
+// PromoteSubType updates the sub_type of a memory record.
+// Only allows valid promotion paths: general→pattern, pattern→rule.
+func (s *Store) PromoteSubType(ctx context.Context, id int64, newSubType string) error {
+	if newSubType != SubTypePattern && newSubType != SubTypeRule {
+		return fmt.Errorf("store: invalid promotion target %q: must be pattern or rule", newSubType)
+	}
+
+	var current string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT sub_type FROM records WHERE id = ? AND source_type = ?`,
+		id, SourceMemory).Scan(&current)
+	if err != nil {
+		return fmt.Errorf("store: promote sub_type: record %d not found or not a memory: %w", id, err)
+	}
+
+	switch {
+	case current == SubTypeGeneral && newSubType == SubTypePattern:
+		// OK
+	case current == SubTypePattern && newSubType == SubTypeRule:
+		// OK
+	default:
+		return fmt.Errorf("store: invalid promotion path %s → %s", current, newSubType)
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE records SET sub_type = ? WHERE id = ?`, newSubType, id)
+	if err != nil {
+		return fmt.Errorf("store: promote sub_type: %w", err)
+	}
+	return nil
+}
+
+// GetPromotionCandidates returns memory records whose hit_count exceeds
+// the promotion threshold for their current sub_type.
+// decision sub_type is excluded (not promotable).
+func (s *Store) GetPromotionCandidates(ctx context.Context) ([]DocRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, url, section_path, content, content_hash, source_type, sub_type,
+		        version, crawled_at, ttl_days, hit_count, last_accessed
+		 FROM records
+		 WHERE source_type = ?
+		   AND ((sub_type = ? AND hit_count >= ?) OR (sub_type = ? AND hit_count >= ?))
+		 ORDER BY hit_count DESC`,
+		SourceMemory,
+		SubTypeGeneral, PromoteToPatternHits,
+		SubTypePattern, PromoteToRuleHits,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("store: get promotion candidates: %w", err)
+	}
+	defer rows.Close()
+
+	var docs []DocRow
+	for rows.Next() {
+		var d DocRow
+		var version sql.NullString
+		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
+			&d.SourceType, &d.SubType, &version, &d.CrawledAt, &d.TTLDays,
+			&d.HitCount, &d.LastAccessed); err != nil {
+			continue
+		}
+		d.Version = version.String
+		docs = append(docs, d)
+	}
+	return docs, rows.Err()
+}
+
+// MemoryStats holds aggregate statistics about memory records.
+type MemoryStats struct {
+	Total       int
+	BySubType   map[string]int
+	AvgHitCount float64
+	TopAccessed []DocRow
+}
+
+// GetMemoryStats returns aggregate statistics about memory records.
+func (s *Store) GetMemoryStats(ctx context.Context) (*MemoryStats, error) {
+	stats := &MemoryStats{BySubType: make(map[string]int)}
+
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(AVG(hit_count), 0) FROM records WHERE source_type = ?`,
+		SourceMemory).Scan(&stats.Total, &stats.AvgHitCount)
+	if err != nil {
+		return nil, fmt.Errorf("store: get memory stats: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT sub_type, COUNT(*) FROM records WHERE source_type = ? GROUP BY sub_type`,
+		SourceMemory)
+	if err != nil {
+		return nil, fmt.Errorf("store: get memory stats by sub_type: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var st string
+		var count int
+		if err := rows.Scan(&st, &count); err != nil {
+			continue
+		}
+		stats.BySubType[st] = count
+	}
+
+	topRows, err := s.db.QueryContext(ctx,
+		`SELECT id, url, section_path, content, source_type, sub_type, hit_count, last_accessed
+		 FROM records WHERE source_type = ? AND hit_count > 0
+		 ORDER BY hit_count DESC LIMIT 5`, SourceMemory)
+	if err != nil {
+		return stats, nil
+	}
+	defer topRows.Close()
+	for topRows.Next() {
+		var d DocRow
+		if err := topRows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content,
+			&d.SourceType, &d.SubType, &d.HitCount, &d.LastAccessed); err != nil {
+			continue
+		}
+		stats.TopAccessed = append(stats.TopAccessed, d)
+	}
+	return stats, nil
+}
+
+// GetStaleMemories returns memory records that haven't been accessed
+// within staleDays. For records with no last_accessed, crawled_at is used.
+func (s *Store) GetStaleMemories(ctx context.Context, staleDays int) ([]DocRow, error) {
+	if staleDays <= 0 {
+		staleDays = 90
+	}
+	cutoff := time.Now().AddDate(0, 0, -staleDays).UTC().Format(time.RFC3339)
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, url, section_path, content, source_type, sub_type, hit_count, last_accessed, crawled_at
+		 FROM records
+		 WHERE source_type = ?
+		   AND CASE WHEN last_accessed != '' THEN last_accessed < ? ELSE crawled_at < ? END
+		 ORDER BY hit_count ASC, crawled_at ASC
+		 LIMIT 50`,
+		SourceMemory, cutoff, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("store: get stale memories: %w", err)
+	}
+	defer rows.Close()
+
+	var docs []DocRow
+	for rows.Next() {
+		var d DocRow
+		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content,
+			&d.SourceType, &d.SubType, &d.HitCount, &d.LastAccessed, &d.CrawledAt); err != nil {
+			continue
+		}
 		docs = append(docs, d)
 	}
 	return docs, rows.Err()

@@ -121,8 +121,8 @@ func applyRecencySignal(docs []store.DocRow, now time.Time) []store.DocRow {
 	return result
 }
 
-// searchResult holds the output of a search pipeline.
-type searchResult struct {
+// SearchResult holds the output of a search pipeline.
+type SearchResult struct {
 	Docs         []store.DocRow
 	SearchMethod string // "vector+rerank", "vector", or "keyword"
 	Warnings     []string
@@ -147,8 +147,8 @@ func parseSourceTypes(s string) []string {
 
 // searchPipeline runs vector search with rerank and recency signal.
 // Falls back to LIKE-based keyword search when embedder is unavailable.
-func searchPipeline(ctx context.Context, st *store.Store, emb *embedder.Embedder, query, sourceType string, limit, overRetrieve int) searchResult {
-	var res searchResult
+func SearchPipeline(ctx context.Context, st *store.Store, emb *embedder.Embedder, query, sourceType string, limit, overRetrieve int) SearchResult {
+	var res SearchResult
 
 	if emb != nil {
 		queryVec, err := emb.EmbedForSearch(ctx, query)
@@ -232,7 +232,23 @@ func searchPipeline(ctx context.Context, st *store.Store, emb *embedder.Embedder
 	if len(res.Docs) > limit {
 		res.Docs = res.Docs[:limit]
 	}
+
 	return res
+}
+
+// TrackHitCounts increments hit_count for the given search results.
+// Call separately from SearchPipeline to allow callers (e.g., benchmarks) to opt out.
+func TrackHitCounts(ctx context.Context, st *store.Store, docs []store.DocRow) {
+	if len(docs) == 0 {
+		return
+	}
+	ids := make([]int64, 0, len(docs))
+	for _, d := range docs {
+		if d.ID > 0 {
+			ids = append(ids, d.ID)
+		}
+	}
+	_ = st.IncrementHitCount(ctx, ids)
 }
 
 // marshalResult encodes v as JSON and wraps it in an MCP CallToolResult.

@@ -87,26 +87,31 @@ Tasks (specs) are NOT deleted when an epic is removed — they become standalone
 
 		server.ServerTool{
 			Tool: mcp.NewTool("ledger",
-				mcp.WithDescription(`Long-term knowledge search and save — memories and past specs, searchable across sessions and projects.
+				mcp.WithDescription(`Long-term knowledge search, save, and health management — memories and past specs, searchable across sessions and projects.
 
 Actions:
-- search (default): Search past memories AND completed specs — decisions, designs, bug fixes, session summaries
+- search (default): Search past memories AND completed specs
 - save: Save a new memory entry for future retrieval
+- promote: Promote a memory's sub_type (general→pattern or pattern→rule) — requires id and sub_type
+- candidates: List memories that qualify for sub_type promotion based on hit_count
+- reflect: Read-only health report — stats, conflicts, stale memories, promotion candidates
 
-Knowledge persists permanently and grows with use. Past specs (requirements, designs, decisions) are searchable alongside memories.
+Knowledge persists permanently and grows with use. Memories track hit_count (how often they appear in search results) and can be promoted from general→pattern→rule as they prove their value.
 
 Use for:
-- "Have I worked on something like this before?"
-- "What decisions did I make about authentication?"
-- "How did we design the auth system last time?"
-- "Remember this approach for future reference"
+- "Have I worked on something like this before?" (search)
+- "Remember this approach for future reference" (save)
+- "What memories should be promoted?" (candidates)
+- "How healthy is my knowledge base?" (reflect)
+- "Promote this memory to a rule" (promote)
 
 Do NOT use for: searching documentation (use WebFetch instead), file operations.`),
 				mcp.WithTitleAnnotation("Ledger — Memory"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("action", mcp.Description("Action: search or save"), mcp.Required(), mcp.Enum("search", "save")),
+				mcp.WithString("action", mcp.Description("Action: search, save, promote, candidates, or reflect"), mcp.Required(), mcp.Enum("search", "save", "promote", "candidates", "reflect")),
+				mcp.WithNumber("id", mcp.Description("Record ID (required for promote)")),
 				mcp.WithString("query", mcp.Description("Search query (for search)")),
 				mcp.WithString("content", mcp.Description("Content to save (required for save)")),
 				mcp.WithString("label", mcp.Description("Short label/description for saved memory (required for save)")),
