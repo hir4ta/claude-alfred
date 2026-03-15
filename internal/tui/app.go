@@ -11,10 +11,10 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/glamour"
 )
 
 const (
@@ -26,6 +26,14 @@ const (
 )
 
 var tabNames = [tabCount]string{"Overview", "Tasks", "Specs", "Knowledge"}
+
+// specTaskGroup groups spec files by task for the Specs tab.
+type specTaskGroup struct {
+	Slug      string
+	FileCount int
+	TotalSize int64
+	Files     []SpecEntry
+}
 
 // tickMsg triggers periodic data refresh.
 type tickMsg time.Time
@@ -41,16 +49,20 @@ type Model struct {
 
 	// Tab state.
 	activeTab int
-	expanded  bool
 	showHelp  bool
 
 	// Bubbles components.
-	specTable   table.Model
 	viewport    viewport.Model
 	helpModel   help.Model
 	spinner     spinner.Model
 	searchInput textinput.Model
 	progress    progress.Model
+
+	// Overlay (floating window) state.
+	overlayActive bool
+	overlayTitle  string
+	overlayVP     viewport.Model
+	breadcrumbs   []string // navigation path shown in overlay header
 
 	// Data caches.
 	activeSlug string
@@ -61,11 +73,20 @@ type Model struct {
 	// Tasks tab state.
 	taskCursor int
 
+	// Specs tab state.
+	specGroups      []specTaskGroup
+	specGroupCursor int
+	specFileCursor  int
+	specLevel       int // 0=groups, 1=files
+
 	// Knowledge tab state.
 	knCursor    int
 	searching   bool
 	searchQuery string
 	searchBusy  bool
+
+	// Markdown renderer.
+	mdRenderer *glamour.TermRenderer
 
 	// Loading.
 	loading bool
@@ -98,38 +119,46 @@ func New(ds DataSource) Model {
 	}
 }
 
-func (m *Model) initTables() {
-	specCols := []table.Column{
-		{Title: "TASK", Width: 24},
-		{Title: "FILE", Width: 20},
-		{Title: "SIZE", Width: 8},
-	}
-	m.specTable = table.New(
-		table.WithColumns(specCols),
-		table.WithFocused(true),
-		table.WithWidth(m.width),
-		table.WithHeight(m.contentHeight()),
-	)
-	ts := table.DefaultStyles()
-	ts.Header = ts.Header.Foreground(lipgloss.Color("#666")).Bold(true)
-	ts.Selected = ts.Selected.Foreground(lipgloss.Color("#fff")).Background(lipgloss.Color("#335"))
-	m.specTable.SetStyles(ts)
-}
-
 func (m *Model) refreshData() {
 	m.activeSlug = m.ds.ActiveTask()
-	m.tasks = m.ds.TaskDetails()
+
+	// Filter to active tasks only for Overview/Tasks tabs.
+	allTasks := m.ds.TaskDetails()
+	m.tasks = m.tasks[:0]
+	for _, t := range allTasks {
+		if t.Status != "completed" {
+			m.tasks = append(m.tasks, t)
+		}
+	}
+	if m.taskCursor >= len(m.tasks) {
+		m.taskCursor = max(0, len(m.tasks)-1)
+	}
+
+	// Build spec groups (all tasks, including completed).
 	m.specs = m.ds.Specs()
+	groupMap := make(map[string]*specTaskGroup)
+	var groupOrder []string
+	for _, s := range m.specs {
+		g, ok := groupMap[s.TaskSlug]
+		if !ok {
+			g = &specTaskGroup{Slug: s.TaskSlug}
+			groupMap[s.TaskSlug] = g
+			groupOrder = append(groupOrder, s.TaskSlug)
+		}
+		g.FileCount++
+		g.TotalSize += s.Size
+		g.Files = append(g.Files, s)
+	}
+	m.specGroups = make([]specTaskGroup, 0, len(groupOrder))
+	for _, slug := range groupOrder {
+		m.specGroups = append(m.specGroups, *groupMap[slug])
+	}
+	if m.specGroupCursor >= len(m.specGroups) {
+		m.specGroupCursor = max(0, len(m.specGroups)-1)
+	}
 
 	// Rebuild overview viewport content.
 	m.rebuildOverview()
-
-	// Rebuild spec table.
-	rows := make([]table.Row, len(m.specs))
-	for i, s := range m.specs {
-		rows[i] = table.Row{s.TaskSlug, s.File, formatSize(s.Size)}
-	}
-	m.specTable.SetRows(rows)
 
 	// Refresh knowledge only when not in active search.
 	if !m.searching && m.searchQuery == "" && !m.searchBusy {
@@ -187,7 +216,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.initTables()
+		m.mdRenderer, _ = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(max(40, m.width-6)),
+		)
 		m.viewport = viewport.New(
 			viewport.WithWidth(m.width-4),
 			viewport.WithHeight(m.contentHeight()),
@@ -227,6 +259,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case tea.KeyPressMsg:
+		// Overlay takes priority — all input goes to the floating window.
+		if m.overlayActive {
+			return m.updateOverlay(msg)
+		}
 		if m.searching {
 			return m.updateSearch(msg)
 		}
@@ -246,7 +282,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, keys.Tab):
 			m.activeTab = (m.activeTab + 1) % tabCount
-			m.expanded = false
 			m.searchBusy = false
 			if m.activeTab == tabOverview {
 				m.rebuildOverview()
@@ -254,14 +289,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, keys.BackTab):
 			m.activeTab = (m.activeTab - 1 + tabCount) % tabCount
-			m.expanded = false
 			m.searchBusy = false
 			if m.activeTab == tabOverview {
 				m.rebuildOverview()
 			}
 			return m, nil
 		case key.Matches(msg, keys.Search):
-			if m.activeTab == tabKnowledge && !m.expanded {
+			if m.activeTab == tabKnowledge && !m.overlayActive {
 				m.searching = true
 				m.searchInput.Focus()
 				return m, nil
@@ -275,22 +309,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tabTasks:
 			return m.updateTasks(msg)
 		case tabSpecs:
-			if !m.expanded {
-				m.specTable, _ = m.specTable.Update(msg)
-				if key.Matches(msg, keys.Enter) {
-					row := m.specTable.SelectedRow()
-					if row != nil {
-						content := m.ds.SpecContent(row[0], row[1])
-						m.viewport.SetContent(content)
-						m.expanded = true
-					}
-				}
-			} else {
-				m.viewport, _ = m.viewport.Update(msg)
-				if key.Matches(msg, keys.Back) {
-					m.expanded = false
-				}
-			}
+			return m.updateSpecs(msg)
 		case tabKnowledge:
 			return m.updateKnowledge(msg)
 		}
@@ -300,14 +319,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateTasks(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.expanded {
-		m.viewport, _ = m.viewport.Update(msg)
-		if key.Matches(msg, keys.Back) {
-			m.expanded = false
-		}
-		return m, nil
-	}
-
 	switch {
 	case key.Matches(msg, keys.Down):
 		if m.taskCursor < len(m.tasks)-1 {
@@ -320,22 +331,64 @@ func (m *Model) updateTasks(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Enter):
 		if m.taskCursor < len(m.tasks) {
 			task := &m.tasks[m.taskCursor]
-			m.viewport.SetContent(m.renderTaskOverview(task))
-			m.expanded = true
+			m.openOverlay(task.Slug, m.renderTaskOverview(task), "Tasks", task.Slug)
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) updateSpecs(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch m.specLevel {
+	case 0: // task group list
+		switch {
+		case key.Matches(msg, keys.Down):
+			if m.specGroupCursor < len(m.specGroups)-1 {
+				m.specGroupCursor++
+			}
+		case key.Matches(msg, keys.Up):
+			if m.specGroupCursor > 0 {
+				m.specGroupCursor--
+			}
+		case key.Matches(msg, keys.Enter):
+			if m.specGroupCursor < len(m.specGroups) {
+				m.specFileCursor = 0
+				m.specLevel = 1
+			}
+		}
+	case 1: // file list
+		switch {
+		case key.Matches(msg, keys.Down):
+			if m.specGroupCursor < len(m.specGroups) {
+				g := m.specGroups[m.specGroupCursor]
+				if m.specFileCursor < len(g.Files)-1 {
+					m.specFileCursor++
+				}
+			}
+		case key.Matches(msg, keys.Up):
+			if m.specFileCursor > 0 {
+				m.specFileCursor--
+			}
+		case key.Matches(msg, keys.Enter):
+			if m.specGroupCursor < len(m.specGroups) {
+				g := m.specGroups[m.specGroupCursor]
+				if m.specFileCursor < len(g.Files) {
+					f := g.Files[m.specFileCursor]
+					content := m.ds.SpecContent(f.TaskSlug, f.File)
+					m.openOverlay(
+						f.File,
+						m.renderMarkdown(content),
+						"Specs", g.Slug, f.File,
+					)
+				}
+			}
+		case key.Matches(msg, keys.Back):
+			m.specLevel = 0
 		}
 	}
 	return m, nil
 }
 
 func (m *Model) updateKnowledge(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.expanded {
-		m.viewport, _ = m.viewport.Update(msg)
-		if key.Matches(msg, keys.Back) {
-			m.expanded = false
-		}
-		return m, nil
-	}
-
 	switch {
 	case key.Matches(msg, keys.Down):
 		if m.knCursor < len(m.knowledge)-1 {
@@ -348,14 +401,15 @@ func (m *Model) updateKnowledge(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Enter):
 		if m.knCursor < len(m.knowledge) {
 			k := m.knowledge[m.knCursor]
-			header := titleStyle.Render(k.Label) + "\n"
-			header += dimStyle.Render(k.Source) + "  " + dimStyle.Render(formatDuration(k.Age)+" ago")
-			if k.Score > 0 {
-				header += "  " + scoreStyle.Render(fmt.Sprintf("%.0f%%", k.Score*100))
+			title, _ := simplifyKnowledgeLabel(k.Label)
+			if len(title) < 5 {
+				title = firstContentLine(k.Content)
 			}
-			header += "\n\n"
-			m.viewport.SetContent(header + k.Content)
-			m.expanded = true
+			m.openOverlay(
+				title,
+				m.renderMarkdown(k.Content),
+				"Knowledge", k.Source, title,
+			)
 		}
 	}
 	return m, nil
@@ -398,6 +452,83 @@ func (m *Model) updateSearch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // ---------------------------------------------------------------------------
+// Overlay (floating window)
+// ---------------------------------------------------------------------------
+
+func (m *Model) openOverlay(title, content string, crumbs ...string) {
+	m.overlayActive = true
+	m.overlayTitle = title
+	m.breadcrumbs = crumbs
+
+	// Size the overlay viewport.
+	w := min(m.width-8, 120)
+	h := m.height - 8
+	if h < 5 {
+		h = 5
+	}
+
+	m.overlayVP = viewport.New(
+		viewport.WithWidth(w - 4), // padding inside border
+		viewport.WithHeight(h - 3),
+	)
+	m.overlayVP.SoftWrap = true
+	m.overlayVP.SetContent(content)
+}
+
+func (m *Model) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, keys.Back) || key.Matches(msg, keys.Quit) {
+		m.overlayActive = false
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.overlayVP, cmd = m.overlayVP.Update(msg)
+	return m, cmd
+}
+
+func (m Model) renderOverlayView(bg string) string {
+	w := min(m.width-4, 124)
+	h := m.height - 4
+
+	// Breadcrumb header.
+	var crumbLine string
+	for i, c := range m.breadcrumbs {
+		if i == len(m.breadcrumbs)-1 {
+			crumbLine += breadcrumbActiveStyle.Render(c)
+		} else {
+			crumbLine += breadcrumbStyle.Render(c+" > ")
+		}
+	}
+
+	// Title bar.
+	titleBar := overlayTitleStyle.Render(m.overlayTitle)
+	hint := dimStyle.Render("esc: close  j/k: scroll")
+
+	header := "  " + crumbLine + "\n  " + titleBar + "  " + hint + "\n"
+
+	// Viewport content.
+	content := header + m.overlayVP.View()
+
+	// Scrollbar indicator.
+	pct := m.overlayVP.ScrollPercent()
+	scrollInfo := dimStyle.Render(fmt.Sprintf("  %d%%", int(pct*100)))
+	content += "\n" + scrollInfo
+
+	// Panel with border.
+	panel := overlayStyle.
+		Width(w).
+		Height(h).
+		Render(content)
+
+	// Center the panel on screen.
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		panel,
+		lipgloss.WithWhitespaceChars("·"),
+		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#1a1a1a"))),
+	)
+}
+
+// ---------------------------------------------------------------------------
 // View
 // ---------------------------------------------------------------------------
 
@@ -422,11 +553,20 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	view := lipgloss.JoinVertical(lipgloss.Left,
+	bg := lipgloss.JoinVertical(lipgloss.Left,
 		m.tabBarView(),
 		content,
 		m.helpBar(),
 	)
+
+	// Render overlay on top if active.
+	var view string
+	if m.overlayActive {
+		view = m.renderOverlayView(bg)
+	} else {
+		view = bg
+	}
+
 	v := tea.NewView(view)
 	v.AltScreen = true
 	return v
@@ -531,10 +671,6 @@ func (m Model) tasksView() string {
 	if len(m.tasks) == 0 {
 		return "\n" + dimStyle.Render("  no tasks — use dossier to create one")
 	}
-	if m.expanded {
-		return "\n" + m.viewport.View()
-	}
-
 	var b strings.Builder
 	b.WriteString("\n")
 
@@ -589,13 +725,237 @@ func (m Model) tasksView() string {
 }
 
 func (m Model) specsView() string {
-	if m.expanded {
-		return "\n" + m.viewport.View()
-	}
-	if len(m.specs) == 0 {
+	if len(m.specGroups) == 0 {
 		return "\n" + dimStyle.Render("  no specs")
 	}
-	return "\n" + m.specTable.View()
+
+	switch m.specLevel {
+	case 1: // file list for selected task
+		return m.specFilesView()
+	default: // task group list
+		return m.specGroupsView()
+	}
+}
+
+func (m Model) specGroupsView() string {
+	var b strings.Builder
+	b.WriteString("\n")
+
+	visibleH := m.contentHeight() - 1
+	startIdx, endIdx := visibleRange(m.specGroupCursor, len(m.specGroups), visibleH)
+
+	for i := startIdx; i < endIdx; i++ {
+		g := m.specGroups[i]
+		prefix := "  "
+		if i == m.specGroupCursor {
+			prefix = "> "
+		}
+
+		slug := fmt.Sprintf("%-28s", truncStr(g.Slug, 28))
+		info := fmt.Sprintf("%d files  %s", g.FileCount, formatSize(g.TotalSize))
+
+		if i == m.specGroupCursor {
+			b.WriteString(titleStyle.Render(prefix+slug) + "  " + dimStyle.Render(info) + "\n")
+		} else {
+			b.WriteString(prefix + slug + "  " + dimStyle.Render(info) + "\n")
+		}
+	}
+
+	if len(m.specGroups) > visibleH {
+		b.WriteString(dimStyle.Render(fmt.Sprintf("\n  %d/%d", m.specGroupCursor+1, len(m.specGroups))))
+	}
+
+	return b.String()
+}
+
+func (m Model) specFilesView() string {
+	if m.specGroupCursor >= len(m.specGroups) {
+		return "\n" + dimStyle.Render("  no files")
+	}
+	g := m.specGroups[m.specGroupCursor]
+
+	var b strings.Builder
+	maxW := m.width - 6
+
+	b.WriteString("\n  " + titleStyle.Render(g.Slug))
+	b.WriteString("  " + dimStyle.Render(fmt.Sprintf("%d files  %s", g.FileCount, formatSize(g.TotalSize))))
+	b.WriteString("\n")
+
+	// Render rich summary from spec files.
+	for i, f := range g.Files {
+		content := m.ds.SpecContent(f.TaskSlug, f.File)
+
+		prefix := "  "
+		if i == m.specFileCursor {
+			prefix = "> "
+		}
+
+		// Section header with file name.
+		header := specFileLabel(f.File)
+		if i == m.specFileCursor {
+			b.WriteString("\n" + titleStyle.Render(prefix+header) + "  " + dimStyle.Render(formatSize(f.Size)) + "\n")
+		} else {
+			b.WriteString("\n" + prefix + sectionHeader.Render(header) + "  " + dimStyle.Render(formatSize(f.Size)) + "\n")
+		}
+
+		// Render a summary based on file type.
+		switch f.File {
+		case "decisions.md":
+			renderDecisionsSummary(&b, content, maxW)
+		case "session.md":
+			renderSessionSummary(&b, content, maxW)
+		case "requirements.md":
+			renderRequirementsSummary(&b, content, maxW)
+		case "design.md":
+			renderDesignSummary(&b, content, maxW)
+		default:
+			if line := firstContentLine(content); line != "" {
+				b.WriteString("    " + dimStyle.Render(truncStr(line, maxW-4)) + "\n")
+			}
+		}
+	}
+
+	b.WriteString("\n" + dimStyle.Render("  enter: view full file  esc: back"))
+
+	return b.String()
+}
+
+func specFileLabel(file string) string {
+	switch file {
+	case "requirements.md":
+		return "Requirements"
+	case "design.md":
+		return "Design"
+	case "decisions.md":
+		return "Decisions"
+	case "session.md":
+		return "Session"
+	default:
+		return file
+	}
+}
+
+func renderDecisionsSummary(b *strings.Builder, content string, maxW int) {
+	sections := splitSections(content)
+	count := 0
+	for header, body := range sections {
+		if header == "" {
+			continue
+		}
+		count++
+		// Extract "Chosen" and "Alternatives" from decision body.
+		chosen := ""
+		alternatives := ""
+		reason := ""
+		for line := range strings.SplitSeq(body, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "- **Chosen:**") || strings.HasPrefix(trimmed, "**Chosen:**") {
+				chosen = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "- "), "**Chosen:**"))
+			} else if strings.HasPrefix(trimmed, "- **Alternatives:**") || strings.HasPrefix(trimmed, "**Alternatives:**") {
+				alternatives = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "- "), "**Alternatives:**"))
+			} else if strings.HasPrefix(trimmed, "- **Reason:**") || strings.HasPrefix(trimmed, "**Reason:**") {
+				reason = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "- "), "**Reason:**"))
+			}
+		}
+		// Strip date prefix from header if present (e.g. "[2026-03-15] Title").
+		title := header
+		if len(title) > 13 && title[0] == '[' {
+			if idx := strings.Index(title, "] "); idx > 0 {
+				title = title[idx+2:]
+			}
+		}
+		b.WriteString("    " + truncStr(title, maxW-4) + "\n")
+		if chosen != "" {
+			b.WriteString("      " + dimStyle.Render("-> "+truncStr(chosen, maxW-9)) + "\n")
+		}
+		if alternatives != "" {
+			b.WriteString("      " + dimStyle.Render("vs "+truncStr(alternatives, maxW-9)) + "\n")
+		}
+		if reason != "" && chosen == "" {
+			b.WriteString("      " + dimStyle.Render(truncStr(reason, maxW-6)) + "\n")
+		}
+		if count >= 5 {
+			remaining := len(sections) - count
+			if remaining > 0 {
+				b.WriteString(dimStyle.Render(fmt.Sprintf("    ... +%d more", remaining)) + "\n")
+			}
+			break
+		}
+	}
+	if count == 0 {
+		b.WriteString("    " + dimStyle.Render("(no decisions)") + "\n")
+	}
+}
+
+func renderSessionSummary(b *strings.Builder, content string, maxW int) {
+	parsed := parseSessionSections(content)
+
+	b.WriteString("    " + styledStatus(parsed.status))
+	if parsed.focus != "" {
+		b.WriteString("  " + truncStr(parsed.focus, maxW-20))
+	}
+	b.WriteString("\n")
+
+	if parsed.hasBlocker {
+		b.WriteString("    " + blockerStyle.Render("! "+truncStr(parsed.blockerText, maxW-6)) + "\n")
+	}
+
+	// Progress from next steps.
+	done := 0
+	for _, s := range parsed.nextSteps {
+		if s.Done {
+			done++
+		}
+	}
+	if len(parsed.nextSteps) > 0 {
+		b.WriteString(dimStyle.Render(fmt.Sprintf("    steps: %d/%d done", done, len(parsed.nextSteps))) + "\n")
+	}
+
+	if len(parsed.modFiles) > 0 {
+		b.WriteString(dimStyle.Render(fmt.Sprintf("    files: %d modified", len(parsed.modFiles))) + "\n")
+	}
+}
+
+func renderRequirementsSummary(b *strings.Builder, content string, maxW int) {
+	// Show first few non-header, non-empty lines as summary.
+	count := 0
+	for line := range strings.SplitSeq(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "---") {
+			continue
+		}
+		b.WriteString("    " + dimStyle.Render(truncStr(trimmed, maxW-4)) + "\n")
+		count++
+		if count >= 3 {
+			break
+		}
+	}
+	if count == 0 {
+		b.WriteString("    " + dimStyle.Render("(empty)") + "\n")
+	}
+}
+
+func renderDesignSummary(b *strings.Builder, content string, maxW int) {
+	// Show section headers as an outline of the design.
+	sections := splitSections(content)
+	count := 0
+	for header := range sections {
+		if header == "" {
+			continue
+		}
+		b.WriteString("    " + dimStyle.Render("- "+truncStr(header, maxW-6)) + "\n")
+		count++
+		if count >= 5 {
+			remaining := len(sections) - count
+			if remaining > 0 {
+				b.WriteString(dimStyle.Render(fmt.Sprintf("    ... +%d more sections", remaining)) + "\n")
+			}
+			break
+		}
+	}
+	if count == 0 {
+		b.WriteString("    " + dimStyle.Render("(empty)") + "\n")
+	}
 }
 
 func (m Model) knowledgeView() string {
@@ -613,10 +973,6 @@ func (m Model) knowledgeView() string {
 	if m.searchBusy {
 		b.WriteString("  " + m.spinner.View() + " searching...\n")
 		return b.String()
-	}
-
-	if m.expanded {
-		return b.String() + m.viewport.View()
 	}
 
 	if len(m.knowledge) == 0 {
@@ -639,24 +995,40 @@ func (m Model) knowledgeView() string {
 			prefix = "> "
 		}
 
-		// Score + source tag + label + age.
+		// Parse label into title + context.
+		title, ctx := simplifyKnowledgeLabel(k.Label)
+		// Use content first line as title if the parsed title is too short.
+		if len(title) < 5 {
+			if cl := firstContentLine(k.Content); cl != "" {
+				title = cl
+			}
+		}
+		title = truncStr(title, m.width-36)
+
+		// Score + source tag + age.
 		scoreStr := "     "
 		if k.Score > 0 {
 			scoreStr = scoreStyle.Render(fmt.Sprintf("%3.0f%% ", k.Score*100))
 		}
 		sourceTag := sourceStyle(k.Source)
-		label := truncStr(k.Label, m.width-36)
 		age := dimStyle.Render(formatDuration(k.Age))
 
-		// Content preview.
-		preview := truncStr(firstContentLine(k.Content), m.width-10)
+		// Context line (task slug / type).
+		ctxLine := ""
+		if ctx != "" {
+			ctxLine = dimStyle.Render(ctx)
+		}
 
 		if i == m.knCursor {
-			b.WriteString(titleStyle.Render(prefix) + scoreStr + sourceTag + " " + titleStyle.Render(label) + "  " + age + "\n")
-			b.WriteString("    " + dimStyle.Render(preview) + "\n")
+			b.WriteString(titleStyle.Render(prefix) + scoreStr + sourceTag + " " + titleStyle.Render(title) + "  " + age + "\n")
+			if ctxLine != "" {
+				b.WriteString("    " + ctxLine + "\n")
+			}
 		} else {
-			b.WriteString(prefix + scoreStr + sourceTag + " " + label + "  " + age + "\n")
-			b.WriteString("    " + dimStyle.Render(preview) + "\n")
+			b.WriteString(prefix + scoreStr + sourceTag + " " + title + "  " + age + "\n")
+			if ctxLine != "" {
+				b.WriteString("    " + ctxLine + "\n")
+			}
 		}
 	}
 
@@ -722,6 +1094,34 @@ func formatDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
+}
+
+func (m Model) renderMarkdown(content string) string {
+	if m.mdRenderer == nil {
+		return content
+	}
+	rendered, err := m.mdRenderer.Render(content)
+	if err != nil {
+		return content
+	}
+	return strings.TrimSpace(rendered)
+}
+
+func simplifyKnowledgeLabel(label string) (title, context string) {
+	parts := strings.Split(label, " > ")
+	if len(parts) <= 1 {
+		return label, ""
+	}
+	title = parts[len(parts)-1]
+	// Skip numeric ID prefix (first part).
+	start := 0
+	if len(parts[0]) > 0 && parts[0][0] >= '0' && parts[0][0] <= '9' {
+		start = 1
+	}
+	if start < len(parts)-1 {
+		context = strings.Join(parts[start:len(parts)-1], " / ")
+	}
+	return
 }
 
 func firstContentLine(s string) string {

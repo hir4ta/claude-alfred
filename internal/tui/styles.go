@@ -5,6 +5,9 @@ import "charm.land/lipgloss/v2"
 // Accent color — single muted teal for the entire UI.
 var accent = lipgloss.Color("#5fafaf")
 
+// Secondary accent for subtle highlights.
+var accentDim = lipgloss.Color("#3d8585")
+
 // Tab styles.
 var (
 	activeTabStyle = lipgloss.NewStyle().
@@ -57,6 +60,36 @@ var (
 var headerStyle = lipgloss.NewStyle().
 	Bold(true).
 	Foreground(accent)
+
+// Content panel — subtle border around main content.
+var contentPanelStyle = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("#333")).
+	Padding(0, 1)
+
+// Overlay (floating window) styles.
+var (
+	overlayStyle = lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(accent).
+			Padding(1, 2)
+
+	overlayTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#fff")).
+				Background(accentDim).
+				Padding(0, 1)
+
+	overlayDimBg = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#333"))
+
+	breadcrumbStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#888"))
+
+	breadcrumbActiveStyle = lipgloss.NewStyle().
+				Foreground(accent).
+				Bold(true)
+)
 
 // Checkbox markers.
 const (
