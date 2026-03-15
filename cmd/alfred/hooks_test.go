@@ -1677,3 +1677,101 @@ func TestPersistChapterMemory(t *testing.T) {
 		t.Error("chapter memory should be findable via keyword search")
 	}
 }
+
+func TestIsStepMatchedByAction(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		item    string
+		context string
+		want    bool
+	}{
+		{
+			name:    "git commit matches コミット step",
+			item:    "コミット",
+			context: "git commit -m 'feat: add feature' コミット",
+			want:    true,
+		},
+		{
+			name:    "go test matches テスト追加 step",
+			item:    "テスト追加（refs_test.go）",
+			context: "go test ./internal/spec/ -run testrefs テスト refs_test.go テスト追加",
+			want:    true,
+		},
+		{
+			name:    "unrelated command does not match",
+			item:    "CLAUDE.md更新",
+			context: "git commit -m 'fix: bug' commit",
+			want:    false,
+		},
+		{
+			name:    "go install matches ビルド step",
+			item:    "ビルド＆インストール",
+			context: "go install ./cmd/alfred install build ビルド インストール",
+			want:    true,
+		},
+		{
+			name:    "empty item never matches",
+			item:    "",
+			context: "git commit",
+			want:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := isStepMatchedByAction(tt.item, tt.context)
+			if got != tt.want {
+				t.Errorf("isStepMatchedByAction(%q, ...) = %v, want %v", tt.item, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReplaceSection(t *testing.T) {
+	t.Parallel()
+	content := "# Session: test\n\n## Status\nactive\n\n## Next Steps\n- [ ] Step 1\n- [ ] Step 2\n\n## Blockers\nNone\n"
+
+	updated := replaceSection(content, "## Next Steps", "- [x] Step 1\n- [x] Step 2")
+
+	if !strings.Contains(updated, "- [x] Step 1") {
+		t.Error("should contain updated steps")
+	}
+	if !strings.Contains(updated, "## Blockers") {
+		t.Error("should preserve following sections")
+	}
+	if !strings.Contains(updated, "## Status") {
+		t.Error("should preserve preceding sections")
+	}
+}
+
+func TestTryAutoCheckNextSteps(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	specDir := dir + "/.alfred/specs/auto-check-test"
+	os.MkdirAll(specDir, 0o755)
+	activeContent := "primary: auto-check-test\ntasks:\n    - slug: auto-check-test\n      started_at: \"2026-03-15T10:00:00Z\"\n      status: active\n"
+	os.WriteFile(dir+"/.alfred/specs/_active.md", []byte(activeContent), 0o644)
+
+	session := "# Session: auto-check-test\n\n## Status\nactive\n\n## Next Steps\n- [x] Feature 1 完了\n- [ ] テスト追加\n- [ ] コミット\n\n## Blockers\nNone\n"
+	os.WriteFile(specDir+"/session.md", []byte(session), 0o644)
+
+	ctx := context.Background()
+
+	// Simulate: git commit succeeds.
+	tryAutoCheckNextSteps(ctx, dir, "git commit -m 'feat: add tests'", "[main abc1234] feat: add tests")
+
+	updated, err := os.ReadFile(specDir + "/session.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(updated)
+	if !strings.Contains(content, "- [x] コミット") {
+		t.Error("コミット step should be auto-checked after git commit")
+	}
+	// テスト追加 should NOT be checked by git commit.
+	if strings.Contains(content, "- [x] テスト追加") {
+		t.Error("テスト追加 should not be checked by git commit")
+	}
+}

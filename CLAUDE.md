@@ -60,7 +60,7 @@ alfred search-eval            # Run search quality benchmark
 - SessionStart: CLAUDE.md ingestion + user rules check + spec context injection (2 ops parallel via channels) + adaptive onboarding (memory count → context depth)
 - PreCompact: auto-updates Next Steps completion status from transcript; decision extraction; structured chapter memory (JSON); epic progress auto-sync
 - UserPromptSubmit: Voyage vector search → FTS5 fallback → keyword fallback; file context boost from git diff
-- PostToolUse: Bash error detection → FTS5 memory search → additionalContext injection
+- PostToolUse: Bash error detection → FTS5 memory search → additionalContext injection; Bash success → session.md Next Steps auto-check (command + action signals matching)
 - Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (3 specialists + mediator + approval gate), attend (spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor autonomous cycles), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → memory)
 
 ### Database & Schema
