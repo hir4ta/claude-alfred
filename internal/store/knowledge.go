@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -154,7 +155,7 @@ func SaveDecision(projectPath string, dec *StructuredDecision) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("store: save decision mkdir: %w", err)
 	}
-	path := filepath.Join(dir, "dec-"+dec.ID+".json")
+	path := filepath.Join(dir, "dec-"+filepath.Base(dec.ID)+".json")
 	data, err := json.MarshalIndent(dec, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("store: save decision marshal: %w", err)
@@ -199,12 +200,18 @@ func LoadDecisions(projectPath string) ([]StructuredDecision, error) {
 }
 
 // SavePattern appends a pattern to .alfred/knowledge/patterns/user.json.
+// Uses file locking to prevent lost updates from concurrent writers.
 func SavePattern(projectPath string, pat *StructuredPattern) error {
 	dir := filepath.Join(KnowledgeDir(projectPath), "patterns")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("store: save pattern mkdir: %w", err)
 	}
 	path := filepath.Join(dir, "user.json")
+	unlock, err := lockKnowledgeFile(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	pf, err := loadPatternFile(path)
 	if err != nil {
 		return err
@@ -225,12 +232,18 @@ func LoadPatterns(projectPath string) ([]StructuredPattern, error) {
 }
 
 // SaveRule appends a rule to .alfred/knowledge/rules/dev-rules.json.
+// Uses file locking to prevent lost updates from concurrent writers.
 func SaveRule(projectPath string, rule *StructuredRule) error {
 	dir := filepath.Join(KnowledgeDir(projectPath), "rules")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("store: save rule mkdir: %w", err)
 	}
 	path := filepath.Join(dir, "dev-rules.json")
+	unlock, err := lockKnowledgeFile(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	rf, err := loadRuleFile(path)
 	if err != nil {
 		return err
@@ -262,7 +275,7 @@ func SaveSession(projectPath string, sess *StructuredSession) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("store: save session mkdir: %w", err)
 	}
-	path := filepath.Join(dir, sess.ID+".json")
+	path := filepath.Join(dir, filepath.Base(sess.ID)+".json")
 	data, err := json.MarshalIndent(sess, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("store: save session marshal: %w", err)
@@ -418,6 +431,24 @@ func loadRuleFile(path string) (*RuleFile, error) {
 		return nil, fmt.Errorf("store: parse rule file: %w", err)
 	}
 	return &rf, nil
+}
+
+// lockKnowledgeFile acquires an advisory flock on {path}.lock.
+// Returns an unlock function that must be deferred.
+func lockKnowledgeFile(path string) (func(), error) {
+	lockPath := path + ".lock"
+	lf, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDONLY, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("store: open lock file: %w", err)
+	}
+	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+		lf.Close()
+		return nil, fmt.Errorf("store: acquire lock: %w", err)
+	}
+	return func() {
+		_ = syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+		lf.Close()
+	}, nil
 }
 
 // writeJSONFile marshals v to indented JSON and writes it to path.
