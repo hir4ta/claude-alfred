@@ -3,6 +3,7 @@ name: brief
 description: >
   Structured spec generation with multi-perspective deliberation (no sub-agents).
   Creates requirements, design, decisions, and session files in .alfred/specs/.
+  Each file is reviewed from multiple perspectives before moving to the next.
   Use when starting a new task, organizing a design, planning before implementation,
   or wanting a structured development plan. NOT for divergent brainstorming
   (use /alfred:salon). NOT for autonomous implementation (use /alfred:attend).
@@ -13,18 +14,15 @@ model: sonnet
 context: current
 ---
 
-# /alfred:brief — Spec Generator with Multi-Perspective Deliberation
+# /alfred:brief — Spec Generator with Staged Review
 
-Generate a structured spec through systematic deliberation from 3 perspectives
-(Architect, Devil's Advocate, Researcher), creating a development plan resilient
-to Compact/session loss.
-
-**No sub-agents are spawned.** All deliberation happens inline to avoid rate limits.
+Generate a structured spec through iterative file-by-file creation with
+multi-perspective review after each file. No sub-agents are spawned.
 
 ## Core Principle
-**What Compact loses most: reasoning process, rationale for design decisions, dead-end
-explorations, implicit agreements.** By explicitly writing these to files with
-multi-perspective analysis, we create specs that are both robust and well-reasoned.
+Each spec file is written, then reviewed from 3 perspectives (Architect, Devil's
+Advocate, Researcher) before moving to the next. This catches issues early rather
+than discovering them after all files are written.
 
 ## Steps
 
@@ -34,141 +32,123 @@ multi-perspective analysis, we create specs that are both robust and well-reason
 - If no arguments, confirm via AskUserQuestion
 
 ### 2. [CHECK] Call `dossier` with action=status
-- If active spec exists for this slug -> resume mode (skip to Step 7)
-- If no spec -> creation mode (continue)
+- If active spec exists for this slug → resume mode (see Resume Mode below)
+- If no spec → creation mode (continue)
 
-### 3. [REQUIREMENTS] Interactive gathering (max 3 questions)
-- What is the goal? (one sentence)
-- What does success look like? (measurable criteria)
-- What is explicitly out of scope?
+### 3. [INIT] Create spec and gather requirements
+1. Call `dossier` action=init to create the spec directory (skip if exists)
+2. Call `knowledge` to search for relevant best practices
+3. Ask user (max 3 questions):
+   - What is the goal? (one sentence)
+   - What does success look like? (measurable criteria)
+   - What is explicitly out of scope?
 
-### 4. [RESEARCH] Knowledge base + codebase exploration
-- Call `knowledge` to search for relevant best practices and patterns
-- Read key source files relevant to the task
-- Note any relevant prior art or conventions
+### 4. [REQUIREMENTS] Write and review requirements.md
 
-### 5. [DELIBERATION] Multi-perspective analysis (inline, single pass)
+**Write**: Call `dossier` action=update, file=requirements.md with:
+- Goal, success criteria, out of scope
+- Confidence scores via `<!-- confidence: N -->` on each section
 
-Analyze the requirements from 3 perspectives in a single structured response.
-Do NOT spawn sub-agents. Think through each perspective yourself:
+**Review** (inline, 3 perspectives):
+- **Architect**: Are success criteria measurable and achievable?
+- **Devil's Advocate**: Is scope too broad? Missing edge cases? Unrealistic criteria?
+- **Researcher**: Any prior art or existing patterns in the codebase that inform requirements?
 
-#### Perspective 1: Architect
-- Propose a concrete architecture (components, data flow, interfaces)
-- Name specific files, functions, data structures — no hand-waving
-- List 2-3 alternative approaches considered and why rejected
-- Define key technical decisions with rationale
-- Propose task breakdown ordered by dependency
+**Fix**: Apply review findings, rewrite requirements.md if needed.
 
-#### Perspective 2: Devil's Advocate
-- List 5-7 things that could go wrong with the proposed architecture
-- Identify hidden complexity and underestimated effort
-- Surface edge cases the requirements don't mention
-- Challenge assumptions: is the scope right? Are success criteria measurable?
-- For each concern, state WHY it's a problem and how to mitigate
+**Update session.md**: Mark requirements step as done in Next Steps.
 
-#### Perspective 3: Researcher
-- Search the codebase for existing patterns that apply
-- Identify reusable code, libraries, or infrastructure
-- Find applicable design patterns and their trade-offs
-- Recommend proven approaches to adopt vs build custom
+### 5. [DESIGN] Write and review design.md
 
-#### Synthesis
-After considering all 3 perspectives:
-1. List points of AGREEMENT (settled decisions)
-2. List points of CONFLICT and for each:
-   - State both sides clearly
-   - Resolve with rationale, or flag for user decision
-3. Produce a unified design incorporating:
-   - The Architect's structure
-   - Mitigations for the Devil's Advocate's concerns
-   - The Researcher's proven patterns
+**Write**: Call `dossier` action=update, file=design.md with:
+- Architecture, components, data flow, interfaces
+- Name specific files, functions, data structures
+- Alternatives considered and why rejected
+- Confidence scores on each section
 
-### 6. [CREATE SPEC] Save to .alfred/specs/
+**Review** (inline, 3 perspectives):
+- **Architect**: Is the architecture sound? Missing components? Clear interfaces?
+- **Devil's Advocate**: What could go wrong? Hidden complexity? Underestimated effort?
+- **Researcher**: Existing patterns in codebase to reuse? Libraries available?
 
-1. Call `dossier` with action=init to create the spec directory (skip if already exists)
-2. Call `dossier` with action=update for each file:
-   - **requirements.md**: Goals, success criteria, out of scope (from Step 3)
-   - **design.md**: Unified design (from Step 5 synthesis), alternatives considered
-   - **decisions.md**: All decisions with rationale + alternatives + which perspective
-     proposed each. Flag unresolved conflicts.
-   - **session.md**: Current position + task breakdown as Next Steps
+**Fix**: Apply review findings, rewrite design.md if needed.
 
-3. **Assign confidence scores** (1-10) to each section using HTML comments:
-   ```markdown
-   ## API設計 <!-- confidence: 8 -->
-   Structure approach (Architect + Researcher aligned, prior art confirms)
+**Update session.md**: Mark design step as done in Next Steps.
 
-   ## 認証方式 <!-- confidence: 3 -->
-   OAuth2 or API Key — unresolved (needs user decision)
-   ```
-   Scale: 1-3 low (speculation), 4-6 medium (inference), 7-9 high (evidence), 10 certain.
-   Items scoring ≤ 5 are flagged in Step 7 output for user attention.
+### 6. [DECISIONS] Write and review decisions.md
 
-### 7. [OUTPUT] Confirm to user
+**Write**: Call `dossier` action=update, file=decisions.md with:
+- All decisions with rationale + alternatives + which perspective informed each
+- Unresolved conflicts flagged for user decision
+- Confidence scores
+
+**Review** (inline, 3 perspectives):
+- **Architect**: Are decisions consistent with design? Missing decisions?
+- **Devil's Advocate**: Any decision based on faulty assumptions? Reversibility?
+- **Researcher**: Do decisions align with established patterns in this codebase?
+
+**Fix**: Apply review findings, rewrite decisions.md if needed.
+
+**Update session.md**: Mark decisions step as done in Next Steps.
+
+### 7. [SESSION] Write session.md
+
+**Write**: Call `dossier` action=update, file=session.md with:
+- Status: active
+- Currently Working On
+- Next Steps: task breakdown from design.md (as unchecked items)
+- Recent Decisions (last 3)
+- Blockers
+
+No review needed for session.md — it's a status file.
+
+### 8. [OUTPUT] Summary to user
 
 ```
 Spec created for '{task-slug}'.
 
-Deliberation: 3 perspectives analyzed (Architect, Devil's Advocate, Researcher)
-- Settled decisions: N
-- Conflicts resolved: N (by evidence)
-- Escalated to you: N (need your input)
-
-Confidence: requirements avg X.X (N items ≤ 5), design avg X.X
-
-Spec files: .alfred/specs/{task-slug}/
-- requirements.md ✓
-- design.md ✓
-- decisions.md ✓
+Deliberation: 3 perspectives applied per file (Architect, Devil's Advocate, Researcher)
+- requirements.md ✓ (reviewed)
+- design.md ✓ (reviewed)
+- decisions.md ✓ (reviewed)
 - session.md ✓
 
-[If escalated conflicts exist:]
-Before starting, please decide on these open questions:
+Confidence: requirements avg X.X, design avg X.X
+[Items with confidence ≤ 5 listed here]
+
+[If unresolved conflicts exist:]
+Please decide on these open questions:
 1. <conflict description> — Option A vs Option B
-2. ...
 ```
 
-### 8. [APPROVAL GATE] Wait for user review
+### 9. [APPROVAL GATE] Wait for user review
 
-After spec creation, set the task to pending review and wait for user approval:
-
-1. Call `dossier` with action=update, file=session.md to set review_status:
-   - Add `## Review Status\npending` to session.md
+1. Add `## Review Status\npending` to session.md
 2. Tell the user:
    ```
-   Spec ready for review. Open `alfred dashboard` → Specs tab → press 'r' to review.
-   Or review the files directly and tell me "approved" or your feedback.
+   Spec ready for review. Check the files directly or use `alfred dashboard`.
+   Tell me "approved" or give feedback.
    ```
 3. **STOP and wait** — do not proceed until the user confirms.
-4. When the user says they've reviewed, call `dossier` with action=review to check:
-   - If `review_status: approved` → done, present completion summary
-   - If `review_status: changes_requested` → read comments, apply fixes, then go back to step 8
-   - If `review_status: pending` → remind the user to review
+4. When user responds, call `dossier` action=review to check:
+   - `approved` → done
+   - `changes_requested` → read comments, apply fixes, go back to step 9
+   - `pending` → remind user to review
 
 ## Resume Mode (from Step 2)
 
 If an active spec already exists:
-1. Call `dossier` with action=status to get current session state
-2. Read spec files in recovery order:
-   - session.md (where am I?)
-   - requirements.md (what am I building?)
-   - design.md (how?)
-   - decisions.md (why these choices?)
+1. Call `dossier` action=status to get current session state
+2. Read spec files in recovery order: session.md → requirements.md → design.md → decisions.md
 3. Present summary: "Resuming task '{slug}'. Last position: {current_position}."
 4. Ask: "Continue from here, or update the plan?"
 
-## Troubleshooting
-
-- **Spec init fails**: Check if `.alfred/specs/{slug}` already exists. Use `dossier` action=status first.
-- **User doesn't answer requirements questions**: Proceed with reasonable defaults, flag assumptions with low confidence scores (1-3).
-
 ## Guardrails
 
-- Do NOT skip requirements gathering — even for "obvious" tasks
+- Do NOT skip per-file review — each file MUST be reviewed before moving to the next
 - Do NOT spawn sub-agents — all deliberation is inline (rate limit prevention)
 - Do NOT leave decisions.md empty — record ALL deliberation outcomes
 - Do NOT create tasks without success criteria
+- ALWAYS update session.md after each file is completed (dashboard UX)
 - ALWAYS record alternatives considered with rationale
-- ALWAYS record which perspective proposed each decision
-- ALWAYS update session.md with current position after plan completion
 - Maximum 20 turns total — force convergence if analysis is not settling

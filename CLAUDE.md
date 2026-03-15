@@ -147,10 +147,12 @@ alfred search-eval            # Run search quality benchmark
 - Skills: brief, attend, tdd, inspect, mend, survey, salon, polish, valet, furnish, quarters, archive, concierge, harvest
 - MCP tools: dossier (spec management), roster (epic management), ledger (memory)
 
-### Agent Spawning (Rate Limit Mitigation)
+### Deliberation Style (Rate Limit Prevention)
 
-- brief skill: inline multi-perspective deliberation (no sub-agents, rate limit prevention)
-- Other multi-agent skills: staggered batch spawning (max 2 parallel), haiku for research, sonnet for synthesis
+- All skills use inline multi-perspective deliberation (no sub-agents)
+- brief/attend/inspect/salon/mend/survey: 3 perspectives analyzed by parent agent
+- Session.md updated after each task completion (dashboard real-time progress)
+- attend/mend: MUST call `dossier action=complete` at end to close spec
 
 ### Misc
 
