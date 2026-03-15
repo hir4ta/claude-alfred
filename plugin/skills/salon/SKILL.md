@@ -1,68 +1,67 @@
 ---
 name: salon
 description: >
-  Divergent thinking with 3 agents (Visionary, Pragmatist, Critic) in parallel.
+  Divergent thinking with 3 inline perspectives (Visionary, Pragmatist, Critic).
   Use when you need more ideas, want to explore options, or surface risks
   before deciding. NOT for convergent decision-making (use /alfred:polish).
   NOT for structured implementation planning (use /alfred:brief).
 user-invocable: true
 disable-model-invocation: true
 argument-hint: "theme or rough prompt"
-allowed-tools: Read, Glob, Grep, AskUserQuestion, Agent, WebSearch, WebFetch, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier
+allowed-tools: Read, Glob, Grep, AskUserQuestion, WebSearch, WebFetch, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier
 context: fork
 model: sonnet
 ---
 
-# /alfred:salon — Multi-Agent Divergent Thinking
+# /alfred:salon — Multi-Perspective Divergent Thinking
 
-3 specialist agents generate perspectives in parallel, then debate to produce
-richer, more grounded divergent output. The goal is not "deciding" but "expanding."
+3 perspectives generate ideas inline, then synthesize to produce richer,
+more grounded divergent output. No sub-agents are spawned.
 
 ## Key Principles
-- This skill's role is **divergence**. It does not judge or decide (decisions are made by /alfred:polish).
-- Where facts are insufficient, explicitly label as "hypothesis" — **never assert speculation as fact**.
+- This skill's role is **divergence**. It does not judge or decide.
+- Where facts are insufficient, explicitly label as "hypothesis".
 - Prefer breadth over depth — surface many angles, don't deep-dive on one.
 
-## Supporting Files
-
-- **[agent-prompts.md](agent-prompts.md)** — Prompt templates for Visionary, Pragmatist, Critic, and Synthesis moderator agents
-
-## Phase 0: Intake & Minimal Assumption Check (AskUserQuestion recommended)
+## Phase 0: Intake (AskUserQuestion recommended)
 
 Confirm with up to 3 questions (with choices):
-
-1) What is the goal?
-- a) Determine direction
-- b) Expand options
-- c) Surface risks/issues
-- d) Reframe the question
-
-2) Any constraints?
-- Deadline / time / budget / team / tech restrictions / hard no's
-
-3) What is the scope?
-- Personal decision / team consensus / product / learning / career etc
+1) What is the goal? (determine direction / expand options / surface risks / reframe)
+2) Any constraints? (deadline / tech / budget / hard no's)
+3) What is the scope? (personal / team / product / learning)
 
 *If the user says "you decide", proceed with reasonable defaults.*
 
-## Phase 1: Perspective Generation (staggered, 3 agents)
+## Phase 1: Perspective Generation (inline, single pass)
 
-Search knowledge for relevant context first, then spawn agents in **2 batches**
-to avoid rate limits:
+Search `knowledge` for relevant context first, then analyze the theme from
+3 perspectives in a single structured response:
 
-1. **Batch 1**: Spawn **Visionary** + **Pragmatist** in a single message (model: haiku).
-   Pass each the theme, constraints, and knowledge base results.
-2. Wait for both to complete
-3. **Batch 2**: Spawn **Critic** (model: haiku) with Batch 1 outputs as additional context
+### Perspective 1: Visionary — Bold possibilities
+- 5+ unconventional ideas that push boundaries
+- "What if we could...?" framing
+- Connect to adjacent domains for inspiration
 
-## Phase 2: Cross-Critique (1 round, parent-mediated)
+### Perspective 2: Pragmatist — Proven approaches
+- 5+ practical, tested approaches
+- Cost/benefit for each
+- Implementation complexity estimate (S/M/L)
 
-After collecting all 3 agents' output, spawn the **Synthesis moderator** (model: sonnet)
-using the prompt from [agent-prompts.md](agent-prompts.md) with all 3 outputs.
+### Perspective 3: Critic — Risks & blind spots
+- 5+ potential failure modes and risks
+- Assumptions being made by Visionary and Pragmatist
+- What everyone is likely overlooking
+
+## Phase 2: Synthesis (inline)
+
+After generating all 3 perspectives:
+
+1. **Key Tensions**: Where do perspectives disagree? Why does it matter?
+2. **Hybrid Ideas**: Combine elements from different perspectives
+3. **Blind Spots**: What did all 3 perspectives miss?
+4. **Top Ideas**: Rank by potential impact × feasibility
 
 ## Phase 3: Final Output (Markdown)
-
-Compile everything into this structure:
 
 ```md
 # Brainstorm Output: <Theme>
@@ -72,35 +71,34 @@ Compile everything into this structure:
 - Constraints:
 - Scope:
 
-## Perspectives (3-agent synthesis)
+## Perspectives
 
 ### Visionary — Bold possibilities
-- ... (top ideas from Visionary agent)
+- ...
 
 ### Pragmatist — Proven approaches
-- ... (top ideas from Pragmatist agent)
+- ...
 
 ### Critic — Risks & blind spots
-- ... (top risks from Critic agent)
+- ...
 
-## Key Tensions (where agents disagreed)
+## Key Tensions (where perspectives disagreed)
 1. <Tension>: Visionary says X, Critic says Y. This matters because...
-2. ...
 
 ## Hybrid Ideas (synthesis)
-- ... (combined ideas from synthesis round)
+- ...
 
 ## Blind Spots (what all 3 missed)
 - ...
 
-## Top Ideas (ranked by synthesis)
+## Top Ideas (ranked)
 1.
 2.
 3.
 4.
 5.
 
-## Questions to Answer for Convergence (priority order)
+## Questions to Answer for Convergence
 1.
 2.
 3.
@@ -108,65 +106,19 @@ Compile everything into this structure:
 ## Recommended Next Step
 - To converge: /alfred:polish
 - To create a spec: /alfred:brief
-- To explore: files to read in Plan Mode / commands to investigate
 ```
 
-## Phase 4: Save for Convergence (spec handoff)
+## Phase 4: Save for Convergence
 
-If the user has an active spec (check via `dossier` with action=status), or if the brainstorm
-theme maps to a clear task slug, save the brainstorm output for seamless `/alfred:polish` pickup:
+If the user has an active spec or the theme maps to a task slug:
+1. Call `dossier` action=init if no spec exists
+2. Call `dossier` action=update, file=decisions.md with the brainstorm output
+3. Tell user: "Brainstorm saved to spec. Run /alfred:brief to plan."
 
-1. Call `dossier` with action=init if no spec exists (use theme as slug, e.g. `auth-strategy`)
-2. Call `dossier` with action=update, file=decisions.md, content=the full Phase 3 output
-   (prefix with `<!-- brainstorm output, pending convergence -->\n`)
-3. Tell the user: "Brainstorm saved to spec. Run `/alfred:polish` to converge — it will
-   auto-load these results."
+## Guardrails
 
-If the user declines to save or the theme is too vague for a slug, skip this step.
-The brainstorm output in the conversation is always usable directly.
-
-## Example
-
-User: `/alfred:salon auth strategy for our API`
-
-```
-# Brainstorm Output: Auth Strategy for API
-
-## Perspectives (3-agent synthesis)
-
-### Visionary — Bold possibilities
-- Passkey-first auth (WebAuthn) — eliminate passwords entirely
-- Decentralized identity (DID) — user-owned credentials
-- ...
-
-### Pragmatist — Proven approaches
-- OAuth2 + PKCE — industry standard, battle-tested
-- API keys + rate limiting — simplest for M2M
-- ...
-
-### Critic — Risks & blind spots
-- OAuth complexity: 6-month implementation, not 2-week
-- Token storage: JWTs in localStorage = XSS vector
-- ...
-
-## Top Ideas (ranked by synthesis)
-1. OAuth2 + PKCE (pragmatist + architect consensus)
-2. Passkey as progressive enhancement (visionary + pragmatist hybrid)
-3. ...
-
-Next: /alfred:polish to converge on a decision
-```
-
-## Troubleshooting
-
-- **Agent fails or returns empty**: Re-read the prompt and retry once. If still fails, proceed with 2 agents and note the missing perspective.
-- **Synthesis agent repeats agents' output**: Prompt explicitly: "Do NOT restate. Focus only on tensions, blind spots, and hybrid ideas."
-- **User wants to go deeper on one idea**: This is convergence territory — redirect to `/alfred:polish`.
-- **Too few ideas generated**: Lower the threshold, ask each agent for 3 more ideas with relaxed constraints.
-
-## Exit Criteria
-- All 3 specialist agents completed
-- Synthesis round completed
-- At least 15 ideas generated across all agents
-- Key tensions and blind spots identified
-- Questions for convergence are ready
+- Do NOT spawn sub-agents — all perspectives are inline (rate limit prevention)
+- Do NOT converge or decide — this is a divergence skill
+- ALWAYS generate at least 15 ideas across all perspectives
+- ALWAYS identify tensions and blind spots
+- Label speculation as "hypothesis", never assert as fact

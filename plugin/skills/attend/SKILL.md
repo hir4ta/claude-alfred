@@ -2,25 +2,24 @@
 name: attend
 description: >
   Fully autonomous development orchestrator. Given a task description, runs the
-  complete workflow: spec creation with 3-agent deliberation, spec review loop,
-  phase-by-phase implementation with review gates, final self-review, test gate,
-  and auto-commit. No user intervention after initial invocation. Use when
-  wanting end-to-end task completion from spec to commit without manual steps,
-  "implement this", "build this feature", or fully autonomous development.
-  NOT for planning only (use /alfred:brief). NOT for code review only
-  (use /alfred:inspect).
+  complete workflow: spec creation with per-file review, user approval gate,
+  phase-by-phase implementation with incremental progress tracking, self-review,
+  test gate, and auto-commit. Updates session.md after each task completion for
+  real-time dashboard progress. Use when wanting end-to-end task completion from
+  spec to commit, "implement this", "build this feature", or fully autonomous
+  development. NOT for planning only (use /alfred:brief). NOT for code review
+  only (use /alfred:inspect).
 user-invocable: true
 argument-hint: "task-slug description"
-allowed-tools: Read, Write, Edit, Glob, Grep, Agent, Bash(git diff *, git log *, git show *, git status *, git add *, git commit *, git merge-base *, git stash *, go test *, go vet *), AskUserQuestion, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier, mcp__plugin_alfred_alfred__ledger
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git diff *, git log *, git show *, git status *, git add *, git commit *, git merge-base *, git stash *, go test *, go vet *), AskUserQuestion, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier, mcp__plugin_alfred_alfred__ledger
+model: sonnet
 ---
 
 # /alfred:attend — Autonomous Development Orchestrator
 
-You are an autonomous development orchestrator. Execute the FULL workflow below
-without asking the user for input (except once at the start if needed).
+Execute the FULL workflow below without asking the user for input (except at
+approval gates and BLOCKED recovery).
 
-- For spec creation agent prompts, see [spec-agents.md](spec-agents.md)
-- For example workflows (basic flow, BLOCKED recovery, resume), see [examples.md](examples.md)
 - For review prompt templates, see [review-prompts.md](review-prompts.md)
 - For BLOCKED recovery and error handling, see [recovery.md](recovery.md)
 
@@ -32,181 +31,139 @@ without asking the user for input (except once at the start if needed).
    - Read state block → determine current phase
    - If `awaiting_approval: true` → call `dossier` action=review to check status:
      - approved → advance to Phase 3
-     - changes_requested → read comments, apply fixes, resume at Phase 2.5
-     - pending → remind user to review in dashboard, STOP
-   - If `blocked: true` with security reason → ask "Specifically, how did you resolve: {blocked_reason}?" via AskUserQuestion → resume from **same phase** (re-review the fix)
-   - If `blocked: true` with non-security reason → ask "Resolved?" → resume from **next phase**
-   - Otherwise resume from persisted phase (skip to that phase)
-4. **If spec exists without Orchestrator State** → ask AskUserQuestion: "Spec exists from /alfred:brief. Start implementation from Phase 3, or re-run spec review first?"
-5. **If no spec** → ask 1 AskUserQuestion: "Confirm scope: {description}. Proceed?"
+     - changes_requested → read comments, apply fixes, resume at Phase 2
+     - pending → remind user to review, STOP
+   - If `blocked: true` → ask how it was resolved via AskUserQuestion → resume
+   - Otherwise resume from persisted phase
+4. **If spec exists without Orchestrator State** → ask: "Spec exists from /alfred:brief. Start implementation from Phase 3, or re-run spec review first?"
+5. **If no spec** → ask 1 question: "Confirm scope: {description}. Proceed?"
    - Init spec via `dossier` action=init
 6. Record `initial_commit` = output of `git rev-parse HEAD`
-7. Write initial Orchestrator State to session.md:
-   ```
-   ## Orchestrator State
-   - phase: spec
-   - iteration: 0
-   - agent_spawns_used: 0
-   - total_warnings: 0
-   - findings_hash:
-   - blocked: false
-   - blocked_reason:
-   - awaiting_approval: false
-   - initial_commit: {sha}
-   - phase_start_commit: {sha}
-   ```
+7. Write initial Orchestrator State to session.md
 
-## Phase 1: Spec Creation
+## Phase 1: Spec Creation (per-file with review)
 
-Follow the prompts in [spec-agents.md](spec-agents.md):
-1. Research via `knowledge` tool
-2. **Batch 1**: Spawn **Architect** + **Devil's Advocate** in parallel (model: haiku)
-3. **Batch 2**: Spawn **Researcher** (model: haiku) with Batch 1 outputs as context
-4. Synthesize with a **Mediator** agent (model: sonnet) — parent writes spec via `dossier` action=update
-5. Write requirements.md, design.md, decisions.md via `dossier` action=update
-6. Update state: `phase: spec-review, agent_spawns_used: +4`
+Create each spec file with inline multi-perspective review. No sub-agents.
+**Update session.md after each file is completed.**
 
-## Phase 2: Spec Review Loop
+### 1a. Research
+- Call `knowledge` tool for relevant patterns and best practices
+- Read key source files relevant to the task
 
-Read prompts from [review-prompts.md](review-prompts.md) § Spec Review.
+### 1b. requirements.md
+- Write requirements with confidence scores
+- Review from 3 perspectives (Architect, Devil's Advocate, Researcher)
+- Apply fixes → save via `dossier` action=update
+- **Update session.md**: mark requirements as done
 
-**Per iteration:**
-1. Spawn review agents in **2 batches** (model: haiku for all):
-   - **Batch 1**: Agent A + Agent B in parallel (fixed perspective assignments)
-   - **Batch 2**: Agent C with Batch 1 findings as context
-   - Each agent receives: spec files content + perspective assignment
-   - Each agent outputs: structured JSON verdict (PASS, NEEDS_IMPROVEMENT, or NEEDS_FIXES)
-   - Each agent is read-only (no Write/Edit/Agent tools)
-   - Agents read spec independently via `dossier` action=status (read-only action)
-2. Collect verdicts → merge findings → deduplicate
-3. Update `agent_spawns_used: +3`
+### 1c. design.md
+- Write design with architecture, components, alternatives
+- Review from 3 perspectives
+- Apply fixes → save via `dossier` action=update
+- **Update session.md**: mark design as done
 
-**Termination check** (in order):
-1. **PASS**: No Critical/High findings → advance to Phase 3
-2. **NEEDS_IMPROVEMENT**: Only warning/info findings (V4/V5 consistency gaps, minor issues)
-   → auto-fix spec (add missing coverage, adjust scope) → one more iteration.
-   If the next verdict is also NEEDS_IMPROVEMENT → proceed to Phase 3 regardless
-3. **Security Critical**: Any security-critical finding → BLOCKED (see [recovery.md](recovery.md))
-4. **Confidence gate**: Any spec section with `<!-- confidence: N -->` where N ≤ 5 → BLOCKED
-5. **Stagnation**: Hash sorted findings (severity+description+file) with SHA-256.
-   If hash matches previous `findings_hash` → stop loop, proceed
-6. **Max iterations**: iteration ≥ 3 → log unresolved to decisions.md, proceed
-7. **Warning accumulation**: `total_warnings` across run > 5 → treat new warnings as High
+### 1d. decisions.md
+- Write all decisions with rationale, alternatives, source perspective
+- Review from 3 perspectives
+- Apply fixes → save via `dossier` action=update
+- **Update session.md**: mark decisions as done
 
-If continuing: apply fixes to spec files, increment iteration, update findings_hash, loop.
+### 1e. session.md
+- Write final session.md with Next Steps task breakdown
+- Update state: `phase: approval-gate`
 
-Update state: `phase: approval-gate`
+## Phase 2: Approval Gate
 
-## Phase 2.5: Approval Gate
+Wait for user approval before proceeding to implementation:
 
-After agent review passes, wait for user approval via the TUI dashboard:
-
-1. Update Orchestrator State: `phase: approval-gate, awaiting_approval: true`
+1. Update Orchestrator State: `awaiting_approval: true`
 2. Tell the user:
    ```
-   Spec review complete. Open `alfred dashboard` → Specs tab → select files → 'r' to review.
-   Comment on any line, then Approve or Request Changes.
-   Tell me "承認した" or "approved" when done.
+   Spec complete. Review the files directly or use `alfred dashboard`.
+   Tell me "approved" or give feedback.
    ```
-3. **STOP and wait** — do not proceed to implementation until user confirms.
-4. When the user responds, call `dossier` action=review:
-   - `review_status: approved` → update state `awaiting_approval: false`, advance to Phase 3
-   - `review_status: changes_requested` → read comments, apply fixes to spec, re-run Phase 2 (1 iteration), then return to this gate
-   - `review_status: pending` → remind the user to review in the dashboard
-5. Update state: `phase: impl-phase-1`
+3. **STOP and wait** — do not proceed until user confirms.
+4. When user responds, call `dossier` action=review:
+   - `approved` → advance to Phase 3
+   - `changes_requested` → read comments, fix spec files, return to this gate
+   - `pending` → remind user
+5. Update state: `awaiting_approval: false, phase: impl-phase-1`
 
 ## Phase 3: Implementation
 
-Read task breakdown from design.md.
+Read task breakdown from session.md Next Steps.
 
-**Per implementation phase (N = 1, 2, ...):**
-1. Record: `phase_start_commit` = output of `git rev-parse HEAD`
-2. Read phase task from design.md
-3. Implement using Edit/Write/Bash — work directly in parent context
-4. Update session.md Modified Files
-5. Proceed to Phase 4 (per-phase review)
+**Per implementation task:**
+1. Record: `phase_start_commit` = `git rev-parse HEAD`
+2. Read the task from Next Steps
+3. Implement using Edit/Write/Bash — work directly
+4. **Immediately update session.md**: mark this task as `[x]` done
+5. Proceed to Phase 4 (per-task review)
 
-## Phase 4: Per-Phase Review Loop
+**CRITICAL**: Update session.md after EACH task, not all at once.
+This ensures the dashboard shows real-time progress.
 
-Read prompts from [review-prompts.md](review-prompts.md) § Code Review.
+## Phase 4: Per-Task Review (inline)
 
-1. Get diff: `git diff {phase_start_commit}` (only this phase's changes)
-2. Spawn review agents in **2 batches** (model: haiku for all):
-   - **Batch 1**: 2 review agents in parallel with diff + spec context
-   - **Batch 2**: 1 review agent with Batch 1 findings as context
-   - Each agent outputs structured JSON verdict (PASS or NEEDS_FIXES)
-3. Collect → merge → deduplicate
+After each implementation task:
 
-**Termination check** (same as Phase 2, but max iterations = 2)
+1. Get diff: `git diff {phase_start_commit}` (only this task's changes)
+2. Review inline from 3 perspectives:
+   - **Correctness**: Does the code match the spec? Any bugs?
+   - **Security**: Any injection, auth, or data exposure issues?
+   - **Integration**: Does it work with existing code? Breaking changes?
+3. Apply fixes if needed
 
-If continuing: apply fixes, increment iteration, loop.
-
-On PASS: mark phase done in session.md, advance to next impl-phase or Phase 5.
+On PASS: advance to next task (Phase 3) or Phase 5 if all tasks done.
 
 ## Phase 5: Final Self-Review
 
-Read prompts from [review-prompts.md](review-prompts.md) § Final Review.
-
-1. Get full diff: `git diff $(git merge-base main HEAD)..HEAD`
-2. Spawn review agents in **2 batches** (model: haiku for all):
-   - **Batch 1**: 2 code reviewers in parallel with diff + spec context
-   - **Batch 2**: 1 code reviewer + 1 integration validator in parallel with Batch 1 findings
-   - Integration validator uses the same verdict format: PASS or NEEDS_FIXES
-   - Category `integration` signals requirement gaps
-3. Collect → merge → deduplicate
-4. Max 1 fix iteration. Security Critical → BLOCKED.
+1. Get full diff: `git diff {initial_commit}..HEAD`
+2. Review inline from 3 perspectives:
+   - **Code quality**: Style, naming, error handling consistency
+   - **Spec compliance**: Does implementation match requirements + design?
+   - **Integration**: Any cross-cutting concerns missed?
+3. Apply fixes if needed (max 1 iteration)
+4. Security Critical → BLOCKED
 5. Update state: `phase: test-gate`
 
 ## Phase 6: Test Gate
 
 1. Run `go test ./...` (timeout: 120s)
 2. Run `go vet ./...` (timeout: 120s)
-3. If failure, classify:
-   - **Compilation error** → fix the build error → re-run
-   - **Test assertion failure** → check if implementation matches spec, fix accordingly → re-run
-   - **Panic/timeout** → likely a deeper issue → BLOCKED if cause unclear
-4. Max 2 fix iterations total. Still failing → BLOCKED.
+3. If failure:
+   - **Compilation error** → fix → re-run
+   - **Test failure** → check spec, fix → re-run
+   - **Panic/timeout** → BLOCKED if cause unclear
+4. Max 2 fix iterations. Still failing → BLOCKED.
 5. Update state: `phase: commit`
 
-## Phase 7: Commit
+## Phase 7: Commit and Complete
 
 1. Get changed files: `git diff --name-only {initial_commit}..HEAD`
-2. **Path filter**: exclude files matching:
-   - `.env*`, `*.key`, `*.pem`, `credentials*`, `secret*`, `*.secret.*`
-   - `.claude/settings*.json`
+2. **Path filter**: exclude `.env*`, `*.key`, `*.pem`, `credentials*`, `secret*`
 3. Stage specific files: `git add <file1> <file2> ...` (never `git add -A`)
-4. **Credential scan**: check `git diff --cached` output for potential secrets
-   (long hex/base64 strings in assignment context, `password=`, `token=`, `key=`)
-   → If suspicious patterns found → BLOCKED
-5. Commit: `feat: <task-slug>: <one-line summary from requirements.md>`
-6. Complete the task: `dossier action=complete task_slug=<task-slug>`
+4. **Credential scan**: check `git diff --cached` for potential secrets → BLOCKED if found
+5. Commit: `feat: <task-slug>: <one-line summary>`
+6. **MUST complete the task**: `dossier action=complete task_slug=<task-slug>`
 7. Update state: `phase: done`
-8. Output completion summary with stats
+8. Output completion summary
 
-## Budget Guard
-
-Total agent spawn cap: **20** per run.
-
-Before EVERY agent spawn:
-1. Check: `agent_spawns_used + agents_to_spawn ≤ 20`
-2. If insufficient for full parallel spawn (3 or 4 agents):
-   - Reduce to 1 agent with all perspectives combined
-3. If even 1 agent would exceed cap → BLOCKED
-
-Typical consumption: spec(4) + spec-review(3) + impl-review×2(6) + final(4) = 17.
+**CRITICAL**: Step 6 is mandatory. Every completed attend run MUST call
+`dossier action=complete` to close the spec. No exceptions.
 
 ## State Persistence
 
-After EVERY phase transition:
+After EVERY phase transition and after EVERY task completion:
 - Update `## Orchestrator State` in session.md via `dossier` action=update
-- Write phase, iteration, agent_spawns_used, total_warnings, findings_hash, blocked status
-- Use mode=replace on session.md (full rewrite, not append)
+- Include: phase, iteration, blocked status, awaiting_approval
+- Mark completed Next Steps as `[x]`
 
 ## Guardrails
 
-- NEVER ask the user after Phase 0 (except BLOCKED recovery on re-invocation)
 - NEVER skip review phases — they are mandatory quality gates
 - NEVER commit with unresolved Critical findings
-- ALWAYS use structured JSON verdicts from review agents
-- ALWAYS check budget before spawning agents
+- NEVER spawn sub-agents for spec creation or review — all inline (rate limit prevention)
+- ALWAYS update session.md after each individual task completion (not in batch)
+- ALWAYS call `dossier action=complete` at the end — never leave a task open
 - ALWAYS record decisions and trade-offs in decisions.md
