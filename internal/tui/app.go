@@ -130,7 +130,8 @@ type Model struct {
 	mdRenderer *glamour.TermRenderer
 
 	// Loading.
-	loading bool
+	loading   bool
+	startedAt time.Time // ignore key presses during startup (DECRPM/CPR filtering)
 
 	// Shimmer animation frame counter.
 	shimmerFrame int
@@ -169,6 +170,7 @@ func New(ds DataSource) Model {
 		searchInput: ti,
 		progress:    prog,
 		loading:     true,
+		startedAt:   time.Now(),
 	}
 }
 
@@ -486,10 +488,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case tea.KeyPressMsg:
-		// Ignore key events during initial data load — DECRPM terminal
-		// responses (e.g. [?2028$y) leak as key presses and can trigger
-		// tab switches before the UI is ready.
-		if m.loading {
+		// Ignore key events during the first second after startup.
+		// DECRPM/CPR terminal responses (e.g. [?2028$y, [8;1R) leak as
+		// key presses in bubbletea v2 and trigger tab switches.
+		if time.Since(m.startedAt) < time.Second {
 			return m, nil
 		}
 		// Overlay takes priority — all input goes to the floating window.
@@ -1355,13 +1357,13 @@ func (m Model) renderOverlayView(bg string) string {
 // View
 // ---------------------------------------------------------------------------
 
-// decrpmRe matches DECRPM terminal responses that leak as visible text.
-// Example: [?2026;2$y or [?2028$y
-var decrpmRe = regexp.MustCompile(`\[(\??\d+[;\d]*\$y)`)
+// termResponseRe matches terminal responses that leak as visible text.
+// DECRPM: [?2026;2$y  CPR: [8;1R  DA: [?65;1c
+var termResponseRe = regexp.MustCompile(`\[\??\d+[;\d]*(?:\$y|[Rc])`)
 
 // stripDECRPM removes leaked terminal capability responses from rendered output.
 func stripDECRPM(s string) string {
-	return decrpmRe.ReplaceAllString(s, "")
+	return termResponseRe.ReplaceAllString(s, "")
 }
 
 func (m Model) View() tea.View {

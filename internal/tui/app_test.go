@@ -176,6 +176,8 @@ func TestStripDECRPM(t *testing.T) {
 		{"[?2028$y text", " text"},
 		{"no escape here", "no escape here"},
 		{"> 2828/2828[?2026;2$y", "> 2828/2828"},
+		{"text[8;1R more", "text more"},            // CPR response
+		{"[?65;1c visible", " visible"},             // DA response
 	}
 
 	for _, tt := range tests {
