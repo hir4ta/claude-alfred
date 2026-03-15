@@ -16,9 +16,9 @@ type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-// schemaVersion 2 = FTS5 full-text search, tag aliases, fuzzy search support.
-// V1→V2: additive (new virtual table + new table, no column changes).
-const schemaVersion = 2
+// schemaVersion 3 = sub_type column on records + session_links table.
+// V2→V3: additive (new column with default, new table).
+const schemaVersion = 3
 
 const ddl = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -38,11 +38,25 @@ CREATE TABLE IF NOT EXISTS records (
     version      TEXT,
     crawled_at   TEXT NOT NULL,
     ttl_days     INTEGER DEFAULT 7,
+    sub_type     TEXT NOT NULL DEFAULT 'general',
     UNIQUE(url, section_path)
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_source_type ON records(source_type);
 CREATE INDEX IF NOT EXISTS idx_records_crawled_at ON records(crawled_at);
+CREATE INDEX IF NOT EXISTS idx_records_sub_type ON records(sub_type);
+
+-- ==========================================================
+-- Session Links (compaction continuity tracking)
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS session_links (
+    claude_session_id TEXT PRIMARY KEY,
+    master_session_id TEXT NOT NULL,
+    project_path      TEXT NOT NULL,
+    task_slug         TEXT NOT NULL DEFAULT '',
+    linked_at         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_links_master ON session_links(master_session_id);
 
 -- ==========================================================
 -- Full-Text Search (FTS5)
@@ -166,10 +180,18 @@ func Migrate(db *sql.DB) error {
 	}
 	defer tx.Rollback()
 
-	switch {
-	case current == 1:
-		// V1→V2: additive migration (FTS5, tag_aliases, seed aliases).
+	switch current {
+	case 2:
+		// V2→V3: additive migration (sub_type column, session_links table).
+		if err := migrateV2toV3(tx); err != nil {
+			return err
+		}
+	case 1:
+		// V1→V2→V3: chain migrations.
 		if err := migrateV1toV2(tx); err != nil {
+			return err
+		}
+		if err := migrateV2toV3(tx); err != nil {
 			return err
 		}
 	default:
@@ -227,6 +249,31 @@ func migrateV1toV2(db execer) error {
 	// Seed default tag aliases.
 	if err := seedTagAliases(db); err != nil {
 		return fmt.Errorf("store: seed tag aliases: %w", err)
+	}
+	return nil
+}
+
+// migrateV2toV3 adds sub_type column to records and session_links table.
+func migrateV2toV3(db execer) error {
+	stmts := []string{
+		// Add sub_type column (existing rows get 'general' default).
+		`ALTER TABLE records ADD COLUMN sub_type TEXT NOT NULL DEFAULT 'general'`,
+		// Index for sub_type filtering.
+		`CREATE INDEX IF NOT EXISTS idx_records_sub_type ON records(sub_type)`,
+		// Session links for compaction continuity.
+		`CREATE TABLE IF NOT EXISTS session_links (
+			claude_session_id TEXT PRIMARY KEY,
+			master_session_id TEXT NOT NULL,
+			project_path      TEXT NOT NULL,
+			task_slug         TEXT NOT NULL DEFAULT '',
+			linked_at         TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_links_master ON session_links(master_session_id)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("store: v2→v3 migration: %w", err)
+		}
 	}
 	return nil
 }

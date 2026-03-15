@@ -179,8 +179,9 @@ Read prompts from [review-prompts.md](review-prompts.md) § Final Review.
    (long hex/base64 strings in assignment context, `password=`, `token=`, `key=`)
    → If suspicious patterns found → BLOCKED
 5. Commit: `feat: <task-slug>: <one-line summary from requirements.md>`
-6. Update state: `phase: done`
-7. Output completion summary with stats
+6. Complete the task: `dossier action=complete task_slug=<task-slug>`
+7. Update state: `phase: done`
+8. Output completion summary with stats
 
 ## Budget Guard
 

@@ -274,6 +274,21 @@ func specDoStatus(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		result["confidence"] = confidence
 	}
 
+	// Enrich with session continuity info if available.
+	sessionID := os.Getenv("CLAUDE_SESSION_ID")
+	if sessionID != "" {
+		if st, err := store.OpenDefaultCached(); err == nil {
+			masterID := st.ResolveMasterSession(context.Background(), sessionID)
+			if sc, err := st.GetSessionContinuity(context.Background(), masterID); err == nil && sc.CompactCount > 0 {
+				result["session_continuity"] = map[string]any{
+					"current_session": sessionID,
+					"master_session":  masterID,
+					"compact_count":   sc.CompactCount,
+				}
+			}
+		}
+	}
+
 	return marshalResult(result)
 }
 

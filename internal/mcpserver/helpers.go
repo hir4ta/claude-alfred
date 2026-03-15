@@ -102,7 +102,8 @@ func applyRecencySignal(docs []store.DocRow, now time.Time) []store.DocRow {
 		// Position-based score: first doc = 1.0, last = 1/n.
 		posScore := 1.0 / float64(i+1)
 		rf := recencyFactor(d.CrawledAt, d.SourceType, now)
-		scored[i] = scoredDoc{doc: d, score: posScore * rf}
+		stb := store.SubTypeBoost(d.SubType)
+		scored[i] = scoredDoc{doc: d, score: posScore * rf * stb}
 	}
 
 	// Single doc: apply factor but skip sort.

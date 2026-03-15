@@ -258,7 +258,7 @@ func TestBuildFTSQuery(t *testing.T) {
 	}
 }
 
-func TestSchemaV2TablesExist(t *testing.T) {
+func TestSchemaTablesExist(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
 
@@ -279,10 +279,39 @@ func TestSchemaV2TablesExist(t *testing.T) {
 		t.Errorf("tag_aliases table not found: %v", err)
 	}
 
-	// Verify schema version is 2.
+	// Verify session_links table exists (V3).
+	err = st.DB().QueryRow(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='session_links'",
+	).Scan(&name)
+	if err != nil {
+		t.Errorf("session_links table not found: %v", err)
+	}
+
+	// Verify schema version is 3.
 	v := st.SchemaVersionCurrent()
-	if v != 2 {
-		t.Errorf("SchemaVersionCurrent() = %d, want 2", v)
+	if v != 3 {
+		t.Errorf("SchemaVersionCurrent() = %d, want 3", v)
+	}
+}
+
+func TestSubTypeBoost(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		subType string
+		want    float64
+	}{
+		{SubTypeRule, 2.0},
+		{SubTypeDecision, 1.5},
+		{SubTypePattern, 1.3},
+		{SubTypeGeneral, 1.0},
+		{"", 1.0},
+		{"unknown", 1.0},
+	}
+	for _, tt := range tests {
+		got := SubTypeBoost(tt.subType)
+		if got != tt.want {
+			t.Errorf("SubTypeBoost(%q) = %v, want %v", tt.subType, got, tt.want)
+		}
 	}
 }
 

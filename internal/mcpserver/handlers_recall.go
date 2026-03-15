@@ -68,6 +68,17 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 	searchMethod := sr.SearchMethod
 	warnings := sr.Warnings
 
+	// Post-filter by sub_type if requested.
+	if subType := req.GetString("sub_type", ""); subType != "" {
+		filtered := docs[:0]
+		for _, d := range docs {
+			if d.SubType == subType {
+				filtered = append(filtered, d)
+			}
+		}
+		docs = filtered
+	}
+
 	// Progressive Disclosure: detail level controls response verbosity.
 	detail := req.GetString("detail", "summary")
 	if detail != "compact" && detail != "summary" && detail != "full" {
@@ -79,6 +90,9 @@ func recallSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, 
 		dm := map[string]any{
 			"section_path": d.SectionPath,
 			"source_type":  d.SourceType,
+		}
+		if d.SubType != "" && d.SubType != store.SubTypeGeneral {
+			dm["sub_type"] = d.SubType
 		}
 		switch detail {
 		case "compact":
@@ -134,6 +148,15 @@ func recallSave(ctx context.Context, st *store.Store, emb *embedder.Embedder, re
 		return mcp.NewToolResultError("label parameter is required for save (short description)"), nil
 	}
 	project := req.GetString("project", "general")
+	subType := req.GetString("sub_type", store.SubTypeGeneral)
+
+	// Validate sub_type.
+	switch subType {
+	case store.SubTypeGeneral, store.SubTypeDecision, store.SubTypePattern, store.SubTypeRule:
+		// valid
+	default:
+		return mcp.NewToolResultError(fmt.Sprintf("invalid sub_type %q: use general, decision, pattern, or rule", subType)), nil
+	}
 
 	// Validate project name to prevent path traversal and section_path parsing issues.
 	if !spec.ValidSlug.MatchString(project) {
@@ -149,6 +172,7 @@ func recallSave(ctx context.Context, st *store.Store, emb *embedder.Embedder, re
 		SectionPath: sectionPath,
 		Content:     strings.TrimSpace(content),
 		SourceType:  store.SourceMemory,
+		SubType:     subType,
 		TTLDays:     0, // permanent
 	})
 	if err != nil {

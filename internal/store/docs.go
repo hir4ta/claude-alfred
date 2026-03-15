@@ -16,6 +16,14 @@ const (
 	SourceProject = "project"
 )
 
+// SubType constants for memory classification.
+const (
+	SubTypeGeneral  = "general"
+	SubTypeDecision = "decision"
+	SubTypePattern  = "pattern"
+	SubTypeRule     = "rule"
+)
+
 // DocRow represents a row in the records table.
 type DocRow struct {
 	ID          int64
@@ -24,6 +32,7 @@ type DocRow struct {
 	Content     string
 	ContentHash string
 	SourceType  string // SourceMemory, SourceSpec, SourceProject
+	SubType     string // SubTypeGeneral, SubTypeDecision, SubTypePattern, SubTypeRule
 	Version     string
 	CrawledAt   string
 	TTLDays     int
@@ -48,6 +57,9 @@ func (s *Store) UpsertDoc(ctx context.Context, doc *DocRow) (id int64, changed b
 	if doc.TTLDays == 0 && doc.SourceType != SourceMemory {
 		doc.TTLDays = 7
 	}
+	if doc.SubType == "" {
+		doc.SubType = SubTypeGeneral
+	}
 
 	// Check if existing row has same hash (skip update if unchanged).
 	var existingID int64
@@ -61,17 +73,18 @@ func (s *Store) UpsertDoc(ctx context.Context, doc *DocRow) (id int64, changed b
 	}
 
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO records (url, section_path, content, content_hash, source_type, version, crawled_at, ttl_days)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO records (url, section_path, content, content_hash, source_type, sub_type, version, crawled_at, ttl_days)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(url, section_path) DO UPDATE SET
 			content = excluded.content,
 			content_hash = excluded.content_hash,
 			source_type = excluded.source_type,
+			sub_type = excluded.sub_type,
 			version = excluded.version,
 			crawled_at = excluded.crawled_at,
 			ttl_days = excluded.ttl_days`,
 		doc.URL, doc.SectionPath, doc.Content, doc.ContentHash,
-		doc.SourceType, doc.Version, doc.CrawledAt, doc.TTLDays,
+		doc.SourceType, doc.SubType, doc.Version, doc.CrawledAt, doc.TTLDays,
 	)
 	if err != nil {
 		return 0, false, fmt.Errorf("store: upsert doc: %w", err)
@@ -160,7 +173,7 @@ func (s *Store) SearchDocsByURLPrefix(ctx context.Context, prefix string, limit 
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, url, section_path, content, source_type, ttl_days FROM records WHERE url LIKE ? ESCAPE '\' ORDER BY url LIMIT ?`,
+		`SELECT id, url, section_path, content, source_type, sub_type, ttl_days FROM records WHERE url LIKE ? ESCAPE '\' ORDER BY url LIMIT ?`,
 		escapeLIKEPrefix(prefix), limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: SearchDocsByURLPrefix: %w", err)
@@ -169,7 +182,7 @@ func (s *Store) SearchDocsByURLPrefix(ctx context.Context, prefix string, limit 
 	var docs []DocRow
 	for rows.Next() {
 		var d DocRow
-		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.SourceType, &d.TTLDays); err != nil {
+		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.SourceType, &d.SubType, &d.TTLDays); err != nil {
 			return nil, fmt.Errorf("store: SearchDocsByURLPrefix scan: %w", err)
 		}
 		docs = append(docs, d)
@@ -220,7 +233,7 @@ func (s *Store) GetDocsByIDs(ctx context.Context, ids []int64) ([]DocRow, error)
 	}
 
 	// Build query with placeholders.
-	query := "SELECT id, url, section_path, content, content_hash, source_type, version, crawled_at, ttl_days FROM records WHERE id IN ("
+	query := "SELECT id, url, section_path, content, content_hash, source_type, sub_type, version, crawled_at, ttl_days FROM records WHERE id IN ("
 	args := make([]any, len(ids))
 	for i, id := range ids {
 		if i > 0 {
@@ -242,7 +255,7 @@ func (s *Store) GetDocsByIDs(ctx context.Context, ids []int64) ([]DocRow, error)
 		var d DocRow
 		var version sql.NullString
 		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
-			&d.SourceType, &version, &d.CrawledAt, &d.TTLDays); err != nil {
+			&d.SourceType, &d.SubType, &version, &d.CrawledAt, &d.TTLDays); err != nil {
 			continue // skip malformed rows; query itself succeeded
 		}
 		d.Version = version.String
@@ -275,7 +288,7 @@ func (s *Store) SearchMemoriesKeyword(ctx context.Context, query string, limit i
 	if len(conditions) > 0 {
 		where += " AND " + strings.Join(conditions, " AND ")
 	}
-	sqlQuery := "SELECT id, url, section_path, content, content_hash, source_type, version, crawled_at, ttl_days FROM records WHERE " +
+	sqlQuery := "SELECT id, url, section_path, content, content_hash, source_type, sub_type, version, crawled_at, ttl_days FROM records WHERE " +
 		where + " ORDER BY crawled_at DESC LIMIT ?"
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
@@ -287,7 +300,7 @@ func (s *Store) SearchMemoriesKeyword(ctx context.Context, query string, limit i
 	for rows.Next() {
 		var d DocRow
 		var version sql.NullString
-		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash, &d.SourceType, &version, &d.CrawledAt, &d.TTLDays); err != nil {
+		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash, &d.SourceType, &d.SubType, &version, &d.CrawledAt, &d.TTLDays); err != nil {
 			continue
 		}
 		d.Version = version.String

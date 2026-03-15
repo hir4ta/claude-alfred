@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -84,6 +85,9 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 	// Sync epic progress from session.md status.
 	syncEpicProgress(projectPath, taskSlug, session)
 
+	// Auto-complete task if session status indicates completion or all Next Steps are done.
+	autoCompleteTask(projectPath, taskSlug, session)
+
 	// Sync session.md to DB (without embedder — hook is short-lived).
 	st, err := store.OpenDefaultCached()
 	if err != nil {
@@ -110,6 +114,10 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 
 	// Async embedding generation for session.md.
 	asyncEmbedSession(sd)
+
+	// Write pending-compact breadcrumb for session continuity.
+	// The next SessionStart will read this to create a session link.
+	writePendingCompact(projectPath, taskSlug)
 
 	notifyUser("saved session for task '%s'", taskSlug)
 }
@@ -605,6 +613,7 @@ func persistDecisionMemory(ctx context.Context, projectPath, taskSlug string, de
 			SectionPath: sectionPath,
 			Content:     d,
 			SourceType:  store.SourceMemory,
+			SubType:     store.SubTypeDecision,
 			TTLDays:     0, // permanent
 		})
 		if err != nil {
@@ -976,6 +985,91 @@ func syncEpicProgress(projectPath, taskSlug, sessionContent string) {
 
 	if epic.SyncTaskStatus(projectPath, taskSlug, epicStatus) {
 		notifyUser("synced epic progress for task '%s' → %s", taskSlug, epicStatus)
+	}
+}
+
+// autoCompleteTask marks a task as completed if session signals indicate it's done.
+// Two signals trigger auto-completion:
+//  1. session.md "## Status" is "completed" or "done"
+//  2. All Next Steps items are checked (no unchecked "- [ ]" remaining)
+func autoCompleteTask(projectPath, taskSlug, session string) {
+	if taskSlug == "" {
+		return
+	}
+	status := parseSessionStatusFromContent(session)
+	statusDone := status == "completed" || status == "done"
+
+	nextSteps := extractSection(session, "## Next Steps")
+	allStepsDone := nextSteps != "" && allNextStepsCompleted(nextSteps)
+
+	if !statusDone && !allStepsDone {
+		return
+	}
+
+	newPrimary, err := spec.CompleteTask(projectPath, taskSlug)
+	if err != nil {
+		// Already completed or not found — not an error worth reporting.
+		return
+	}
+
+	reason := "session status = " + status
+	if allStepsDone && !statusDone {
+		reason = "all Next Steps completed"
+	}
+	notifyUser("auto-completed task '%s' (%s)", taskSlug, reason)
+	if newPrimary != "" {
+		notifyUser("switched primary to '%s'", newPrimary)
+	}
+}
+
+// allNextStepsCompleted returns true if every checklist item is checked.
+// Returns false if there are no items at all.
+func allNextStepsCompleted(nextSteps string) bool {
+	hasItems := false
+	for _, line := range strings.Split(nextSteps, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- [x] ") || strings.HasPrefix(trimmed, "- [X] ") {
+			hasItems = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- [ ] ") {
+			return false // unchecked item found
+		}
+	}
+	return hasItems
+}
+
+// pendingCompact is the breadcrumb written by PreCompact for session linking.
+type pendingCompact struct {
+	ClaudeSessionID string `json:"claude_session_id"`
+	TaskSlug        string `json:"task_slug"`
+	Timestamp       string `json:"timestamp"`
+}
+
+// pendingCompactPath returns the path to the pending-compact breadcrumb file.
+func pendingCompactPath(projectPath string) string {
+	return filepath.Join(projectPath, ".alfred", ".pending-compact.json")
+}
+
+// writePendingCompact writes a breadcrumb file so the next SessionStart
+// can link the new Claude session back to the current master session.
+func writePendingCompact(projectPath, taskSlug string) {
+	sessionID := os.Getenv("CLAUDE_SESSION_ID")
+	if sessionID == "" {
+		return
+	}
+
+	pc := pendingCompact{
+		ClaudeSessionID: sessionID,
+		TaskSlug:        taskSlug,
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+	}
+	data, err := json.Marshal(pc)
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(pendingCompactPath(projectPath), data, 0o600); err != nil {
+		notifyUser("warning: breadcrumb write failed: %v", err)
 	}
 }
 

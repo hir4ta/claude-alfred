@@ -63,8 +63,8 @@ alfred export                 # Export memories to Git-shareable YAML
 
 ### Database & Schema
 
-- DB schema V2: FTS5 full-text search + tag aliases (V1→V2 additive migration)
-- Tables: records (memories/specs/project), embeddings (vector search), records_fts (FTS5), tag_aliases (search expansion)
+- DB schema V3: sub_type column + session_links table (V2→V3 additive migration)
+- Tables: records (memories/specs/project), embeddings (vector search), records_fts (FTS5), tag_aliases (search expansion), session_links (compaction continuity)
 - Store.DB() is test-only; production code uses Store methods (no raw SQL outside internal/store)
 - @.claude/rules/store-internals.md (vector search, SQL safety patterns)
 
@@ -116,7 +116,8 @@ alfred export                 # Export memories to Git-shareable YAML
 
 ### Memory & Search
 
-- Memory persistence: source_type="memory" in records table, TTL=0 (permanent)
+- Memory persistence: source_type="memory" in records table, TTL=0 (permanent), sub_type classification (general/decision/pattern/rule)
+- Memory sub_type boost: rule=2.0x, decision=1.5x, pattern=1.3x, general=1.0x (search relevance)
 - Search pipeline: Voyage vector search → rerank → recency signal → FTS5 fallback → keyword fallback
 - FTS5: records_fts virtual table with bm25 ranking, auto-synced via triggers
 - Tag alias expansion: auth→authentication/login/認証, 16 categories bilingual (EN/JP)
@@ -129,6 +130,8 @@ alfred export                 # Export memories to Git-shareable YAML
 - Decision extraction: base score 0.35, min confidence 0.4 — bare keyword matches require at least one positive signal (rationale/alternative/arch term)
 - Background embedding: embed-async/embed-doc subcommands for async Voyage API calls
 - Orphan cleanup: CleanOrphanedEmbeddings runs during PreCompact (not per-insert)
+- Session continuity: PreCompact writes .alfred/.pending-compact.json breadcrumb, SessionStart resolves → session_links table (master session tracking)
+- Auto-complete: PreCompact auto-completes task when session.md Status="completed"/"done" or all Next Steps are checked
 - Onboarding context: SessionStart adapts injection depth by project memory count (0-5: full spec, 6-20: session+goal, 21+: session only)
 
 ### Naming Convention (Butler Theme)

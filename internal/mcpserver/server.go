@@ -113,6 +113,7 @@ Do NOT use for: searching documentation (use WebFetch instead), file operations.
 				mcp.WithString("project", mcp.Description("Project name for context (default: 'general')")),
 				mcp.WithNumber("limit", mcp.Description("Maximum search results (default: 10)")),
 				mcp.WithString("detail", mcp.Description("Response verbosity: compact (labels only), summary (200-char snippets, default), full (complete content)"), mcp.Enum("compact", "summary", "full")),
+				mcp.WithString("sub_type", mcp.Description("Memory classification for save, or filter for search: decision (design choices), pattern (reusable practices), rule (enforced standards), general (default)"), mcp.Enum("general", "decision", "pattern", "rule")),
 			),
 			Handler: recallHandler(st, emb),
 		},

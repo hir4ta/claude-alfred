@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
+
 	"github.com/hir4ta/claude-alfred/internal/embedder"
 	"github.com/hir4ta/claude-alfred/internal/install"
 	"github.com/hir4ta/claude-alfred/internal/spec"
@@ -43,6 +45,9 @@ func handleSessionStart(ctx context.Context, ev *hookEvent) {
 			return
 		}
 	}
+
+	// Handle pending-compact breadcrumb for session continuity.
+	handlePendingCompact(ctx, st, ev.ProjectPath)
 
 	// Inject spec context after parallel ops complete.
 	// Must be serial: writes JSON to stdout (protocol integrity).
@@ -111,6 +116,50 @@ func ingestProjectClaudeMD(ctx context.Context, st *store.Store, projectPath str
 			TTLDays:     1,
 		})
 	}
+}
+
+// handlePendingCompact reads the breadcrumb left by PreCompact and creates a
+// session link from the current Claude session to the master session.
+// This enables tracking conversation continuity across auto-compactions.
+func handlePendingCompact(ctx context.Context, st *store.Store, projectPath string) {
+	pcPath := pendingCompactPath(projectPath)
+	data, err := os.ReadFile(pcPath)
+	if err != nil {
+		return // no breadcrumb — normal startup (not post-compact)
+	}
+	defer os.Remove(pcPath) // always clean up
+
+	var pc pendingCompact
+	if err := json.Unmarshal(data, &pc); err != nil {
+		return
+	}
+
+	// Stale check: ignore breadcrumbs older than 5 minutes.
+	if ts, err := time.Parse(time.RFC3339, pc.Timestamp); err == nil {
+		if time.Since(ts) > 5*time.Minute {
+			return
+		}
+	}
+
+	currentSessionID := os.Getenv("CLAUDE_SESSION_ID")
+	if currentSessionID == "" || currentSessionID == pc.ClaudeSessionID {
+		return
+	}
+
+	// Resolve master: the old session may itself be linked to an earlier master.
+	masterID := st.ResolveMasterSession(ctx, pc.ClaudeSessionID)
+
+	if err := st.LinkSession(ctx, &store.SessionLink{
+		ClaudeSessionID: currentSessionID,
+		MasterSessionID: masterID,
+		ProjectPath:     projectPath,
+		TaskSlug:        pc.TaskSlug,
+	}); err != nil {
+		notifyUser("warning: session link failed: %v", err)
+		return
+	}
+
+	notifyUser("linked session to master %s (compact continuity)", masterID[:min(8, len(masterID))])
 }
 
 // injectSpecContext outputs spec content to stdout when an active

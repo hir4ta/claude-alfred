@@ -689,6 +689,87 @@ func TestHandlePreCompactNoSpec(t *testing.T) {
 	}
 }
 
+func TestAllNextStepsCompleted(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"all checked", "- [x] Step 1\n- [x] Step 2\n- [x] Step 3", true},
+		{"one unchecked", "- [x] Step 1\n- [ ] Step 2\n- [x] Step 3", false},
+		{"all unchecked", "- [ ] Step 1\n- [ ] Step 2", false},
+		{"empty", "", false},
+		{"no items", "Some text\nMore text", false},
+		{"mixed case X", "- [X] Step 1\n- [x] Step 2", true},
+		{"with indent", "  - [x] Step 1\n  - [x] Step 2", true},
+		{"unchecked with indent", "  - [x] Step 1\n  - [ ] Step 2", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := allNextStepsCompleted(tt.input)
+			if got != tt.want {
+				t.Errorf("allNextStepsCompleted(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAutoCompleteTask(t *testing.T) {
+	t.Parallel()
+
+	setupTask := func(t *testing.T, slug string) string {
+		t.Helper()
+		dir := t.TempDir()
+		specDir := dir + "/.alfred/specs"
+		os.MkdirAll(specDir+"/"+slug, 0o755)
+		activeContent := fmt.Sprintf("primary: %s\ntasks:\n    - slug: %s\n      started_at: \"2026-03-15T10:00:00Z\"\n      status: active\n", slug, slug)
+		os.WriteFile(specDir+"/_active.md", []byte(activeContent), 0o644)
+		os.WriteFile(specDir+"/"+slug+"/session.md", []byte("# test"), 0o644)
+		return dir
+	}
+
+	t.Run("completes on status done", func(t *testing.T) {
+		t.Parallel()
+		dir := setupTask(t, "auto-test")
+
+		session := "# Session: auto-test\n\n## Status\ncompleted\n\n## Next Steps\n- [ ] Remaining step\n"
+		autoCompleteTask(dir, "auto-test", session)
+
+		data, _ := os.ReadFile(dir + "/.alfred/specs/_active.md")
+		if !strings.Contains(string(data), "status: completed") {
+			t.Error("_active.md should contain 'status: completed'")
+		}
+	})
+
+	t.Run("completes when all next steps done", func(t *testing.T) {
+		t.Parallel()
+		dir := setupTask(t, "steps-test")
+
+		session := "# Session: steps-test\n\n## Status\nactive\n\n## Next Steps\n- [x] Step 1\n- [x] Step 2\n- [x] Step 3\n"
+		autoCompleteTask(dir, "steps-test", session)
+
+		data, _ := os.ReadFile(dir + "/.alfred/specs/_active.md")
+		if !strings.Contains(string(data), "status: completed") {
+			t.Error("_active.md should contain 'status: completed'")
+		}
+	})
+
+	t.Run("no-op when active with unchecked steps", func(t *testing.T) {
+		t.Parallel()
+		dir := setupTask(t, "noop-test")
+
+		session := "# Session: noop-test\n\n## Status\nactive\n\n## Next Steps\n- [x] Step 1\n- [ ] Step 2\n"
+		autoCompleteTask(dir, "noop-test", session)
+
+		data, _ := os.ReadFile(dir + "/.alfred/specs/_active.md")
+		if strings.Contains(string(data), "status: completed") {
+			t.Error("should not auto-complete when unchecked steps remain")
+		}
+	})
+}
+
 func TestExtractDecisionsFromTranscript(t *testing.T) {
 	dir := t.TempDir()
 
