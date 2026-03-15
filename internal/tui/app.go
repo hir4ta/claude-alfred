@@ -173,49 +173,59 @@ func New(ds DataSource) Model {
 }
 
 // loadDataCmd returns a tea.Cmd that loads data asynchronously in a goroutine.
-// All I/O (DB queries, file reads) happens off the UI thread.
+// All I/O (DB queries, file reads) happens off the UI thread with a 4s timeout.
 func (m *Model) loadDataCmd() tea.Cmd {
 	ds := m.ds
 	searching := m.searching
 	searchQuery := m.searchQuery
 	searchBusy := m.searchBusy
 	return func() tea.Msg {
-		var msg dataLoadedMsg
-		msg.activeSlug = ds.ActiveTask()
-		msg.allTasks = ds.TaskDetails()
+		done := make(chan dataLoadedMsg, 1)
+		go func() {
+			var msg dataLoadedMsg
+			msg.activeSlug = ds.ActiveTask()
+			msg.allTasks = ds.TaskDetails()
 
-		// Build spec groups.
-		specs := ds.Specs()
-		msg.specs = specs
-		groupMap := make(map[string]*specTaskGroup)
-		var groupOrder []string
-		for _, s := range specs {
-			g, ok := groupMap[s.TaskSlug]
-			if !ok {
-				g = &specTaskGroup{Slug: s.TaskSlug}
-				groupMap[s.TaskSlug] = g
-				groupOrder = append(groupOrder, s.TaskSlug)
+			// Build spec groups.
+			specs := ds.Specs()
+			msg.specs = specs
+			groupMap := make(map[string]*specTaskGroup)
+			var groupOrder []string
+			for _, s := range specs {
+				g, ok := groupMap[s.TaskSlug]
+				if !ok {
+					g = &specTaskGroup{Slug: s.TaskSlug}
+					groupMap[s.TaskSlug] = g
+					groupOrder = append(groupOrder, s.TaskSlug)
+				}
+				g.FileCount++
+				g.TotalSize += s.Size
+				g.Files = append(g.Files, s)
 			}
-			g.FileCount++
-			g.TotalSize += s.Size
-			g.Files = append(g.Files, s)
-		}
-		groups := make([]specTaskGroup, 0, len(groupOrder))
-		for _, slug := range groupOrder {
-			groups = append(groups, *groupMap[slug])
-		}
-		msg.specGroups = groups
+			groups := make([]specTaskGroup, 0, len(groupOrder))
+			for _, slug := range groupOrder {
+				groups = append(groups, *groupMap[slug])
+			}
+			msg.specGroups = groups
 
-		msg.activity = ds.RecentActivity(50)
-		msg.knStats = ds.KnowledgeStats()
-		msg.epics = ds.Epics()
-		msg.decisions = ds.AllDecisions(20)
+			msg.activity = ds.RecentActivity(50)
+			msg.knStats = ds.KnowledgeStats()
+			msg.epics = ds.Epics()
+			msg.decisions = ds.AllDecisions(20)
 
-		if !searching && searchQuery == "" && !searchBusy {
-			msg.knowledge = ds.RecentKnowledge(100)
+			if !searching && searchQuery == "" && !searchBusy {
+				msg.knowledge = ds.RecentKnowledge(100)
+			}
+			done <- msg
+		}()
+
+		select {
+		case result := <-done:
+			return result
+		case <-time.After(4 * time.Second):
+			// Timeout: return partial data (empty) so UI doesn't freeze.
+			return dataLoadedMsg{}
 		}
-
-		return msg
 	}
 }
 
@@ -476,6 +486,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case tea.KeyPressMsg:
+		// Ignore key events during initial data load — DECRPM terminal
+		// responses (e.g. [?2028$y) leak as key presses and can trigger
+		// tab switches before the UI is ready.
+		if m.loading {
+			return m, nil
+		}
 		// Overlay takes priority — all input goes to the floating window.
 		if m.overlayActive {
 			return m.updateOverlay(msg)
