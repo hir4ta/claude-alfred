@@ -22,11 +22,17 @@ alfred fixes all three.
 
 **Specs that survive.** Requirements, design, decisions, session state — structured markdown files that persist across compacts, sessions, and even project restarts. Your context is never lost.
 
-**Memory that compounds.** Every decision, every bug fix, every "we tried X and it didn't work" gets stored as semantic memory. Next time you hit a similar problem, alfred surfaces the relevant experience automatically — before you even ask.
+**Specs that adapt.** Small bug? 3 files. Medium feature? 5. Large system? All 7. alfred auto-detects the right scope — or you can pick a bugfix template with surgical precision (reproduction steps, root cause, fix strategy).
+
+**Memory that compounds.** Every decision, every bug fix, every "we tried X and it didn't work" gets stored as semantic memory with a vitality score. Stale assumptions decay faster than proven rules. Contradictions are detected automatically. Next time you hit a similar problem, alfred surfaces the relevant experience — before you even ask.
+
+**Specs that don't drift.** After every commit, alfred compares what changed against your spec. Modified a component not in the design? Warning. Convention in memory no longer matches code? Flagged. No other tool does this.
 
 **Reviews that scale.** Six review profiles (code, config, security, docs, architecture, testing), each with a curated checklist. Parallel agents, scored reports, actionable findings.
 
 **Approval gates.** Specs go through a review cycle before implementation. Comment on any line in the TUI dashboard, approve or request changes — like a GitHub PR review, but for your specs.
+
+**Project context that sticks.** Steering documents (product purpose, code structure, tech stack) are auto-generated from your project and injected into every spec. Your AI always knows your architecture.
 
 ## Quick start
 
@@ -64,9 +70,9 @@ No Voyage key? alfred still works — FTS5 full-text search handles the fallback
 
 | Tool | Purpose |
 |------|---------|
-| `dossier` | Spec lifecycle — init, update, status, switch, complete, delete, history, rollback, review |
+| `dossier` | Spec lifecycle — init (with size/type), update, status, switch, complete, delete, history, rollback, review, validate |
 | `roster` | Epic management — group tasks with dependencies, track progress |
-| `ledger` | Memory — search past decisions and experiences, save new ones |
+| `ledger` | Memory — search, save (with validity windows), promote, reflect, stale, audit-conventions |
 
 ## Hooks
 
@@ -77,7 +83,7 @@ Run automatically. You don't touch these.
 | SessionStart | Restores spec context, ingests CLAUDE.md, adapts injection depth to project maturity |
 | PreCompact | Extracts decisions, saves structured chapter memory (JSON), syncs epic progress |
 | UserPromptSubmit | Semantic search + file context boost — surfaces relevant past experience |
-| PostToolUse | Detects Bash errors, searches memory for similar past fixes |
+| PostToolUse | Detects Bash errors + searches memory for similar past fixes. After commits: spec drift detection |
 
 ## TUI dashboard
 
@@ -89,7 +95,7 @@ alfred dashboard
 |-----|-------------|
 | Overview | Active task deep-dive — progress, next steps, blockers, decisions |
 | Tasks | All tasks with progress bars and status |
-| Specs | File browser with inline review mode (comment on lines, approve/reject) |
+| Specs | File browser with inline review mode (comment on lines, approve/reject) + version diff viewer |
 | Knowledge | Semantic search across all memories and specs |
 
 The first unchecked task shimmers. You know exactly what's in progress.
@@ -105,6 +111,54 @@ alfred doesn't just do keyword matching. The search pipeline has three tiers:
 Tag aliases expand your searches automatically: "auth" finds results tagged "authentication", "login", and "認証".
 
 Fuzzy matching catches typos: "authetication" still finds "authentication".
+
+## Knowledge vitality
+
+Memories aren't static. They have a lifecycle:
+
+- **Sub-type decay**: Assumptions decay in 30 days. Proven rules last 120 days. Each memory type has its own half-life.
+- **Vitality score**: 0-100 composite (recency, hit count, type weight, access frequency). Low-vitality memories get flagged, never silently deleted.
+- **Contradiction detection**: When two memories say opposite things ("use JWT" vs "avoid JWT"), alfred flags the conflict.
+- **Validity windows**: Set explicit expiry dates on decisions about fast-changing APIs. Expired memories stop appearing in search.
+- **Memory versioning**: Update a memory and the old version is preserved. Up to 5 versions per chain.
+
+## Adaptive specs
+
+Not every task needs 7 spec files.
+
+| Size | Files generated | When |
+|------|----------------|------|
+| **S** (small) | 3: requirements, tasks, session | Bug fix, config change, small tweak |
+| **M** (medium) | 5: + design, test-specs | New endpoint, refactor, moderate feature |
+| **L/XL** (large) | 7: + decisions, research | Architecture change, new subsystem |
+| **Bugfix** | 3-4: bugfix.md, tasks, session (+ test-specs) | Surgical bug fix with reproduction steps |
+
+Size auto-detected from description, or set explicitly: `dossier action=init size=S`.
+
+## Spec validation
+
+`dossier action=validate` checks your spec's structural completeness:
+
+- Required sections present (Goal, Functional Requirements, etc.)
+- Minimum FR count by size (S: 1+, M: 3+, L: 5+)
+- Traceability completeness (every FR mapped to a task, every task referencing an FR)
+- Confidence annotations on required sections
+- Closing wave present in tasks
+
+## Steering documents
+
+Project-level context that gets injected into every spec:
+
+```bash
+alfred steering-init  # auto-generates from go.mod, README, CLAUDE.md
+```
+
+Creates `.alfred/steering/` with:
+- `product.md` — project purpose, target users, business rules
+- `structure.md` — package layout, module boundaries, naming conventions
+- `tech.md` — tech stack, dependencies, API conventions
+
+These docs are read during `dossier init` and injected as context, so specs are always project-aware.
 
 ## How it works
 
@@ -126,9 +180,9 @@ Hooks (invisible)
 Storage
   |-- .alfred/specs/       -> spec files + version history + reviews
   |-- .alfred/epics/       -> epic YAML + task dependencies
-  |-- .alfred/audit.jsonl  -> operation audit trail
-  |-- .alfred/knowledge/   -> exported memories (Git-shareable)
-  +-- ~/.claude-alfred/    -> SQLite (records + FTS5 + Voyage embeddings)
+  |-- .alfred/steering/    -> project context (product, structure, tech)
+  |-- .alfred/audit.jsonl  -> operation audit trail + drift events
+  +-- ~/.claude-alfred/    -> SQLite (records + FTS5 + embeddings, schema V7)
 ```
 
 ## When files are created
@@ -141,8 +195,8 @@ Nothing is generated at install time. Files appear as you use alfred:
 | `.alfred/specs/` | First task is started | `dossier action=init` (via `/alfred:brief`, `/alfred:attend`, etc.) |
 | `.alfred/epics/` | First epic is created | `roster action=init` |
 | `.alfred/decisions/` | First context compaction with design decisions | PreCompact hook extracts decisions automatically |
-| `.alfred/knowledge/` | Manual export | `alfred export` command |
-| `.alfred/audit.jsonl` | First spec operation | `dossier init`, `dossier delete`, review submission |
+| `.alfred/steering/` | Running `alfred steering-init` | CLI command with project analysis |
+| `.alfred/audit.jsonl` | First spec operation or commit drift detection | `dossier init`, `dossier delete`, review submission, PostToolUse drift |
 
 ## Troubleshooting
 
