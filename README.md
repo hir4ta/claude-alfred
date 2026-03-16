@@ -36,7 +36,7 @@ alfred fixes all three.
 
 **Proactive skill suggestions.** alfred doesn't wait to be asked. It detects what you're doing — researching, designing, implementing, fixing bugs — and suggests the right skill at the right time. Explored code for a while? "Try `/alfred:survey`." Got research findings? "Save them with `ledger`." Three tasks piling up? "Group them with `roster`."
 
-**Approval gates.** Specs go through a review cycle before implementation. Comment on any line in the TUI dashboard, approve or request changes — like a GitHub PR review, but for your specs.
+**Approval gates that can't be bypassed.** Specs go through a review cycle before implementation. Comment on any line in the TUI dashboard, approve or request changes — like a GitHub PR review, but for your specs. The gate verifies both the review status *and* the existence of a signed review file, so manually editing the status won't get you past it.
 
 **Project context that sticks.** Steering documents (product purpose, code structure, tech stack) are auto-generated from your project and injected into every spec. Your AI always knows your architecture.
 
@@ -99,10 +99,12 @@ alfred dashboard
 
 | Tab | What you see |
 |-----|-------------|
-| Overview | Active task deep-dive — progress, next steps, blockers, decisions |
-| Tasks | All tasks with progress bars and status |
-| Specs | File browser with inline review mode (comment on lines, approve/reject) + version diff viewer |
-| Knowledge | Semantic search across all memories and specs |
+| **Overview** | Project health at a glance — task progress with validation badges, memory health (stale count, conflicts), confidence distribution across specs, epic progress, recent decisions |
+| **Tasks** | Enriched task cards: current focus, next action, epic context, validation status. Drill into spec files with rich summaries |
+| **Knowledge** | Browse all memories with sub-type tags. `Ctrl+F` for instant local filter, `Ctrl+S` for Voyage AI semantic search with relevance scores. Toggle any memory on/off with `Space` |
+| **Activity** | Timeline of all operations. Press `f` to cycle filters (init/complete/review). Epic drill-down jumps straight to the task |
+
+Inline review mode: press `r` on any spec file to get a line-numbered view. Comment on specific lines, navigate between review rounds, approve or request changes — all without leaving the terminal.
 
 The first unchecked task shimmers. You know exactly what's in progress.
 
