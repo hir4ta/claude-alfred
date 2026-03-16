@@ -269,12 +269,11 @@ func (m *Model) rebuildTasksViewport() {
 		b.WriteString("\n  " + strings.Repeat("\u2500", min(maxW, 60)) + "\n\n")
 	}
 
-	// All tasks list with cursor.
+	// Active Tasks list with cursor.
 	if len(m.allTasks) > 0 {
-		b.WriteString("  " + sectionHeader.Render("All Tasks") + "\n")
+		b.WriteString("  " + sectionHeader.Render("Active Tasks") + "\n")
 		for i, t := range m.allTasks {
 			isCompleted := t.Status == "completed" || t.Status == "done" || t.Status == "implementation-complete"
-			isActiveTask := t.Status == "active" || t.Status == "in-progress" || t.Status == "integration"
 
 			marker := "  "
 			if i == m.taskCursor {
@@ -289,25 +288,19 @@ func (m *Model) rebuildTasksViewport() {
 				progBar = strings.Repeat("#", filled) + strings.Repeat("-", barW-filled)
 				progBar += fmt.Sprintf(" %d%%", int(pct*100))
 			}
-			status := styledStatus(t.Status)
+			// Show status only for non-active (completed tasks need the label; active is implied).
+			status := ""
+			if isCompleted {
+				status = styledStatus(t.Status)
+			}
 			blocker := " "
 			if t.HasBlocker {
 				blocker = blockerStyle.Render("!")
 			}
-			focus := ""
-			if t.Focus != "" {
-				focus = truncStr(t.Focus, maxW-50)
-			}
 
-			// Shimmer on focus text for active task at cursor.
-			displayFocus := focus
-			if i == m.taskCursor && isActiveTask && focus != "" {
-				displayFocus = renderShimmer(focus, m.shimmerFrame)
-			}
-
-			line := marker + slug + " " + progBar + " " + status + " " + displayFocus + " " + blocker
+			line := marker + slug + " " + progBar + " " + status + " " + blocker
 			if i == m.taskCursor {
-				b.WriteString(titleStyle.Render(marker+slug) + " " + progBar + " " + status + " " + displayFocus + " " + blocker + "\n")
+				b.WriteString(titleStyle.Render(marker+slug) + " " + progBar + " " + status + " " + blocker + "\n")
 			} else if isCompleted {
 				b.WriteString(dimStyle.Render(line) + "\n")
 			} else {
