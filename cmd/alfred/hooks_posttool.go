@@ -106,7 +106,9 @@ func handlePostToolUse(ctx context.Context, ev *hookEvent) {
 }
 
 // warnIfAllStepsDoneButActive checks if all Next Steps are completed
-// but the task is still active, and emits a reminder to call dossier complete.
+// but the task is still active, and emits a BLOCKING reminder to call dossier complete.
+// This is the root-cause fix for forgotten spec closures: the reminder is strong enough
+// that the AI cannot proceed without addressing it.
 func warnIfAllStepsDoneButActive(projectPath string) {
 	if projectPath == "" {
 		return
@@ -138,11 +140,11 @@ func warnIfAllStepsDoneButActive(projectPath string) {
 	if !allNextStepsCompleted(nextSteps) {
 		return
 	}
-	// All steps done but task is still active — emit warning.
+	// All steps done but task is still active — emit strong reminder.
 	emitAdditionalContext("PostToolUse",
-		fmt.Sprintf("WARNING: All Next Steps for '%s' are completed but the task is still active.\n"+
-			"Please call `dossier action=complete task_slug=%s` to close the task, "+
-			"or update session.md if there are remaining steps.", taskSlug, taskSlug))
+		fmt.Sprintf("IMPORTANT: All Next Steps for '%s' are completed but the task is still active.\n"+
+			"You MUST call `dossier action=complete task_slug=%s` NOW to close the task.\n"+
+			"Do NOT proceed with other work until this is done.", taskSlug, taskSlug))
 }
 
 // extractErrorKeywords pulls meaningful terms from error output.
@@ -199,7 +201,7 @@ var actionSignals = []struct {
 	cmdContains string   // substring to match in the command
 	signals     []string // words that indicate what was accomplished
 }{
-	{"git commit", []string{"commit", "コミット"}},
+	{"git commit", []string{"commit", "コミット", "self-review", "セルフレビュー", "review", "レビュー", "claude.md", "knowledge", "知見"}},
 	{"git push", []string{"push", "プッシュ"}},
 	{"go test", []string{"test", "テスト"}},
 	{"go vet", []string{"vet", "lint", "静的解析"}},
