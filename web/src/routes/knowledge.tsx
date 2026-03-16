@@ -1,15 +1,9 @@
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
 	knowledgeQueryOptions,
@@ -17,12 +11,13 @@ import {
 	knowledgeStatsQueryOptions,
 	useToggleEnabledMutation,
 } from "@/lib/api";
+import { contentPreview, formatDate, formatLabel } from "@/lib/format";
 import type { KnowledgeEntry, KnowledgeStats } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Search } from "lucide-react";
+import { Eye, EyeOff, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export const Route = createFileRoute("/knowledge")({
@@ -33,6 +28,7 @@ function KnowledgePage() {
 	const [searchInput, setSearchInput] = useState("");
 	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [localFilter, setLocalFilter] = useState("");
+	const [selected, setSelected] = useState<number | null>(null);
 	const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
 	const isSearching = debouncedSearch.length > 0;
 
@@ -63,168 +59,272 @@ function KnowledgePage() {
 			)
 		: entries;
 	const isLoading = isSearching ? searchLoading : browseLoading;
+	const selectedEntry = selected ? filtered.find((e) => e.id === selected) : null;
 
 	return (
-		<div className="space-y-4">
-			<div className="flex items-center gap-4">
-				<div className="relative flex-1 max-w-md">
-					<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+		<div className="flex gap-6 h-[calc(100vh-8rem)]">
+			{/* Left: list */}
+			<div className="flex w-full flex-col gap-4 lg:w-[420px] lg:shrink-0">
+				{/* Search bar */}
+				<div className="flex gap-2">
+					<div className="relative flex-1">
+						<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							placeholder="Semantic search..."
+							value={searchInput}
+							onChange={(e) => handleSearchChange(e.target.value)}
+							className="pl-9"
+						/>
+					</div>
 					<Input
-						placeholder="Semantic search (Voyage AI)..."
-						value={searchInput}
-						onChange={(e) => handleSearchChange(e.target.value)}
-						className="pl-9"
-					/>
-				</div>
-				<div className="relative max-w-xs">
-					<Input
-						placeholder="Local filter..."
+						placeholder="Filter..."
 						value={localFilter}
 						onChange={(e) => setLocalFilter(e.target.value)}
+						className="w-32"
 					/>
 				</div>
-				{statsData && <StatsDisplay stats={statsData} />}
+
+				{/* Stats */}
+				{statsData && (
+					<StatsBar stats={statsData} isSearching={isSearching} searchData={searchData} />
+				)}
+
+				{/* List */}
+				<ScrollArea className="flex-1">
+					{isLoading ? (
+						<div className="space-y-2 pr-3">
+							{Array.from({ length: 8 }).map((_, i) => (
+								<Skeleton key={i} className="h-16 w-full rounded-lg" />
+							))}
+						</div>
+					) : (
+						<div className="space-y-1.5 pr-3">
+							{filtered.map((entry) => (
+								<KnowledgeCard
+									key={entry.id}
+									entry={entry}
+									isSelected={selected === entry.id}
+									onSelect={() => setSelected(selected === entry.id ? null : entry.id)}
+								/>
+							))}
+							{filtered.length === 0 && (
+								<p className="py-8 text-center text-sm text-muted-foreground">
+									{isSearching ? "No results found." : "No memories yet."}
+								</p>
+							)}
+						</div>
+					)}
+				</ScrollArea>
 			</div>
 
-			{isSearching && searchData && (
-				<p className="text-xs text-muted-foreground">
-					{searchData.entries.length} results via {searchData.method}
-					{searchData.partial && " (partial — timeout)"}
-				</p>
-			)}
-
-			{isLoading ? (
-				<div className="space-y-2">
-					{Array.from({ length: 5 }).map((_, i) => (
-						<Skeleton key={`skel-${i}`} className="h-12 w-full" />
-					))}
-				</div>
-			) : (
-				<KnowledgeTable entries={filtered} />
-			)}
-		</div>
-	);
-}
-
-function StatsDisplay({ stats }: { stats: KnowledgeStats }) {
-	return (
-		<div className="flex gap-2 text-xs text-muted-foreground">
-			<span>{stats.total} total</span>
-			<Separator orientation="vertical" className="h-4" />
-			<span>{stats.decision} dec</span>
-			<span>{stats.pattern} pat</span>
-			<span>{stats.rule} rule</span>
-			<span>{stats.general} gen</span>
-		</div>
-	);
-}
-
-function KnowledgeTable({ entries }: { entries: KnowledgeEntry[] }) {
-	const toggleMutation = useToggleEnabledMutation();
-	const [expanded, setExpanded] = useState<number | null>(null);
-	const hasScores = entries.some((e) => e.score);
-
-	return (
-		<Table>
-			<TableHeader>
-				<TableRow>
-					<TableHead className="w-8" />
-					<TableHead>Label</TableHead>
-					<TableHead className="w-24">Type</TableHead>
-					<TableHead className="w-16 text-right">Hits</TableHead>
-					{hasScores && <TableHead className="w-20 text-right">Score</TableHead>}
-				</TableRow>
-			</TableHeader>
-			<TableBody>
-				{entries.map((entry) => (
-					<KnowledgeRow
-						key={entry.id}
-						entry={entry}
-						isExpanded={expanded === entry.id}
-						showScore={hasScores}
-						onToggleExpand={() => setExpanded(expanded === entry.id ? null : entry.id)}
-						onToggleEnabled={() => toggleMutation.mutate({ id: entry.id, enabled: !entry.enabled })}
-					/>
-				))}
-				{entries.length === 0 && (
-					<TableRow>
-						<TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-							No entries found.
-						</TableCell>
-					</TableRow>
+			{/* Right: detail */}
+			<div className="hidden flex-1 lg:block">
+				{selectedEntry ? (
+					<KnowledgeDetail entry={selectedEntry} />
+				) : (
+					<div className="flex h-full items-center justify-center">
+						<p className="text-sm text-muted-foreground">Select a memory to view details.</p>
+					</div>
 				)}
-			</TableBody>
-		</Table>
+			</div>
+		</div>
 	);
 }
 
-function KnowledgeRow({
+function StatsBar({
+	stats,
+	isSearching,
+	searchData,
+}: {
+	stats: KnowledgeStats;
+	isSearching: boolean;
+	searchData?: { entries: KnowledgeEntry[]; method: string; partial: boolean };
+}) {
+	return (
+		<div className="flex items-center gap-3 text-xs text-muted-foreground">
+			{isSearching && searchData ? (
+				<>
+					<span>
+						{searchData.entries.length} results via {searchData.method}
+					</span>
+					{searchData.partial && <span style={{ color: "#e67e22" }}>(partial — timeout)</span>}
+				</>
+			) : (
+				<>
+					<span>{stats.total} memories</span>
+					<Separator orientation="vertical" className="h-3" />
+					<StatBadge label="decision" count={stats.decision} color={SUB_TYPE_COLORS.decision!} />
+					<StatBadge label="pattern" count={stats.pattern} color={SUB_TYPE_COLORS.pattern!} />
+					<StatBadge label="rule" count={stats.rule} color={SUB_TYPE_COLORS.rule!} />
+					<StatBadge label="general" count={stats.general} color={SUB_TYPE_COLORS.general!} />
+				</>
+			)}
+		</div>
+	);
+}
+
+function StatBadge({ label, count, color }: { label: string; count: number; color: string }) {
+	return (
+		<span className="flex items-center gap-1">
+			<span className="size-1.5 rounded-full" style={{ backgroundColor: color }} />
+			{count}
+		</span>
+	);
+}
+
+function KnowledgeCard({
 	entry,
-	isExpanded,
-	showScore,
-	onToggleExpand,
-	onToggleEnabled,
+	isSelected,
+	onSelect,
 }: {
 	entry: KnowledgeEntry;
-	isExpanded: boolean;
-	showScore: boolean;
-	onToggleExpand: () => void;
-	onToggleEnabled: () => void;
+	isSelected: boolean;
+	onSelect: () => void;
 }) {
-	const color = SUB_TYPE_COLORS[entry.sub_type] ?? SUB_TYPE_COLORS.general;
+	const { title, source } = formatLabel(entry.label);
+	const color = SUB_TYPE_COLORS[entry.sub_type] ?? SUB_TYPE_COLORS.general!;
+	const toggleMutation = useToggleEnabledMutation();
 
 	return (
-		<>
-			<TableRow
-				className={cn("cursor-pointer", !entry.enabled && "opacity-50")}
-				onClick={onToggleExpand}
-			>
-				<TableCell>
+		<Card
+			className={cn(
+				"cursor-pointer border-stone-200 transition-all hover:border-stone-300 hover:shadow-sm dark:border-stone-700",
+				isSelected && "ring-1 ring-brand-pattern/30 border-brand-pattern/20",
+				!entry.enabled && "opacity-40",
+			)}
+			onClick={onSelect}
+		>
+			<CardContent className="p-3 space-y-1.5">
+				<div className="flex items-start justify-between gap-2">
+					<p className="text-sm font-medium leading-snug line-clamp-2">{title}</p>
+					<div className="flex shrink-0 items-center gap-1.5">
+						{entry.score ? (
+							<span className="text-[10px] tabular-nums text-muted-foreground">
+								{entry.score.toFixed(2)}
+							</span>
+						) : null}
+						<Badge
+							variant="outline"
+							className="rounded-full text-[10px] px-1.5 py-0"
+							style={{ borderColor: `${color}50`, color }}
+						>
+							{entry.sub_type}
+						</Badge>
+					</div>
+				</div>
+				<p className="text-xs text-muted-foreground line-clamp-1">
+					{contentPreview(entry.content, 80)}
+				</p>
+				<div className="flex items-center justify-between">
+					<div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+						{source && <span>{source}</span>}
+						<span>{formatDate(entry.saved_at ?? "")}</span>
+						{entry.hit_count > 0 && <span>{entry.hit_count} hits</span>}
+					</div>
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<button
 								type="button"
 								onClick={(e) => {
 									e.stopPropagation();
-									onToggleEnabled();
+									toggleMutation.mutate({ id: entry.id, enabled: !entry.enabled });
 								}}
-								className="text-xs"
+								className="text-muted-foreground hover:text-foreground transition-colors"
 							>
-								{entry.enabled ? "[x]" : "[ ]"}
+								{entry.enabled ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
 							</button>
 						</TooltipTrigger>
-						<TooltipContent>{entry.enabled ? "Disable" : "Enable"} memory</TooltipContent>
+						<TooltipContent>{entry.enabled ? "Disable" : "Enable"}</TooltipContent>
 					</Tooltip>
-				</TableCell>
-				<TableCell className="font-medium text-sm">{entry.label}</TableCell>
-				<TableCell>
-					<Badge variant="outline" className="text-xs" style={{ borderColor: `${color}40`, color }}>
-						{entry.sub_type}
-					</Badge>
-				</TableCell>
-				<TableCell className="text-right text-xs text-muted-foreground">
-					{entry.hit_count}
-				</TableCell>
-				{showScore && (
-					<TableCell className="text-right text-xs text-muted-foreground">
-						{entry.score ? entry.score.toFixed(3) : ""}
-					</TableCell>
-				)}
-			</TableRow>
-			{isExpanded && (
-				<TableRow>
-					<TableCell colSpan={5} className="bg-muted/30">
-						<div className="space-y-1 py-2">
-							<p className="text-xs text-muted-foreground">
-								Source: {entry.source} | Saved: {entry.saved_at}
-							</p>
-							<pre className="text-xs whitespace-pre-wrap break-words font-mono max-h-64 overflow-auto">
-								{entry.content}
+				</div>
+			</CardContent>
+		</Card>
+	);
+}
+
+function KnowledgeDetail({ entry }: { entry: KnowledgeEntry }) {
+	const { title, source } = formatLabel(entry.label);
+	const color = SUB_TYPE_COLORS[entry.sub_type] ?? SUB_TYPE_COLORS.general!;
+
+	// Parse structured decision content
+	const fields = parseDecisionFields(entry.content);
+
+	return (
+		<Card className="h-full border-stone-200 dark:border-stone-700">
+			<div className="p-6 space-y-4">
+				{/* Header */}
+				<div className="space-y-2">
+					<div className="flex items-center gap-2">
+						<Badge
+							variant="outline"
+							className="rounded-full text-xs"
+							style={{ borderColor: `${color}50`, color }}
+						>
+							{entry.sub_type}
+						</Badge>
+						{source && <span className="text-xs text-muted-foreground">{source}</span>}
+					</div>
+					<h2 className="text-lg font-semibold" style={{ fontFamily: "var(--font-display)" }}>
+						{title}
+					</h2>
+					<div className="flex gap-4 text-xs text-muted-foreground">
+						<span>Saved {formatDate(entry.saved_at ?? "")}</span>
+						<span>{entry.hit_count} hits</span>
+						<span>{entry.enabled ? "Active" : "Disabled"}</span>
+					</div>
+				</div>
+
+				<Separator />
+
+				{/* Structured fields for decisions */}
+				{fields.length > 0 ? (
+					<div className="space-y-3">
+						{fields.map((f) => (
+							<div key={f.key}>
+								<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+									{f.key}
+								</p>
+								<p className="text-sm leading-relaxed">{f.value}</p>
+							</div>
+						))}
+					</div>
+				) : (
+					<ScrollArea className="h-[calc(100vh-20rem)]">
+						<div className="prose prose-sm prose-stone max-w-none">
+							<pre className="whitespace-pre-wrap break-words text-sm leading-relaxed font-sans">
+								{cleanContent(entry.content)}
 							</pre>
 						</div>
-					</TableCell>
-				</TableRow>
-			)}
-		</>
+					</ScrollArea>
+				)}
+			</div>
+		</Card>
 	);
+}
+
+// Parse "- **Key:** value" patterns from decision content.
+function parseDecisionFields(content: string): { key: string; value: string }[] {
+	const fields: { key: string; value: string }[] = [];
+	for (const line of content.split("\n")) {
+		const match = line.match(/^-\s*\*\*([^*]+)\*\*:?\s*(.+)/);
+		if (match?.[1] && match[2]) {
+			fields.push({ key: match[1], value: match[2] });
+		}
+	}
+	return fields;
+}
+
+// Strip markdown headers, confidence annotations, and status lines.
+function cleanContent(content: string): string {
+	return content
+		.split("\n")
+		.filter(
+			(l) =>
+				!l.startsWith("# ") &&
+				!l.startsWith("## ") &&
+				!l.startsWith("<!-- confidence") &&
+				!l.match(/^-\s*\*\*Status\*\*/),
+		)
+		.join("\n")
+		.trim();
 }
