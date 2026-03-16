@@ -136,8 +136,9 @@ type Model struct {
 	searchResults  []KnowledgeEntry // semantic search results
 
 	// Activity tab state.
-	activityTable table.Model
-	epics         []EpicSummary
+	activityTable  table.Model
+	epics          []EpicSummary
+	activityFilter string // ""=all, "spec.init", "spec.complete", "review.submit"
 
 	// Cached data from DataSource extensions.
 	validations map[string]*spec.ValidationReport
@@ -499,7 +500,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tabKnowledge:
 			return m.updateKnowledge(msg)
 		case tabActivity:
-			m.viewport, _ = m.viewport.Update(msg)
+			return m.handleActivityKey(msg)
 		}
 	}
 
