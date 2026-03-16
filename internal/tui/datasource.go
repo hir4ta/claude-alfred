@@ -3,8 +3,10 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hir4ta/claude-alfred/internal/embedder"
@@ -98,6 +100,14 @@ type DecisionEntry struct {
 	Reason       string
 }
 
+// MemoryHealthStats holds overview-level memory health data.
+type MemoryHealthStats struct {
+	Total         int
+	StaleCount    int    // vitality < 20
+	ConflictCount int    // DetectConflicts result (cached)
+	VitalityDist  [5]int // 0-20, 21-40, 41-60, 61-80, 81-100
+}
+
 // DataSource abstracts data retrieval for the TUI.
 type DataSource interface {
 	ProjectPath() string
@@ -112,6 +122,9 @@ type DataSource interface {
 	Epics() []EpicSummary
 	AllDecisions(limit int) []DecisionEntry
 	ToggleEnabled(id int64, enabled bool) error
+	Validation(taskSlug string) *spec.ValidationReport
+	MemoryHealth() MemoryHealthStats
+	ConfidenceStats(taskSlug string) *spec.ConfidenceSummary
 }
 
 // fileDataSource implements DataSource by reading .alfred/ files and SQLite.
@@ -119,6 +132,11 @@ type fileDataSource struct {
 	projectPath string
 	st          *store.Store
 	emb         *embedder.Embedder
+
+	// Conflict detection cache (DEC-6: 60s TTL).
+	conflictMu    sync.Mutex
+	conflictCount int
+	conflictAt    time.Time
 }
 
 // NewFileDataSource creates a DataSource backed by filesystem + SQLite + Voyage.
@@ -223,11 +241,15 @@ func (ds *fileDataSource) Specs() []SpecEntry {
 			if err != nil {
 				continue
 			}
-			entries = append(entries, SpecEntry{
+			entry := SpecEntry{
 				TaskSlug: at.Slug,
 				File:     string(f),
 				Size:     int64(len(content)),
-			})
+			}
+			if info, err := os.Stat(sd.FilePath(f)); err == nil {
+				entry.UpdatedAt = info.ModTime()
+			}
+			entries = append(entries, entry)
 		}
 	}
 	return entries
@@ -509,6 +531,97 @@ func (ds *fileDataSource) ToggleEnabled(id int64, enabled bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	return ds.st.SetEnabled(ctx, id, enabled)
+}
+
+func (ds *fileDataSource) Validation(taskSlug string) *spec.ValidationReport {
+	state, err := spec.ReadActiveState(ds.projectPath)
+	if err != nil {
+		return nil
+	}
+	sd := &spec.SpecDir{ProjectPath: ds.projectPath, TaskSlug: taskSlug}
+	if !sd.Exists() {
+		return nil
+	}
+	size := spec.SizeL
+	specType := spec.TypeFeature
+	for _, t := range state.Tasks {
+		if t.Slug == taskSlug {
+			size = t.EffectiveSize()
+			specType = t.EffectiveSpecType()
+			break
+		}
+	}
+	report, err := spec.Validate(sd, size, specType)
+	if err != nil {
+		return nil
+	}
+	return report
+}
+
+func (ds *fileDataSource) MemoryHealth() MemoryHealthStats {
+	var stats MemoryHealthStats
+	if ds.st == nil {
+		return stats
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Total memory count.
+	docs, err := ds.st.ListAllMemories(ctx, 1000)
+	if err == nil {
+		stats.Total = len(docs)
+	}
+
+	// Stale count (vitality < 20).
+	lowDocs, err := ds.st.ListLowVitality(ctx, 20, 1000)
+	if err == nil {
+		stats.StaleCount = len(lowDocs)
+	}
+
+	// Conflict count (60s cache, DEC-6).
+	ds.conflictMu.Lock()
+	if time.Since(ds.conflictAt) > 60*time.Second {
+		conflicts, err := ds.st.DetectConflicts(ctx, 0.70)
+		if err == nil {
+			ds.conflictCount = len(conflicts)
+		}
+		ds.conflictAt = time.Now()
+	}
+	stats.ConflictCount = ds.conflictCount
+	ds.conflictMu.Unlock()
+
+	return stats
+}
+
+func (ds *fileDataSource) ConfidenceStats(taskSlug string) *spec.ConfidenceSummary {
+	sd := &spec.SpecDir{ProjectPath: ds.projectPath, TaskSlug: taskSlug}
+	if !sd.Exists() {
+		return nil
+	}
+	// Determine primary file.
+	primaryFile := spec.FileRequirements
+	if state, err := spec.ReadActiveState(ds.projectPath); err == nil {
+		for _, t := range state.Tasks {
+			if t.Slug == taskSlug {
+				switch t.EffectiveSpecType() {
+				case spec.TypeBugfix:
+					primaryFile = spec.FileBugfix
+				case spec.TypeDelta:
+					primaryFile = spec.FileDelta
+				}
+				break
+			}
+		}
+	}
+	content, err := sd.ReadFile(primaryFile)
+	if err != nil {
+		return nil
+	}
+	cs := spec.ParseConfidence(content)
+	if cs.Total == 0 {
+		return nil
+	}
+	return &cs
 }
 
 func docsToKnowledge(docs []store.DocRow, scoreMap map[int64]float64, limit int) []KnowledgeEntry {

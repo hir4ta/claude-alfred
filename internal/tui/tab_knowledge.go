@@ -9,7 +9,55 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
+// semanticSearchKey is the key binding for Ctrl+S semantic search.
+var semanticSearchKey = key.NewBinding(
+	key.WithKeys("ctrl+s"),
+	key.WithHelp("C-s", "semantic search"),
+)
+
 func (m *Model) updateKnowledge(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Ctrl+S: toggle semantic search mode.
+	if key.Matches(msg, semanticSearchKey) {
+		if m.searchMode {
+			// Exit search mode, restore normal list.
+			m.searchMode = false
+			m.searchResults = nil
+			m.searchInput.Blur()
+			m.updateKnowledgeListItems()
+		} else {
+			// Enter search mode.
+			m.searchMode = true
+			m.searchInput.SetValue("")
+			m.searchInput.Focus()
+		}
+		return m, nil
+	}
+
+	// In search mode: handle input.
+	if m.searchMode {
+		if key.Matches(msg, keys.Back) {
+			// Esc: exit search mode.
+			m.searchMode = false
+			m.searchResults = nil
+			m.searchInput.Blur()
+			m.updateKnowledgeListItems()
+			return m, nil
+		}
+		if key.Matches(msg, keys.Enter) {
+			// Execute semantic search.
+			query := m.searchInput.Value()
+			if query != "" {
+				m.searchBusy = true
+				return m, m.executeSemanticSearch(query)
+			}
+			return m, nil
+		}
+		// Forward to text input.
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		return m, cmd
+	}
+
 	// Space: toggle enabled/disabled.
 	if key.Matches(msg, knowledgeToggleKey) {
 		idx := m.knList.Index()
@@ -48,6 +96,15 @@ func (m *Model) updateKnowledge(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.knList, cmd = m.knList.Update(msg)
 	return m, cmd
+}
+
+// executeSemanticSearch runs SemanticSearch asynchronously.
+func (m *Model) executeSemanticSearch(query string) tea.Cmd {
+	ds := m.ds
+	return func() tea.Msg {
+		results := ds.SemanticSearch(query, 20)
+		return semanticSearchResultMsg{results: results}
+	}
 }
 
 func extractKnowledgeTitle(k KnowledgeEntry) string {

@@ -49,17 +49,25 @@ type searchResultMsg []KnowledgeEntry
 // debounceTickMsg triggers a debounced search after typing pauses.
 type debounceTickMsg struct{ seq int }
 
+// semanticSearchResultMsg carries results from async semantic search.
+type semanticSearchResultMsg struct {
+	results []KnowledgeEntry
+}
+
 // dataLoadedMsg carries refreshed data from async loading.
 type dataLoadedMsg struct {
-	activeSlug string
-	allTasks   []TaskDetail
-	specs      []SpecEntry
-	knowledge  []KnowledgeEntry
-	activity   []ActivityEntry
-	knStats    KnowledgeStats
-	epics      []EpicSummary
-	decisions  []DecisionEntry
-	specGroups []specTaskGroup
+	activeSlug  string
+	allTasks    []TaskDetail
+	specs       []SpecEntry
+	knowledge   []KnowledgeEntry
+	activity    []ActivityEntry
+	knStats     KnowledgeStats
+	epics       []EpicSummary
+	decisions   []DecisionEntry
+	specGroups  []specTaskGroup
+	validations map[string]*spec.ValidationReport
+	memHealth   MemoryHealthStats
+	confStats   map[string]*spec.ConfidenceSummary
 }
 
 // Model is the root bubbletea model.
@@ -119,15 +127,22 @@ type Model struct {
 	specLevel       int // 0=groups, 1=files
 
 	// Knowledge tab state.
-	knList      list.Model
-	knStats     KnowledgeStats
-	promotions  []KnowledgeEntry
-	decisions   []DecisionEntry
-	searchBusy  bool
+	knList         list.Model
+	knStats        KnowledgeStats
+	promotions     []KnowledgeEntry
+	decisions      []DecisionEntry
+	searchBusy     bool
+	searchMode     bool             // Ctrl+S semantic search active
+	searchResults  []KnowledgeEntry // semantic search results
 
 	// Activity tab state.
 	activityTable table.Model
 	epics         []EpicSummary
+
+	// Cached data from DataSource extensions.
+	validations map[string]*spec.ValidationReport
+	memHealth   MemoryHealthStats
+	confStats   map[string]*spec.ConfidenceSummary
 
 	// Markdown renderer.
 	mdRenderer *glamour.TermRenderer
@@ -230,6 +245,20 @@ func (m *Model) loadDataCmd() tea.Cmd {
 			msg.epics = ds.Epics()
 			msg.decisions = ds.AllDecisions(20)
 			msg.knowledge = ds.RecentKnowledge(100)
+
+			// Validation + confidence for each active task.
+			msg.validations = make(map[string]*spec.ValidationReport)
+			msg.confStats = make(map[string]*spec.ConfidenceSummary)
+			for _, t := range msg.allTasks {
+				if r := ds.Validation(t.Slug); r != nil {
+					msg.validations[t.Slug] = r
+				}
+				if cs := ds.ConfidenceStats(t.Slug); cs != nil {
+					msg.confStats[t.Slug] = cs
+				}
+			}
+			msg.memHealth = ds.MemoryHealth()
+
 			done <- msg
 		}()
 
@@ -297,6 +326,9 @@ func (m *Model) applyDataLoaded(msg dataLoadedMsg) {
 			}
 		}
 	}
+	m.validations = msg.validations
+	m.memHealth = msg.memHealth
+	m.confStats = msg.confStats
 	m.rebuildTasksViewport()
 }
 
@@ -384,6 +416,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.knowledge = []KnowledgeEntry(msg)
 		m.searchBusy = false
 		m.updateKnowledgeListItems()
+		return m, nil
+
+	case semanticSearchResultMsg:
+		m.searchBusy = false
+		m.searchResults = msg.results
+		if len(msg.results) > 0 {
+			m.knList.SetItems(knowledgeEntriesToItems(msg.results))
+		} else {
+			m.knList.SetItems(nil)
+		}
 		return m, nil
 
 	case shimmerTickMsg:
@@ -573,11 +615,13 @@ func (m Model) helpBar() string {
 	return "\n" + m.helpModel.ShortHelpView(keys.ShortHelp())
 }
 
-// overviewView renders the Overview tab — placeholder until T-2.1.
+// overviewView renders the Overview tab with project health summary.
 func (m Model) overviewView() string {
 	var b strings.Builder
 	b.WriteString("\n")
+	maxW := m.width - 6
 
+	// Task summary with validation.
 	activeCount := 0
 	completedCount := 0
 	for _, t := range m.allTasks {
@@ -588,12 +632,76 @@ func (m Model) overviewView() string {
 		}
 	}
 	b.WriteString("  " + sectionHeader.Render("Tasks") + "\n")
-	b.WriteString(fmt.Sprintf("  %d active, %d completed\n\n", activeCount, completedCount))
+	fmt.Fprintf(&b, "  %d active, %d completed\n", activeCount, completedCount)
 
-	b.WriteString("  " + sectionHeader.Render("Knowledge") + "\n")
-	b.WriteString(fmt.Sprintf("  Total: %d  |  decision: %d  pattern: %d  rule: %d  general: %d\n\n",
-		m.knStats.Total, m.knStats.Decision, m.knStats.Pattern, m.knStats.Rule, m.knStats.General))
+	// Per-task validation summary.
+	if len(m.validations) > 0 {
+		for _, t := range m.allTasks {
+			if t.Status == "completed" || t.Status == "done" {
+				continue
+			}
+			if r, ok := m.validations[t.Slug]; ok {
+				passed := 0
+				for _, c := range r.Checks {
+					if c.Status == "pass" {
+						passed++
+					}
+				}
+				total := len(r.Checks)
+				icon := scoreStyle.Render("ok")
+				if passed < total {
+					icon = blockerStyle.Render(fmt.Sprintf("%d fail", total-passed))
+				}
+				fmt.Fprintf(&b, "    %-20s %d/%d checks  %s\n", truncStr(t.Slug, 20), passed, total, icon)
+			}
+		}
+	}
+	b.WriteString("\n")
 
+	// Memory health.
+	b.WriteString("  " + sectionHeader.Render("Knowledge Health") + "\n")
+	fmt.Fprintf(&b, "  Total: %d  |  decision: %d  pattern: %d  rule: %d  general: %d\n",
+		m.knStats.Total, m.knStats.Decision, m.knStats.Pattern, m.knStats.Rule, m.knStats.General)
+	if m.memHealth.Total > 0 {
+		staleLabel := dimStyle.Render(fmt.Sprintf("%d", m.memHealth.StaleCount))
+		if m.memHealth.StaleCount > 0 {
+			staleLabel = blockerStyle.Render(fmt.Sprintf("%d stale", m.memHealth.StaleCount))
+		}
+		conflictLabel := dimStyle.Render("0")
+		if m.memHealth.ConflictCount > 0 {
+			conflictLabel = reviewCommentMarker.Render(fmt.Sprintf("%d conflicts", m.memHealth.ConflictCount))
+		}
+		fmt.Fprintf(&b, "  Memories: %d  |  %s  |  %s\n", m.memHealth.Total, staleLabel, conflictLabel)
+	}
+	b.WriteString("\n")
+
+	// Confidence distribution across active specs.
+	hasConf := false
+	for _, t := range m.allTasks {
+		if cs, ok := m.confStats[t.Slug]; ok && cs != nil {
+			if !hasConf {
+				b.WriteString("  " + sectionHeader.Render("Confidence") + "\n")
+				hasConf = true
+			}
+			groundingStr := ""
+			if len(cs.GroundingDist) > 0 {
+				parts := make([]string, 0, 4)
+				for _, g := range []string{"verified", "reviewed", "inferred", "speculative"} {
+					if n, ok := cs.GroundingDist[g]; ok && n > 0 {
+						parts = append(parts, fmt.Sprintf("%s:%d", g[:3], n))
+					}
+				}
+				groundingStr = dimStyle.Render(strings.Join(parts, " "))
+			}
+			fmt.Fprintf(&b, "    %-20s avg:%.1f  low:%d/%d  %s\n",
+				truncStr(t.Slug, 20), cs.Avg, cs.LowCount, cs.Total, groundingStr)
+		}
+	}
+	if hasConf {
+		b.WriteString("\n")
+	}
+
+	// Epic progress.
 	if len(m.epics) > 0 {
 		b.WriteString("  " + sectionHeader.Render("Epics") + "\n")
 		for _, e := range m.epics {
@@ -605,19 +713,20 @@ func (m Model) overviewView() string {
 				progBar = strings.Repeat("#", filled) + strings.Repeat("-", barW-filled)
 				progBar += fmt.Sprintf(" %d%%", int(pct*100))
 			}
-			b.WriteString(fmt.Sprintf("  %-20s %s  %s\n", truncStr(e.Name, 20), progBar, styledStatus(e.Status)))
+			fmt.Fprintf(&b, "  %-20s %s  %s\n", truncStr(e.Name, 20), progBar, styledStatus(e.Status))
 		}
 		b.WriteString("\n")
 	}
 
+	// Recent decisions.
 	if len(m.decisions) > 0 {
 		shown := min(5, len(m.decisions))
 		b.WriteString("  " + sectionHeader.Render("Recent Decisions") + "\n")
 		for i := range shown {
 			d := m.decisions[i]
-			b.WriteString("  " + truncStr(d.Title, m.width-30) + "  " + dimStyle.Render(d.TaskSlug) + "\n")
+			b.WriteString("  " + truncStr(d.Title, maxW-25) + "  " + dimStyle.Render(d.TaskSlug) + "\n")
 			if d.Chosen != "" {
-				b.WriteString("    " + dimStyle.Render("-> "+truncStr(d.Chosen, m.width-10)) + "\n")
+				b.WriteString("    " + dimStyle.Render("-> "+truncStr(d.Chosen, maxW-7)) + "\n")
 			}
 		}
 		b.WriteString("\n")

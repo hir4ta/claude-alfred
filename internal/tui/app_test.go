@@ -19,18 +19,21 @@ type mockDataSource struct {
 	activity    []ActivityEntry
 }
 
-func (m *mockDataSource) ProjectPath() string                            { return m.projectPath }
-func (m *mockDataSource) ActiveTask() string                             { return m.activeTask }
-func (m *mockDataSource) TaskDetails() []TaskDetail                      { return m.tasks }
-func (m *mockDataSource) Specs() []SpecEntry                             { return m.specs }
-func (m *mockDataSource) SpecContent(_, _ string) string                 { return "# test" }
-func (m *mockDataSource) SemanticSearch(_ string, _ int) []KnowledgeEntry { return m.knowledge }
-func (m *mockDataSource) RecentKnowledge(_ int) []KnowledgeEntry         { return m.knowledge }
-func (m *mockDataSource) RecentActivity(_ int) []ActivityEntry           { return m.activity }
-func (m *mockDataSource) KnowledgeStats() KnowledgeStats                 { return KnowledgeStats{} }
-func (m *mockDataSource) Epics() []EpicSummary                           { return nil }
-func (m *mockDataSource) AllDecisions(_ int) []DecisionEntry             { return nil }
-func (m *mockDataSource) ToggleEnabled(_ int64, _ bool) error            { return nil }
+func (m *mockDataSource) ProjectPath() string                              { return m.projectPath }
+func (m *mockDataSource) ActiveTask() string                               { return m.activeTask }
+func (m *mockDataSource) TaskDetails() []TaskDetail                        { return m.tasks }
+func (m *mockDataSource) Specs() []SpecEntry                               { return m.specs }
+func (m *mockDataSource) SpecContent(_, _ string) string                   { return "# test" }
+func (m *mockDataSource) SemanticSearch(_ string, _ int) []KnowledgeEntry  { return m.knowledge }
+func (m *mockDataSource) RecentKnowledge(_ int) []KnowledgeEntry           { return m.knowledge }
+func (m *mockDataSource) RecentActivity(_ int) []ActivityEntry             { return m.activity }
+func (m *mockDataSource) KnowledgeStats() KnowledgeStats                   { return KnowledgeStats{} }
+func (m *mockDataSource) Epics() []EpicSummary                             { return nil }
+func (m *mockDataSource) AllDecisions(_ int) []DecisionEntry               { return nil }
+func (m *mockDataSource) ToggleEnabled(_ int64, _ bool) error              { return nil }
+func (m *mockDataSource) Validation(_ string) *spec.ValidationReport       { return nil }
+func (m *mockDataSource) MemoryHealth() MemoryHealthStats                  { return MemoryHealthStats{} }
+func (m *mockDataSource) ConfidenceStats(_ string) *spec.ConfidenceSummary { return nil }
 
 func TestTabBadge(t *testing.T) {
 	ds := &mockDataSource{

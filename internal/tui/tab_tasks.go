@@ -26,9 +26,9 @@ func (m *Model) rebuildTasksViewport() {
 		b.WriteString("\n  " + strings.Repeat("\u2500", min(maxW, 60)) + "\n\n")
 	}
 
-	// Active Tasks list with cursor.
+	// Active Tasks list with cursor — enriched cards.
 	if len(m.allTasks) > 0 {
-		b.WriteString("  " + sectionHeader.Render("Active Tasks") + "\n")
+		b.WriteString("  " + sectionHeader.Render("Tasks") + "\n")
 		for i, t := range m.allTasks {
 			isCompleted := t.Status == "completed" || t.Status == "done" || t.Status == "implementation-complete"
 
@@ -45,23 +45,64 @@ func (m *Model) rebuildTasksViewport() {
 				progBar = strings.Repeat("#", filled) + strings.Repeat("-", barW-filled)
 				progBar += fmt.Sprintf(" %d%%", int(pct*100))
 			}
-			// Show status only for non-active (completed tasks need the label; active is implied).
 			status := ""
 			if isCompleted {
 				status = styledStatus(t.Status)
 			}
-			blocker := " "
+			blocker := ""
 			if t.HasBlocker {
-				blocker = blockerStyle.Render("!")
+				blocker = blockerStyle.Render(" !")
 			}
 
-			line := marker + slug + " " + progBar + " " + status + " " + blocker
+			// Validation badge.
+			valBadge := ""
+			if r, ok := m.validations[t.Slug]; ok && !isCompleted {
+				passed := 0
+				for _, c := range r.Checks {
+					if c.Status == "pass" {
+						passed++
+					}
+				}
+				total := len(r.Checks)
+				if passed == total {
+					valBadge = " " + scoreStyle.Render(fmt.Sprintf("%d/%d", passed, total))
+				} else {
+					valBadge = " " + blockerStyle.Render(fmt.Sprintf("%d/%d", passed, total))
+				}
+			}
+
+			// Epic context.
+			epicLabel := ""
+			if t.EpicSlug != "" {
+				epicLabel = " " + dimStyle.Render("epic:"+t.EpicSlug)
+			}
+
+			// Line 1: slug + progress + status + badges.
 			if i == m.taskCursor {
-				b.WriteString(titleStyle.Render(marker+slug) + " " + progBar + " " + status + " " + blocker + "\n")
+				b.WriteString(titleStyle.Render(marker+slug) + " " + progBar + " " + status + blocker + valBadge + epicLabel + "\n")
 			} else if isCompleted {
-				b.WriteString(dimStyle.Render(line) + "\n")
+				b.WriteString(dimStyle.Render(marker+slug+" "+progBar+" "+status) + "\n")
 			} else {
-				b.WriteString(line + "\n")
+				b.WriteString(marker + slug + " " + progBar + " " + status + blocker + valBadge + epicLabel + "\n")
+			}
+
+			// Line 2: focus + next action (active tasks only, non-completed).
+			if !isCompleted && (t.Focus != "" || len(t.NextSteps) > 0) {
+				detail := "      "
+				if t.Focus != "" {
+					detail += dimStyle.Render(truncStr(t.Focus, maxW-20))
+				}
+				// Find first unchecked step.
+				for _, s := range t.NextSteps {
+					if !s.Done {
+						if t.Focus != "" {
+							detail += "  "
+						}
+						detail += dimStyle.Render("Next: " + truncStr(s.Text, maxW-35))
+						break
+					}
+				}
+				b.WriteString(detail + "\n")
 			}
 		}
 	}

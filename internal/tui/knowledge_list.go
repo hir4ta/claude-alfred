@@ -179,8 +179,24 @@ func (m *Model) knowledgeListView() string {
 			len(items), dec, pat, rul, gen)
 	}
 
+	// Semantic search input (Ctrl+S mode).
+	if m.searchMode {
+		b.WriteString("  " + sectionHeader.Render("Semantic Search") + "  ")
+		if m.searchBusy {
+			b.WriteString(m.spinner.View())
+		}
+		b.WriteString("\n  " + m.searchInput.View() + "\n\n")
+	}
+
 	// List component handles everything: filtering, pagination, cursor.
 	b.WriteString(m.knList.View())
+
+	// Hint for search mode toggle.
+	if !m.searchMode {
+		b.WriteString("\n  " + dimStyle.Render("C-s: semantic search  C-f: filter"))
+	} else {
+		b.WriteString("\n  " + dimStyle.Render("enter: search  esc: cancel"))
+	}
 
 	return b.String()
 }
