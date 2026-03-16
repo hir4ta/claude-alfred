@@ -212,7 +212,6 @@ func New(ds DataSource, version string) Model {
 // loadDataCmd returns a tea.Cmd that loads data asynchronously in a goroutine.
 func (m *Model) loadDataCmd() tea.Cmd {
 	ds := m.ds
-	_ = m.searchBusy // kept for future semantic search
 	return func() tea.Msg {
 		done := make(chan dataLoadedMsg, 1)
 		go func() {

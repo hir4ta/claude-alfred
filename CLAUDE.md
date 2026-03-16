@@ -166,14 +166,24 @@ alfred steering-init          # Generate project steering docs (.alfred/steering
 ### TUI Dashboard
 
 - `alfred dashboard` (alias: `alfred dash`): bubbletea v2 TUI
-- 4 tabs: Overview (drilldown) / Tasks / Specs (review mode) / Knowledge (semantic search)
+- 4 tabs: Overview / Tasks / Knowledge / Activity
+- File structure: app.go (root Model + routing), tab_overview.go, tab_tasks.go, tab_knowledge.go, tab_activity.go, review.go, overlay.go, helpers.go
+- Tab constants: tabOverview=0, tabTasks=1, tabKnowledge=2, tabActivity=3
 - Data refresh: 5-second polling
-- Style: Claude Code warm palette — terracotta accent (#da7756), dusty sage (#7c9a92), warm gold (#c49a5c), coral highlight (#e8976b), dusty rose (#b07878), warm neutrals; no emoji
-- Shimmer animation: lipgloss.Blend1D gradient (dark terracotta → warm coral), 50ms tick, on first unchecked Next Steps item
+- Overview tab: task summary with validation badges, memory health (stale/conflicts), confidence/grounding distribution, epic progress, recent decisions
+- Tasks tab Level 0: enriched cards (slug + progress + focus + next action + epic + validation badge)
+- Tasks tab Level 1: spec files with rich summaries, validation status per task
+- Knowledge tab: Ctrl+F (local filter, list.Model built-in), Ctrl+S (semantic search via Voyage AI, async)
+- Activity tab: timeline with `f` key filter cycle (all/spec.init/spec.complete/review.submit), epic drilldown (Enter→Tasks)
+- Style: Everforest/Gruvbox warm palette — aqua (#7fbbb3), orange (#e69875), gold (#dbbc7f), green (#a7c080), red (#e67e80), purple (#d699b6), blue (#7393b3); no emoji
+- Shimmer animation: lipgloss.Blend1D gradient (warm brown → orange), 80ms tick (12.5 FPS), on first unchecked Next Steps item
 - Review mode: line-numbered viewer, inline comments (orange), background-highlighted cursor, Approve/Request Changes
 - Review history: round navigation (left/right keys), read-only past rounds, carried-over unresolved comments (dim orange)
 - Spec diff viewer: 'd' key in Tasks/Specs overlay shows unified diff (go-diff/diffmatchpatch) between current and last history version
-- DataSource interface for testability (internal/tui/datasource.go)
+- Clipboard: OS-detected (darwin: pbcopy, linux: xclip/xsel, fallback: error), 'c' key in overlay
+- DataSource interface: 17 methods (14 original + Validation, MemoryHealth, ConfidenceStats)
+- MemoryHealth: DetectConflicts result cached 60s (DEC-6), ListLowVitality for stale count
+- Confidence: spec.ParseConfidence() (extracted from mcpserver to spec package)
 
 ### Memory & Search
 
