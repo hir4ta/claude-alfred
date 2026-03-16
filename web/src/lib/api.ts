@@ -47,7 +47,10 @@ export const specsQueryOptions = (slug: string) =>
 export const specContentQueryOptions = (slug: string, file: string) =>
 	queryOptions({
 		queryKey: ["spec-content", slug, file],
-		queryFn: () => fetchJSON<SpecContentResponse>(`/api/tasks/${slug}/specs/${file}`),
+		queryFn: () =>
+			fetchJSON<SpecContentResponse>(
+				`/api/tasks/${encodeURIComponent(slug)}/specs/${encodeURIComponent(file)}`,
+			),
 		staleTime: REF_STALE,
 		enabled: !!slug && !!file,
 	});
