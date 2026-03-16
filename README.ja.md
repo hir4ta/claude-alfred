@@ -131,6 +131,19 @@ Hook（見えない）
   +-- ~/.claude-alfred/    -> SQLite（records + FTS5 + Voyage embeddings）
 ```
 
+## ファイル生成タイミング
+
+インストール時には何も生成されない。使うと出てくる:
+
+| ファイル / ディレクトリ | 生成タイミング | トリガー |
+|---|---|---|
+| `~/.claude-alfred/alfred.db` | プラグインインストール後の最初の Claude Code セッション | SessionStart hook が DB を開く |
+| `.alfred/specs/` | 最初のタスク開始時 | `dossier action=init`（`/alfred:brief` や `/alfred:attend` 経由） |
+| `.alfred/epics/` | 最初のエピック作成時 | `roster action=init` |
+| `.alfred/decisions/` | 設計判断を含む最初のコンテキスト圧縮時 | PreCompact hook が自動抽出 |
+| `.alfred/knowledge/` | 手動エクスポート時 | `alfred export` コマンド |
+| `.alfred/audit.jsonl` | 最初の仕様操作時 | `dossier init`、`dossier delete`、レビュー送信 |
+
 ## トラブルシューティング
 
 | 症状 | 対処 |

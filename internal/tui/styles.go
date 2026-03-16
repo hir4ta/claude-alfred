@@ -56,11 +56,6 @@ var (
 			Foreground(lipgloss.Color("#c66"))
 )
 
-// Layout styles.
-var headerStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(accent)
-
 // Content panel — subtle border around main content.
 var contentPanelStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).

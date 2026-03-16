@@ -129,14 +129,9 @@ type Model struct {
 	// Markdown renderer.
 	mdRenderer *glamour.TermRenderer
 
-	// Loading.
-	loading bool
-
 	// Shimmer animation frame counter.
 	shimmerFrame int
 
-	// Tab before global search was invoked (for returning).
-	searchReturnTab int
 	// Debounce sequence for live search.
 	debounceSeq int
 
@@ -168,7 +163,6 @@ func New(ds DataSource) Model {
 		spinner:     sp,
 		searchInput: ti,
 		progress:    prog,
-		loading:     true,
 	}
 }
 
@@ -231,7 +225,6 @@ func (m *Model) loadDataCmd() tea.Cmd {
 
 // applyDataLoaded applies a dataLoadedMsg to the model (in-memory only, no I/O).
 func (m *Model) applyDataLoaded(msg dataLoadedMsg) {
-	m.loading = false
 	m.activeSlug = msg.activeSlug
 	m.allTasks = msg.allTasks
 	m.specs = msg.specs
@@ -474,7 +467,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case spinner.TickMsg:
-		if m.loading || m.searchBusy {
+		if m.searchBusy {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
@@ -514,10 +507,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchTab((m.activeTab - 1 + tabCount) % tabCount)
 			return m, nil
 		case key.Matches(msg, keys.Search):
-			// Global search — works from any tab.
-			if !m.overlayActive {
-				m.searchReturnTab = m.activeTab
-				m.activeTab = tabKnowledge
+			if m.activeTab == tabKnowledge && !m.overlayActive {
 				m.searching = true
 				m.searchInput.Focus()
 				return m, nil
@@ -668,10 +658,6 @@ func (m *Model) updateSearch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.searchInput.Blur()
 		m.knowledge = m.ds.RecentKnowledge(100)
 		m.knCursor = 0
-		// Return to the tab search was invoked from.
-		if m.searchReturnTab != tabKnowledge {
-			m.switchTab(m.searchReturnTab)
-		}
 		return m, nil
 	case "enter":
 		// Immediate search on Enter.
@@ -1402,11 +1388,10 @@ func (m Model) tabBarView() string {
 		}
 	}
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
-	title := headerStyle.Render("alfred")
-	if m.loading || m.searchBusy {
-		title += " " + m.spinner.View()
+	if m.searchBusy {
+		bar += " " + m.spinner.View()
 	}
-	return title + "\n" + tabBarStyle.Width(m.width).Render(bar)
+	return tabBarStyle.Width(m.width).Render(bar)
 }
 
 // tabBadge returns a count/alert badge for a given tab.

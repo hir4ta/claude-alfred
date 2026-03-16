@@ -131,6 +131,19 @@ Storage
   +-- ~/.claude-alfred/    -> SQLite (records + FTS5 + Voyage embeddings)
 ```
 
+## When files are created
+
+Nothing is generated at install time. Files appear as you use alfred:
+
+| File / Directory | Created when | Trigger |
+|---|---|---|
+| `~/.claude-alfred/alfred.db` | First Claude Code session after plugin install | SessionStart hook opens the database |
+| `.alfred/specs/` | First task is started | `dossier action=init` (via `/alfred:brief`, `/alfred:attend`, etc.) |
+| `.alfred/epics/` | First epic is created | `roster action=init` |
+| `.alfred/decisions/` | First context compaction with design decisions | PreCompact hook extracts decisions automatically |
+| `.alfred/knowledge/` | Manual export | `alfred export` command |
+| `.alfred/audit.jsonl` | First spec operation | `dossier init`, `dossier delete`, review submission |
+
 ## Troubleshooting
 
 | Symptom | Fix |

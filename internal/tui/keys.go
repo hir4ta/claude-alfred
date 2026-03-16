@@ -18,6 +18,9 @@ type keyMap struct {
 	Review  key.Binding
 }
 
+// Key bindings use ctrl+ modifiers to avoid conflicts with terminal
+// capability responses (OSC 11 contains "/", "r", "g", "b", "?", digits;
+// DECRPM contains "[", "?", digits, "$", "y").
 var keys = keyMap{
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),
@@ -44,20 +47,20 @@ var keys = keyMap{
 		key.WithHelp("enter", "expand"),
 	),
 	Back: key.NewBinding(
-		key.WithKeys("esc", "backspace"),
+		key.WithKeys("esc"),
 		key.WithHelp("esc", "back"),
 	),
 	Search: key.NewBinding(
-		key.WithKeys("/"),
-		key.WithHelp("/", "search"),
+		key.WithKeys("ctrl+f"),
+		key.WithHelp("C-f", "search"),
 	),
 	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "help"),
+		key.WithKeys("ctrl+h"),
+		key.WithHelp("C-h", "help"),
 	),
 	Review: key.NewBinding(
-		key.WithKeys("r"),
-		key.WithHelp("r", "review"),
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("C-r", "review"),
 	),
 }
 
