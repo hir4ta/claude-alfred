@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600&family=Quicksand:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 @theme inline {
@@ -10,6 +11,10 @@
 	--color-brand-purple: #7b6b8d;
 	--color-brand-error: #c0392b;
 	--color-brand-dark: #44403c;
+
+	/* Font families */
+	--font-display: "Quicksand", system-ui, sans-serif;
+	--font-sans: "Nunito", system-ui, -apple-system, sans-serif;
 
 	/* shadcn/ui CSS variables */
 	--color-background: var(--background);
@@ -44,60 +49,60 @@
 }
 
 :root {
-	--radius: 0.5rem;
-	--background: oklch(0.98 0.005 75);
-	--foreground: oklch(0.25 0.01 60);
-	--card: oklch(0.99 0.003 75);
-	--card-foreground: oklch(0.25 0.01 60);
-	--popover: oklch(0.99 0.003 75);
-	--popover-foreground: oklch(0.25 0.01 60);
-	--primary: oklch(0.4 0.06 155);
+	--radius: 0.625rem;
+	--background: oklch(0.975 0.003 75);
+	--foreground: oklch(0.22 0.01 56);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.22 0.01 56);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.22 0.01 56);
+	--primary: oklch(0.37 0.011 56);
 	--primary-foreground: oklch(0.98 0.005 75);
-	--secondary: oklch(0.93 0.008 75);
-	--secondary-foreground: oklch(0.3 0.01 60);
-	--muted: oklch(0.93 0.008 75);
-	--muted-foreground: oklch(0.55 0.01 60);
-	--accent: oklch(0.93 0.008 75);
-	--accent-foreground: oklch(0.3 0.01 60);
-	--destructive: oklch(0.5 0.15 25);
-	--destructive-foreground: oklch(0.98 0.005 75);
-	--border: oklch(0.88 0.008 75);
-	--input: oklch(0.88 0.008 75);
-	--ring: oklch(0.4 0.06 155);
-	--sidebar: oklch(0.96 0.005 75);
-	--sidebar-foreground: oklch(0.3 0.01 60);
-	--sidebar-accent: oklch(0.93 0.008 75);
-	--sidebar-accent-foreground: oklch(0.3 0.01 60);
-	--sidebar-border: oklch(0.88 0.008 75);
-	--sidebar-ring: oklch(0.4 0.06 155);
+	--secondary: oklch(0.95 0.005 75);
+	--secondary-foreground: oklch(0.3 0.01 56);
+	--muted: oklch(0.95 0.005 75);
+	--muted-foreground: oklch(0.5 0.01 56);
+	--accent: oklch(0.95 0.005 75);
+	--accent-foreground: oklch(0.3 0.01 56);
+	--destructive: oklch(0.54 0.174 30);
+	--destructive-foreground: oklch(0.98 0 0);
+	--border: oklch(0.9 0.005 56);
+	--input: oklch(0.9 0.005 56);
+	--ring: oklch(0.37 0.011 56);
+	--sidebar: oklch(0.97 0.003 75);
+	--sidebar-foreground: oklch(0.3 0.01 56);
+	--sidebar-accent: oklch(0.95 0.005 75);
+	--sidebar-accent-foreground: oklch(0.3 0.01 56);
+	--sidebar-border: oklch(0.9 0.005 56);
+	--sidebar-ring: oklch(0.37 0.011 56);
 }
 
 .dark {
-	--background: oklch(0.15 0.01 60);
-	--foreground: oklch(0.9 0.005 75);
-	--card: oklch(0.18 0.01 60);
-	--card-foreground: oklch(0.9 0.005 75);
-	--popover: oklch(0.18 0.01 60);
-	--popover-foreground: oklch(0.9 0.005 75);
-	--primary: oklch(0.55 0.08 155);
-	--primary-foreground: oklch(0.15 0.01 60);
-	--secondary: oklch(0.22 0.01 60);
-	--secondary-foreground: oklch(0.85 0.005 75);
-	--muted: oklch(0.22 0.01 60);
-	--muted-foreground: oklch(0.6 0.01 60);
-	--accent: oklch(0.22 0.01 60);
-	--accent-foreground: oklch(0.85 0.005 75);
-	--destructive: oklch(0.55 0.15 25);
-	--destructive-foreground: oklch(0.9 0.005 75);
-	--border: oklch(0.28 0.01 60);
-	--input: oklch(0.28 0.01 60);
-	--ring: oklch(0.55 0.08 155);
-	--sidebar: oklch(0.17 0.01 60);
-	--sidebar-foreground: oklch(0.85 0.005 75);
-	--sidebar-accent: oklch(0.22 0.01 60);
-	--sidebar-accent-foreground: oklch(0.85 0.005 75);
-	--sidebar-border: oklch(0.28 0.01 60);
-	--sidebar-ring: oklch(0.55 0.08 155);
+	--background: oklch(0.145 0 0);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.18 0.005 56);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.18 0.005 56);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.55 0.02 56);
+	--primary-foreground: oklch(0.145 0 0);
+	--secondary: oklch(0.22 0.005 56);
+	--secondary-foreground: oklch(0.9 0 0);
+	--muted: oklch(0.22 0.005 56);
+	--muted-foreground: oklch(0.6 0.005 56);
+	--accent: oklch(0.22 0.005 56);
+	--accent-foreground: oklch(0.9 0 0);
+	--destructive: oklch(0.54 0.174 30);
+	--destructive-foreground: oklch(0.98 0 0);
+	--border: oklch(1 0 0 / 10%);
+	--input: oklch(1 0 0 / 10%);
+	--ring: oklch(0.55 0.02 56);
+	--sidebar: oklch(0.17 0.005 56);
+	--sidebar-foreground: oklch(0.9 0 0);
+	--sidebar-accent: oklch(0.22 0.005 56);
+	--sidebar-accent-foreground: oklch(0.9 0 0);
+	--sidebar-border: oklch(1 0 0 / 10%);
+	--sidebar-ring: oklch(0.55 0.02 56);
 }
 
 @layer base {
@@ -105,8 +110,8 @@
 		@apply border-border;
 	}
 	body {
-		@apply bg-background text-foreground;
-		font-family: system-ui, -apple-system, sans-serif;
+		@apply bg-background text-foreground antialiased;
+		font-family: var(--font-sans);
 	}
 }
 
