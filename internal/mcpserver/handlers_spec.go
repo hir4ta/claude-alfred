@@ -314,6 +314,16 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 		result["db_synced"] = true
 	}
 
+	// After session.md update: check if all Next Steps are completed → auto-complete.
+	if sf == spec.FileSession {
+		if ns := extractNextSteps(content); ns != "" && allStepsCompleted(ns) {
+			if newPrimary, err := spec.CompleteTask(projectPath, taskSlug); err == nil {
+				result["auto_completed"] = true
+				result["new_primary"] = newPrimary
+			}
+		}
+	}
+
 	return marshalResult(result)
 }
 
@@ -910,4 +920,35 @@ func parseConfidenceScores(content string) confidenceSummary {
 		Items:    items,
 		Warnings: warnings,
 	}
+}
+
+// extractNextSteps extracts the Next Steps section from session.md content.
+func extractNextSteps(content string) string {
+	const heading = "## Next Steps"
+	idx := strings.Index(content, heading)
+	if idx < 0 {
+		return ""
+	}
+	rest := content[idx+len(heading):]
+	// Find next ## heading.
+	if end := strings.Index(rest, "\n## "); end >= 0 {
+		rest = rest[:end]
+	}
+	return rest
+}
+
+// allStepsCompleted returns true if all checkbox items are checked.
+func allStepsCompleted(nextSteps string) bool {
+	hasItems := false
+	for line := range strings.SplitSeq(nextSteps, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- [x] ") || strings.HasPrefix(trimmed, "- [X] ") {
+			hasItems = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- [ ] ") {
+			return false
+		}
+	}
+	return hasItems
 }

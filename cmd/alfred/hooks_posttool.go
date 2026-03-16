@@ -34,9 +34,10 @@ func handlePostToolUse(ctx context.Context, ev *hookEvent) {
 		return
 	}
 
-	// On success: try to auto-check Next Steps.
+	// On success: try to auto-check Next Steps + warn if all done but task still active.
 	if resp.ExitCode == 0 {
 		tryAutoCheckNextSteps(ctx, ev.ProjectPath, input.Command, resp.Stdout)
+		warnIfAllStepsDoneButActive(ev.ProjectPath)
 		return
 	}
 
@@ -74,6 +75,46 @@ func handlePostToolUse(ctx context.Context, ev *hookEvent) {
 	}
 
 	emitAdditionalContext("PostToolUse", buf.String())
+}
+
+// warnIfAllStepsDoneButActive checks if all Next Steps are completed
+// but the task is still active, and emits a reminder to call dossier complete.
+func warnIfAllStepsDoneButActive(projectPath string) {
+	if projectPath == "" {
+		return
+	}
+	taskSlug, err := spec.ReadActive(projectPath)
+	if err != nil {
+		return
+	}
+	state, err := spec.ReadActiveState(projectPath)
+	if err != nil {
+		return
+	}
+	// Check if the task is still active.
+	for _, t := range state.Tasks {
+		if t.Slug == taskSlug && !t.IsActive() {
+			return // already completed
+		}
+	}
+
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	session, err := sd.ReadFile(spec.FileSession)
+	if err != nil {
+		return
+	}
+	nextSteps := extractSection(session, "## Next Steps")
+	if nextSteps == "" {
+		return
+	}
+	if !allNextStepsCompleted(nextSteps) {
+		return
+	}
+	// All steps done but task is still active — emit warning.
+	emitAdditionalContext("PostToolUse",
+		fmt.Sprintf("WARNING: All Next Steps for '%s' are completed but the task is still active.\n"+
+			"Please call `dossier action=complete task_slug=%s` to close the task, "+
+			"or update session.md if there are remaining steps.", taskSlug, taskSlug))
 }
 
 // extractErrorKeywords pulls meaningful terms from error output.
