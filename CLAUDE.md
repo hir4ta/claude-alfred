@@ -61,7 +61,8 @@ alfred steering-init          # Generate project steering docs (.alfred/steering
 - Hook handler: short-lived process. UserPromptSubmit uses Voyage API (semantic search) or FTS5 fallback
 - SessionStart: CLAUDE.md ingestion + user rules check + spec context injection (2 ops parallel via channels) + adaptive onboarding (memory count → context depth)
 - PreCompact: auto-updates Next Steps completion status from transcript; decision extraction; structured chapter memory (JSON); epic progress auto-sync
-- UserPromptSubmit: Voyage vector search → FTS5 fallback → keyword fallback; file context boost from git diff
+- UserPromptSubmit: Voyage vector search → FTS5 fallback → keyword fallback; file context boost from git diff; skill nudge (intent detection → skill suggestion via additionalContext)
+- Skill nudge: classifyIntent (6 intents: research/plan/implement/bugfix/review/save-knowledge, JP+EN bilingual phrase keywords) → buildSkillNudge (intent→skill routing with active spec suppression for plan/implement) → additionalContext injection. save-knowledge suppresses research when both match. No API calls (pure keyword matching, <1ms)
 - PostToolUse: Bash error detection → FTS5 memory search → additionalContext injection; Bash success → session.md Next Steps auto-check (command + action signals matching + file-based matching via git diff); git commit → spec drift detection (file refs vs changed files)
 - PostToolUse drift detection: extractChangedFiles (git diff --name-only HEAD~1, 500ms timeout, fail-open) → parseSpecFileRefs (design.md File: + tasks.md Files:) → matchComponentByPackage (directory-level component matching) → reverseMapFileToFR (file→FR reverse lookup via tasks.md) → compare → additionalContext warning + audit.jsonl logging
 - Drift severity: info (test files), warning (source files not in spec), critical (component-level drift — file in same package as spec component)

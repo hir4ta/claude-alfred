@@ -1860,3 +1860,219 @@ func TestSyncSessionProgress(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Skill nudge tests
+// ---------------------------------------------------------------------------
+
+func TestClassifyIntent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		prompt  string
+		want    []string
+		notWant []string
+	}{
+		{
+			name:   "japanese research",
+			prompt: "このコードベースを調査して",
+			want:   []string{"research"},
+		},
+		{
+			name:   "english implement",
+			prompt: "implement the auth module",
+			want:   []string{"implement"},
+		},
+		{
+			name:   "japanese bugfix",
+			prompt: "このバグを直して",
+			want:   []string{"bugfix"},
+		},
+		{
+			name:   "japanese review",
+			prompt: "コードレビューして",
+			want:   []string{"review"},
+		},
+		{
+			name:   "japanese plan",
+			prompt: "この機能の仕様を書いて",
+			want:   []string{"plan"},
+		},
+		{
+			name:   "save knowledge",
+			prompt: "競合ツールの調査結果をまとめて保存",
+			want:   []string{"save-knowledge"},
+			notWant: []string{"research"}, // save-knowledge suppresses research
+		},
+		{
+			name:   "no match",
+			prompt: "hello world",
+			want:   nil,
+		},
+		{
+			name:    "check does not trigger review",
+			prompt:  "テスト結果を確認して",
+			notWant: []string{"review"},
+		},
+		{
+			name:    "create does not trigger implement",
+			prompt:  "ファイルを作って",
+			notWant: []string{"implement"},
+		},
+		{
+			name:    "build does not trigger implement",
+			prompt:  "build the project",
+			notWant: []string{"implement"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := classifyIntent(tt.prompt)
+			gotSet := map[string]bool{}
+			for _, i := range got {
+				gotSet[i] = true
+			}
+			for _, w := range tt.want {
+				if !gotSet[w] {
+					t.Errorf("classifyIntent(%q) missing intent %q, got %v", tt.prompt, w, got)
+				}
+			}
+			for _, nw := range tt.notWant {
+				if gotSet[nw] {
+					t.Errorf("classifyIntent(%q) should not have intent %q, got %v", tt.prompt, nw, got)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildSkillNudge(t *testing.T) {
+	t.Parallel()
+
+	t.Run("implement without active spec", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge([]string{"implement"}, false)
+		if !strings.Contains(nudge, "/alfred:attend") {
+			t.Errorf("nudge should contain /alfred:attend, got %q", nudge)
+		}
+	})
+
+	t.Run("implement with active spec suppressed", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge([]string{"implement"}, true)
+		if nudge != "" {
+			t.Errorf("nudge should be empty when active spec exists, got %q", nudge)
+		}
+	})
+
+	t.Run("plan with active spec suppressed", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge([]string{"plan"}, true)
+		if nudge != "" {
+			t.Errorf("nudge should be empty when active spec exists, got %q", nudge)
+		}
+	})
+
+	t.Run("bugfix not suppressed by active spec", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge([]string{"bugfix"}, true)
+		if !strings.Contains(nudge, "/alfred:mend") {
+			t.Errorf("bugfix nudge should not be suppressed, got %q", nudge)
+		}
+	})
+
+	t.Run("review maps to inspect", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge([]string{"review"}, false)
+		if !strings.Contains(nudge, "/alfred:inspect") {
+			t.Errorf("review nudge should contain /alfred:inspect, got %q", nudge)
+		}
+	})
+
+	t.Run("save-knowledge maps to ledger", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge([]string{"save-knowledge"}, false)
+		if !strings.Contains(nudge, "ledger") {
+			t.Errorf("save-knowledge nudge should mention ledger, got %q", nudge)
+		}
+	})
+
+	t.Run("no intents returns empty", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge(nil, false)
+		if nudge != "" {
+			t.Errorf("empty intents should return empty nudge, got %q", nudge)
+		}
+	})
+
+	t.Run("no duplicate nudges", func(t *testing.T) {
+		t.Parallel()
+		nudge := buildSkillNudge([]string{"review", "review"}, false)
+		count := strings.Count(nudge, "/alfred:inspect")
+		if count > 1 {
+			t.Errorf("should not duplicate nudges, found %d occurrences", count)
+		}
+	})
+}
+
+func TestCombineHints(t *testing.T) {
+	t.Parallel()
+
+	t.Run("both non-empty", func(t *testing.T) {
+		t.Parallel()
+		result := combineHints("hint1", "hint2")
+		if result != "hint1\n\nhint2" {
+			t.Errorf("combineHints = %q, want %q", result, "hint1\n\nhint2")
+		}
+	})
+
+	t.Run("one empty", func(t *testing.T) {
+		t.Parallel()
+		result := combineHints("", "hint2")
+		if result != "hint2" {
+			t.Errorf("combineHints = %q, want %q", result, "hint2")
+		}
+	})
+
+	t.Run("both empty", func(t *testing.T) {
+		t.Parallel()
+		result := combineHints("", "")
+		if result != "" {
+			t.Errorf("combineHints = %q, want empty", result)
+		}
+	})
+}
+
+func TestHasActiveSpecTask(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no active spec", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		if hasActiveSpecTask(tmp) {
+			t.Error("should return false for dir without active spec")
+		}
+	})
+
+	t.Run("with active spec", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		_, err := spec.Init(tmp, "test-task", "test", spec.WithSize(spec.SizeS))
+		if err != nil {
+			t.Fatalf("Init: %v", err)
+		}
+		if !hasActiveSpecTask(tmp) {
+			t.Error("should return true when active spec exists")
+		}
+	})
+
+	t.Run("empty path", func(t *testing.T) {
+		t.Parallel()
+		if hasActiveSpecTask("") {
+			t.Error("should return false for empty path")
+		}
+	})
+}
