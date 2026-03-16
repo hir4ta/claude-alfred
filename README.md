@@ -26,9 +26,15 @@ alfred fixes all three.
 
 **Memory that compounds.** Every decision, every bug fix, every "we tried X and it didn't work" gets stored as semantic memory with a vitality score. Stale assumptions decay faster than proven rules. Contradictions are detected automatically. Next time you hit a similar problem, alfred surfaces the relevant experience — before you even ask.
 
+**Reliability signals.** Every spec item gets a grounding level — `verified`, `reviewed`, `inferred`, or `speculative`. You can instantly see which requirements are battle-tested and which are guesswork. Typos in grounding values get caught, not silently ignored.
+
+**Brownfield-ready.** Delta specs for existing code changes get `CHG-N` change IDs and Before/After behavioral diffs. Not just "what file changed" but "what behavior changed and why." Three new validation checks enforce delta quality.
+
 **Specs that don't drift.** After every commit, alfred compares what changed against your spec. Modified a component not in the design? Warning. Convention in memory no longer matches code? Flagged. No other tool does this.
 
 **Reviews that scale.** Six review profiles (code, config, security, docs, architecture, testing), each with a curated checklist. Parallel agents, scored reports, actionable findings.
+
+**Proactive skill suggestions.** alfred doesn't wait to be asked. It detects what you're doing — researching, designing, implementing, fixing bugs — and suggests the right skill at the right time. Explored code for a while? "Try `/alfred:survey`." Got research findings? "Save them with `ledger`." Three tasks piling up? "Group them with `roster`."
 
 **Approval gates.** Specs go through a review cycle before implementation. Comment on any line in the TUI dashboard, approve or request changes — like a GitHub PR review, but for your specs.
 
@@ -80,10 +86,10 @@ Run automatically. You don't touch these.
 
 | Event | What happens |
 |-------|-------------|
-| SessionStart | Restores spec context, ingests CLAUDE.md, adapts injection depth to project maturity |
-| PreCompact | Extracts decisions, saves structured chapter memory (JSON), syncs epic progress |
-| UserPromptSubmit | Semantic search + file context boost — surfaces relevant past experience |
-| PostToolUse | Detects Bash errors + searches memory for similar past fixes. After commits: spec drift detection |
+| SessionStart | Restores spec context, ingests CLAUDE.md, adapts injection depth to project maturity, suggests `ledger reflect` when knowledge base needs attention |
+| PreCompact | Extracts decisions, saves structured chapter memory (JSON), syncs epic progress, detects research patterns and reminds to save knowledge |
+| UserPromptSubmit | Semantic search + file context boost + **skill nudge** (detects intent → suggests the right skill) |
+| PostToolUse | Detects Bash errors + searches memory for similar past fixes. After commits: spec drift detection. After 5+ Read/Grep: suggests `/alfred:survey` |
 
 ## TUI dashboard
 
@@ -131,19 +137,22 @@ Not every task needs 7 spec files.
 | **S** (small) | 3: requirements, tasks, session | Bug fix, config change, small tweak |
 | **M** (medium) | 5: + design, test-specs | New endpoint, refactor, moderate feature |
 | **L/XL** (large) | 7: + decisions, research | Architecture change, new subsystem |
+| **D** (delta) | 2: delta.md (with CHG-N IDs + Before/After), session | Brownfield changes to existing code |
 | **Bugfix** | 3-4: bugfix.md, tasks, session (+ test-specs) | Surgical bug fix with reproduction steps |
 
 Size auto-detected from description, or set explicitly: `dossier action=init size=S`.
 
 ## Spec validation
 
-`dossier action=validate` checks your spec's structural completeness:
+`dossier action=validate` runs 22 progressive checks:
 
 - Required sections present (Goal, Functional Requirements, etc.)
 - Minimum FR count by size (S: 1+, M: 3+, L: 5+)
 - Traceability completeness (every FR mapped to a task, every task referencing an FR)
-- Confidence annotations on required sections
+- Confidence + grounding annotations on required sections
 - Closing wave present in tasks
+- Grounding coverage — opt-in check: fails when >30% of items are speculative (L/XL)
+- Delta spec quality — CHG-N identifiers in Files Affected, Before/After section with content
 
 ## Steering documents
 
