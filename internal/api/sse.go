@@ -115,8 +115,7 @@ func (h *SSEHub) StartMtimePoller(projectPath string, interval time.Duration) {
 				mtime := dirMaxMtime(alfredDir)
 				if mtime.After(lastMtime) {
 					lastMtime = mtime
-					h.Broadcast(SSEEvent{Type: "spec_changed", Data: map[string]any{}})
-					h.Broadcast(SSEEvent{Type: "task_updated", Data: map[string]any{}})
+					h.Broadcast(SSEEvent{Type: "refresh", Data: map[string]any{}})
 				}
 			}
 		}
