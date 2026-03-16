@@ -77,7 +77,7 @@ function OverviewPage() {
 			{/* Bottom row: Health + Epics + Decisions */}
 			<div className="grid gap-6 lg:grid-cols-3">
 				<HealthCard stats={healthData} />
-				<EpicProgressCard epics={epicsData?.epics} />
+				<EpicProgressCard epics={epicsData?.epics?.filter((e) => e.status !== "completed")} />
 				<RecentDecisionsCard decisions={decisionsData?.decisions} />
 			</div>
 		</div>

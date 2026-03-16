@@ -31,7 +31,7 @@ function ActivityPage() {
 	const { data: epicsData } = useQuery(epicsQueryOptions());
 
 	const entries = activityData?.entries ?? [];
-	const epics = epicsData?.epics ?? [];
+	const epics = (epicsData?.epics ?? []).filter((e) => e.status !== "completed");
 
 	return (
 		<div className="space-y-6">
