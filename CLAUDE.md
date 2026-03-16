@@ -140,18 +140,21 @@ alfred search-eval            # Run search quality benchmark
 - Memory sub_type boost: rule=2.0x, decision=1.5x, pattern=1.3x, general=1.0x (search relevance)
 - Knowledge maturity: hit_count tracks search result appearances, last_accessed for staleness detection
 - Knowledge promotion: general→pattern (5+ hits), pattern→rule (15+ hits); manual confirmation via ledger promote
-- Ledger tool actions: search, save, promote, candidates, reflect
-- Knowledge health (ledger reflect): stats + conflict detection + stale memories + promotion candidates
+- Ledger tool actions: search, save, promote, candidates, reflect, stale
+- Knowledge health (ledger reflect): stats + conflict detection (contradictions vs duplicates) + stale memories + promotion candidates + vitality distribution (5 buckets) + avg_vitality
+- Ledger stale action: returns low-vitality memories with computed scores (threshold parameter, default 20)
 - Search quality benchmark: `alfred search-eval` CLI subcommand with .alfred/search-eval.yaml test cases
 - PreCompact promotion injection: candidates above threshold surfaced in additionalContext
 - Search pipeline: Voyage vector search → rerank → recency signal → hit_count tracking → FTS5 fallback → keyword fallback
 - FTS5: records_fts virtual table with bm25 ranking, auto-synced via triggers
 - Tag alias expansion: auth→authentication/login/認証, 16 categories bilingual (EN/JP)
 - Fuzzy search: Levenshtein distance on section_path (max dist = min(2, len/3))
-- Conflict detection: DetectConflicts pairwise cosine similarity (threshold 0.75) on memory embeddings
+- Conflict detection: DetectConflicts pairwise cosine similarity (threshold 0.70) on memory embeddings; classifyConflict keyword polarity analysis (contradictionPairs) → "potential_contradiction" or "potential_duplicate"
 - Progressive Disclosure: ledger search detail parameter (compact/summary/full)
 - File context boost: git diff → FTS5 search by changed filenames → score boost
-- Recency signal: post-rerank exponential decay for memory (60d half-life); floor at 50%
+- Recency signal: post-rerank exponential decay with sub-type-aware half-life via store.SubTypeHalfLife (assumption=30d, inference=45d, general=60d, pattern=90d, decision=90d, rule=120d); floor at 50%; replaces former uniform 60d half-life
+- Vitality score: on-demand composite (0-100) = 40% recency_decay + 25% hit_count (cap 50) + 20% sub_type_weight + 15% access_frequency; ComputeVitality/ListLowVitality in store/docs.go
+- PreCompact vitality warnings: warnLowVitalityMemories logs stderr warning for memories with vitality < 10 AND 180+ days unaccessed (read-only, never auto-disable per DEC-6)
 - Structured chapter memory: JSON schema (goal, technologies, modified_files, decisions, blockers)
 - Decision extraction: base score 0.35, min confidence 0.4 — bare keyword matches require at least one positive signal (rationale/alternative/arch term)
 - Background embedding: embed-async/embed-doc subcommands for async Voyage API calls

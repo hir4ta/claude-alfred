@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -539,7 +540,7 @@ func (s *Store) GetStaleMemories(ctx context.Context, staleDays int) ([]DocRow, 
 	}
 	cutoff := time.Now().AddDate(0, 0, -staleDays).UTC().Format(time.RFC3339)
 
-	rows, err := s.db.QueryContext(ctx,
+	staleRows, err := s.db.QueryContext(ctx,
 		`SELECT id, url, section_path, content, source_type, sub_type, hit_count, last_accessed, crawled_at, structured
 		 FROM records
 		 WHERE source_type = ?
@@ -550,16 +551,149 @@ func (s *Store) GetStaleMemories(ctx context.Context, staleDays int) ([]DocRow, 
 	if err != nil {
 		return nil, fmt.Errorf("store: get stale memories: %w", err)
 	}
-	defer rows.Close()
+	defer staleRows.Close()
 
 	var docs []DocRow
-	for rows.Next() {
+	for staleRows.Next() {
 		var d DocRow
-		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content,
+		if err := staleRows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content,
 			&d.SourceType, &d.SubType, &d.HitCount, &d.LastAccessed, &d.CrawledAt, &d.Structured); err != nil {
 			continue
 		}
 		docs = append(docs, d)
 	}
-	return docs, rows.Err()
+	return docs, staleRows.Err()
+}
+
+// VitalityScore holds the computed vitality components for a memory.
+type VitalityScore struct {
+	Total           float64 `json:"total"`            // 0-100
+	RecencyDecay    float64 `json:"recency_decay"`    // 0-1.0
+	HitCountScore   float64 `json:"hit_count_score"`  // 0-1.0 (capped at 50 hits)
+	SubTypeWeight   float64 `json:"sub_type_weight"`  // 0-1.0 (normalized boost)
+	AccessFrequency float64 `json:"access_frequency"` // 0-1.0 (hits per day, bounded)
+}
+
+// vitalityHitCap is the maximum hit_count contribution ceiling.
+const vitalityHitCap = 50.0
+
+// ComputeVitalityFromDoc calculates vitality from a DocRow without DB access.
+// Used by both ComputeVitality and ListLowVitality.
+func ComputeVitalityFromDoc(d *DocRow, now time.Time) VitalityScore {
+	// 1. Recency decay component (0.5 to 1.0).
+	halfLife := SubTypeHalfLife(d.SubType)
+	var recencyDecay float64 = 1.0
+	if t, err := time.Parse(time.RFC3339, d.CrawledAt); err == nil {
+		ageDays := now.Sub(t).Hours() / 24
+		if ageDays > 0 && halfLife > 0 {
+			recencyDecay = math.Exp(-math.Ln2 * ageDays / halfLife)
+			if recencyDecay < 0.5 {
+				recencyDecay = 0.5
+			}
+		}
+	}
+
+	// 2. Hit count component (0-1.0, capped at 50 hits).
+	hitScore := math.Min(float64(d.HitCount), vitalityHitCap) / vitalityHitCap
+
+	// 3. Sub-type weight component (normalized: general=0, rule=1.0).
+	// SubTypeBoost range: 1.0 (general) to 2.0 (rule). Normalize to 0-1.
+	subTypeWeight := SubTypeBoost(d.SubType) - 1.0
+
+	// 4. Access frequency component (hits per day, bounded 0-1).
+	var accessFreq float64
+	if t, err := time.Parse(time.RFC3339, d.CrawledAt); err == nil {
+		ageDays := math.Max(now.Sub(t).Hours()/24, 1.0)
+		accessFreq = math.Min(float64(d.HitCount)/ageDays, 1.0)
+	}
+
+	total := 100.0 * (0.40*recencyDecay + 0.25*hitScore + 0.20*subTypeWeight + 0.15*accessFreq)
+
+	return VitalityScore{
+		Total:           total,
+		RecencyDecay:    recencyDecay,
+		HitCountScore:   hitScore,
+		SubTypeWeight:   subTypeWeight,
+		AccessFrequency: accessFreq,
+	}
+}
+
+// ComputeVitality calculates the composite vitality score for a memory record.
+// Returns an error if the record is not found or is not a memory.
+func (s *Store) ComputeVitality(ctx context.Context, recordID int64) (*VitalityScore, error) {
+	var d DocRow
+	var version sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, url, section_path, content, content_hash, source_type, sub_type,
+			version, crawled_at, ttl_days, hit_count, last_accessed
+		 FROM records WHERE id = ?`, recordID).Scan(
+		&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
+		&d.SourceType, &d.SubType, &version, &d.CrawledAt, &d.TTLDays,
+		&d.HitCount, &d.LastAccessed)
+	if err != nil {
+		return nil, fmt.Errorf("store: compute vitality: record %d not found: %w", recordID, err)
+	}
+	d.Version = version.String
+
+	if d.SourceType != SourceMemory {
+		return nil, fmt.Errorf("store: compute vitality: record %d is not a memory (source_type=%s)", recordID, d.SourceType)
+	}
+
+	vs := ComputeVitalityFromDoc(&d, time.Now())
+	return &vs, nil
+}
+
+// LowVitalityDoc pairs a DocRow with its computed vitality score.
+type LowVitalityDoc struct {
+	DocRow
+	Vitality float64 `json:"vitality"`
+}
+
+// ListLowVitality returns enabled memory records with vitality below threshold,
+// sorted by vitality ascending. Only computes vitality for source_type=memory.
+func (s *Store) ListLowVitality(ctx context.Context, threshold float64, limit int) ([]LowVitalityDoc, error) {
+	if threshold <= 0 {
+		threshold = 20.0
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+
+	lvRows, err := s.db.QueryContext(ctx,
+		`SELECT id, url, section_path, content, content_hash, source_type, sub_type,
+			version, crawled_at, ttl_days, hit_count, last_accessed
+		 FROM records
+		 WHERE source_type = ? AND enabled = 1
+		 ORDER BY crawled_at ASC`,
+		SourceMemory)
+	if err != nil {
+		return nil, fmt.Errorf("store: list low vitality: %w", err)
+	}
+	defer lvRows.Close()
+
+	now := time.Now()
+	var results []LowVitalityDoc
+	for lvRows.Next() {
+		var d DocRow
+		var version sql.NullString
+		if err := lvRows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
+			&d.SourceType, &d.SubType, &version, &d.CrawledAt, &d.TTLDays,
+			&d.HitCount, &d.LastAccessed); err != nil {
+			continue
+		}
+		d.Version = version.String
+
+		vs := ComputeVitalityFromDoc(&d, now)
+		if vs.Total < threshold {
+			results = append(results, LowVitalityDoc{DocRow: d, Vitality: vs.Total})
+			if len(results) >= limit {
+				break
+			}
+		}
+	}
+	if err := lvRows.Err(); err != nil {
+		return results, fmt.Errorf("store: list low vitality iteration: %w", err)
+	}
+
+	return results, nil
 }

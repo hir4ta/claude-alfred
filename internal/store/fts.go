@@ -212,19 +212,57 @@ func FuzzyMatch(query, target string) bool {
 	return dist <= maxDist
 }
 
-// Conflict represents a pair of potentially contradictory memories.
+// contradictionPairs defines antonym keyword pairs for polarity analysis.
+// Used by classifyConflict to distinguish duplicates from contradictions.
+var contradictionPairs = [][2]string{
+	{"always", "never"},
+	{"must", "must not"},
+	{"use", "avoid"},
+	{"enable", "disable"},
+	{"allow", "deny"},
+	{"required", "optional"},
+	{"do", "don't"},
+	{"add", "remove"},
+	{"include", "exclude"},
+}
+
+// classifyConflict determines if a high-similarity pair is a duplicate or contradiction.
+// Returns "potential_contradiction" if one doc contains a keyword and the other contains
+// its antonym; otherwise returns "potential_duplicate".
+func classifyConflict(contentA, contentB string) string {
+	lowerA := strings.ToLower(contentA)
+	lowerB := strings.ToLower(contentB)
+
+	for _, pair := range contradictionPairs {
+		aHas0 := strings.Contains(lowerA, pair[0])
+		aHas1 := strings.Contains(lowerA, pair[1])
+		bHas0 := strings.Contains(lowerB, pair[0])
+		bHas1 := strings.Contains(lowerB, pair[1])
+
+		// One doc has keyword, other has antonym (cross-polarity).
+		if (aHas0 && bHas1 && !aHas1) || (aHas1 && bHas0 && !bHas1) {
+			return "potential_contradiction"
+		}
+	}
+	return "potential_duplicate"
+}
+
+// Conflict represents a pair of potentially contradictory or duplicate memories.
 type Conflict struct {
 	DocA       DocRow
 	DocB       DocRow
 	Similarity float64
+	Type       string // "potential_duplicate" or "potential_contradiction"
 }
 
 // DetectConflicts finds pairs of memory records with high cosine similarity
-// that may represent contradictory decisions. Threshold 0.75 = high semantic overlap.
+// that may represent contradictory decisions or duplicates.
+// Threshold 0.70 = high semantic overlap. Uses keyword polarity analysis
+// to classify each pair as duplicate or contradiction.
 // Only checks source_type="memory" records that have embeddings.
 func (s *Store) DetectConflicts(ctx context.Context, threshold float64) ([]Conflict, error) {
 	if threshold <= 0 {
-		threshold = 0.75
+		threshold = 0.70
 	}
 
 	// Load all memory embeddings.
@@ -293,6 +331,8 @@ func (s *Store) DetectConflicts(ctx context.Context, threshold float64) ([]Confl
 				if d, ok := docMap[conflicts[i].DocB.ID]; ok {
 					conflicts[i].DocB = d
 				}
+				// Classify as contradiction or duplicate using keyword polarity.
+				conflicts[i].Type = classifyConflict(conflicts[i].DocA.Content, conflicts[i].DocB.Content)
 			}
 		}
 	}
@@ -303,6 +343,28 @@ func (s *Store) DetectConflicts(ctx context.Context, threshold float64) ([]Confl
 	})
 
 	return conflicts, nil
+}
+
+// SubTypeHalfLife returns the recency decay half-life in days for a memory sub_type.
+// Callers should check source_type first — only memory records should be decayed.
+// Unknown sub_types fall back to general's 60-day half-life.
+func SubTypeHalfLife(subType string) float64 {
+	switch subType {
+	case "assumption":
+		return 30.0
+	case "inference":
+		return 45.0
+	case SubTypeGeneral:
+		return 60.0
+	case SubTypePattern:
+		return 90.0
+	case SubTypeDecision:
+		return 90.0
+	case SubTypeRule:
+		return 120.0
+	default:
+		return 60.0 // safe fallback
+	}
 }
 
 // SubTypeBoost returns a relevance multiplier based on memory sub_type.

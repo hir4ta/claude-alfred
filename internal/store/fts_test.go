@@ -294,6 +294,32 @@ func TestSchemaTablesExist(t *testing.T) {
 	}
 }
 
+func TestSubTypeHalfLife(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		subType string
+		want    float64
+	}{
+		{"assumption", 30.0},
+		{"inference", 45.0},
+		{SubTypeGeneral, 60.0},
+		{SubTypePattern, 90.0},
+		{SubTypeDecision, 90.0},
+		{SubTypeRule, 120.0},
+		{"", 60.0},
+		{"unknown", 60.0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.subType, func(t *testing.T) {
+			t.Parallel()
+			got := SubTypeHalfLife(tt.subType)
+			if got != tt.want {
+				t.Errorf("SubTypeHalfLife(%q) = %v, want %v", tt.subType, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSubTypeBoost(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -312,6 +338,75 @@ func TestSubTypeBoost(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("SubTypeBoost(%q) = %v, want %v", tt.subType, got, tt.want)
 		}
+	}
+}
+
+func TestClassifyConflict(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		contentA string
+		contentB string
+		want     string
+	}{
+		{
+			name:     "always vs never",
+			contentA: "always use go install for building",
+			contentB: "never use go install, prefer go build",
+			want:     "potential_contradiction",
+		},
+		{
+			name:     "must vs must not",
+			contentA: "you must run tests before committing",
+			contentB: "you must not run tests in production",
+			want:     "potential_contradiction",
+		},
+		{
+			name:     "use vs avoid",
+			contentA: "use SQLite for local storage",
+			contentB: "avoid SQLite for large datasets",
+			want:     "potential_contradiction",
+		},
+		{
+			name:     "enable vs disable",
+			contentA: "enable WAL mode for better performance",
+			contentB: "disable WAL mode in testing",
+			want:     "potential_contradiction",
+		},
+		{
+			name:     "duplicate content",
+			contentA: "use go install for building",
+			contentB: "use go install for deployment",
+			want:     "potential_duplicate",
+		},
+		{
+			name:     "no polarity keywords",
+			contentA: "SQLite is the database engine",
+			contentB: "SQLite handles persistence",
+			want:     "potential_duplicate",
+		},
+		{
+			name:     "case insensitive",
+			contentA: "ALWAYS run linting",
+			contentB: "Never run linting in CI",
+			want:     "potential_contradiction",
+		},
+		{
+			name:     "both have same polarity (not contradiction)",
+			contentA: "always use tests, always verify",
+			contentB: "always run checks, always validate",
+			want:     "potential_duplicate",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := classifyConflict(tt.contentA, tt.contentB)
+			if got != tt.want {
+				t.Errorf("classifyConflict(%q, %q) = %q, want %q", tt.contentA, tt.contentB, got, tt.want)
+			}
+		})
 	}
 }
 

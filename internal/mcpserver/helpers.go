@@ -20,8 +20,7 @@ import (
 // Docs (crawled reference material) are not decayed because crawled_at
 // reflects fetch time, not feature authoring time.
 const (
-	recencyHalfLifeMemory = 60.0 // days: memory half-life
-	recencyFloor          = 0.5  // minimum multiplier (never suppress below 50%)
+	recencyFloor = 0.5 // minimum multiplier (never suppress below 50%)
 )
 
 // truncate shortens a string to maxLen runes, appending "..." if truncated.
@@ -33,22 +32,14 @@ func truncate(s string, maxLen int) string {
 	return string(runes[:maxLen]) + "..."
 }
 
-// recencyHalfLife returns the half-life in days for a given source type.
-// Returns 0 for source types that should not be decayed.
-func recencyHalfLife(sourceType string) float64 {
-	switch sourceType {
-	case store.SourceMemory:
-		return recencyHalfLifeMemory
-	default:
-		return 0 // no decay
-	}
-}
-
 // recencyFactor computes a multiplicative recency signal for a document.
-// Uses exponential decay: factor = max(floor, exp(-ln2 * ageDays / halfLife)).
-// Returns 1.0 for source types with no decay or missing timestamps.
-func recencyFactor(crawledAt string, sourceType string, now time.Time) float64 {
-	halfLife := recencyHalfLife(sourceType)
+// Uses exponential decay with sub-type-aware half-life from store.SubTypeHalfLife.
+// Returns 1.0 for source types other than memory, or missing timestamps.
+func recencyFactor(crawledAt string, sourceType string, subType string, now time.Time) float64 {
+	if sourceType != store.SourceMemory {
+		return 1.0
+	}
+	halfLife := store.SubTypeHalfLife(subType)
 	if halfLife <= 0 {
 		return 1.0
 	}
@@ -88,7 +79,7 @@ func applyRecencySignal(docs []store.DocRow, now time.Time) []store.DocRow {
 	// Check if any doc needs recency adjustment.
 	needsAdjust := false
 	for _, d := range docs {
-		if recencyHalfLife(d.SourceType) > 0 {
+		if d.SourceType == store.SourceMemory {
 			needsAdjust = true
 			break
 		}
@@ -101,7 +92,7 @@ func applyRecencySignal(docs []store.DocRow, now time.Time) []store.DocRow {
 	for i, d := range docs {
 		// Position-based score: first doc = 1.0, last = 1/n.
 		posScore := 1.0 / float64(i+1)
-		rf := recencyFactor(d.CrawledAt, d.SourceType, now)
+		rf := recencyFactor(d.CrawledAt, d.SourceType, d.SubType, now)
 		stb := store.SubTypeBoost(d.SubType)
 		scored[i] = scoredDoc{doc: d, score: posScore * rf * stb}
 	}

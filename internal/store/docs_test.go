@@ -452,6 +452,175 @@ func TestUpsertDocMemoryTTL(t *testing.T) {
 	}
 }
 
+func TestComputeVitality(t *testing.T) {
+	t.Parallel()
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	// Insert a fresh general memory with some hit count.
+	id, _, err := st.UpsertDoc(ctx, &DocRow{
+		URL:         "memory://test/vitality1",
+		SectionPath: "project > vitality test",
+		Content:     "test content for vitality",
+		SourceType:  SourceMemory,
+		SubType:     SubTypeGeneral,
+	})
+	if err != nil {
+		t.Fatalf("UpsertDoc: %v", err)
+	}
+	// Increment hit count to 10.
+	for i := 0; i < 10; i++ {
+		if err := st.IncrementHitCount(ctx, []int64{id}); err != nil {
+			t.Fatalf("IncrementHitCount: %v", err)
+		}
+	}
+
+	vs, err := st.ComputeVitality(ctx, id)
+	if err != nil {
+		t.Fatalf("ComputeVitality: %v", err)
+	}
+
+	// Fresh memory with hits should have a high score.
+	if vs.Total < 20 || vs.Total > 100 {
+		t.Errorf("ComputeVitality total = %f, want between 20 and 100", vs.Total)
+	}
+	if vs.RecencyDecay < 0.5 || vs.RecencyDecay > 1.0 {
+		t.Errorf("RecencyDecay = %f, want between 0.5 and 1.0", vs.RecencyDecay)
+	}
+	// 10 hits / 50 cap = 0.2
+	if vs.HitCountScore < 0.19 || vs.HitCountScore > 0.21 {
+		t.Errorf("HitCountScore = %f, want ~0.2", vs.HitCountScore)
+	}
+	// General sub_type: boost=1.0, weight=0.0
+	if vs.SubTypeWeight != 0.0 {
+		t.Errorf("SubTypeWeight = %f, want 0.0 for general", vs.SubTypeWeight)
+	}
+
+	// Non-existent record returns error.
+	_, err = st.ComputeVitality(ctx, 99999)
+	if err == nil {
+		t.Error("ComputeVitality(99999) should return error")
+	}
+
+	// Non-memory record returns error.
+	nonMemID, _, _ := st.UpsertDoc(ctx, &DocRow{
+		URL: "https://example.com/page", SectionPath: "A", Content: "doc", SourceType: "project",
+	})
+	_, err = st.ComputeVitality(ctx, nonMemID)
+	if err == nil {
+		t.Error("ComputeVitality on non-memory should return error")
+	}
+}
+
+func TestComputeVitalityFromDoc(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		doc      DocRow
+		wantMin  float64
+		wantMax  float64
+	}{
+		{
+			name: "fresh general no hits",
+			doc: DocRow{
+				SubType:  SubTypeGeneral,
+				CrawledAt: "2026-03-10T12:00:00Z",
+				HitCount: 0,
+			},
+			wantMin: 20.0, // 100 * (0.40*1.0 + 0.25*0 + 0.20*0 + 0.15*0) = 40
+			wantMax: 41.0,
+		},
+		{
+			name: "old general no hits",
+			doc: DocRow{
+				SubType:  SubTypeGeneral,
+				CrawledAt: "2025-01-01T00:00:00Z", // >1 year old
+				HitCount: 0,
+			},
+			wantMin: 19.0, // 100 * (0.40*0.5 + 0) = 20
+			wantMax: 21.0,
+		},
+		{
+			name: "rule with max hits",
+			doc: DocRow{
+				SubType:  SubTypeRule,
+				CrawledAt: "2026-03-10T12:00:00Z",
+				HitCount: 50,
+			},
+			wantMin: 80.0, // high recency + max hits + rule boost + high freq
+			wantMax: 100.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			vs := ComputeVitalityFromDoc(&tt.doc, now)
+			if vs.Total < tt.wantMin || vs.Total > tt.wantMax {
+				t.Errorf("ComputeVitalityFromDoc() total = %f, want between %f and %f", vs.Total, tt.wantMin, tt.wantMax)
+			}
+		})
+	}
+}
+
+func TestListLowVitality(t *testing.T) {
+	t.Parallel()
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	// Insert an old memory with no hits (should have low vitality).
+	_, _, err := st.UpsertDoc(ctx, &DocRow{
+		URL:         "memory://test/old",
+		SectionPath: "project > old memory",
+		Content:     "very old content",
+		SourceType:  SourceMemory,
+		SubType:     SubTypeGeneral,
+		CrawledAt:   time.Now().AddDate(-1, 0, 0).UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		t.Fatalf("UpsertDoc(old): %v", err)
+	}
+
+	// Insert a fresh memory with hits (should have high vitality).
+	freshID, _, err := st.UpsertDoc(ctx, &DocRow{
+		URL:         "memory://test/fresh",
+		SectionPath: "project > fresh memory",
+		Content:     "fresh content",
+		SourceType:  SourceMemory,
+		SubType:     SubTypeRule,
+	})
+	if err != nil {
+		t.Fatalf("UpsertDoc(fresh): %v", err)
+	}
+	for i := 0; i < 20; i++ {
+		_ = st.IncrementHitCount(ctx, []int64{freshID})
+	}
+
+	results, err := st.ListLowVitality(ctx, 25, 50)
+	if err != nil {
+		t.Fatalf("ListLowVitality: %v", err)
+	}
+
+	// Old memory should be in the results, fresh should not.
+	found := false
+	for _, r := range results {
+		if r.SectionPath == "project > old memory" {
+			found = true
+			if r.Vitality >= 25 {
+				t.Errorf("old memory vitality = %f, want < 25", r.Vitality)
+			}
+		}
+		if r.SectionPath == "project > fresh memory" {
+			t.Error("fresh memory should not be in low vitality results")
+		}
+	}
+	if !found {
+		t.Error("old memory should be in low vitality results")
+	}
+}
+
 func TestSearchMemoriesKeyword(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)

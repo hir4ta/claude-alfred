@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -40,9 +41,11 @@ func recallHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFu
 		case "candidates":
 			return recallCandidates(ctx, st)
 		case "reflect":
-			return recallReflect(ctx, st, emb)
+			return recallReflect(ctx, st, emb, req)
+		case "stale":
+			return recallStale(ctx, st, req)
 		default:
-			return mcp.NewToolResultError(fmt.Sprintf("unknown action %q: use search, save, promote, candidates, or reflect", action)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("unknown action %q: use search, save, promote, candidates, stale, or reflect", action)), nil
 		}
 	}
 }
@@ -364,8 +367,43 @@ func recallCandidates(ctx context.Context, st *store.Store) (*mcp.CallToolResult
 	})
 }
 
+// recallStale returns low-vitality memories with their computed scores.
+func recallStale(ctx context.Context, st *store.Store, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	threshold := float64(req.GetInt("threshold", 20))
+	if threshold <= 0 {
+		threshold = 20.0
+	}
+
+	docs, err := st.ListLowVitality(ctx, threshold, 50)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("stale query failed: %v", err)), nil
+	}
+
+	results := make([]map[string]any, 0, len(docs))
+	for _, d := range docs {
+		accessDate := d.LastAccessed
+		if accessDate == "" {
+			accessDate = d.CrawledAt + " (created, never accessed)"
+		}
+		results = append(results, map[string]any{
+			"id":             d.ID,
+			"section_path":   d.SectionPath,
+			"vitality_score": math.Round(d.Vitality*100) / 100,
+			"hit_count":      d.HitCount,
+			"last_accessed":  accessDate,
+			"sub_type":       d.SubType,
+		})
+	}
+
+	return marshalResult(map[string]any{
+		"threshold": threshold,
+		"results":   results,
+		"count":     len(results),
+	})
+}
+
 // recallReflect generates a read-only health report for the knowledge base.
-func recallReflect(ctx context.Context, st *store.Store, emb *embedder.Embedder) (*mcp.CallToolResult, error) {
+func recallReflect(ctx context.Context, st *store.Store, emb *embedder.Embedder, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	result := map[string]any{}
 
 	// 1. Memory stats.
@@ -388,21 +426,29 @@ func recallReflect(ctx context.Context, st *store.Store, emb *embedder.Embedder)
 		"most_accessed":  topAccessed,
 	}
 
-	// 2. Conflicts (requires embeddings).
+	// 2. Conflicts (requires embeddings) — lowered threshold to 0.70 for contradiction detection.
 	if emb != nil {
-		conflicts, err := st.DetectConflicts(ctx, 0.75)
+		conflicts, err := st.DetectConflicts(ctx, 0.70)
 		if err != nil {
 			result["conflicts_warning"] = fmt.Sprintf("conflict detection failed: %v", err)
 		} else {
-			conflictList := make([]map[string]any, 0, len(conflicts))
+			var duplicates []map[string]any
+			var contradictions []map[string]any
 			for _, c := range conflicts {
-				conflictList = append(conflictList, map[string]any{
+				entry := map[string]any{
 					"doc_a":      truncate(c.DocA.SectionPath, 80),
 					"doc_b":      truncate(c.DocB.SectionPath, 80),
 					"similarity": math.Round(c.Similarity*1000) / 1000,
-				})
+					"type":       c.Type,
+				}
+				if c.Type == "potential_contradiction" {
+					contradictions = append(contradictions, entry)
+				} else {
+					duplicates = append(duplicates, entry)
+				}
 			}
-			result["conflicts"] = conflictList
+			result["duplicates"] = duplicates
+			result["contradictions"] = contradictions
 		}
 	} else {
 		result["conflicts_warning"] = "conflict detection requires VOYAGE_API_KEY (embeddings needed for cosine similarity)"
@@ -449,7 +495,100 @@ func recallReflect(ctx context.Context, st *store.Store, emb *embedder.Embedder)
 		result["promotion_candidates"] = candList
 	}
 
+	// 5. Vitality distribution.
+	vitalityDist, avgVitality := computeVitalityDistribution(ctx, st)
+	if vitalityDist != nil {
+		result["vitality_distribution"] = vitalityDist
+		result["avg_vitality"] = math.Round(avgVitality*100) / 100
+	}
+
+	// 6. Steering doc freshness check.
+	if projectPath := req.GetString("project_path", ""); projectPath != "" {
+		if steeringWarnings := checkSteeringFreshness(projectPath); len(steeringWarnings) > 0 {
+			result["steering_warnings"] = steeringWarnings
+		}
+	}
+
 	return marshalResult(result)
+}
+
+// checkSteeringFreshness checks if steering docs are stale (older than 30 days
+// with recent commits).
+func checkSteeringFreshness(projectPath string) []string {
+	if !spec.SteeringExists(projectPath) {
+		return nil
+	}
+
+	dir := spec.SteeringDir(projectPath)
+	var oldestMod time.Time
+
+	for _, f := range spec.AllSteeringFiles {
+		info, err := os.Stat(filepath.Join(dir, string(f)))
+		if err != nil {
+			continue
+		}
+		mod := info.ModTime()
+		if oldestMod.IsZero() || mod.Before(oldestMod) {
+			oldestMod = mod
+		}
+	}
+
+	if oldestMod.IsZero() {
+		return nil
+	}
+
+	staleDays := 30
+	if time.Since(oldestMod) < time.Duration(staleDays)*24*time.Hour {
+		return nil
+	}
+
+	var warnings []string
+	daysSinceUpdate := int(time.Since(oldestMod).Hours() / 24)
+	warnings = append(warnings, fmt.Sprintf(
+		"steering docs last modified %d days ago — consider running `alfred steering-init --force` or updating manually",
+		daysSinceUpdate,
+	))
+	return warnings
+}
+
+// computeVitalityDistribution computes a histogram of vitality scores across all memories.
+// Returns bucket counts and average vitality.
+func computeVitalityDistribution(ctx context.Context, st *store.Store) (map[string]int, float64) {
+	docs, err := st.ListRecentMemories(ctx, 5000) // reasonable upper bound
+	if err != nil || len(docs) == 0 {
+		return nil, 0
+	}
+
+	buckets := map[string]int{
+		"0-20":   0,
+		"21-40":  0,
+		"41-60":  0,
+		"61-80":  0,
+		"81-100": 0,
+	}
+	now := time.Now()
+	var totalVitality float64
+
+	for _, d := range docs {
+		vs := store.ComputeVitalityFromDoc(&d, now)
+		totalVitality += vs.Total
+
+		switch {
+		case vs.Total <= 20:
+			buckets["0-20"]++
+		case vs.Total <= 40:
+			buckets["21-40"]++
+		case vs.Total <= 60:
+			buckets["41-60"]++
+		case vs.Total <= 80:
+			buckets["61-80"]++
+		default:
+			buckets["81-100"]++
+		}
+	}
+
+	avgVitality := totalVitality / float64(len(docs))
+	return buckets, avgVitality
 }
 
 // sanitizeID converts a label into a lowercase slug suitable for structured IDs.

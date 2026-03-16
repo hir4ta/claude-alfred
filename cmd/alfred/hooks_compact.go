@@ -66,6 +66,11 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 		persistDecisionMemory(ctx, projectPath, taskSlug, decisions)
 	}
 
+	// Suggest updating steering docs if architecture-related decisions were detected.
+	if len(decisions) > 0 && spec.SteeringExists(projectPath) {
+		suggestSteeringUpdate(decisions)
+	}
+
 	// Get modified files from git.
 	modifiedFiles := getModifiedFiles(projectPath)
 
@@ -94,6 +99,9 @@ func handlePreCompact(ctx context.Context, projectPath, transcriptPath, customIn
 		notifyUser("warning: DB open failed, session not synced: %v", err)
 		return
 	}
+
+	// Warn about memories with very low vitality (read-only, never auto-disable).
+	warnLowVitalityMemories(ctx, st)
 
 	// Inject promotion candidates if any exist.
 	injectPromotionCandidates(ctx, st)
@@ -310,6 +318,25 @@ func getModifiedFiles(projectPath string) []string {
 		}
 	}
 	return files
+}
+
+// suggestSteeringUpdate checks if decisions contain architecture-related keywords
+// and suggests updating steering docs if so.
+func suggestSteeringUpdate(decisions []string) {
+	archKeywords := []string{
+		"package", "module", "directory", "structure", "architecture",
+		"dependency", "framework", "stack", "migration", "api",
+		"convention", "naming", "layout",
+	}
+	for _, d := range decisions {
+		lower := strings.ToLower(d)
+		for _, kw := range archKeywords {
+			if strings.Contains(lower, kw) {
+				notifyUser("hint: architecture-related decision detected — consider updating steering docs (.alfred/steering/)")
+				return
+			}
+		}
+	}
 }
 
 // autoAppendDecisions appends newly extracted decisions to decisions.md,
@@ -1175,4 +1202,47 @@ func writePendingCompact(projectPath, taskSlug string) {
 // parseSessionStatusFromContent extracts the status value from session.md content.
 func parseSessionStatusFromContent(content string) string {
 	return strings.TrimSpace(extractSection(content, "## Status"))
+}
+
+// warnLowVitalityMemories logs a warning for memories with very low vitality
+// and no recent access. This is a read-only operation — memories are never
+// auto-disabled (DEC-6).
+func warnLowVitalityMemories(ctx context.Context, st *store.Store) {
+	docs, err := st.ListLowVitality(ctx, 10, 50)
+	if err != nil || len(docs) == 0 {
+		return
+	}
+
+	// Filter to those not accessed in 180+ days.
+	cutoff := time.Now().AddDate(0, 0, -180)
+	var stale []store.LowVitalityDoc
+	for _, d := range docs {
+		lastDate := d.LastAccessed
+		if lastDate == "" {
+			lastDate = d.CrawledAt
+		}
+		if t, err := time.Parse(time.RFC3339, lastDate); err == nil && t.Before(cutoff) {
+			stale = append(stale, d)
+		}
+	}
+
+	if len(stale) == 0 {
+		return
+	}
+
+	// Build warning with count and top 3 labels.
+	labels := make([]string, 0, 3)
+	for i, d := range stale {
+		if i >= 3 {
+			break
+		}
+		label := d.SectionPath
+		if len([]rune(label)) > 60 {
+			label = string([]rune(label)[:60]) + "..."
+		}
+		labels = append(labels, label)
+	}
+
+	notifyUser("%d memories with very low vitality (< 10) and no access in 180+ days: %s — consider reviewing via 'ledger action=stale'",
+		len(stale), strings.Join(labels, "; "))
 }
