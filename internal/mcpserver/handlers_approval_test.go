@@ -14,6 +14,7 @@ func TestRequireApprovalGate(t *testing.T) {
 		name         string
 		size         spec.SpecSize
 		reviewStatus spec.ReviewStatus
+		createReview bool // create a review JSON file with approved status
 		wantErr      bool
 		errContains  string
 	}{
@@ -25,9 +26,17 @@ func TestRequireApprovalGate(t *testing.T) {
 			errContains:  "requires review",
 		},
 		{
-			name:         "L_approved_allows",
+			name:         "L_approved_without_json_rejects",
 			size:         spec.SizeL,
 			reviewStatus: spec.ReviewApproved,
+			wantErr:      true,
+			errContains:  "no approved review file",
+		},
+		{
+			name:         "L_approved_with_json_allows",
+			size:         spec.SizeL,
+			reviewStatus: spec.ReviewApproved,
+			createReview: true,
 		},
 		{
 			name:         "XL_changes_requested_rejects",
@@ -81,6 +90,18 @@ func TestRequireApprovalGate(t *testing.T) {
 			if tt.reviewStatus != "" {
 				if err := spec.SetReviewStatus(dir, slug, tt.reviewStatus); err != nil {
 					t.Fatalf("SetReviewStatus: %v", err)
+				}
+			}
+
+			// Create approved review JSON if requested.
+			if tt.createReview {
+				sd := &spec.SpecDir{ProjectPath: dir, TaskSlug: slug}
+				review := &spec.Review{
+					Status:  spec.ReviewApproved,
+					Summary: "test approval",
+				}
+				if err := sd.SaveReview(review); err != nil {
+					t.Fatalf("SaveReview: %v", err)
 				}
 			}
 

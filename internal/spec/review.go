@@ -94,6 +94,17 @@ func (s *SpecDir) LatestReview() (*Review, error) {
 	return &r, nil
 }
 
+// HasApprovedReview checks if the reviews/ directory contains at least one
+// review JSON file with status="approved". This prevents bypassing the
+// approval gate by manually editing _active.md.
+func (s *SpecDir) HasApprovedReview() bool {
+	r, err := s.LatestReview()
+	if err != nil || r == nil {
+		return false
+	}
+	return r.Status == ReviewApproved
+}
+
 // AllReviews reads all reviews sorted chronologically (oldest first).
 func (s *SpecDir) AllReviews() ([]Review, error) {
 	dir := s.ReviewsDir()

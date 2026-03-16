@@ -116,7 +116,7 @@ alfred steering-init          # Generate project steering docs (.alfred/steering
 - Spec version history: `.history/` dir with max 20 versions per file; rollback saves current first
 - Task lifecycle: active → complete (preserves spec files, sets completed_at) or delete (removes files)
 - ActiveTask fields: slug, started_at, status (active/completed), completed_at, review_status (pending/approved/changes_requested), size (S/M/L/XL), spec_type (feature/bugfix)
-- complete action: marks task completed, switches primary to next active task, syncs epic status. **Approval gate**: M/L/XL specs require review_status="approved" before completion (S/D exempt). Fail-closed: YAML parse errors reject completion
+- complete action: marks task completed, switches primary to next active task, syncs epic status. **Approval gate**: M/L/XL specs require review_status="approved" AND approved review JSON file in reviews/ directory before completion (S/D exempt). Fail-closed: YAML parse errors reject completion. Manual _active.md editing cannot bypass the gate
 - Spec v2: 7 files (requirements, design, tasks, test-specs, decisions, research, session); original 4 = CoreFiles, all 7 = AllFiles; bugfix.md = alternative primary file for bugfix type
 - SpecSize: S (3 files), M (4-5 files), L/XL (7 files), D (2 files: delta.md + session.md) — controls file count; auto-detected from description length (< 100 → S, < 300 → M, else L); D and XL are manual-only (never auto-detected)
 - SpecType: feature (default, uses requirements.md), bugfix (uses bugfix.md), delta (uses delta.md) — orthogonal to size; delta auto-set when size=D

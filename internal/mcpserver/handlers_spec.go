@@ -1216,6 +1216,12 @@ func requireApprovalGate(projectPath, taskSlug string) error {
 
 	switch task.ReviewStatus {
 	case spec.ReviewApproved:
+		// Verify that a review JSON file with approved status actually exists.
+		// This prevents bypassing the gate by manually editing _active.md.
+		sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+		if !sd.HasApprovedReview() {
+			return fmt.Errorf("task %q has review_status=approved but no approved review file — use alfred dashboard to submit review", taskSlug)
+		}
 		return nil
 	case spec.ReviewChangesRequested:
 		return fmt.Errorf("task %q has unresolved review comments — address them and re-submit review in alfred dashboard", taskSlug)
