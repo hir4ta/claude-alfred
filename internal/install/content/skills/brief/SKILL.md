@@ -233,3 +233,4 @@ If an active spec already exists:
 - ALWAYS record alternatives considered with rationale
 - ALWAYS direct user to `alfred dashboard` for approval (not text-based approval)
 - Mark `<!-- optional -->` sections as skipped for S-sized tasks (don't force unnecessary detail)
+- ALWAYS include "Wave: Closing" tasks (self-review, CLAUDE.md update, test verification) — these trigger auto-complete when all checked

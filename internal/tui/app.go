@@ -1394,7 +1394,7 @@ func (m Model) tabBarView() string {
 	}
 
 	return tabBarStyle.Width(m.width).Render(
-		title + "\n" + tabRow,
+		title + "\n\n" + tabRow,
 	)
 }
 

@@ -196,3 +196,4 @@ After EVERY phase transition and after EVERY task completion:
 - ALWAYS include traceability matrix in design.md
 - ALWAYS include `<!-- source: FR-N -->` in test-specs.md Gherkin cases
 - Mark `<!-- optional -->` sections as skipped for S-sized tasks
+- ALWAYS include "Wave: Closing" tasks (self-review, CLAUDE.md update, test verification) — these trigger auto-complete when all checked
