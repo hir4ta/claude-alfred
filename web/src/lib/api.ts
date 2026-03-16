@@ -8,6 +8,8 @@ import type {
 	KnowledgeSearchResponse,
 	KnowledgeStats,
 	MemoryHealthStats,
+	Review,
+	ReviewHistoryResponse,
 	SpecContentResponse,
 	SpecsResponse,
 	TasksResponse,
@@ -128,12 +130,47 @@ export const validationQueryOptions = (slug: string) =>
 		enabled: !!slug,
 	});
 
+export const reviewQueryOptions = (slug: string) =>
+	queryOptions({
+		queryKey: ["review", slug],
+		queryFn: () => fetchJSON<Review>(`/api/tasks/${slug}/review`),
+		staleTime: REF_STALE,
+		enabled: !!slug,
+	});
+
+export const reviewHistoryQueryOptions = (slug: string) =>
+	queryOptions({
+		queryKey: ["review-history", slug],
+		queryFn: () => fetchJSON<ReviewHistoryResponse>(`/api/tasks/${slug}/review/history`),
+		staleTime: REF_STALE,
+		enabled: !!slug,
+	});
+
 export const versionQueryOptions = () =>
 	queryOptions({
 		queryKey: ["version"],
 		queryFn: () => fetchJSON<VersionResponse>("/api/version"),
 		staleTime: REF_STALE,
 	});
+
+// --- Mutations ---
+
+export async function submitReview(
+	slug: string,
+	status: "approved" | "changes_requested",
+	comments: { file: string; line: number; body: string }[],
+) {
+	const res = await fetch(`/api/tasks/${slug}/review`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ status, comments }),
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({ error: res.statusText }));
+		throw new Error(body.error ?? `HTTP ${res.status}`);
+	}
+	return res.json();
+}
 
 // --- Hooks (convenience wrappers) ---
 

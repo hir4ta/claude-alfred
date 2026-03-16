@@ -132,6 +132,26 @@ export interface ConfidenceSummary {
 	grounding_warnings?: string[];
 }
 
+// --- spec/review.go ---
+
+export interface ReviewComment {
+	file: string;
+	line: number;
+	body: string;
+	resolved?: boolean;
+}
+
+export interface Review {
+	timestamp: string;
+	status: "approved" | "changes_requested";
+	comments?: ReviewComment[];
+	summary?: string;
+}
+
+export interface ReviewHistoryResponse {
+	reviews: Review[];
+}
+
 // --- API response wrappers ---
 
 export interface TasksResponse {
