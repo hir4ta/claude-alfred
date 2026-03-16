@@ -143,6 +143,13 @@ func specDoInit(ctx context.Context, req mcp.CallToolRequest, st *store.Store, e
 		}
 	}
 
+	// Inject steering context for project-aware spec generation.
+	if summary, err := spec.SteeringSummary(projectPath); err == nil && summary != "" {
+		result["steering_context"] = summary
+	} else if !spec.SteeringExists(projectPath) {
+		result["steering_hint"] = "project steering docs not found — run `alfred steering-init` to generate project context for better specs"
+	}
+
 	return marshalResult(result)
 }
 
@@ -264,9 +271,14 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 		return mcp.NewToolResultError("mode must be 'append' or 'replace'"), nil
 	}
 
+	// Route steering/ prefixed files to steering doc update.
+	if strings.HasPrefix(fileName, "steering/") {
+		return specDoUpdateSteering(projectPath, fileName, content, mode)
+	}
+
 	sf, ok := validSpecFiles[fileName]
 	if !ok {
-		return mcp.NewToolResultError(fmt.Sprintf("invalid file: %s (valid: %s)", fileName, validFileList())), nil
+		return mcp.NewToolResultError(fmt.Sprintf("invalid file: %s (valid: %s, steering/product.md, steering/structure.md, steering/tech.md)", fileName, validFileList())), nil
 	}
 
 	// Accept optional task_slug; fall back to active task if not provided.
@@ -334,6 +346,46 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 	}
 
 	return marshalResult(result)
+}
+
+// specDoUpdateSteering handles dossier update for steering/ prefixed file paths.
+func specDoUpdateSteering(projectPath, fileName, content, mode string) (*mcp.CallToolResult, error) {
+	// Validate steering file name.
+	steeringName := strings.TrimPrefix(fileName, "steering/")
+	validSteering := map[string]spec.SteeringFile{
+		"product.md":   spec.SteeringProduct,
+		"structure.md": spec.SteeringStructure,
+		"tech.md":      spec.SteeringTech,
+	}
+	sf, ok := validSteering[steeringName]
+	if !ok {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid steering file: %s (valid: steering/product.md, steering/structure.md, steering/tech.md)", fileName)), nil
+	}
+
+	dir := spec.SteeringDir(projectPath)
+	filePath := filepath.Join(dir, string(sf))
+
+	// Ensure directory exists.
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("create steering dir: %v", err)), nil
+	}
+
+	switch mode {
+	case "replace":
+		if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("write failed: %v", err)), nil
+		}
+	default: // append
+		existing, _ := os.ReadFile(filePath)
+		if err := os.WriteFile(filePath, append(existing, []byte(content)...), 0o644); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("append failed: %v", err)), nil
+		}
+	}
+
+	return marshalResult(map[string]any{
+		"file": fileName,
+		"mode": mode,
+	})
 }
 
 func specDoStatus(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

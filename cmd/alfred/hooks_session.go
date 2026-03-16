@@ -49,6 +49,11 @@ func handleSessionStart(ctx context.Context, ev *hookEvent) {
 	// Handle pending-compact breadcrumb for session continuity.
 	handlePendingCompact(ctx, st, ev.ProjectPath)
 
+	// Suggest steering docs if missing (lightweight file stat, fail-open).
+	if !spec.SteeringExists(ev.ProjectPath) {
+		notifyUser("tip: run `alfred steering-init` to create project steering docs for better spec generation")
+	}
+
 	// Inject spec context after parallel ops complete.
 	// Must be serial: writes JSON to stdout (protocol integrity).
 	injectSpecContext(ctx, ev.ProjectPath, ev.Source, st)

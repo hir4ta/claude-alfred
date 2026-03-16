@@ -13,7 +13,7 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TU
 | `internal/mcpserver` | MCP server (3 tools: dossier, roster, ledger) |
 | `internal/store` | SQLite persistence (records + embeddings + FTS5 full-text search) |
 | `internal/embedder` | Voyage AI (voyage-4-large, vector search + rerank-2.5) |
-| `internal/spec` | Spec management: .alfred/specs/ (7 files: requirements, design, tasks, test-specs, decisions, research, session) |
+| `internal/spec` | Spec management: .alfred/specs/ (7 files: requirements, design, tasks, test-specs, decisions, research, session) + Steering docs: .alfred/steering/ (3 files: product, structure, tech) |
 | `internal/epic` | Epic management: .alfred/epics/ (YAML-based task grouping + dependencies) |
 | `internal/tui` | TUI dashboard: bubbletea v2 (overview/tasks/specs/knowledge tabs + review mode) |
 | `internal/install` | Plugin bundle + user rules |
@@ -23,6 +23,7 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TU
 | `cmd/alfred/hooks_posttool.go` | PostToolUse: Bash error detection → related memory injection |
 | `cmd/alfred/hooks_transcript.go` | Transcript parsing: rich context extraction, decision detection |
 | `cmd/alfred/dashboard.go` | TUI dashboard entry point (`alfred dashboard`) |
+| `cmd/alfred/steering.go` | Steering doc generation (`alfred steering-init`) |
 | `cmd/alfred/export.go` | Knowledge export (`alfred export` → .alfred/knowledge/memories.yaml) |
 | `cmd/alfred/search_eval.go` | Search quality benchmark (`alfred search-eval`) |
 
@@ -33,6 +34,7 @@ go install ./cmd/alfred        # Build & install
 go test ./...                 # All tests
 go vet ./...                  # Static analysis
 alfred search-eval            # Run search quality benchmark
+alfred steering-init          # Generate project steering docs (.alfred/steering/)
 ```
 
 ## Release
@@ -70,6 +72,20 @@ alfred search-eval            # Run search quality benchmark
 - Tables: records (memories/specs/project), embeddings (vector search), records_fts (FTS5), tag_aliases (search expansion), session_links (compaction continuity)
 - Store.DB() is test-only; production code uses Store methods (no raw SQL outside internal/store)
 - @.claude/rules/store-internals.md (vector search, SQL safety patterns)
+
+### Steering Docs
+
+- Steering docs: `.alfred/steering/` (3 files: product.md, structure.md, tech.md)
+- Pure filesystem (no DB storage, read on demand)
+- `alfred steering-init`: analyzes project files (go.mod, CLAUDE.md, README.md, directory tree) to auto-generate steering docs
+- `steering-init --force`: overwrite existing steering docs
+- Dossier init: injects `steering_context` (summary) or `steering_hint` (suggestion) in response JSON
+- Dossier update: accepts `file=steering/{filename}` for steering doc updates
+- SessionStart hook: suggests `alfred steering-init` if steering docs are missing
+- PreCompact hook: suggests updating steering docs when architecture-related decisions detected
+- Ledger reflect: checks steering doc freshness (warns if > 30 days old)
+- ValidateSteering: checks tech.md vs go.mod drift, structure.md vs filesystem directory existence
+- Templates: `internal/spec/templates/steering/*.tmpl` (separate embed.FS from spec templates)
 
 ### Spec Management
 

@@ -37,6 +37,8 @@ approval gates and BLOCKED recovery).
 4. **If spec exists without Orchestrator State** → ask: "Spec exists from /alfred:brief. Start implementation from Phase 3, or re-run spec review first?"
 5. **If no spec** → ask 1 question: "Confirm scope: {description}. Proceed?"
    - Init spec via `dossier` action=init
+   - If response contains `steering_context`, store it for use across all spec files
+   - If response contains `steering_hint`, inform the user about `alfred steering-init`
 6. Record `initial_commit` = output of `git rev-parse HEAD`
 7. Write initial Orchestrator State to session.md
 
