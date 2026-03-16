@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
@@ -60,7 +61,15 @@ func (d knowledgeDelegate) Render(w io.Writer, m list.Model, index int, item lis
 
 	// Sub_type tag + age.
 	subTag := styledSubType(k.SubType)
-	age := dimStyle.Render(formatDuration(k.Age))
+	var ageD time.Duration
+	if k.SavedAt != "" {
+		if t, err := time.Parse(time.RFC3339, k.SavedAt); err == nil {
+			ageD = time.Since(t)
+		} else if t, err := time.Parse("2006-01-02 15:04:05", k.SavedAt); err == nil {
+			ageD = time.Since(t)
+		}
+	}
+	age := dimStyle.Render(formatDuration(ageD))
 	scoreStr := ""
 	if k.Score > 0 {
 		scoreStr = scoreStyle.Render(fmt.Sprintf("%3.0f%%", k.Score*100)) + " "

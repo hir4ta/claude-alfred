@@ -37,7 +37,19 @@ func run() error {
 
 	switch cmd {
 	case "dashboard", "dash":
-		return runDashboard()
+		port := 7575
+		urlOnly := false
+		for _, a := range os.Args[2:] {
+			if a == "--url-only" {
+				urlOnly = true
+			}
+			if len(a) > 7 && a[:7] == "--port=" {
+				if v, err := fmt.Sscanf(a, "--port=%d", &port); err != nil || v != 1 {
+					return fmt.Errorf("invalid --port value")
+				}
+			}
+		}
+		return runDashboard(port, urlOnly)
 	case "serve":
 		return runServe()
 	case "plugin-bundle":

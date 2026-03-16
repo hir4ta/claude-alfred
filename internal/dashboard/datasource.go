@@ -1,4 +1,4 @@
-package tui
+package dashboard
 
 import (
 	"context"
@@ -13,45 +13,7 @@ import (
 	"github.com/hir4ta/claude-alfred/internal/epic"
 	"github.com/hir4ta/claude-alfred/internal/spec"
 	"github.com/hir4ta/claude-alfred/internal/store"
-
-	"github.com/hir4ta/claude-alfred/internal/dashboard"
 )
-
-// Type aliases — TUI code uses these names throughout; they now come from
-// the shared dashboard package. This avoids a massive rename across 12 files.
-type (
-	StepItem          = dashboard.StepItem
-	TaskDetail        = dashboard.TaskDetail
-	SpecEntry         = dashboard.SpecEntry
-	KnowledgeEntry    = dashboard.KnowledgeEntry
-	ActivityEntry     = dashboard.ActivityEntry
-	KnowledgeStats    = dashboard.KnowledgeStats
-	EpicSummary       = dashboard.EpicSummary
-	EpicTaskSummary   = dashboard.EpicTaskSummary
-	DecisionEntry     = dashboard.DecisionEntry
-	MemoryHealthStats = dashboard.MemoryHealthStats
-)
-
-// DataSource abstracts data retrieval for the TUI.
-// Kept as a local interface (Go convention: define in consuming package) with
-// the original TUI-compatible signatures.
-type DataSource interface {
-	ProjectPath() string
-	ActiveTask() string
-	TaskDetails() []TaskDetail
-	Specs() []SpecEntry
-	SpecContent(taskSlug, file string) string
-	SemanticSearch(query string, limit int) []KnowledgeEntry
-	RecentKnowledge(limit int) []KnowledgeEntry
-	RecentActivity(limit int) []ActivityEntry
-	KnowledgeStats() KnowledgeStats
-	Epics() []EpicSummary
-	AllDecisions(limit int) []DecisionEntry
-	ToggleEnabled(id int64, enabled bool) error
-	Validation(taskSlug string) *spec.ValidationReport
-	MemoryHealth() MemoryHealthStats
-	ConfidenceStats(taskSlug string) *spec.ConfidenceSummary
-}
 
 // fileDataSource implements DataSource by reading .alfred/ files and SQLite.
 type fileDataSource struct {
@@ -77,7 +39,6 @@ func (ds *fileDataSource) ActiveTask() string {
 	if err != nil {
 		return ""
 	}
-	// If primary is completed, find first active task.
 	for _, t := range state.Tasks {
 		if t.Slug == state.Primary && t.IsActive() {
 			return state.Primary
@@ -92,7 +53,7 @@ func (ds *fileDataSource) ActiveTask() string {
 }
 
 func (ds *fileDataSource) TaskDetails() []TaskDetail {
-	epicTasks := make(map[string]string) // taskSlug -> epicSlug
+	epicTasks := make(map[string]string)
 	for _, e := range epic.ListAll(ds.projectPath) {
 		for _, t := range e.Tasks {
 			epicTasks[t.Slug] = e.Slug
@@ -104,18 +65,21 @@ func (ds *fileDataSource) TaskDetails() []TaskDetail {
 		return nil
 	}
 
-	// Sort: active tasks first, completed last.
 	active := make([]TaskDetail, 0, len(state.Tasks))
 	completed := make([]TaskDetail, 0)
 	for _, at := range state.Tasks {
 		sd := &spec.SpecDir{ProjectPath: ds.projectPath, TaskSlug: at.Slug}
 		td := TaskDetail{
-			Slug:     at.Slug,
-			EpicSlug: epicTasks[at.Slug],
-			Status:   "unknown",
+			Slug:         at.Slug,
+			EpicSlug:     epicTasks[at.Slug],
+			Status:       "unknown",
+			StartedAt:    at.StartedAt,
+			CompletedAt:  at.CompletedAt,
+			Size:         string(at.EffectiveSize()),
+			SpecType:     string(at.EffectiveSpecType()),
+			ReviewStatus: string(at.ReviewStatus),
 		}
 
-		// Use lifecycle status from _active.md if set.
 		if at.Status == spec.TaskCompleted {
 			td.Status = "completed"
 		}
@@ -181,20 +145,19 @@ func (ds *fileDataSource) Specs() []SpecEntry {
 	return entries
 }
 
-func (ds *fileDataSource) SpecContent(taskSlug, file string) string {
+func (ds *fileDataSource) SpecContent(taskSlug, file string) (string, error) {
 	sd := &spec.SpecDir{ProjectPath: ds.projectPath, TaskSlug: taskSlug}
 	content, err := sd.ReadFile(spec.SpecFile(file))
 	if err != nil {
-		return "(not found)"
+		return "", fmt.Errorf("spec file not found: %s/%s", taskSlug, file)
 	}
-	return content
+	return content, nil
 }
 
-func (ds *fileDataSource) SemanticSearch(query string, limit int) []KnowledgeEntry {
+func (ds *fileDataSource) SemanticSearch(ctx context.Context, query string, limit int) []KnowledgeEntry {
 	if ds.emb == nil || ds.st == nil {
 		return nil
 	}
-	ctx := context.Background()
 
 	vec, err := ds.emb.EmbedForSearch(ctx, query)
 	if err != nil || vec == nil {
@@ -219,7 +182,6 @@ func (ds *fileDataSource) SemanticSearch(query string, limit int) []KnowledgeEnt
 		return nil
 	}
 
-	// Rerank for quality.
 	if len(docs) > 1 {
 		contents := make([]string, len(docs))
 		for i, d := range docs {
@@ -240,7 +202,6 @@ func (ds *fileDataSource) SemanticSearch(query string, limit int) []KnowledgeEnt
 }
 
 func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
-	// Prefer DB (has all memories including auto-saved decisions, with enabled status).
 	if ds.st != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
@@ -248,6 +209,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 		if err == nil && len(docs) > 0 {
 			entries := make([]KnowledgeEntry, 0, len(docs))
 			for _, d := range docs {
+				savedAt := d.CrawledAt
 				entries = append(entries, KnowledgeEntry{
 					ID:         d.ID,
 					Label:      d.SectionPath,
@@ -256,7 +218,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 					HitCount:   d.HitCount,
 					Content:    d.Content,
 					Structured: d.Structured,
-					SavedAt:    d.CrawledAt,
+					SavedAt:    savedAt,
 					Enabled:    d.Enabled,
 				})
 			}
@@ -264,7 +226,6 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 		}
 	}
 
-	// Fallback: read from .alfred/knowledge/ JSON files.
 	var entries []KnowledgeEntry
 
 	decs, _ := store.LoadDecisions(ds.projectPath)
@@ -317,13 +278,11 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 	return entries
 }
 
-
 func (ds *fileDataSource) RecentActivity(limit int) []ActivityEntry {
 	entries, err := spec.ReadAuditLog(ds.projectPath, limit)
 	if err != nil || len(entries) == 0 {
 		return nil
 	}
-	// Reverse: most recent first.
 	result := make([]ActivityEntry, 0, len(entries))
 	for i := len(entries) - 1; i >= 0; i-- {
 		e := entries[i]
@@ -339,7 +298,6 @@ func (ds *fileDataSource) RecentActivity(limit int) []ActivityEntry {
 }
 
 func (ds *fileDataSource) KnowledgeStats() KnowledgeStats {
-	// Count from .alfred/knowledge/ JSON files (no DB needed).
 	var ks KnowledgeStats
 	decs, _ := store.LoadDecisions(ds.projectPath)
 	ks.Decision = len(decs)
@@ -412,12 +370,12 @@ func (ds *fileDataSource) AllDecisions(limit int) []DecisionEntry {
 
 		_, ordered := splitSectionsOrdered(content)
 		for _, sec := range ordered {
-			if sec.Header == "" {
+			if sec.header == "" {
 				continue
 			}
 			de := DecisionEntry{TaskSlug: at.Slug}
 
-			title := sec.Header
+			title := sec.header
 			if len(title) > 13 && title[0] == '[' {
 				if idx := strings.Index(title, "] "); idx > 0 {
 					title = title[idx+2:]
@@ -425,7 +383,7 @@ func (ds *fileDataSource) AllDecisions(limit int) []DecisionEntry {
 			}
 			de.Title = title
 
-			for line := range strings.SplitSeq(sec.Body, "\n") {
+			for line := range strings.SplitSeq(sec.body, "\n") {
 				trimmed := strings.TrimSpace(line)
 				if strings.HasPrefix(trimmed, "- **Chosen:**") || strings.HasPrefix(trimmed, "**Chosen:**") {
 					de.Chosen = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "- "), "**Chosen:**"))
@@ -488,19 +446,16 @@ func (ds *fileDataSource) MemoryHealth() MemoryHealthStats {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// Total memory count.
 	docs, err := ds.st.ListAllMemories(ctx, 1000)
 	if err == nil {
 		stats.Total = len(docs)
 	}
 
-	// Stale count (vitality < 20).
 	lowDocs, err := ds.st.ListLowVitality(ctx, 20, 1000)
 	if err == nil {
 		stats.StaleCount = len(lowDocs)
 	}
 
-	// Conflict count (60s cache, DEC-6).
 	ds.conflictMu.Lock()
 	if time.Since(ds.conflictAt) > 60*time.Second {
 		conflicts, err := ds.st.DetectConflicts(ctx, 0.70)
@@ -520,7 +475,6 @@ func (ds *fileDataSource) ConfidenceStats(taskSlug string) *spec.ConfidenceSumma
 	if !sd.Exists() {
 		return nil
 	}
-	// Determine primary file.
 	primaryFile := spec.FileRequirements
 	if state, err := spec.ReadActiveState(ds.projectPath); err == nil {
 		for _, t := range state.Tasks {
@@ -545,6 +499,10 @@ func (ds *fileDataSource) ConfidenceStats(taskSlug string) *spec.ConfidenceSumma
 	}
 	return &cs
 }
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
 
 func docsToKnowledge(docs []store.DocRow, scoreMap map[int64]float64, limit int) []KnowledgeEntry {
 	entries := make([]KnowledgeEntry, 0, min(limit, len(docs)))
@@ -600,11 +558,9 @@ func parseSessionSections(content string) parsedSession {
 		ps.focus = firstNonEmptyLine(v)
 	}
 
-	// Try "Next Steps" first, then "Completed" sections for checkboxes.
 	if v, ok := sections["Next Steps"]; ok {
 		ps.nextSteps = parseCheckboxes(v)
 	}
-	// Match "Completed", "Completed Steps", etc.
 	for header, v := range sections {
 		if strings.HasPrefix(header, "Completed") {
 			completed := parseCheckboxes(v)
@@ -613,7 +569,6 @@ func parseSessionSections(content string) parsedSession {
 		}
 	}
 
-	// Recent Decisions — match headers like "Recent Decisions (last 3)".
 	for header, v := range sections {
 		if strings.HasPrefix(header, "Recent Decisions") {
 			ps.decisions = parseNumberedList(v)
@@ -630,7 +585,6 @@ func parseSessionSections(content string) parsedSession {
 		}
 	}
 
-	// Modified Files — match headers with optional suffix.
 	for header, v := range sections {
 		if strings.HasPrefix(header, "Modified Files") {
 			ps.modFiles = parseBulletList(v)
@@ -641,20 +595,16 @@ func parseSessionSections(content string) parsedSession {
 	return ps
 }
 
-// orderedSection is a header+body pair preserving document order.
 type orderedSection struct {
-	Header string
-	Body   string
+	header string
+	body   string
 }
 
-// splitSections splits markdown content by ## headers.
-// Returns a map for key-based access AND preserves insertion order via orderedSections.
 func splitSections(content string) map[string]string {
 	sections, _ := splitSectionsOrdered(content)
 	return sections
 }
 
-// splitSectionsOrdered splits markdown by ## headers, preserving document order.
 func splitSectionsOrdered(content string) (map[string]string, []orderedSection) {
 	m := make(map[string]string)
 	var ordered []orderedSection
@@ -667,7 +617,7 @@ func splitSectionsOrdered(content string) (map[string]string, []orderedSection) 
 			if currentHeader != "" {
 				b := body.String()
 				m[currentHeader] = b
-				ordered = append(ordered, orderedSection{Header: currentHeader, Body: b})
+				ordered = append(ordered, orderedSection{header: currentHeader, body: b})
 			}
 			currentHeader = strings.TrimPrefix(trimmed, "## ")
 			body.Reset()
@@ -678,7 +628,7 @@ func splitSectionsOrdered(content string) (map[string]string, []orderedSection) 
 	if currentHeader != "" {
 		b := body.String()
 		m[currentHeader] = b
-		ordered = append(ordered, orderedSection{Header: currentHeader, Body: b})
+		ordered = append(ordered, orderedSection{header: currentHeader, body: b})
 	}
 	return m, ordered
 }
@@ -722,7 +672,6 @@ func parseBulletList(text string) []string {
 
 var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->`)
 
-// stripHTMLComments removes HTML comments from text.
 func stripHTMLComments(s string) string {
 	return strings.TrimSpace(htmlCommentRe.ReplaceAllString(s, ""))
 }
