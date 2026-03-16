@@ -724,7 +724,7 @@ func TestAutoCompleteTask(t *testing.T) {
 		dir := t.TempDir()
 		specDir := dir + "/.alfred/specs"
 		os.MkdirAll(specDir+"/"+slug, 0o755)
-		activeContent := fmt.Sprintf("primary: %s\ntasks:\n    - slug: %s\n      started_at: \"2026-03-15T10:00:00Z\"\n      status: active\n", slug, slug)
+		activeContent := fmt.Sprintf("primary: %s\ntasks:\n    - slug: %s\n      started_at: \"2026-03-15T10:00:00Z\"\n      status: active\n      size: S\n", slug, slug)
 		os.WriteFile(specDir+"/_active.md", []byte(activeContent), 0o644)
 		os.WriteFile(specDir+"/"+slug+"/session.md", []byte("# test"), 0o644)
 		return dir

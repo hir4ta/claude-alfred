@@ -56,11 +56,16 @@ func handlePostToolUse(ctx context.Context, ev *hookEvent) {
 	// On success: try to auto-check Next Steps + warn if all done but task still active.
 	if resp.ExitCode == 0 {
 		tryAutoCheckNextSteps(ctx, ev.ProjectPath, input.Command, resp.Stdout)
+
+		cmdLower := strings.ToLower(input.Command)
+		if strings.Contains(cmdLower, "git commit") {
+			// Git commit = natural checkpoint. Auto-check Closing Wave items.
+			autoCheckClosingWave(ev.ProjectPath)
+		}
+
 		warnIfAllStepsDoneButActive(ev.ProjectPath)
 
 		// Living Spec: auto-append before drift detection so appended files are excluded from warnings.
-		// Share extractChangedFiles result between auto-append and drift detection.
-		cmdLower := strings.ToLower(input.Command)
 		if strings.Contains(cmdLower, "git commit") {
 			changed := extractChangedFiles(ctx, ev.ProjectPath)
 			appended := tryAutoAppendDesignRefs(ctx, ev.ProjectPath, changed)
@@ -148,10 +153,21 @@ func warnIfAllStepsDoneButActive(projectPath string) {
 			"Do NOT proceed with other work until this is done.", taskSlug, taskSlug))
 }
 
-// remindKnowledgeSave checks if the active spec has a research.md with substantive content
-// and reminds to save key findings via ledger before they are lost to compaction.
-// Triggers on git commit — the natural checkpoint where knowledge should be persisted.
-func remindKnowledgeSave(projectPath string) {
+// closingWaveKeywords maps Closing Wave item patterns to keywords.
+// A step is auto-checked if any keyword is found (case-insensitive substring match).
+// This bypasses the 50% token overlap threshold used for regular steps.
+var closingWaveKeywords = []struct {
+	keywords []string // any of these in the step text triggers auto-check
+}{
+	{[]string{"self-review", "セルフレビュー", "code-reviewer"}},
+	{[]string{"claude.md", "claude.md update"}},
+	{[]string{"test verification", "テスト検証", "go test", "npm test"}},
+	{[]string{"knowledge save", "ledger save", "知見保存", "knowledge"}},
+}
+
+// autoCheckClosingWave auto-checks Closing Wave items in session.md after git commit.
+// Uses direct keyword matching (not 50% token overlap) for reliability.
+func autoCheckClosingWave(projectPath string) {
 	if projectPath == "" {
 		return
 	}
@@ -160,6 +176,73 @@ func remindKnowledgeSave(projectPath string) {
 		return
 	}
 	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+	session, err := sd.ReadFile(spec.FileSession)
+	if err != nil {
+		return
+	}
+	nextSteps := extractSection(session, "## Next Steps")
+	if nextSteps == "" || !strings.Contains(nextSteps, "- [ ] ") {
+		return
+	}
+
+	lines := strings.Split(nextSteps, "\n")
+	updated := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "- [ ] ") {
+			continue
+		}
+		itemLower := strings.ToLower(trimmed)
+		for _, cw := range closingWaveKeywords {
+			matched := false
+			for _, kw := range cw.keywords {
+				if strings.Contains(itemLower, kw) {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				lines[i] = strings.Replace(line, "- [ ] ", "- [x] ", 1)
+				updated = true
+				break
+			}
+		}
+	}
+
+	if !updated {
+		return
+	}
+
+	updatedNextSteps := strings.Join(lines, "\n")
+	updatedSession := replaceSection(session, "## Next Steps", updatedNextSteps)
+	updatedSession = syncSessionProgress(updatedSession)
+	_ = sd.WriteFile(context.Background(), spec.FileSession, updatedSession)
+
+	if allNextStepsCompleted(updatedNextSteps) {
+		autoCompleteTask(projectPath, taskSlug, updatedSession)
+	}
+}
+
+// remindKnowledgeSave checks if the active spec has a research.md with substantive content
+// and reminds to save key findings via ledger before they are lost to compaction.
+// Triggers on git commit — the natural checkpoint where knowledge should be persisted.
+// Fires at most once per task to avoid noise on subsequent commits.
+func remindKnowledgeSave(projectPath string) {
+	if projectPath == "" {
+		return
+	}
+	taskSlug, err := spec.ReadActive(projectPath)
+	if err != nil {
+		return
+	}
+
+	// Suppress duplicate reminders: one flag file per task slug.
+	flagFile := fmt.Sprintf("/tmp/alfred-knowledge-reminded-%s", taskSlug)
+	if _, err := os.Stat(flagFile); err == nil {
+		return // already reminded for this task
+	}
+
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
 
 	// Check if research.md exists and has substantive content (>500 bytes).
 	research, err := sd.ReadFile(spec.FileResearch)
@@ -167,15 +250,24 @@ func remindKnowledgeSave(projectPath string) {
 		return
 	}
 
-	// Check if decisions.md has entries (DEC-N).
+	// Check if decisions.md has real entries (not just template placeholders).
 	decisions, err := sd.ReadFile(spec.FileDecisions)
 	if err != nil {
 		return
 	}
-	decCount := strings.Count(decisions, "## DEC-")
+	// Count DEC-N sections that have Status: field (indicates real content, not placeholder).
+	decCount := 0
+	for _, line := range strings.Split(decisions, "\n") {
+		if strings.Contains(line, "**Status**:") && (strings.Contains(line, "Accepted") || strings.Contains(line, "Proposed")) {
+			decCount++
+		}
+	}
 	if decCount == 0 {
 		return
 	}
+
+	// Mark as reminded (once per task, survives until reboot or manual cleanup).
+	_ = os.WriteFile(flagFile, []byte(taskSlug), 0o600)
 
 	emitAdditionalContext("PostToolUse",
 		fmt.Sprintf("Knowledge reminder: spec '%s' has research.md (%d bytes) and %d decisions.\n"+
@@ -238,7 +330,7 @@ var actionSignals = []struct {
 	cmdContains string   // substring to match in the command
 	signals     []string // words that indicate what was accomplished
 }{
-	{"git commit", []string{"commit", "コミット", "self-review", "セルフレビュー", "review", "レビュー", "claude.md", "knowledge", "知見"}},
+	{"git commit", []string{"commit", "コミット"}},
 	{"git push", []string{"push", "プッシュ"}},
 	{"go test", []string{"test", "テスト"}},
 	{"go vet", []string{"vet", "lint", "静的解析"}},

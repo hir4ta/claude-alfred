@@ -1146,6 +1146,23 @@ func autoCompleteTask(projectPath, taskSlug, session string) {
 		return
 	}
 
+	// Approval gate: M+ specs require dashboard review before completion.
+	// Check here to prevent auto-complete from bypassing the MCP-level gate.
+	if state, err := spec.ReadActiveState(projectPath); err == nil {
+		for _, t := range state.Tasks {
+			if t.Slug == taskSlug {
+				size := t.EffectiveSize()
+				if size != spec.SizeS && size != spec.SizeDelta {
+					if t.ReviewStatus != spec.ReviewApproved {
+						notifyUser("auto-complete blocked for '%s' (size %s) — review required in alfred dashboard", taskSlug, size)
+						return
+					}
+				}
+				break
+			}
+		}
+	}
+
 	newPrimary, err := spec.CompleteTask(projectPath, taskSlug)
 	if err != nil {
 		// Already completed or not found — not an error worth reporting.
