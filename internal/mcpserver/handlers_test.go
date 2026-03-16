@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/hir4ta/claude-alfred/internal/spec"
 	"github.com/hir4ta/claude-alfred/internal/store"
 )
 
@@ -119,7 +120,7 @@ OAuth2 or API Key (undecided)
 ## Database <!-- confidence: 7 -->
 PostgreSQL with pgx driver
 `
-		cs := parseConfidenceScores(content)
+		cs := spec.ParseConfidence(content)
 		if cs.Total != 3 {
 			t.Errorf("total = %d, want 3", cs.Total)
 		}
@@ -134,7 +135,7 @@ PostgreSQL with pgx driver
 
 	t.Run("no annotations", func(t *testing.T) {
 		t.Parallel()
-		cs := parseConfidenceScores("## Goals\nBuild something\n")
+		cs := spec.ParseConfidence("## Goals\nBuild something\n")
 		if cs.Total != 0 {
 			t.Errorf("total = %d, want 0 for no annotations", cs.Total)
 		}
@@ -143,7 +144,7 @@ PostgreSQL with pgx driver
 	t.Run("edge scores", func(t *testing.T) {
 		t.Parallel()
 		content := "## X <!-- confidence: 1 -->\n## Y <!-- confidence: 10 -->\n## Z <!-- confidence: 11 -->\n"
-		cs := parseConfidenceScores(content)
+		cs := spec.ParseConfidence(content)
 		// score 11 is out of range (1-10), should be skipped
 		if cs.Total != 2 {
 			t.Errorf("total = %d, want 2 (11 out of range)", cs.Total)
@@ -159,7 +160,7 @@ PostgreSQL with pgx driver
 ## Notes
 <!-- confidence: 7 -->
 `
-		cs := parseConfidenceScores(content)
+		cs := spec.ParseConfidence(content)
 		if cs.Total != 3 {
 			t.Errorf("total = %d, want 3", cs.Total)
 		}
@@ -194,7 +195,7 @@ PostgreSQL with pgx driver
 ## Notes
 <!-- confidence: 8 | source: code -->
 `
-		cs := parseConfidenceScores(content)
+		cs := spec.ParseConfidence(content)
 		if cs.Total != 4 {
 			t.Errorf("total = %d, want 4", cs.Total)
 		}
@@ -232,7 +233,7 @@ PostgreSQL with pgx driver
 		content := `## Goal
 <!-- confidence: 8 | source: code | grounding: verfied -->
 `
-		cs := parseConfidenceScores(content)
+		cs := spec.ParseConfidence(content)
 		if cs.Total != 1 {
 			t.Errorf("total = %d, want 1", cs.Total)
 		}
@@ -251,7 +252,7 @@ PostgreSQL with pgx driver
 ## Safe
 <!-- confidence: 3 | source: assumption | grounding: speculative -->
 `
-		cs := parseConfidenceScores(content)
+		cs := spec.ParseConfidence(content)
 		var highConfWarns int
 		for _, w := range cs.GroundingWarns {
 			if strings.Contains(w, "high confidence") {

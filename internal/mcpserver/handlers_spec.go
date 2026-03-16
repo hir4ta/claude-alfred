@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -485,7 +484,7 @@ func specDoStatus(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		result[key] = content
 
 		// Parse confidence annotations for all files that contain them.
-		if cs := parseConfidenceScores(content); cs.Total > 0 {
+		if cs := spec.ParseConfidence(content); cs.Total > 0 {
 			confidence[key] = cs
 		}
 	}
@@ -877,26 +876,7 @@ func specDoRollback(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 }
 
 // ---------------------------------------------------------------------------
-// Spec confidence scoring (10-point scale)
-// ---------------------------------------------------------------------------
-
-// confidenceSummary holds parsed confidence statistics for a spec file.
-type confidenceSummary struct {
-	Avg            float64          `json:"avg"`
-	Total          int              `json:"total_items"`
-	LowCount       int              `json:"low_items"`                          // items with score <= 5
-	Items          []confidenceItem `json:"items,omitempty"`
-	Warnings       []string         `json:"low_confidence_warnings,omitempty"`  // sections with score <= 5 and source=assumption
-	GroundingDist  map[string]int   `json:"grounding_distribution,omitempty"`   // count per grounding level
-	GroundingWarns []string         `json:"grounding_warnings,omitempty"`       // high confidence + speculative, unknown values
-}
-
-type confidenceItem struct {
-	Section   string `json:"section"`
-	Score     int    `json:"score"`
-	Source    string `json:"source,omitempty"`    // user, design-doc, code, inference, assumption
-	Grounding string `json:"grounding,omitempty"` // verified, reviewed, inferred, speculative
-}
+// Spec confidence scoring — types and parsing are in internal/spec/confidence.go.
 
 // specDoReview returns the latest review status and comments for a task.
 // Claude Code calls this to check if the user has approved or requested changes.
@@ -1010,100 +990,7 @@ func specDoValidate(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return marshalResult(report)
 }
 
-// confidenceRe matches <!-- confidence: N --> or <!-- confidence: N | source: TYPE --> or
-// <!-- confidence: N | source: TYPE | grounding: LEVEL --> annotations.
-var confidenceRe = regexp.MustCompile(`<!--\s*confidence:\s*(\d{1,2})(?:\s*\|\s*source:\s*([\w][\w-]*))?(?:\s*\|\s*grounding:\s*([\w]+))?\s*-->`)
-
-// validGroundings defines the accepted grounding levels.
-var validGroundings = map[string]bool{
-	"verified": true, "reviewed": true, "inferred": true, "speculative": true,
-}
-
-// parseConfidenceScores extracts confidence annotations from spec file content.
-// Format: <!-- confidence: N --> where N is 1-10, placed after ## section headers.
-//
-// Scale interpretation:
-//   1-3: Low (speculation, needs discussion)
-//   4-6: Medium (reasonable inference, needs validation)
-//   7-9: High (evidence-based, confirmed)
-//   10:  Certain (explicitly confirmed or derived from code)
-func parseConfidenceScores(content string) confidenceSummary {
-	lines := strings.Split(content, "\n")
-	var items []confidenceItem
-	var groundingWarns []string
-	currentSection := ""
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "## ") {
-			currentSection = strings.TrimPrefix(trimmed, "## ")
-			// Strip inline confidence annotation from section name.
-			if idx := strings.Index(currentSection, "<!--"); idx > 0 {
-				currentSection = strings.TrimSpace(currentSection[:idx])
-			}
-		}
-
-		matches := confidenceRe.FindStringSubmatch(trimmed)
-		if len(matches) < 2 {
-			continue
-		}
-		score, err := strconv.Atoi(matches[1])
-		if err != nil || score < 1 || score > 10 {
-			continue
-		}
-		section := currentSection
-		if section == "" {
-			section = "(unnamed)"
-		}
-		source := ""
-		if len(matches) >= 3 {
-			source = matches[2]
-		}
-		grounding := ""
-		if len(matches) >= 4 && matches[3] != "" {
-			if validGroundings[matches[3]] {
-				grounding = matches[3]
-			} else {
-				groundingWarns = append(groundingWarns, fmt.Sprintf("unknown grounding %q in section: %s", matches[3], section))
-			}
-		}
-		items = append(items, confidenceItem{Section: section, Score: score, Source: source, Grounding: grounding})
-	}
-
-	if len(items) == 0 {
-		return confidenceSummary{}
-	}
-
-	total := 0
-	lowCount := 0
-	var warnings []string
-	groundingDist := map[string]int{}
-	for _, item := range items {
-		total += item.Score
-		if item.Score <= 5 {
-			lowCount++
-			if item.Source == "assumption" {
-				warnings = append(warnings, item.Section)
-			}
-		}
-		if item.Grounding != "" {
-			groundingDist[item.Grounding]++
-		}
-		if item.Grounding == "speculative" && item.Score > 5 {
-			groundingWarns = append(groundingWarns, fmt.Sprintf("high confidence (%d) with speculative grounding in section: %s", item.Score, item.Section))
-		}
-	}
-
-	return confidenceSummary{
-		Avg:            float64(total) / float64(len(items)),
-		Total:          len(items),
-		LowCount:       lowCount,
-		Items:          items,
-		Warnings:       warnings,
-		GroundingDist:  groundingDist,
-		GroundingWarns: groundingWarns,
-	}
-}
+// parseConfidenceScores/confidenceRe/validGroundings moved to internal/spec/confidence.go
 
 // buildCompletionDetail creates a summary string for the audit log on task completion.
 func buildCompletionDetail(sd *spec.SpecDir, decisionsSaved int) string {
