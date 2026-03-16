@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hir4ta/claude-alfred/internal/spec"
 )
@@ -38,6 +41,7 @@ func handlePostToolUse(ctx context.Context, ev *hookEvent) {
 	if resp.ExitCode == 0 {
 		tryAutoCheckNextSteps(ctx, ev.ProjectPath, input.Command, resp.Stdout)
 		warnIfAllStepsDoneButActive(ev.ProjectPath)
+		tryDetectSpecDrift(ctx, ev.ProjectPath, input.Command)
 		return
 	}
 
@@ -396,5 +400,274 @@ func replaceSection(content, heading, newBody string) string {
 		return content
 	}
 	return strings.Join(result, "\n")
+}
+
+// ---------------------------------------------------------------------------
+// Spec drift detection (PostToolUse — after successful git commit)
+// ---------------------------------------------------------------------------
+
+// driftActionSpec is the audit action for spec file drift.
+const driftActionSpec = "drift.spec"
+
+// driftActionConvention is the audit action for convention drift.
+const driftActionConvention = "drift.convention"
+
+// driftResolutionUnresolved is the default resolution status for drift events.
+const driftResolutionUnresolved = "unresolved"
+
+// tryDetectSpecDrift runs after a successful git commit command.
+// Compares changed files against the active spec's file references and
+// emits additionalContext warnings for untracked files or modified components.
+func tryDetectSpecDrift(ctx context.Context, projectPath, command string) {
+	if projectPath == "" || command == "" {
+		return
+	}
+
+	cmdLower := strings.ToLower(command)
+	if !strings.Contains(cmdLower, "git commit") {
+		return
+	}
+
+	taskSlug, err := spec.ReadActive(projectPath)
+	if err != nil {
+		return // no active task — skip silently
+	}
+
+	changed := extractChangedFiles(ctx, projectPath)
+	if len(changed) == 0 {
+		return
+	}
+
+	specRefs := parseSpecFileRefs(projectPath, taskSlug)
+	if len(specRefs) == 0 {
+		return // no file references in spec — nothing to compare
+	}
+
+	var untracked []string
+	var modifiedComponents []string
+
+	for _, f := range changed {
+		component, inSpec := specRefs[f]
+		if !inSpec {
+			untracked = append(untracked, f)
+		} else if component != "" {
+			modifiedComponents = append(modifiedComponents, component)
+		}
+	}
+
+	if len(untracked) == 0 && len(modifiedComponents) == 0 {
+		return
+	}
+
+	var buf strings.Builder
+	if len(untracked) > 0 {
+		buf.WriteString("SPEC DRIFT: The following changed files are not referenced in the active spec:\n")
+		for _, f := range untracked {
+			severity := classifyDriftSeverity(f, false)
+			buf.WriteString(fmt.Sprintf("  - %s [%s]\n", f, severity))
+		}
+		buf.WriteString("Consider updating design.md or tasks.md to include these files.\n")
+
+		// Log drift event.
+		logDriftEvent(projectPath, driftActionSpec, taskSlug, map[string]any{
+			"type":       "spec-drift",
+			"severity":   highestSeverity(untracked, false),
+			"files":      untracked,
+			"spec_task":  taskSlug,
+			"resolution": driftResolutionUnresolved,
+		})
+	}
+
+	if len(modifiedComponents) > 0 {
+		buf.WriteString("SPEC UPDATE SUGGESTED: The following spec components were modified:\n")
+		seen := make(map[string]bool)
+		for _, c := range modifiedComponents {
+			if seen[c] {
+				continue
+			}
+			seen[c] = true
+			buf.WriteString(fmt.Sprintf("  - %s — consider updating design.md\n", c))
+		}
+
+		logDriftEvent(projectPath, driftActionSpec, taskSlug, map[string]any{
+			"type":                "spec-drift",
+			"severity":            "critical",
+			"components_affected": uniqueStrings(modifiedComponents),
+			"spec_task":           taskSlug,
+			"resolution":          driftResolutionUnresolved,
+		})
+	}
+
+	emitAdditionalContext("PostToolUse", buf.String())
+}
+
+// extractChangedFiles runs `git diff --name-only HEAD~1` with a 500ms timeout.
+// Returns nil on error (fail-open). Handles merge commits by using HEAD^..HEAD.
+func extractChangedFiles(ctx context.Context, projectPath string) []string {
+	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	// First try HEAD~1 (regular commits).
+	out, err := runGitDiff(ctx, projectPath, "HEAD~1")
+	if err != nil {
+		// May be a merge commit or initial commit — try HEAD^ as fallback.
+		out, err = runGitDiff(ctx, projectPath, "HEAD^")
+		if err != nil {
+			return nil // fail-open
+		}
+	}
+
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files
+}
+
+// runGitDiff executes git diff --name-only against a ref.
+func runGitDiff(ctx context.Context, projectPath, ref string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", ref)
+	cmd.Dir = projectPath
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// specFileRefRe matches "**File**: path" or "**File:** path" in design.md.
+var specFileRefRe = regexp.MustCompile(`\*\*File\*?\*?:\s*` + "`?" + `([^` + "`" + `\n]+)` + "`?")
+
+// taskFilesRefRe matches "Files: path1, path2" in tasks.md.
+var taskFilesRefRe = regexp.MustCompile(`(?i)Files?:\s*(.+)`)
+
+// parseSpecFileRefs reads design.md and tasks.md to extract referenced file paths.
+// Returns map[string]string: filePath → componentName (empty string for tasks.md refs).
+func parseSpecFileRefs(projectPath, taskSlug string) map[string]string {
+	refs := make(map[string]string)
+	sd := &spec.SpecDir{ProjectPath: projectPath, TaskSlug: taskSlug}
+
+	// Parse design.md for component file references.
+	if design, err := sd.ReadFile(spec.FileDesign); err == nil {
+		parseDesignFileRefs(design, refs)
+	}
+
+	// Parse tasks.md for file references.
+	if tasks, err := sd.ReadFile(spec.FileTasks); err == nil {
+		parseTasksFileRefs(tasks, refs)
+	}
+
+	return refs
+}
+
+// componentNameRe matches "### Component: Name" headers in design.md.
+var componentNameRe = regexp.MustCompile(`(?m)^###\s+Component:\s*(.+)`)
+
+// parseDesignFileRefs extracts file references from design.md content.
+// Associates each file with its component name.
+func parseDesignFileRefs(content string, refs map[string]string) {
+	lines := strings.Split(content, "\n")
+	currentComponent := ""
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Track current component.
+		if m := componentNameRe.FindStringSubmatch(trimmed); len(m) > 1 {
+			currentComponent = strings.TrimSpace(m[1])
+			continue
+		}
+
+		// Match file references.
+		if m := specFileRefRe.FindStringSubmatch(trimmed); len(m) > 1 {
+			path := strings.TrimSpace(m[1])
+			path = strings.Trim(path, "`")
+			if path != "" {
+				refs[path] = currentComponent
+			}
+		}
+	}
+}
+
+// parseTasksFileRefs extracts file references from tasks.md content.
+func parseTasksFileRefs(content string, refs map[string]string) {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+
+		// Match "_Requirements: ... | Files: path1, path2_" pattern.
+		if !strings.Contains(trimmed, "Files:") && !strings.Contains(trimmed, "files:") {
+			continue
+		}
+		if m := taskFilesRefRe.FindStringSubmatch(trimmed); len(m) > 1 {
+			filesStr := strings.TrimSuffix(strings.TrimSpace(m[1]), "_")
+			for _, f := range strings.Split(filesStr, ",") {
+				f = strings.TrimSpace(f)
+				f = strings.Trim(f, "`")
+				if f != "" && !strings.Contains(f, " ") {
+					if _, exists := refs[f]; !exists {
+						refs[f] = "" // no component association for tasks.md refs
+					}
+				}
+			}
+		}
+	}
+}
+
+// classifyDriftSeverity returns "info", "warning", or "critical" based on file type.
+// Test files are info, source files not in spec are warning,
+// core component modifications are critical.
+func classifyDriftSeverity(filePath string, isComponent bool) string {
+	if isComponent {
+		return "critical"
+	}
+	if strings.HasSuffix(filePath, "_test.go") {
+		return "info"
+	}
+	return "warning"
+}
+
+// highestSeverity returns the highest severity among a list of files.
+func highestSeverity(files []string, isComponent bool) string {
+	highest := "info"
+	for _, f := range files {
+		s := classifyDriftSeverity(f, isComponent)
+		if s == "critical" {
+			return "critical"
+		}
+		if s == "warning" {
+			highest = "warning"
+		}
+	}
+	return highest
+}
+
+// logDriftEvent writes a drift event to audit.jsonl.
+func logDriftEvent(projectPath, action, target string, detail map[string]any) {
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		return
+	}
+	spec.AppendAudit(projectPath, spec.AuditEntry{
+		Action: action,
+		Target: target,
+		Detail: string(detailJSON),
+		User:   "hook",
+	})
+}
+
+// uniqueStrings returns deduplicated strings preserving order.
+func uniqueStrings(ss []string) []string {
+	seen := make(map[string]bool, len(ss))
+	result := make([]string, 0, len(ss))
+	for _, s := range ss {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	return result
 }
 

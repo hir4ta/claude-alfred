@@ -1,12 +1,14 @@
 package mcpserver
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -44,8 +46,10 @@ func recallHandler(st *store.Store, emb *embedder.Embedder) server.ToolHandlerFu
 			return recallReflect(ctx, st, emb, req)
 		case "stale":
 			return recallStale(ctx, st, req)
+		case "audit-conventions":
+			return recallAuditConventions(ctx, st, req)
 		default:
-			return mcp.NewToolResultError(fmt.Sprintf("unknown action %q: use search, save, promote, candidates, stale, or reflect", action)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("unknown action %q: use search, save, promote, candidates, stale, reflect, or audit-conventions", action)), nil
 		}
 	}
 }
@@ -577,9 +581,17 @@ func recallReflect(ctx context.Context, st *store.Store, emb *embedder.Embedder,
 	}
 
 	// 9. Steering doc freshness check.
-	if projectPath := req.GetString("project_path", ""); projectPath != "" {
+	projectPath := req.GetString("project_path", "")
+	if projectPath != "" {
 		if steeringWarnings := checkSteeringFreshness(projectPath); len(steeringWarnings) > 0 {
 			result["steering_warnings"] = steeringWarnings
+		}
+	}
+
+	// 10. Drift statistics from audit.jsonl.
+	if projectPath != "" {
+		if driftStats := aggregateDriftStats(projectPath); len(driftStats) > 0 {
+			result["drift_stats"] = driftStats
 		}
 	}
 
@@ -766,4 +778,254 @@ func versionMemory(ctx context.Context, st *store.Store, newID int64, sectionPat
 	}
 
 	return oldID, nil
+}
+
+// ---------------------------------------------------------------------------
+// Drift statistics aggregation from audit.jsonl
+// ---------------------------------------------------------------------------
+
+// aggregateDriftStats reads audit.jsonl and returns drift event statistics.
+func aggregateDriftStats(projectPath string) map[string]any {
+	entries, err := spec.ReadAuditLog(projectPath, 0) // all entries
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+
+	byType := map[string]int{}
+	bySeverity := map[string]int{}
+	unresolved := 0
+	total := 0
+
+	for _, e := range entries {
+		if e.Action != "drift.spec" && e.Action != "drift.convention" {
+			continue
+		}
+		total++
+
+		// Parse detail JSON.
+		var detail map[string]any
+		if err := json.Unmarshal([]byte(e.Detail), &detail); err != nil {
+			continue
+		}
+
+		// Count by type.
+		driftType, _ := detail["type"].(string)
+		if driftType == "" {
+			driftType = "unknown"
+		}
+		byType[driftType]++
+
+		// Count by severity.
+		severity, _ := detail["severity"].(string)
+		if severity == "" {
+			severity = "warning"
+		}
+		bySeverity[severity]++
+
+		// Count unresolved.
+		resolution, _ := detail["resolution"].(string)
+		if resolution == "" || resolution == "unresolved" {
+			unresolved++
+		}
+	}
+
+	if total == 0 {
+		return nil
+	}
+
+	return map[string]any{
+		"total":       total,
+		"by_type":     byType,
+		"by_severity": bySeverity,
+		"unresolved":  unresolved,
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Convention audit — validate pattern/rule memories against the codebase
+// ---------------------------------------------------------------------------
+
+// recallAuditConventions checks all enabled pattern/rule memories for codebase drift.
+// Returns a list of drifted conventions with evidence.
+func recallAuditConventions(ctx context.Context, st *store.Store, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectPath := resolveProjectPath(req)
+	if projectPath == "" || projectPath == "." {
+		return mcp.NewToolResultError("project_path is required for audit-conventions"), nil
+	}
+
+	docs, err := st.ListPatternRuleMemories(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("list memories failed: %v", err)), nil
+	}
+
+	var results []map[string]any
+	valid, drifted, skipped := 0, 0, 0
+
+	for _, d := range docs {
+		fileRefs, codePatterns := extractMemoryFileRefs(d.Content)
+		if len(fileRefs) == 0 && len(codePatterns) == 0 {
+			skipped++
+			continue
+		}
+
+		isDrifted, evidence := checkConvention(projectPath, fileRefs, codePatterns)
+		status := "valid"
+		if isDrifted {
+			status = "drifted"
+			drifted++
+
+			// Log drift event to audit.
+			detailJSON, _ := json.Marshal(map[string]any{
+				"type":       "convention-drift",
+				"severity":   "warning",
+				"memory_id":  d.ID,
+				"memory_label": d.SectionPath,
+				"evidence":   evidence,
+				"resolution": "unresolved",
+			})
+			spec.AppendAudit(projectPath, spec.AuditEntry{
+				Action: "drift.convention",
+				Target: fmt.Sprintf("memory:%d", d.ID),
+				Detail: string(detailJSON),
+				User:   "mcp",
+			})
+		} else {
+			valid++
+		}
+
+		results = append(results, map[string]any{
+			"id":           d.ID,
+			"section_path": d.SectionPath,
+			"sub_type":     d.SubType,
+			"hit_count":    d.HitCount,
+			"status":       status,
+			"evidence":     evidence,
+		})
+	}
+
+	return marshalResult(map[string]any{
+		"total_checked": valid + drifted,
+		"valid":         valid,
+		"drifted":       drifted,
+		"skipped":       skipped,
+		"results":       results,
+	})
+}
+
+// goFilePathRe matches Go file paths like internal/store/docs.go or cmd/alfred/hooks.go.
+var goFilePathRe = regexp.MustCompile(`(?:internal|cmd|pkg)/[a-zA-Z0-9_/.-]+\.go`)
+
+// goIdentifierRe matches Go exported identifiers (function/type names like Store, UpsertDoc).
+var goIdentifierRe = regexp.MustCompile(`\b[A-Z][a-zA-Z0-9]+(?:\.[A-Z][a-zA-Z0-9]+)?\b`)
+
+// backtickContentRe matches content inside backticks (code references).
+var backtickContentRe = regexp.MustCompile("`([^`]+)`")
+
+// extractMemoryFileRefs extracts file paths and code patterns from memory content.
+// Returns fileRefs (paths to check existence) and codePatterns (strings to grep for).
+func extractMemoryFileRefs(content string) (fileRefs []string, codePatterns []string) {
+	// Limit content to 10KB to prevent expensive regex on huge memories.
+	if len(content) > 10240 {
+		content = content[:10240]
+	}
+
+	// Extract Go file paths.
+	seenFiles := make(map[string]bool)
+	for _, m := range goFilePathRe.FindAllString(content, -1) {
+		if !seenFiles[m] {
+			seenFiles[m] = true
+			fileRefs = append(fileRefs, m)
+		}
+	}
+
+	// Extract identifiers from backtick-quoted code.
+	seenPatterns := make(map[string]bool)
+	for _, m := range backtickContentRe.FindAllStringSubmatch(content, -1) {
+		if len(m) > 1 {
+			p := strings.TrimSpace(m[1])
+			// Only keep patterns that look like function/type names (not prose).
+			if len(p) >= 3 && len(p) <= 80 && !strings.Contains(p, " ") && !seenPatterns[p] {
+				seenPatterns[p] = true
+				codePatterns = append(codePatterns, p)
+			}
+		}
+	}
+
+	return fileRefs, codePatterns
+}
+
+// checkConvention validates a single memory against the codebase.
+// Returns drifted=true with evidence string, or drifted=false.
+// Uses os.Stat for file existence and bufio.Scanner for pattern search.
+func checkConvention(projectPath string, fileRefs []string, codePatterns []string) (drifted bool, evidence string) {
+	// Check file existence.
+	for _, ref := range fileRefs {
+		fullPath := filepath.Join(projectPath, ref)
+		if _, err := os.Stat(fullPath); err != nil {
+			return true, fmt.Sprintf("file not found: %s", ref)
+		}
+	}
+
+	// Check code patterns via file scanning (no subprocess grep).
+	for _, pattern := range codePatterns {
+		if !searchPatternInProject(projectPath, pattern) {
+			return true, fmt.Sprintf("pattern not found: %s", pattern)
+		}
+	}
+
+	return false, ""
+}
+
+// searchPatternInProject searches for a string pattern in .go files under projectPath.
+// Uses bufio.Scanner for efficient line-by-line scanning.
+// Returns true if the pattern is found in any file.
+func searchPatternInProject(projectPath, pattern string) bool {
+	// Search common Go source directories.
+	dirs := []string{"cmd", "internal", "pkg"}
+	for _, dir := range dirs {
+		dirPath := filepath.Join(projectPath, dir)
+		if _, err := os.Stat(dirPath); err != nil {
+			continue
+		}
+		if searchPatternInDir(dirPath, pattern) {
+			return true
+		}
+	}
+	// Also search root .go files.
+	return searchPatternInDir(projectPath, pattern)
+}
+
+// searchPatternInDir searches for a pattern in .go files within a directory tree.
+func searchPatternInDir(dir, pattern string) bool {
+	found := false
+	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || found {
+			return filepath.SkipAll
+		}
+		if d.IsDir() {
+			name := d.Name()
+			// Skip hidden dirs and vendor.
+			if strings.HasPrefix(name, ".") || name == "vendor" || name == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			if strings.Contains(scanner.Text(), pattern) {
+				found = true
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	return found
 }

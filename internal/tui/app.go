@@ -19,6 +19,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/glamour"
+	"github.com/sergi/go-diff/diffmatchpatch"
 
 	"github.com/hir4ta/claude-alfred/internal/spec"
 )
@@ -737,83 +738,60 @@ func (m *Model) showSpecDiff() {
 	}
 	previous := string(prevData)
 
-	// Simple line diff.
-	diff := renderSimpleDiff(previous, current)
+	// Unified diff using go-diff.
+	diff := renderUnifiedDiff(previous, current)
 	ts, _ := time.Parse("20060102-150405", history[0].Timestamp)
 	age := time.Since(ts)
 	m.overlayTitle = fmt.Sprintf("Diff: %s (vs %s ago)", f.File, formatDuration(age))
 	m.overlayVP.SetContent(diff)
 }
 
-// renderSimpleDiff produces a colored line diff between two texts.
-// Uses bag-of-lines approach: groups removed and added lines separately.
-func renderSimpleDiff(old, new string) string {
-	oldLines := strings.Split(old, "\n")
-	newLines := strings.Split(new, "\n")
+// renderUnifiedDiff produces a colored unified diff between two texts.
+// Uses go-diff for semantic line diff with context lines.
+func renderUnifiedDiff(old, new string) string {
+	diffs := dmp.DiffMain(old, new, true)
+	diffs = dmp.DiffCleanupSemantic(diffs)
 
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8"))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#c66"))
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#88c"))
 
 	var b strings.Builder
+	addedCount, removedCount := 0, 0
 
-	// Build line frequency maps for both versions.
-	newCounts := make(map[string]int)
-	for _, l := range newLines {
-		newCounts[l]++
-	}
-	oldCounts := make(map[string]int)
-	for _, l := range oldLines {
-		oldCounts[l]++
-	}
-
-	// Removed lines: in old but not (enough) in new.
-	removedCount := 0
-	remaining := make(map[string]int)
-	for k, v := range newCounts {
-		remaining[k] = v
-	}
-	for _, l := range oldLines {
-		if remaining[l] > 0 {
-			remaining[l]--
-			continue
-		}
-		if removedCount == 0 {
-			b.WriteString(delStyle.Render("  --- removed") + "\n")
-		}
-		b.WriteString(delStyle.Render("  - "+l) + "\n")
-		removedCount++
-	}
-
-	// Added lines: in new but not (enough) in old.
-	addedCount := 0
-	remaining2 := make(map[string]int)
-	for k, v := range oldCounts {
-		remaining2[k] = v
-	}
-	for _, l := range newLines {
-		if remaining2[l] > 0 {
-			remaining2[l]--
-			continue
-		}
-		if addedCount == 0 {
-			if removedCount > 0 {
-				b.WriteString("\n")
+	for _, d := range diffs {
+		lines := strings.Split(d.Text, "\n")
+		// Last empty element from trailing newline — keep it attached.
+		for i, line := range lines {
+			// Skip the empty string that results from a trailing newline.
+			if i == len(lines)-1 && line == "" {
+				continue
 			}
-			b.WriteString(addStyle.Render("  +++ added") + "\n")
+			switch d.Type {
+			case diffmatchpatch.DiffDelete:
+				b.WriteString(delStyle.Render("  - "+line) + "\n")
+				removedCount++
+			case diffmatchpatch.DiffInsert:
+				b.WriteString(addStyle.Render("  + "+line) + "\n")
+				addedCount++
+			case diffmatchpatch.DiffEqual:
+				b.WriteString("    " + line + "\n")
+			}
 		}
-		b.WriteString(addStyle.Render("  + "+l) + "\n")
-		addedCount++
 	}
 
 	if removedCount == 0 && addedCount == 0 {
 		b.WriteString(dimStyle.Render("  no changes"))
 	} else {
 		b.WriteString(fmt.Sprintf("\n  %s",
-			dimStyle.Render(fmt.Sprintf("%d removed, %d added", removedCount, addedCount))))
+			headerStyle.Render(fmt.Sprintf("%d removed, %d added", removedCount, addedCount))))
 	}
 
 	return b.String()
 }
+
+// dmp is the shared DiffMatchPatch instance for diff computation.
+var dmp = diffmatchpatch.New()
 
 // enterReviewMode initializes review mode for the currently viewed spec file.
 func (m *Model) enterReviewMode() {

@@ -366,6 +366,34 @@ func (s *Store) ListRecentMemories(ctx context.Context, limit int) ([]DocRow, er
 	return docs, rows.Err()
 }
 
+// ListPatternRuleMemories returns all enabled memories with sub_type=pattern or sub_type=rule.
+// Used by the convention audit feature to validate memories against the codebase.
+func (s *Store) ListPatternRuleMemories(ctx context.Context) ([]DocRow, error) {
+	sqlQuery := `SELECT id, url, section_path, content, content_hash, source_type, sub_type,
+		version, crawled_at, ttl_days, hit_count, COALESCE(last_accessed, '') as last_accessed, structured
+		FROM records WHERE source_type = ? AND enabled = 1
+		AND sub_type IN (?, ?)
+		AND superseded_by IS NULL
+		ORDER BY hit_count DESC`
+	rows, err := s.db.QueryContext(ctx, sqlQuery, SourceMemory, SubTypePattern, SubTypeRule)
+	if err != nil {
+		return nil, fmt.Errorf("store: list pattern/rule memories: %w", err)
+	}
+	defer rows.Close()
+	var docs []DocRow
+	for rows.Next() {
+		var d DocRow
+		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
+			&d.SourceType, &d.SubType, &d.Version, &d.CrawledAt, &d.TTLDays,
+			&d.HitCount, &d.LastAccessed, &d.Structured); err != nil {
+			continue
+		}
+		d.Enabled = true
+		docs = append(docs, d)
+	}
+	return docs, rows.Err()
+}
+
 // SetEnabled toggles the enabled status of a memory record.
 // Scoped to source_type=memory to prevent accidental disabling of spec/project records.
 func (s *Store) SetEnabled(ctx context.Context, id int64, enabled bool) error {

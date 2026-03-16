@@ -154,9 +154,9 @@ func TestRenderSimpleDiff(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := renderSimpleDiff(tt.old, tt.new)
-			hasRemoved := strings.Contains(result, "--- removed")
-			hasAdded := strings.Contains(result, "+++ added")
+			result := renderUnifiedDiff(tt.old, tt.new)
+			hasRemoved := strings.Contains(result, "- ")
+			hasAdded := strings.Contains(result, "+ ")
 			if hasRemoved != tt.wantRemoved {
 				t.Errorf("removed: got %v, want %v", hasRemoved, tt.wantRemoved)
 			}

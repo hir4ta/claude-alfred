@@ -99,6 +99,7 @@ Actions:
 - candidates: List memories that qualify for sub_type promotion based on hit_count
 - reflect: Read-only health report — stats, conflicts, stale memories, promotion candidates, vitality distribution
 - stale: List low-vitality memories with computed scores (optional threshold parameter, default 20)
+- audit-conventions: Check pattern/rule memories against the codebase for drift (requires project_path)
 
 Knowledge persists permanently and grows with use. Memories track hit_count (how often they appear in search results) and can be promoted from general→pattern→rule as they prove their value.
 
@@ -109,13 +110,14 @@ Use for:
 - "How healthy is my knowledge base?" (reflect)
 - "Promote this memory to a rule" (promote)
 - "What memories have low vitality?" (stale)
+- "Are my conventions still accurate?" (audit-conventions)
 
 Do NOT use for: searching documentation (use WebFetch instead), file operations.`),
 				mcp.WithTitleAnnotation("Ledger — Memory"),
 				mcp.WithReadOnlyHintAnnotation(false),
 				mcp.WithIdempotentHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithString("action", mcp.Description("Action: search, save, promote, candidates, reflect, or stale"), mcp.Required(), mcp.Enum("search", "save", "promote", "candidates", "reflect", "stale")),
+				mcp.WithString("action", mcp.Description("Action: search, save, promote, candidates, reflect, stale, or audit-conventions"), mcp.Required(), mcp.Enum("search", "save", "promote", "candidates", "reflect", "stale", "audit-conventions")),
 				mcp.WithNumber("id", mcp.Description("Record ID (required for promote)")),
 				mcp.WithString("query", mcp.Description("Search query (for search)")),
 				mcp.WithString("content", mcp.Description("Content to save (required for save)")),

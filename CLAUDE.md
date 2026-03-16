@@ -20,7 +20,7 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TU
 | `cmd/alfred/hooks*.go` | Hook handler (SessionStart / PreCompact / UserPromptSubmit / PostToolUse) |
 | `cmd/alfred/hooks_compact.go` | PreCompact: decision extraction, structured chapter memory (JSON), session.md rebuild |
 | `cmd/alfred/hooks_semantic.go` | UserPromptSubmit: Voyage semantic search + FTS5 fallback + file context boost |
-| `cmd/alfred/hooks_posttool.go` | PostToolUse: Bash error detection → related memory injection |
+| `cmd/alfred/hooks_posttool.go` | PostToolUse: Bash error detection → related memory injection; spec drift detection (git commit) |
 | `cmd/alfred/hooks_transcript.go` | Transcript parsing: rich context extraction, decision detection |
 | `cmd/alfred/dashboard.go` | TUI dashboard entry point (`alfred dashboard`) |
 | `cmd/alfred/steering.go` | Steering doc generation (`alfred steering-init`) |
@@ -62,7 +62,9 @@ alfred steering-init          # Generate project steering docs (.alfred/steering
 - SessionStart: CLAUDE.md ingestion + user rules check + spec context injection (2 ops parallel via channels) + adaptive onboarding (memory count → context depth)
 - PreCompact: auto-updates Next Steps completion status from transcript; decision extraction; structured chapter memory (JSON); epic progress auto-sync
 - UserPromptSubmit: Voyage vector search → FTS5 fallback → keyword fallback; file context boost from git diff
-- PostToolUse: Bash error detection → FTS5 memory search → additionalContext injection; Bash success → session.md Next Steps auto-check (command + action signals matching)
+- PostToolUse: Bash error detection → FTS5 memory search → additionalContext injection; Bash success → session.md Next Steps auto-check (command + action signals matching); git commit → spec drift detection (file refs vs changed files)
+- PostToolUse drift detection: extractChangedFiles (git diff --name-only HEAD~1, 500ms timeout, fail-open) → parseSpecFileRefs (design.md File: + tasks.md Files:) → compare → additionalContext warning + audit.jsonl logging
+- Drift severity: info (test files), warning (source files not in spec), critical (design.md component modified)
 - Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (7 spec files with EARS/traceability + 3 specialists per file + approval gate), attend (7-file spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor autonomous cycles), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → memory)
 - brief/attend spec generation order: research → requirements → design → tasks → test-specs → decisions → session
 
@@ -159,6 +161,7 @@ alfred steering-init          # Generate project steering docs (.alfred/steering
 - Shimmer animation: lipgloss.Blend1D gradient, 50ms tick, on first unchecked Next Steps item
 - Review mode: line-numbered viewer, inline comments (orange), background-highlighted cursor, Approve/Request Changes
 - Review history: round navigation (left/right keys), read-only past rounds, carried-over unresolved comments (dim orange)
+- Spec diff viewer: 'd' key in Tasks/Specs overlay shows unified diff (go-diff/diffmatchpatch) between current and last history version
 - DataSource interface for testability (internal/tui/datasource.go)
 
 ### Memory & Search
@@ -167,7 +170,10 @@ alfred steering-init          # Generate project steering docs (.alfred/steering
 - Memory sub_type boost: rule=2.0x, decision=1.5x, pattern=1.3x, general=1.0x (search relevance)
 - Knowledge maturity: hit_count tracks search result appearances, last_accessed for staleness detection
 - Knowledge promotion: general→pattern (5+ hits), pattern→rule (15+ hits); manual confirmation via ledger promote
-- Ledger tool actions: search, save, promote, candidates, reflect, stale
+- Ledger tool actions: search, save, promote, candidates, reflect, stale, audit-conventions
+- Convention audit: `ledger action=audit-conventions project_path=...` validates pattern/rule memories against codebase (file existence + code pattern grep)
+- Drift detection audit: drift.spec and drift.convention events logged to audit.jsonl with severity/resolution
+- Drift stats: `ledger action=reflect` includes drift_stats section (by type, severity, unresolved count)
 - Knowledge health (ledger reflect): stats + conflict detection (contradictions vs duplicates) + stale memories + promotion candidates + vitality distribution (5 buckets) + avg_vitality
 - Ledger stale action: returns low-vitality memories with computed scores (threshold parameter, default 20)
 - Search quality benchmark: `alfred search-eval` CLI subcommand with .alfred/search-eval.yaml test cases

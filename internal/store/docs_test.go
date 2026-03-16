@@ -1028,6 +1028,76 @@ func TestExpiringMemories(t *testing.T) {
 	}
 }
 
+func TestListPatternRuleMemories(t *testing.T) {
+	t.Parallel()
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	// Insert memories with different sub_types.
+	memories := []DocRow{
+		{URL: "memory://test/general", SectionPath: "general memory", Content: "general content", SourceType: SourceMemory, SubType: SubTypeGeneral},
+		{URL: "memory://test/pattern", SectionPath: "pattern memory", Content: "pattern content", SourceType: SourceMemory, SubType: SubTypePattern},
+		{URL: "memory://test/rule", SectionPath: "rule memory", Content: "rule content", SourceType: SourceMemory, SubType: SubTypeRule},
+		{URL: "memory://test/decision", SectionPath: "decision memory", Content: "decision content", SourceType: SourceMemory, SubType: SubTypeDecision},
+	}
+	for i := range memories {
+		if _, _, err := st.UpsertDoc(ctx, &memories[i]); err != nil {
+			t.Fatalf("UpsertDoc[%d]: %v", i, err)
+		}
+	}
+
+	// Also insert a non-memory doc to verify source_type filter.
+	_, _, err := st.UpsertDoc(ctx, &DocRow{
+		URL: "https://example.com/rule", SectionPath: "External Rule", Content: "external rule", SourceType: "project", SubType: SubTypeRule,
+	})
+	if err != nil {
+		t.Fatalf("UpsertDoc(external): %v", err)
+	}
+
+	// ListPatternRuleMemories should return only pattern and rule memories.
+	results, err := st.ListPatternRuleMemories(ctx)
+	if err != nil {
+		t.Fatalf("ListPatternRuleMemories: %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("ListPatternRuleMemories = %d, want 2", len(results))
+	}
+	for _, r := range results {
+		if r.SubType != SubTypePattern && r.SubType != SubTypeRule {
+			t.Errorf("unexpected sub_type %q", r.SubType)
+		}
+		if r.SourceType != SourceMemory {
+			t.Errorf("unexpected source_type %q", r.SourceType)
+		}
+	}
+}
+
+func TestListPatternRuleMemories_ExcludesDisabled(t *testing.T) {
+	t.Parallel()
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	id, _, err := st.UpsertDoc(ctx, &DocRow{
+		URL: "memory://test/disabled-rule", SectionPath: "disabled rule", Content: "disabled", SourceType: SourceMemory, SubType: SubTypeRule,
+	})
+	if err != nil {
+		t.Fatalf("UpsertDoc: %v", err)
+	}
+
+	// Disable the memory.
+	if err := st.SetEnabled(ctx, id, false); err != nil {
+		t.Fatalf("SetEnabled: %v", err)
+	}
+
+	results, err := st.ListPatternRuleMemories(ctx)
+	if err != nil {
+		t.Fatalf("ListPatternRuleMemories: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("ListPatternRuleMemories = %d, want 0 (disabled excluded)", len(results))
+	}
+}
+
 func TestSetSupersededByClear(t *testing.T) {
 	t.Parallel()
 	st := openTestStore(t)
