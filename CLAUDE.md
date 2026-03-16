@@ -4,7 +4,7 @@ Development butler for Claude Code — MCP server + Hook handler.
 
 ## Stack
 
-Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TUI)
+Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / React SPA (Vite 8 + TanStack Router + shadcn/ui)
 
 ## Structure
 
@@ -15,14 +15,16 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TU
 | `internal/embedder` | Voyage AI (voyage-4-large, vector search + rerank-2.5) |
 | `internal/spec` | Spec management: .alfred/specs/ (8 file types: requirements, design, tasks, test-specs, decisions, research, session, bugfix) + Size-based scaling (S/M/L/XL) + SpecType (feature/bugfix) + Validate checker + Steering docs: .alfred/steering/ (3 files: product, structure, tech) |
 | `internal/epic` | Epic management: .alfred/epics/ (YAML-based task grouping + dependencies) |
-| `internal/tui` | TUI dashboard: bubbletea v2 (overview/tasks/specs/knowledge tabs + review mode) |
+| `internal/dashboard` | Dashboard types: DataSource interface + shared types (extracted from former TUI) |
+| `internal/api` | HTTP API server: chi router, REST handlers, SSE broadcast hub, SPA serving |
+| `web/` | React SPA: Vite 8, TanStack Router/Query, shadcn/ui, Tailwind CSS v4, Biome |
 | `internal/install` | Plugin bundle + user rules |
 | `cmd/alfred/hooks*.go` | Hook handler (SessionStart / PreCompact / UserPromptSubmit / PostToolUse) |
 | `cmd/alfred/hooks_compact.go` | PreCompact: decision extraction, structured chapter memory (JSON), session.md rebuild |
 | `cmd/alfred/hooks_semantic.go` | UserPromptSubmit: Voyage semantic search + FTS5 fallback + file context boost |
 | `cmd/alfred/hooks_posttool.go` | PostToolUse: Bash error detection → related memory injection; spec drift detection (git commit) |
 | `cmd/alfred/hooks_transcript.go` | Transcript parsing: rich context extraction, decision detection |
-| `cmd/alfred/dashboard.go` | TUI dashboard entry point (`alfred dashboard`) |
+| `cmd/alfred/dashboard.go` | HTTP dashboard entry point (`alfred dashboard` — browser open + go:embed SPA) |
 | `cmd/alfred/steering.go` | Steering doc generation (`alfred steering-init`) |
 | `cmd/alfred/export.go` | Knowledge export (`alfred export` → .alfred/knowledge/memories.yaml) |
 | `cmd/alfred/search_eval.go` | Search quality benchmark (`alfred search-eval`) |
@@ -30,9 +32,15 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TU
 ## Commands
 
 ```bash
-go install ./cmd/alfred        # Build & install
-go test ./...                 # All tests
-go vet ./...                  # Static analysis
+task build                    # Build React SPA + go install (full pipeline)
+task dev                      # Start Vite dev server (use with ALFRED_DEV=1 alfred dashboard)
+task check                    # Go vet + Biome lint
+task fix                      # Biome auto-fix
+task test                     # Go tests
+task clean                    # Clean build artifacts
+alfred dashboard              # Open browser dashboard (localhost:7575)
+alfred dashboard --port 8080  # Custom port
+alfred dashboard --url-only   # Print URL only
 alfred search-eval            # Run search quality benchmark
 alfred steering-init          # Generate project steering docs (.alfred/steering/)
 ```
@@ -163,25 +171,21 @@ alfred steering-init          # Generate project steering docs (.alfred/steering
 - epic delete: tasks (specs) preserved as standalone (not deleted)
 - Epic status auto-transitions: all tasks completed → epic completed
 
-### TUI Dashboard
+### Web Dashboard
 
-- `alfred dashboard` (alias: `alfred dash`): bubbletea v2 TUI
-- 4 tabs: Overview / Tasks / Knowledge / Activity
-- File structure: app.go (root Model + routing), tab_overview.go, tab_tasks.go, tab_knowledge.go, tab_activity.go, review.go, overlay.go, helpers.go
-- Tab constants: tabOverview=0, tabTasks=1, tabKnowledge=2, tabActivity=3
-- Data refresh: 5-second polling
-- Overview tab: task summary with validation badges, memory health (stale/conflicts), confidence/grounding distribution, epic progress, recent decisions
-- Tasks tab Level 0: enriched cards (slug + progress + focus + next action + epic + validation badge)
-- Tasks tab Level 1: spec files with rich summaries, validation status per task
-- Knowledge tab: Ctrl+F (local filter, list.Model built-in), Ctrl+S (semantic search via Voyage AI, async)
-- Activity tab: timeline with `f` key filter cycle (all/spec.init/spec.complete/review.submit), epic drilldown (Enter→Tasks)
-- Style: Everforest/Gruvbox warm palette — aqua (#7fbbb3), orange (#e69875), gold (#dbbc7f), green (#a7c080), red (#e67e80), purple (#d699b6), blue (#7393b3); no emoji
-- Shimmer animation: lipgloss.Blend1D gradient (warm brown → orange), 80ms tick (12.5 FPS), on first unchecked Next Steps item
-- Review mode: line-numbered viewer, inline comments (orange), background-highlighted cursor, Approve/Request Changes
-- Review history: round navigation (left/right keys), read-only past rounds, carried-over unresolved comments (dim orange)
-- Spec diff viewer: 'd' key in Tasks/Specs overlay shows unified diff (go-diff/diffmatchpatch) between current and last history version
-- Clipboard: OS-detected (darwin: pbcopy, linux: xclip/xsel, fallback: error), 'c' key in overlay
-- DataSource interface: 17 methods (14 original + Validation, MemoryHealth, ConfidenceStats)
+- `alfred dashboard`: HTTP server + browser open (localhost:7575)
+- React SPA: Vite 8 + TanStack Router (file-based) + TanStack Query + shadcn/ui + Tailwind CSS v4
+- Build: `task build` (bun run build → cp dist → go install with go:embed)
+- Dev mode: `ALFRED_DEV=1 alfred dashboard` + `task dev` (Vite HMR proxy)
+- 4 tabs: Overview (/) / Tasks (/tasks) / Knowledge (/knowledge) / Activity (/activity)
+- Overview: task summary cards, memory health, epic progress, recent decisions
+- Tasks: task list sidebar + spec file viewer + review mode (View/Review tabs)
+- Knowledge: Table with semantic search (Voyage AI, 300ms debounce), local filter, toggle enabled
+- Activity: timeline table with filter tabs (all/spec.init/spec.complete/review.submit), epic section
+- Review mode: line-numbered spec viewer, inline comments, Approve/Request Changes with confirmation dialog
+- SSE: EventSource → TanStack Query invalidation for real-time updates
+- Brand palette (DEC-15): session #40513b, decision #628141, pattern #2d8b7a, rule #e67e22, error #c0392b, purple #7b6b8d, dark #44403c; no Tailwind vivid colors
+- DataSource interface: 15 methods (internal/dashboard/types.go)
 - MemoryHealth: DetectConflicts result cached 60s (DEC-6), ListLowVitality for stale count
 - Confidence: spec.ParseConfidence() (extracted from mcpserver to spec package)
 
