@@ -300,6 +300,72 @@ func TestActivityEntryReversal(t *testing.T) {
 	}
 }
 
+func TestParseSessionCompletedSteps(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		content   string
+		wantTotal int
+		wantDone  int
+	}{
+		{
+			name: "Completed Steps section counted",
+			content: `## Status
+active
+## Completed Steps
+- [x] T-1.1 Done task
+- [x] T-1.2 Another done
+## Next Steps
+- [ ] T-2.1 Pending task
+`,
+			wantTotal: 3,
+			wantDone:  2,
+		},
+		{
+			name: "legacy Completed section still works",
+			content: `## Status
+active
+## Completed
+- [x] Done item
+## Next Steps
+- [ ] Pending item
+`,
+			wantTotal: 2,
+			wantDone:  1,
+		},
+		{
+			name: "only Next Steps no Completed",
+			content: `## Status
+active
+## Next Steps
+- [x] Done item
+- [ ] Pending item
+`,
+			wantTotal: 2,
+			wantDone:  1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ps := parseSessionSections(tt.content)
+			gotTotal := len(ps.nextSteps)
+			gotDone := 0
+			for _, s := range ps.nextSteps {
+				if s.Done {
+					gotDone++
+				}
+			}
+			if gotTotal != tt.wantTotal {
+				t.Errorf("parseSessionSections() total = %d, want %d", gotTotal, tt.wantTotal)
+			}
+			if gotDone != tt.wantDone {
+				t.Errorf("parseSessionSections() done = %d, want %d", gotDone, tt.wantDone)
+			}
+		})
+	}
+}
+
 func TestStyledSubType(t *testing.T) {
 	// All sub types should render non-empty.
 	for _, st := range []string{"rule", "decision", "pattern", "general"} {

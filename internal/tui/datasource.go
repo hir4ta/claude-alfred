@@ -575,9 +575,13 @@ func parseSessionSections(content string) parsedSession {
 	if v, ok := sections["Next Steps"]; ok {
 		ps.nextSteps = parseCheckboxes(v)
 	}
-	if v, ok := sections["Completed"]; ok {
-		completed := parseCheckboxes(v)
-		ps.nextSteps = append(completed, ps.nextSteps...)
+	// Match "Completed", "Completed Steps", etc.
+	for header, v := range sections {
+		if strings.HasPrefix(header, "Completed") {
+			completed := parseCheckboxes(v)
+			ps.nextSteps = append(completed, ps.nextSteps...)
+			break
+		}
 	}
 
 	// Recent Decisions — match headers like "Recent Decisions (last 3)".
