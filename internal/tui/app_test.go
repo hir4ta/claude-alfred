@@ -30,6 +30,7 @@ func (m *mockDataSource) RecentActivity(_ int) []ActivityEntry           { retur
 func (m *mockDataSource) KnowledgeStats() KnowledgeStats                 { return KnowledgeStats{} }
 func (m *mockDataSource) Epics() []EpicSummary                           { return nil }
 func (m *mockDataSource) AllDecisions(_ int) []DecisionEntry             { return nil }
+func (m *mockDataSource) ToggleEnabled(_ int64, _ bool) error            { return nil }
 
 func TestTabBadge(t *testing.T) {
 	ds := &mockDataSource{

@@ -640,6 +640,16 @@ func (m *Model) updateKnowledge(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				"Knowledge", k.Source, title,
 			)
 		}
+	case msg.String() == " ": // space to toggle enabled/disabled
+		if m.knCursor < len(m.knowledge) {
+			k := &m.knowledge[m.knCursor]
+			if k.ID > 0 {
+				newState := !k.Enabled
+				if err := m.ds.ToggleEnabled(k.ID, newState); err == nil {
+					k.Enabled = newState
+				}
+			}
+		}
 	}
 	return m, nil
 }
@@ -1841,9 +1851,13 @@ func (m Model) knowledgeView() string {
 
 	for i := startIdx; i < endIdx; i++ {
 		k := m.knowledge[i]
-		prefix := "  "
+		enabledMark := "[x] "
+		if !k.Enabled {
+			enabledMark = "[ ] "
+		}
+		prefix := "  " + enabledMark
 		if i == m.knCursor {
-			prefix = "> "
+			prefix = "> " + enabledMark
 		}
 
 		// Parse label into title + context.
@@ -1887,6 +1901,9 @@ func (m Model) knowledgeView() string {
 			if ctxLine != "" {
 				b.WriteString("    " + ctxLine + "\n")
 			}
+		} else if !k.Enabled {
+			line := prefix + scoreStr + sourceTag + subTag + statusTag + " " + title + "  " + age + hitStr
+			b.WriteString(dimStyle.Render(line) + "\n")
 		} else {
 			b.WriteString(prefix + scoreStr + sourceTag + subTag + statusTag + " " + title + "  " + age + hitStr + "\n")
 			if ctxLine != "" {

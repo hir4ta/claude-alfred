@@ -39,6 +39,7 @@ type DocRow struct {
 	HitCount     int
 	LastAccessed string
 	Structured   string
+	Enabled      bool
 }
 
 // Promotion thresholds: minimum hit_count to qualify as a promotion candidate.
@@ -294,7 +295,7 @@ func (s *Store) SearchMemoriesKeyword(ctx context.Context, query string, limit i
 		conditions = append(conditions, "(LOWER(section_path) LIKE ? ESCAPE '\\' OR LOWER(content) LIKE ? ESCAPE '\\')")
 		args = append(args, escaped, escaped)
 	}
-	where := "source_type = ?"
+	where := "source_type = ? AND enabled = 1"
 	if len(conditions) > 0 {
 		where += " AND " + strings.Join(conditions, " AND ")
 	}
@@ -319,14 +320,14 @@ func (s *Store) SearchMemoriesKeyword(ctx context.Context, query string, limit i
 	return docs, rows.Err()
 }
 
-// ListRecentMemories returns the most recent memory records, ordered by crawled_at desc.
+// ListRecentMemories returns the most recent enabled memory records, ordered by crawled_at desc.
 func (s *Store) ListRecentMemories(ctx context.Context, limit int) ([]DocRow, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	sqlQuery := `SELECT id, url, section_path, content, content_hash, source_type, sub_type,
 		version, crawled_at, ttl_days, hit_count, structured
-		FROM records WHERE source_type = ? ORDER BY crawled_at DESC LIMIT ?`
+		FROM records WHERE source_type = ? AND enabled = 1 ORDER BY crawled_at DESC LIMIT ?`
 	rows, err := s.db.QueryContext(ctx, sqlQuery, SourceMemory, limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: list recent memories: %w", err)
@@ -338,6 +339,42 @@ func (s *Store) ListRecentMemories(ctx context.Context, limit int) ([]DocRow, er
 		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
 			&d.SourceType, &d.SubType, &d.Version, &d.CrawledAt, &d.TTLDays,
 			&d.HitCount, &d.Structured); err != nil {
+			continue
+		}
+		docs = append(docs, d)
+	}
+	return docs, rows.Err()
+}
+
+// SetEnabled toggles the enabled status of a record.
+func (s *Store) SetEnabled(ctx context.Context, id int64, enabled bool) error {
+	val := 0
+	if enabled {
+		val = 1
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE records SET enabled = ? WHERE id = ?`, val, id)
+	return err
+}
+
+// ListAllMemories returns recent memories including disabled ones, with enabled status.
+func (s *Store) ListAllMemories(ctx context.Context, limit int) ([]DocRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	sqlQuery := `SELECT id, url, section_path, content, content_hash, source_type, sub_type,
+		version, crawled_at, ttl_days, hit_count, structured, enabled
+		FROM records WHERE source_type = ? ORDER BY crawled_at DESC LIMIT ?`
+	rows, err := s.db.QueryContext(ctx, sqlQuery, SourceMemory, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: list all memories: %w", err)
+	}
+	defer rows.Close()
+	var docs []DocRow
+	for rows.Next() {
+		var d DocRow
+		if err := rows.Scan(&d.ID, &d.URL, &d.SectionPath, &d.Content, &d.ContentHash,
+			&d.SourceType, &d.SubType, &d.Version, &d.CrawledAt, &d.TTLDays,
+			&d.HitCount, &d.Structured, &d.Enabled); err != nil {
 			continue
 		}
 		docs = append(docs, d)

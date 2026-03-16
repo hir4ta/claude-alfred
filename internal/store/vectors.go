@@ -93,7 +93,7 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 	var queryArgs []any
 	if len(docSourceTypes) > 0 {
 		var qb strings.Builder
-		qb.WriteString("SELECT e.source_id, e.vector FROM embeddings e JOIN records d ON d.id = e.source_id WHERE e.source = ? AND d.source_type IN (")
+		qb.WriteString("SELECT e.source_id, e.vector FROM embeddings e JOIN records d ON d.id = e.source_id WHERE e.source = ? AND d.enabled = 1 AND d.source_type IN (")
 		queryArgs = append(queryArgs, source)
 		for i, st := range docSourceTypes {
 			if i > 0 {
@@ -106,7 +106,7 @@ func (s *Store) VectorSearch(ctx context.Context, queryVec []float32, source str
 		queryArgs = append(queryArgs, maxCandidates)
 		queryStr = qb.String()
 	} else {
-		queryStr = `SELECT source_id, vector FROM embeddings WHERE source = ? LIMIT ?`
+		queryStr = `SELECT e.source_id, e.vector FROM embeddings e JOIN records d ON d.id = e.source_id WHERE e.source = ? AND d.enabled = 1 LIMIT ?`
 		queryArgs = []any{source, maxCandidates}
 	}
 

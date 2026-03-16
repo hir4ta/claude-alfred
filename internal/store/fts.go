@@ -36,7 +36,7 @@ func (s *Store) SearchFTS(ctx context.Context, query string, sourceType string, 
 			bm25(records_fts, 1.0, 3.0) AS rank
 		FROM records_fts f
 		JOIN records r ON r.rowid = f.rowid
-		WHERE records_fts MATCH ? AND r.source_type = ?
+		WHERE records_fts MATCH ? AND r.source_type = ? AND r.enabled = 1
 		ORDER BY rank
 		LIMIT ?`
 		args = []any{ftsQuery, sourceType, limit}
@@ -46,7 +46,7 @@ func (s *Store) SearchFTS(ctx context.Context, query string, sourceType string, 
 			bm25(records_fts, 1.0, 3.0) AS rank
 		FROM records_fts f
 		JOIN records r ON r.rowid = f.rowid
-		WHERE records_fts MATCH ?
+		WHERE records_fts MATCH ? AND r.enabled = 1
 		ORDER BY rank
 		LIMIT ?`
 		args = []any{ftsQuery, limit}
@@ -374,7 +374,7 @@ func (s *Store) searchFTSMemory(ctx context.Context, ftsQuery string, limit int)
 		bm25(records_fts, 1.0, 3.0) AS rank
 	FROM records_fts f
 	JOIN records r ON r.rowid = f.rowid
-	WHERE records_fts MATCH ? AND r.source_type = ?
+	WHERE records_fts MATCH ? AND r.source_type = ? AND r.enabled = 1
 	ORDER BY rank
 	LIMIT ?`
 
@@ -412,7 +412,7 @@ func (s *Store) fuzzySearchMemories(ctx context.Context, queryWords []string, li
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, url, section_path, content, content_hash, source_type, sub_type, version, crawled_at, ttl_days, structured
-		FROM records WHERE source_type = ? LIMIT 500`, SourceMemory)
+		FROM records WHERE source_type = ? AND enabled = 1 LIMIT 500`, SourceMemory)
 	if err != nil {
 		return nil
 	}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type SpecEntry struct {
 
 // KnowledgeEntry holds a search/browse result.
 type KnowledgeEntry struct {
+	ID         int64
 	Label      string
 	Source     string  // "memory", "spec", "project"
 	SubType    string  // "general", "decision", "pattern", "rule"
@@ -50,6 +52,7 @@ type KnowledgeEntry struct {
 	Structured string  // JSON structured data (if available)
 	Score      float64 // vector similarity (0 if not from search)
 	Age        time.Duration
+	Enabled    bool    // governance: active in search pipeline
 }
 
 // ActivityEntry holds a timeline event from audit.jsonl.
@@ -107,6 +110,7 @@ type DataSource interface {
 	KnowledgeStats() KnowledgeStats
 	Epics() []EpicSummary
 	AllDecisions(limit int) []DecisionEntry
+	ToggleEnabled(id int64, enabled bool) error
 }
 
 // fileDataSource implements DataSource by reading .alfred/ files and SQLite.
@@ -287,11 +291,11 @@ func (ds *fileDataSource) SemanticSearch(query string, limit int) []KnowledgeEnt
 }
 
 func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
-	// Prefer DB (has all memories including auto-saved decisions).
+	// Prefer DB (has all memories including auto-saved decisions, with enabled status).
 	if ds.st != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		docs, err := ds.st.ListRecentMemories(ctx, limit)
+		docs, err := ds.st.ListAllMemories(ctx, limit)
 		if err == nil && len(docs) > 0 {
 			entries := make([]KnowledgeEntry, 0, len(docs))
 			for _, d := range docs {
@@ -300,6 +304,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 					age = time.Since(t)
 				}
 				entries = append(entries, KnowledgeEntry{
+					ID:         d.ID,
 					Label:      d.SectionPath,
 					Source:     d.SourceType,
 					SubType:    d.SubType,
@@ -307,6 +312,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 					Content:    d.Content,
 					Structured: d.Structured,
 					Age:        age,
+					Enabled:    d.Enabled,
 				})
 			}
 			return entries
@@ -323,6 +329,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 			Source:  "memory",
 			SubType: "decision",
 			Content: d.ToContent(),
+			Enabled: true,
 		})
 	}
 
@@ -333,6 +340,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 			Source:  "memory",
 			SubType: "pattern",
 			Content: p.ToContent(),
+			Enabled: true,
 		})
 	}
 
@@ -343,6 +351,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 			Source:  "memory",
 			SubType: "rule",
 			Content: r.ToContent(),
+			Enabled: true,
 		})
 	}
 
@@ -353,6 +362,7 @@ func (ds *fileDataSource) RecentKnowledge(limit int) []KnowledgeEntry {
 			Source:  "memory",
 			SubType: "general",
 			Content: s.ToContent(),
+			Enabled: true,
 		})
 	}
 
@@ -489,6 +499,13 @@ func (ds *fileDataSource) AllDecisions(limit int) []DecisionEntry {
 		entries = entries[:limit]
 	}
 	return entries
+}
+
+func (ds *fileDataSource) ToggleEnabled(id int64, enabled bool) error {
+	if ds.st == nil {
+		return fmt.Errorf("no database connection")
+	}
+	return ds.st.SetEnabled(context.Background(), id, enabled)
 }
 
 func docsToKnowledge(docs []store.DocRow, scoreMap map[int64]float64, limit int) []KnowledgeEntry {

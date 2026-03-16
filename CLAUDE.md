@@ -32,7 +32,6 @@ Go 1.25 / SQLite (ncruces/go-sqlite3) / Voyage AI (embedding) / Bubbletea v2 (TU
 go install ./cmd/alfred        # Build & install
 go test ./...                 # All tests
 go vet ./...                  # Static analysis
-alfred export                 # Export memories to Git-shareable YAML
 alfred search-eval            # Run search quality benchmark
 ```
 
@@ -67,7 +66,7 @@ alfred search-eval            # Run search quality benchmark
 
 ### Database & Schema
 
-- DB schema V4: hit_count + last_accessed columns (V3→V4 additive migration)
+- DB schema V6: enabled column for memory governance (V5→V6 additive migration)
 - Tables: records (memories/specs/project), embeddings (vector search), records_fts (FTS5), tag_aliases (search expansion), session_links (compaction continuity)
 - Store.DB() is test-only; production code uses Store methods (no raw SQL outside internal/store)
 - @.claude/rules/store-internals.md (vector search, SQL safety patterns)
@@ -99,6 +98,9 @@ alfred search-eval            # Run search quality benchmark
 - Wave: Closing required in all tasks.md: self-review, CLAUDE.md update, test verification, knowledge save
 - Knowledge tab: DB-first (ListRecentMemories), file fallback (.alfred/knowledge/)
 - Activity tab: shows audit detail (completion summary: files modified, decisions saved)
+- Memory governance: `enabled` column (DB schema V6), disabled memories excluded from all search pipelines (vector, FTS5, keyword, fuzzy)
+- TUI Knowledge tab: space key toggles enabled/disabled; [x]/[ ] indicator; disabled entries dimmed
+- `alfred export` removed — all knowledge auto-saved via spec complete + hooks
 
 ### Spec Review & Approval Gate
 
