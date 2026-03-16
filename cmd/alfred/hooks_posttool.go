@@ -247,9 +247,10 @@ func tryAutoCheckNextSteps(ctx context.Context, projectPath, command, stdout str
 		return
 	}
 
-	// Write updated session.md.
+	// Write updated session.md with synced sections.
 	updatedNextSteps := strings.Join(lines, "\n")
 	updatedSession := replaceSection(session, "## Next Steps", updatedNextSteps)
+	updatedSession = syncSessionProgress(updatedSession)
 	if err := sd.WriteFile(ctx, spec.FileSession, updatedSession); err != nil {
 		return
 	}
@@ -289,6 +290,82 @@ func isStepMatchedByAction(itemText, contextText string) bool {
 		}
 	}
 	return float64(hits)/float64(len(tokens)) >= 0.5
+}
+
+// syncSessionProgress moves checked items from Next Steps to Completed Steps
+// and updates "Currently Working On" to reflect the next unchecked step.
+// This keeps the dashboard accurate without relying on the AI to manually update.
+func syncSessionProgress(session string) string {
+	nextSteps := extractSection(session, "## Next Steps")
+	if nextSteps == "" {
+		return session
+	}
+
+	var checked, unchecked []string
+	for _, line := range strings.Split(nextSteps, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- [x] ") || strings.HasPrefix(trimmed, "- [X] ") {
+			checked = append(checked, trimmed)
+		} else if strings.HasPrefix(trimmed, "- [ ] ") {
+			unchecked = append(unchecked, trimmed)
+		} else if trimmed != "" && !strings.HasPrefix(trimmed, "<!--") {
+			unchecked = append(unchecked, trimmed) // preserve non-checkbox lines
+		}
+	}
+
+	if len(checked) == 0 {
+		return session
+	}
+
+	// Move checked items to Completed Steps.
+	existingCompleted := extractSectionFallback(session, "## Completed Steps", "## Completed")
+	var completedBuf strings.Builder
+	if existingCompleted != "" {
+		completedBuf.WriteString(existingCompleted)
+		completedBuf.WriteByte('\n')
+	}
+	for _, item := range checked {
+		// Avoid duplicates.
+		if existingCompleted == "" || !strings.Contains(existingCompleted, item) {
+			completedBuf.WriteString(item)
+			completedBuf.WriteByte('\n')
+		}
+	}
+
+	// Update Completed Steps section (try both names).
+	updated := session
+	completedBody := completedBuf.String()
+	if strings.Contains(session, "## Completed Steps") {
+		updated = replaceSection(updated, "## Completed Steps", completedBody)
+	} else if strings.Contains(session, "## Completed") {
+		updated = replaceSection(updated, "## Completed", completedBody)
+	} else {
+		// Insert Completed Steps section before Next Steps.
+		updated = strings.Replace(updated,
+			"## Next Steps",
+			"## Completed Steps\n"+completedBody+"\n## Next Steps",
+			1)
+	}
+
+	// Replace Next Steps with only unchecked items.
+	var nextBuf strings.Builder
+	for _, item := range unchecked {
+		nextBuf.WriteString(item)
+		nextBuf.WriteByte('\n')
+	}
+	updated = replaceSection(updated, "## Next Steps", nextBuf.String())
+
+	// Update "Currently Working On" to the first unchecked step.
+	if len(unchecked) > 0 {
+		first := strings.TrimSpace(unchecked[0])
+		first = strings.TrimPrefix(first, "- [ ] ")
+		// Strip task ID prefix like "T-1.1 [S] " to get just the description.
+		updated = replaceSection(updated, "## Currently Working On", first+"\n")
+	} else {
+		updated = replaceSection(updated, "## Currently Working On", "All steps completed\n")
+	}
+
+	return updated
 }
 
 // replaceSection replaces the content under a ## heading with new content.

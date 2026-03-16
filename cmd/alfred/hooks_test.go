@@ -1775,3 +1775,88 @@ func TestTryAutoCheckNextSteps(t *testing.T) {
 		t.Error("テスト追加 should not be checked by git commit")
 	}
 }
+
+func TestSyncSessionProgress(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name            string
+		session         string
+		wantCompleted   []string // items that should appear in Completed Steps
+		wantNextSteps   []string // items that should remain in Next Steps
+		wantWorkingOn   string   // expected "Currently Working On" content
+		noCompleted     bool     // true if no Completed Steps section should exist
+	}{
+		{
+			name: "moves checked items to Completed Steps",
+			session: "# Session\n\n## Status\nactive\n\n## Currently Working On\nOld focus\n\n## Completed Steps\n\n## Next Steps\n- [x] T-1.1 [S] Done task\n- [ ] T-2.1 [M] Pending task\n- [ ] T-2.2 [S] Another pending\n\n## Blockers\nNone\n",
+			wantCompleted: []string{"- [x] T-1.1 [S] Done task"},
+			wantNextSteps: []string{"- [ ] T-2.1 [M] Pending task", "- [ ] T-2.2 [S] Another pending"},
+			wantWorkingOn: "T-2.1 [M] Pending task",
+		},
+		{
+			name: "creates Completed Steps section if missing",
+			session: "# Session\n\n## Status\nactive\n\n## Currently Working On\nOld focus\n\n## Next Steps\n- [x] T-1.1 [S] Done\n- [ ] T-2.1 [M] Pending\n\n## Blockers\nNone\n",
+			wantCompleted: []string{"- [x] T-1.1 [S] Done"},
+			wantNextSteps: []string{"- [ ] T-2.1 [M] Pending"},
+			wantWorkingOn: "T-2.1 [M] Pending",
+		},
+		{
+			name: "all steps completed",
+			session: "# Session\n\n## Status\nactive\n\n## Currently Working On\nOld focus\n\n## Completed Steps\n\n## Next Steps\n- [x] T-1.1 Done\n- [x] T-1.2 Also done\n\n## Blockers\nNone\n",
+			wantCompleted: []string{"- [x] T-1.1 Done", "- [x] T-1.2 Also done"},
+			wantNextSteps: []string{},
+			wantWorkingOn: "All steps completed",
+		},
+		{
+			name:        "no checked items — no change",
+			session:     "# Session\n\n## Status\nactive\n\n## Currently Working On\nOld focus\n\n## Next Steps\n- [ ] T-1.1 Pending\n\n## Blockers\nNone\n",
+			noCompleted: true,
+			wantWorkingOn: "Old focus",
+		},
+		{
+			name: "avoids duplicate in Completed Steps",
+			session: "# Session\n\n## Status\nactive\n\n## Currently Working On\nOld focus\n\n## Completed Steps\n- [x] T-1.1 [S] Already done\n\n## Next Steps\n- [x] T-1.1 [S] Already done\n- [ ] T-2.1 Pending\n\n## Blockers\nNone\n",
+			wantCompleted: []string{"- [x] T-1.1 [S] Already done"},
+			wantNextSteps: []string{"- [ ] T-2.1 Pending"},
+			wantWorkingOn: "T-2.1 Pending",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := syncSessionProgress(tt.session)
+
+			// Check Completed Steps.
+			for _, item := range tt.wantCompleted {
+				completedSection := extractSectionFallback(result, "## Completed Steps", "## Completed")
+				if !strings.Contains(completedSection, item) {
+					t.Errorf("Completed Steps should contain %q, got:\n%s", item, completedSection)
+				}
+			}
+
+			// Check Next Steps only has unchecked items.
+			nextSection := extractSection(result, "## Next Steps")
+			for _, item := range tt.wantNextSteps {
+				if !strings.Contains(nextSection, item) {
+					t.Errorf("Next Steps should contain %q, got:\n%s", item, nextSection)
+				}
+			}
+			// No checked items should remain in Next Steps.
+			if strings.Contains(nextSection, "- [x] ") || strings.Contains(nextSection, "- [X] ") {
+				t.Errorf("Next Steps should not contain checked items, got:\n%s", nextSection)
+			}
+
+			// Check Currently Working On.
+			workingOn := extractSection(result, "## Currently Working On")
+			if !strings.Contains(workingOn, tt.wantWorkingOn) {
+				t.Errorf("Currently Working On = %q, want %q", workingOn, tt.wantWorkingOn)
+			}
+
+			if tt.noCompleted {
+				if strings.Contains(result, "## Completed Steps") {
+					t.Error("should not create Completed Steps when no items checked")
+				}
+			}
+		})
+	}
+}
