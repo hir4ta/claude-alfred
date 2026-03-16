@@ -15,12 +15,15 @@
      - 4 waves (+ closing): Large tasks — foundation, core, edge cases, integration/polish
      Each wave should produce a testable/verifiable increment.
      If a wave has only 1 task, consider merging it with an adjacent wave.
+     Prefer test-first: write/update tests before implementation code in each wave.
 -->
 
 - [ ] T-1.1 [{size}] {Task description}
   _Requirements: FR-{N} | Files: {path}_
+  _Risk: low | Verify: `go test ./...` | Accept: {criterion} | Rollback: `git revert`_
 - [ ] T-1.2 [{size}] (P) {Parallel-safe task description}
   _Requirements: FR-{N} | Files: {path}_
+  _Risk: low | Verify: `go test ./...` | Accept: {criterion} | Rollback: `git revert`_
 
 <!-- example:
 - [ ] T-1.1 [S] Create users table migration

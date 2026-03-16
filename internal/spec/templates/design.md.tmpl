@@ -14,6 +14,20 @@
 -->
 {Describe layers, data flow, and boundaries — see guidance above}
 
+## Design Tenets
+<!-- required -->
+<!-- Ordered by priority. Used to break ties when design trade-offs arise.
+     Format: {N}. {Tenet Name} over {Alternative}
+     Example: 1. Simplicity over Performance — prefer readable code unless profiling proves a bottleneck -->
+1. {Tenet} over {Alternative}
+2. {Tenet} over {Alternative}
+
+## System Context
+<!-- required -->
+<!-- C4 Level 1: how does this feature fit in the whole system?
+     Show external actors, other systems, and this feature's boundary -->
+{External users/systems} → [This Feature] → {Downstream dependencies}
+
 ## Component Design
 <!-- required -->
 <!-- Component granularity guidance:
@@ -50,6 +64,21 @@
 - **Dependencies**: `pkg/store`, `pkg/config`
 -->
 
+## Sequence Diagram
+<!-- optional: skip for S-sized tasks -->
+<!-- Use Mermaid syntax for interaction flows. The ASCII diagram above shows static architecture;
+     sequence diagrams show runtime behavior.
+     Example (indented, not fenced):
+       sequenceDiagram
+         participant C as Client
+         participant H as Handler
+         participant S as Store
+         C->>H: Request
+         H->>S: Query
+         S-->>H: Result
+         H-->>C: Response
+-->
+
 ## Data Models
 <!-- optional: skip for S-sized tasks -->
 
@@ -79,12 +108,25 @@ CREATE TABLE {table_name} (
 | NFR-1  | {component} | {interface} | T-{N.N} | TS-{N.N} |
 
 ## Error Handling Design
-<!-- optional: skip for S-sized tasks -->
+<!-- required — for S-sized tasks, a single sentence describing the error strategy suffices -->
 <!-- Define error categories and recovery strategies for this feature -->
 
 | Error Category | Example | Recovery Strategy | User Impact |
 |---------------|---------|-------------------|-------------|
 | {category} | {specific error} | {retry/fallback/fail-fast/degrade} | {what user sees} |
+
+## Observability Design
+<!-- optional: skip for S-sized tasks -->
+| Signal | Name/Pattern | When | FR |
+|--------|-------------|------|-----|
+| Log | {log.Info/Warn/Error pattern} | {trigger} | FR-{N} |
+| Metric | {metric_name} | {what it measures} | NFR-{N} |
+
+## Security Design
+<!-- optional: skip for S-sized tasks -->
+| Threat | Asset | Mitigation | Trust Boundary |
+|--------|-------|------------|----------------|
+| {threat} | {asset} | {mitigation} | {boundary} |
 
 ## Migration Strategy
 <!-- optional: skip for S-sized tasks -->

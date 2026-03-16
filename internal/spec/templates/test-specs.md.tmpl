@@ -28,7 +28,7 @@
 ## Test Cases
 <!-- required -->
 
-### TS-1.1: {Test name} (FR-{N}, Happy Path)
+### TS-1.1: {Test name} (FR-{N}, Happy Path) [fast]
 <!-- source: FR-{N} AC-{N.N} -->
 ```gherkin
 Given {precondition}
@@ -63,6 +63,32 @@ Then {error response}
 | Scenario | Input | Expected | Req |
 |----------|-------|----------|-----|
 | {edge case} | {input} | {expected} | FR-{N} |
+
+## Regression Risk Matrix
+<!-- required -->
+| Existing Test | Risk Description | Mitigation |
+|---------------|-----------------|------------|
+| {test_file:test_name} | {what might break} | {strategy} |
+
+## Concurrency Tests
+<!-- optional: skip for S-sized tasks -->
+<!-- Go-specific: use `go test -race` flag. Test shared state, goroutine safety. -->
+| Scenario | Shared Resource | Goroutines | Expected |
+|----------|----------------|------------|----------|
+| {scenario} | {resource} | {count} | {result} |
+
+## Property-based Tests
+<!-- optional: skip unless task involves large input domains -->
+<!-- Use testing/quick or rapid for Go. Specify invariants that must hold for any valid input. -->
+| Property | Invariant | Generator |
+|----------|-----------|-----------|
+| {property} | {invariant that must hold} | {input generator} |
+
+## Performance Tests
+<!-- optional: skip for S-sized tasks -->
+| Operation | p50 | p95 | p99 | Sample Size |
+|-----------|-----|-----|-----|-------------|
+| {operation} | {target} | {target} | {target} | {N} |
 
 ## Boundary Values
 <!-- optional: skip for S-sized tasks -->

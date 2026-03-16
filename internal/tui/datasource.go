@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -593,7 +594,7 @@ func parseSessionSections(content string) parsedSession {
 	}
 
 	if v, ok := sections["Blockers"]; ok {
-		text := strings.TrimSpace(v)
+		text := stripHTMLComments(strings.TrimSpace(v))
 		lower := strings.ToLower(text)
 		if text != "" && lower != "none" && lower != "none." && lower != "なし" {
 			ps.hasBlocker = true
@@ -689,6 +690,13 @@ func parseBulletList(text string) []string {
 		}
 	}
 	return items
+}
+
+var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+// stripHTMLComments removes HTML comments from text.
+func stripHTMLComments(s string) string {
+	return strings.TrimSpace(htmlCommentRe.ReplaceAllString(s, ""))
 }
 
 func firstNonEmptyLine(s string) string {

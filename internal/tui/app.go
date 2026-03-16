@@ -1367,7 +1367,7 @@ func (m Model) tabBadge(tab int) string {
 			}
 		}
 		if hasBlocker {
-			return fmt.Sprintf("(%d", len(m.allTasks)) + blockerStyle.Render("!") + ")"
+			return fmt.Sprintf("(%d!)", len(m.allTasks))
 		}
 		return fmt.Sprintf("(%d)", len(m.allTasks))
 	case tabKnowledge:
