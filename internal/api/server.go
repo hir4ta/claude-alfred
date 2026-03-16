@@ -101,6 +101,10 @@ func New(ds dashboard.DataSource, specDir string, opts ...Option) *Server {
 	}
 
 	s.router = r
+
+	// Start filesystem poller for real-time SSE updates.
+	s.sse.StartMtimePoller(ds.ProjectPath(), 5*time.Second)
+
 	return s
 }
 

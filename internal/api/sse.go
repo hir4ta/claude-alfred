@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sync"
+	"time"
 )
 
 var validSSEType = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
@@ -21,6 +24,7 @@ type SSEHub struct {
 	mu      sync.RWMutex
 	clients map[chan SSEEvent]struct{}
 	closed  bool
+	stopCh  chan struct{}
 }
 
 // NewSSEHub creates a new SSE broadcast hub.
@@ -92,9 +96,74 @@ func (h *SSEHub) Handler() http.HandlerFunc {
 	}
 }
 
+// StartMtimePoller starts a background goroutine that polls .alfred/ for
+// filesystem changes and broadcasts SSE events. Call Close() to stop.
+func (h *SSEHub) StartMtimePoller(projectPath string, interval time.Duration) {
+	alfredDir := filepath.Join(projectPath, ".alfred")
+	h.stopCh = make(chan struct{})
+
+	go func() {
+		lastMtime := dirMaxMtime(alfredDir)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-h.stopCh:
+				return
+			case <-ticker.C:
+				mtime := dirMaxMtime(alfredDir)
+				if mtime.After(lastMtime) {
+					lastMtime = mtime
+					h.Broadcast(SSEEvent{Type: "spec_changed", Data: map[string]any{}})
+					h.Broadcast(SSEEvent{Type: "task_updated", Data: map[string]any{}})
+				}
+			}
+		}
+	}()
+}
+
+// dirMaxMtime returns the most recent modification time of files in dir (1 level deep).
+func dirMaxMtime(dir string) time.Time {
+	var maxT time.Time
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return maxT
+	}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(maxT) {
+			maxT = info.ModTime()
+		}
+		// Check one level of subdirs (specs/{slug}/, epics/{slug}/).
+		if e.IsDir() {
+			subEntries, err := os.ReadDir(filepath.Join(dir, e.Name()))
+			if err != nil {
+				continue
+			}
+			for _, se := range subEntries {
+				si, err := se.Info()
+				if err != nil {
+					continue
+				}
+				if si.ModTime().After(maxT) {
+					maxT = si.ModTime()
+				}
+			}
+		}
+	}
+	return maxT
+}
+
 // Close shuts down the hub. Does not close client channels — context
 // cancellation in each handler goroutine handles cleanup.
 func (h *SSEHub) Close() {
+	if h.stopCh != nil {
+		close(h.stopCh)
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.closed = true
