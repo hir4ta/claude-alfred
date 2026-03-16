@@ -449,6 +449,20 @@ func (ds *fileDataSource) MemoryHealth() MemoryHealthStats {
 	docs, err := ds.st.ListAllMemories(ctx, 1000)
 	if err == nil {
 		stats.Total = len(docs)
+
+		// Compute vitality distribution: 5 buckets (0-20, 21-40, 41-60, 61-80, 81-100).
+		now := time.Now()
+		for _, d := range docs {
+			v := store.ComputeVitalityFromDoc(&d, now)
+			bucket := int(v.Total / 20)
+			if bucket > 4 {
+				bucket = 4
+			}
+			if bucket < 0 {
+				bucket = 0
+			}
+			stats.VitalityDist[bucket]++
+		}
 	}
 
 	lowDocs, err := ds.st.ListLowVitality(ctx, 20, 1000)
