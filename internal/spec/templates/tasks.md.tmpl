@@ -22,14 +22,30 @@
   _Requirements: FR-{N} | Files: {path}_
   _Risk: low | Verify: `go test ./...` | Accept: {criterion} | Rollback: `git revert`_
 - [ ] T-1.2 [{size}] (P) {Parallel-safe task description}
-  _Requirements: FR-{N} | Files: {path}_
+  _Requirements: FR-{N} | Files: {path} | Shared: {resource or "none"}_
   _Risk: low | Verify: `go test ./...` | Accept: {criterion} | Rollback: `git revert`_
+
+<!-- Task metadata guidance:
+     Verify: command + exit criteria. Examples:
+       `go test ./... -cover` | Accept: coverage > 60%, all tests pass
+       `go vet ./...` | Accept: no warnings
+       Manual TUI test | Accept: shimmer animation visible on first item
+     Rollback strategies by complexity:
+       Simple (no state): `git revert` — sufficient for most code changes
+       With data migration: revert code + rollback migration script
+       Long-running/stateful: feature flag to disable, then fix forward
+     Parallel safety (P) metadata:
+       Shared: the resource this task reads/writes (e.g., "schema.go", "go.mod", "none")
+       If two (P) tasks share a resource, they are NOT truly parallel-safe — remove (P)
+-->
 
 <!-- example:
 - [ ] T-1.1 [S] Create users table migration
   _Requirements: FR-2 | Files: internal/store/migration.go_
+  _Risk: low | Verify: `go test ./internal/store/...` | Accept: migration applies cleanly | Rollback: `git revert`_
 - [ ] T-1.2 [S] (P) Add JWT dependency to go.mod
-  _Requirements: FR-1 | Files: go.mod_
+  _Requirements: FR-1 | Files: go.mod | Shared: none_
+  _Risk: low | Verify: `go mod tidy && go build ./...` | Accept: builds without error | Rollback: `git revert`_
 -->
 
 ## Wave 2: Core Implementation

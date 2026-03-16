@@ -3,8 +3,52 @@ package spec
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 )
+
+// assertCheckStatus verifies a named check exists in the report and has the expected status.
+func assertCheckStatus(t *testing.T, report *ValidationReport, name, wantStatus string) {
+	t.Helper()
+	for _, c := range report.Checks {
+		if c.Name == name {
+			if c.Status != wantStatus {
+				t.Errorf("%s = %s, want %s (%s)", name, c.Status, wantStatus, c.Message)
+			}
+			return
+		}
+	}
+	t.Errorf("%s check not found in report (expected %s)", name, wantStatus)
+}
+
+// assertCheckAbsent verifies a named check is NOT in the report (was skipped).
+func assertCheckAbsent(t *testing.T, report *ValidationReport, name string) {
+	t.Helper()
+	for _, c := range report.Checks {
+		if c.Name == name {
+			t.Errorf("%s should be skipped, but found with status %s", name, c.Status)
+			return
+		}
+	}
+}
+
+// assertCheckMessageContains verifies a named check exists, has the expected status,
+// and its message contains the substring.
+func assertCheckMessageContains(t *testing.T, report *ValidationReport, name, wantStatus, substr string) {
+	t.Helper()
+	for _, c := range report.Checks {
+		if c.Name == name {
+			if c.Status != wantStatus {
+				t.Errorf("%s = %s, want %s (%s)", name, c.Status, wantStatus, c.Message)
+			}
+			if !strings.Contains(c.Message, substr) {
+				t.Errorf("%s message should contain %q, got %q", name, substr, c.Message)
+			}
+			return
+		}
+	}
+	t.Errorf("%s check not found in report", name)
+}
 
 func setupValidateSpec(t *testing.T, size SpecSize, specType SpecType) *SpecDir {
 	t.Helper()
@@ -20,7 +64,7 @@ func TestValidateWellFormedSpec(t *testing.T) {
 	t.Parallel()
 	sd := setupValidateSpec(t, SizeL, TypeFeature)
 
-	// Write well-formed requirements.md with FRs and confidence.
+	// Write well-formed requirements.md with FRs, NFRs, and confidence.
 	reqs := `# Requirements: validate-test
 
 ## Goal
@@ -37,10 +81,15 @@ WHEN something, the system SHALL do something.
 ### FR-3: Third
 ### FR-4: Fourth
 ### FR-5: Fifth
+
+## Non-Functional Requirements
+
+### NFR-1: Performance
+The system SHALL respond within 200ms.
 `
 	sd.WriteFile(context.Background(), FileRequirements, reqs)
 
-	// Write design.md with traceability.
+	// Write design.md with traceability including NFR.
 	design := `# Design: validate-test
 
 ## Requirements Traceability
@@ -52,6 +101,7 @@ WHEN something, the system SHALL do something.
 | FR-3 | ComponentC |
 | FR-4 | ComponentD |
 | FR-5 | ComponentE |
+| NFR-1 | ComponentA |
 `
 	sd.WriteFile(context.Background(), FileDesign, design)
 
@@ -67,6 +117,21 @@ WHEN something, the system SHALL do something.
 `
 	sd.WriteFile(context.Background(), FileTasks, tasks)
 
+	// Write test-specs.md with gherkin blocks and source annotations.
+	testSpecs := `# Test Specifications: validate-test
+
+## Coverage Matrix
+| Req ID | Test IDs | Type | Priority | Status |
+|--------|----------|------|----------|--------|
+| FR-1   | TS-1.1   | Unit | P0       | Pending |
+
+## Test Cases
+
+### TS-1.1: First test (FR-1, Happy Path)
+<!-- source: FR-1 -->
+` + "```gherkin\nGiven a precondition\nWhen an action occurs\nThen the expected result happens\n```\n"
+	sd.WriteFile(context.Background(), FileTestSpecs, testSpecs)
+
 	report, err := Validate(sd, SizeL, TypeFeature)
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
@@ -77,8 +142,9 @@ WHEN something, the system SHALL do something.
 			t.Errorf("check %s: %s (%s)", c.Name, c.Status, c.Message)
 		}
 	}
-	if report.Summary != "6/6 checks passed" {
-		t.Errorf("Summary = %q, want '6/6 checks passed'", report.Summary)
+	// 6 original + 6 new checks = 12 total.
+	if report.Summary != "12/12 checks passed" {
+		t.Errorf("Summary = %q, want '12/12 checks passed'", report.Summary)
 	}
 }
 
@@ -184,6 +250,260 @@ func TestValidateMissingFiles(t *testing.T) {
 	if len(report.Checks) == 0 {
 		t.Error("Validate should return checks even with missing files")
 	}
+}
+
+func TestValidateDesignFRReferences(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid_references_pass", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "design-fr"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n### FR-2: Req2\n### FR-3: Req3\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		design := "# Design\n\n## Traceability\n| FR-1 | A |\n| FR-2 | B |\n| FR-3 | C |\n"
+		os.WriteFile(sd.FilePath(FileDesign), []byte(design), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "design_fr_references", "pass")
+	})
+
+	t.Run("invalid_references_fail", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "design-fr-fail"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n### FR-2: Req2\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		design := "# Design\n\n## Traceability\n| FR-1 | A |\n| FR-5 | B |\n"
+		os.WriteFile(sd.FilePath(FileDesign), []byte(design), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckMessageContains(t, report, "design_fr_references", "fail", "FR-5")
+	})
+
+	t.Run("s_size_skips", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "design-fr-skip"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+
+		report, _ := Validate(sd, SizeS, TypeFeature)
+		assertCheckAbsent(t, report, "design_fr_references")
+	})
+}
+
+func TestValidateTestSpecFRReferences(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid_pass", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "ts-fr"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n### FR-2: Req2\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		testSpecs := "# Test Specs\n\n| FR-1 | TS-1.1 |\n| FR-2 | TS-2.1 |\n"
+		os.WriteFile(sd.FilePath(FileTestSpecs), []byte(testSpecs), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "testspec_fr_references", "pass")
+	})
+
+	t.Run("invalid_fail", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "ts-fr-fail"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		testSpecs := "# Test Specs\n\n| FR-1 | TS-1.1 |\n| FR-99 | TS-99.1 |\n"
+		os.WriteFile(sd.FilePath(FileTestSpecs), []byte(testSpecs), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckMessageContains(t, report, "testspec_fr_references", "fail", "FR-99")
+	})
+}
+
+func TestValidateNFRTraceability(t *testing.T) {
+	t.Parallel()
+
+	t.Run("mapped_pass", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "nfr-pass"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n\n### NFR-1: Performance\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		design := "# Design\n\n## Traceability\n| FR-1 | A |\n| NFR-1 | A |\n"
+		os.WriteFile(sd.FilePath(FileDesign), []byte(design), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "nfr_traceability", "pass")
+	})
+
+	t.Run("unmapped_fail", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "nfr-fail"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n\n### NFR-1: Performance\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		design := "# Design\n\n## Traceability\n| FR-1 | A |\n"
+		os.WriteFile(sd.FilePath(FileDesign), []byte(design), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "nfr_traceability", "fail")
+	})
+
+	t.Run("no_nfr_skips", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "nfr-skip"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckAbsent(t, report, "nfr_traceability")
+	})
+
+	t.Run("m_size_skips", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "nfr-m"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n\n### NFR-1: Perf\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+
+		report, _ := Validate(sd, SizeM, TypeFeature)
+		assertCheckAbsent(t, report, "nfr_traceability")
+	})
+}
+
+func TestValidateGherkinSyntax(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid_pass", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "gherkin-pass"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		content := "# Test Specs\n\n" +
+			"```gherkin\nGiven a precondition\nWhen an action\nThen a result\n```\n"
+		os.WriteFile(sd.FilePath(FileTestSpecs), []byte(content), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "gherkin_syntax", "pass")
+	})
+
+	t.Run("missing_then_fail", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "gherkin-fail"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		content := "# Test Specs\n\n" +
+			"```gherkin\nGiven a precondition\nWhen an action\n```\n"
+		os.WriteFile(sd.FilePath(FileTestSpecs), []byte(content), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "gherkin_syntax", "fail")
+	})
+
+	t.Run("no_blocks_skips", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "gherkin-skip"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		content := "# Test Specs\n\nNo gherkin blocks here.\n"
+		os.WriteFile(sd.FilePath(FileTestSpecs), []byte(content), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckAbsent(t, report, "gherkin_syntax")
+	})
+}
+
+func TestValidateOrphanTests(t *testing.T) {
+	t.Parallel()
+
+	t.Run("linked_pass", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "orphan-test-pass"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		testSpecs := "# Test Specs\n\n### TS-1.1: Test\n<!-- source: FR-1 -->\n"
+		os.WriteFile(sd.FilePath(FileTestSpecs), []byte(testSpecs), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "orphan_tests", "pass")
+	})
+
+	t.Run("orphan_fail", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "orphan-test-fail"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		testSpecs := "# Test Specs\n\n### TS-1.1: Test\n<!-- source: FR-99 -->\n"
+		os.WriteFile(sd.FilePath(FileTestSpecs), []byte(testSpecs), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckMessageContains(t, report, "orphan_tests", "fail", "FR-99")
+	})
+}
+
+func TestValidateOrphanTasks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("linked_pass", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "orphan-task-pass"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		tasks := "# Tasks\n\n## Wave 1\n- [ ] T-1.1 [S] Task\n  _Requirements: FR-1_\n\n## Wave: Closing\n- [ ] T-C.1 Review\n"
+		os.WriteFile(sd.FilePath(FileTasks), []byte(tasks), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckStatus(t, report, "orphan_tasks", "pass")
+	})
+
+	t.Run("orphan_fail", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sd := &SpecDir{ProjectPath: tmp, TaskSlug: "orphan-task-fail"}
+		os.MkdirAll(sd.Dir(), 0o755)
+
+		reqs := "# Requirements\n\n## Goal\n<!-- confidence: 7 | source: user -->\nTest\n\n### FR-1: Req\n"
+		os.WriteFile(sd.FilePath(FileRequirements), []byte(reqs), 0o644)
+		tasks := "# Tasks\n\n## Wave 1\n- [ ] T-2.1 [S] Task\n  _Requirements: FR-99_\n\n## Wave: Closing\n- [ ] T-C.1 Review\n"
+		os.WriteFile(sd.FilePath(FileTasks), []byte(tasks), 0o644)
+
+		report, _ := Validate(sd, SizeL, TypeFeature)
+		assertCheckMessageContains(t, report, "orphan_tasks", "fail", "FR-99")
+	})
 }
 
 func TestValidateBugfix(t *testing.T) {

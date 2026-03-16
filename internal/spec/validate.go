@@ -59,6 +59,36 @@ func Validate(sd *SpecDir, size SpecSize, specType SpecType) (*ValidationReport,
 	// 6. closing_wave: "## Wave: Closing" present in tasks.md.
 	report.Checks = append(report.Checks, checkClosingWave(sd))
 
+	// 7. design_fr_references: FR-N in design.md must exist in primary file.
+	if c := checkDesignFRReferences(sd, primaryFile, size); c != nil {
+		report.Checks = append(report.Checks, *c)
+	}
+
+	// 8. testspec_fr_references: FR-N in test-specs.md must exist in primary file.
+	if c := checkTestSpecFRReferences(sd, primaryFile); c != nil {
+		report.Checks = append(report.Checks, *c)
+	}
+
+	// 9. nfr_traceability: NFR-N in primary mapped in design.md (L/XL only).
+	if c := checkNFRTraceability(sd, primaryFile, size); c != nil {
+		report.Checks = append(report.Checks, *c)
+	}
+
+	// 10. gherkin_syntax: ```gherkin blocks must contain Given+When+Then.
+	if c := checkGherkinSyntax(sd); c != nil {
+		report.Checks = append(report.Checks, *c)
+	}
+
+	// 11. orphan_tests: TS-N.N source annotations must reference defined FRs.
+	if c := checkOrphanTests(sd, primaryFile); c != nil {
+		report.Checks = append(report.Checks, *c)
+	}
+
+	// 12. orphan_tasks: task Requirements FR-N must reference defined FRs.
+	if c := checkOrphanTasks(sd, primaryFile); c != nil {
+		report.Checks = append(report.Checks, *c)
+	}
+
 	// Summary.
 	passed := 0
 	for _, c := range report.Checks {
@@ -165,7 +195,14 @@ func checkMinFRCount(sd *SpecDir, primaryFile SpecFile, size SpecSize, specType 
 }
 
 var frIDPattern = regexp.MustCompile(`FR-(\d+)`)
+var nfrIDPattern = regexp.MustCompile(`NFR-(\d+)`)
 var taskIDPattern = regexp.MustCompile(`T-(\d+)\.(\d+)`)
+var gherkinBlockPattern = regexp.MustCompile("(?s)```gherkin\\s*\\n(.*?)```")
+var gherkinGivenPattern = regexp.MustCompile(`(?m)^\s*Given\s+`)
+var gherkinWhenPattern = regexp.MustCompile(`(?m)^\s*When\s+`)
+var gherkinThenPattern = regexp.MustCompile(`(?m)^\s*Then\s+`)
+var sourceCommentPattern = regexp.MustCompile(`<!--\s*source:\s*FR-(\d+)`)
+var taskReqPattern = regexp.MustCompile(`Requirements:\s*(FR-\d+(?:\s*,\s*FR-\d+)*)`)
 
 // checkFRToTask checks that FRs in the primary file are mapped to tasks in design.md.
 // Skipped if no design.md exists.
@@ -318,5 +355,295 @@ func checkClosingWave(sd *SpecDir) ValidationCheck {
 		Name:    "closing_wave",
 		Status:  "fail",
 		Message: "tasks.md missing '## Wave: Closing' section",
+	}
+}
+
+// extractFRSet extracts unique FR-N identifiers from content and returns them as a set.
+func extractFRSet(content string) map[string]bool {
+	set := map[string]bool{}
+	for _, m := range frIDPattern.FindAllString(content, -1) {
+		set[m] = true
+	}
+	return set
+}
+
+// checkDesignFRReferences checks that FR-N references in design.md exist in the primary file.
+// Skipped if no design.md or primary file.
+func checkDesignFRReferences(sd *SpecDir, primaryFile SpecFile, size SpecSize) *ValidationCheck {
+	if size == SizeS {
+		return nil
+	}
+
+	design, err := sd.ReadFile(FileDesign)
+	if err != nil {
+		return nil
+	}
+
+	primary, err := sd.ReadFile(primaryFile)
+	if err != nil {
+		return nil
+	}
+
+	definedFRs := extractFRSet(primary)
+	if len(definedFRs) == 0 {
+		return nil
+	}
+
+	designFRs := frIDPattern.FindAllString(design, -1)
+	seen := map[string]bool{}
+	var invalid []string
+	for _, fr := range designFRs {
+		if !definedFRs[fr] && !seen[fr] {
+			seen[fr] = true
+			invalid = append(invalid, fr)
+		}
+	}
+
+	if len(invalid) == 0 {
+		return &ValidationCheck{
+			Name:    "design_fr_references",
+			Status:  "pass",
+			Message: "all FR references in design.md are valid",
+		}
+	}
+	return &ValidationCheck{
+		Name:    "design_fr_references",
+		Status:  "fail",
+		Message: fmt.Sprintf("undefined FR references in design.md: %s", strings.Join(invalid, ", ")),
+	}
+}
+
+// checkTestSpecFRReferences checks that FR-N references in test-specs.md exist in the primary file.
+// Skipped if no test-specs.md or primary file.
+func checkTestSpecFRReferences(sd *SpecDir, primaryFile SpecFile) *ValidationCheck {
+	testSpecs, err := sd.ReadFile(FileTestSpecs)
+	if err != nil {
+		return nil
+	}
+
+	primary, err := sd.ReadFile(primaryFile)
+	if err != nil {
+		return nil
+	}
+
+	definedFRs := extractFRSet(primary)
+	if len(definedFRs) == 0 {
+		return nil
+	}
+
+	testFRs := frIDPattern.FindAllString(testSpecs, -1)
+	seen := map[string]bool{}
+	var invalid []string
+	for _, fr := range testFRs {
+		if !definedFRs[fr] && !seen[fr] {
+			seen[fr] = true
+			invalid = append(invalid, fr)
+		}
+	}
+
+	if len(invalid) == 0 {
+		return &ValidationCheck{
+			Name:    "testspec_fr_references",
+			Status:  "pass",
+			Message: "all FR references in test-specs.md are valid",
+		}
+	}
+	return &ValidationCheck{
+		Name:    "testspec_fr_references",
+		Status:  "fail",
+		Message: fmt.Sprintf("undefined FR references in test-specs.md: %s", strings.Join(invalid, ", ")),
+	}
+}
+
+// checkNFRTraceability checks that NFR-N in the primary file are mapped in design.md.
+// Skipped if size is S/M, no design.md, or no NFR-N in primary.
+func checkNFRTraceability(sd *SpecDir, primaryFile SpecFile, size SpecSize) *ValidationCheck {
+	if size != SizeL && size != SizeXL {
+		return nil
+	}
+
+	primary, err := sd.ReadFile(primaryFile)
+	if err != nil {
+		return nil
+	}
+
+	nfrIDs := nfrIDPattern.FindAllString(primary, -1)
+	if len(nfrIDs) == 0 {
+		return nil // no NFRs defined — skip
+	}
+
+	design, err := sd.ReadFile(FileDesign)
+	if err != nil {
+		return nil
+	}
+
+	seen := map[string]bool{}
+	var unmapped []string
+	for _, nfr := range nfrIDs {
+		if seen[nfr] {
+			continue
+		}
+		seen[nfr] = true
+		if !strings.Contains(design, nfr) {
+			unmapped = append(unmapped, nfr)
+		}
+	}
+
+	if len(unmapped) == 0 {
+		return &ValidationCheck{
+			Name:    "nfr_traceability",
+			Status:  "pass",
+			Message: "all NFRs mapped in design.md",
+		}
+	}
+	return &ValidationCheck{
+		Name:    "nfr_traceability",
+		Status:  "fail",
+		Message: fmt.Sprintf("unmapped NFRs in design.md: %s", strings.Join(unmapped, ", ")),
+	}
+}
+
+// checkGherkinSyntax checks that ```gherkin blocks in test-specs.md contain Given+When+Then.
+// Skipped if no test-specs.md or no gherkin blocks found.
+func checkGherkinSyntax(sd *SpecDir) *ValidationCheck {
+	content, err := sd.ReadFile(FileTestSpecs)
+	if err != nil {
+		return nil
+	}
+
+	blocks := gherkinBlockPattern.FindAllStringSubmatch(content, -1)
+	if len(blocks) == 0 {
+		return nil // no gherkin blocks — skip
+	}
+
+	var incomplete []int
+	for i, block := range blocks {
+		body := block[1]
+		hasGiven := gherkinGivenPattern.MatchString(body)
+		hasWhen := gherkinWhenPattern.MatchString(body)
+		hasThen := gherkinThenPattern.MatchString(body)
+		if !hasGiven || !hasWhen || !hasThen {
+			incomplete = append(incomplete, i+1)
+		}
+	}
+
+	if len(incomplete) == 0 {
+		return &ValidationCheck{
+			Name:    "gherkin_syntax",
+			Status:  "pass",
+			Message: fmt.Sprintf("all %d gherkin blocks have Given/When/Then", len(blocks)),
+		}
+	}
+
+	nums := make([]string, len(incomplete))
+	for i, n := range incomplete {
+		nums[i] = fmt.Sprintf("#%d", n)
+	}
+	return &ValidationCheck{
+		Name:    "gherkin_syntax",
+		Status:  "fail",
+		Message: fmt.Sprintf("gherkin blocks missing Given/When/Then: %s", strings.Join(nums, ", ")),
+	}
+}
+
+// checkOrphanTests checks that test source annotations (<!-- source: FR-N -->)
+// in test-specs.md reference FRs defined in the primary file.
+// Skipped if no test-specs.md or no source annotations.
+func checkOrphanTests(sd *SpecDir, primaryFile SpecFile) *ValidationCheck {
+	testSpecs, err := sd.ReadFile(FileTestSpecs)
+	if err != nil {
+		return nil
+	}
+
+	primary, err := sd.ReadFile(primaryFile)
+	if err != nil {
+		return nil
+	}
+
+	definedFRs := extractFRSet(primary)
+	if len(definedFRs) == 0 {
+		return nil
+	}
+
+	sourceMatches := sourceCommentPattern.FindAllStringSubmatch(testSpecs, -1)
+	if len(sourceMatches) == 0 {
+		return nil // no source annotations — skip
+	}
+
+	seen := map[string]bool{}
+	var orphans []string
+	for _, m := range sourceMatches {
+		frRef := "FR-" + m[1]
+		if !definedFRs[frRef] && !seen[frRef] {
+			seen[frRef] = true
+			orphans = append(orphans, frRef)
+		}
+	}
+
+	if len(orphans) == 0 {
+		return &ValidationCheck{
+			Name:    "orphan_tests",
+			Status:  "pass",
+			Message: "all test source annotations reference valid FRs",
+		}
+	}
+	return &ValidationCheck{
+		Name:    "orphan_tests",
+		Status:  "fail",
+		Message: fmt.Sprintf("orphan test references: %s", strings.Join(orphans, ", ")),
+	}
+}
+
+// checkOrphanTasks checks that task Requirements FR-N references in tasks.md
+// reference FRs defined in the primary file.
+// This differs from checkTaskToFR: it checks _Requirements:_ lines specifically,
+// while checkTaskToFR checks all FR-N references in the entire tasks.md.
+// Skipped if no tasks.md or no primary file.
+func checkOrphanTasks(sd *SpecDir, primaryFile SpecFile) *ValidationCheck {
+	tasks, err := sd.ReadFile(FileTasks)
+	if err != nil {
+		return nil
+	}
+
+	primary, err := sd.ReadFile(primaryFile)
+	if err != nil {
+		return nil
+	}
+
+	definedFRs := extractFRSet(primary)
+	if len(definedFRs) == 0 {
+		return nil
+	}
+
+	// Extract FR-N from _Requirements: FR-N_ lines.
+	reqMatches := taskReqPattern.FindAllStringSubmatch(tasks, -1)
+	if len(reqMatches) == 0 {
+		return nil
+	}
+
+	seen := map[string]bool{}
+	var orphans []string
+	for _, m := range reqMatches {
+		// m[1] contains the FR references (e.g., "FR-1" or "FR-1, FR-2")
+		frRefs := frIDPattern.FindAllString(m[1], -1)
+		for _, fr := range frRefs {
+			if !definedFRs[fr] && !seen[fr] {
+				seen[fr] = true
+				orphans = append(orphans, fr)
+			}
+		}
+	}
+
+	if len(orphans) == 0 {
+		return &ValidationCheck{
+			Name:    "orphan_tasks",
+			Status:  "pass",
+			Message: "all task requirement references are valid",
+		}
+	}
+	return &ValidationCheck{
+		Name:    "orphan_tasks",
+		Status:  "fail",
+		Message: fmt.Sprintf("orphan task FR references: %s", strings.Join(orphans, ", ")),
 	}
 }

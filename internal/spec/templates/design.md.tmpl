@@ -28,6 +28,31 @@
      Show external actors, other systems, and this feature's boundary -->
 {External users/systems} → [This Feature] → {Downstream dependencies}
 
+## Container Diagram
+<!-- required for M/L/XL — skip for S-sized tasks -->
+<!-- C4 Level 2: processes, data stores, and external systems that compose the solution.
+     Show runtime containers (not code modules):
+     - Process: a running executable (CLI, daemon, lambda, etc.)
+     - Data Store: database, file system, cache, queue
+     - External System: third-party API, upstream service
+     Include communication protocols between containers.
+     Example:
+     ```
+     [CLI Process] --gRPC--> [API Server] --SQL--> [PostgreSQL]
+                                          --HTTP--> [Voyage AI API]
+     [Hook Process] --file I/O--> [SQLite DB]
+     ```
+-->
+{Containers, data stores, and external systems — see guidance above}
+
+## Deployment Topology
+<!-- optional: skip for S-sized tasks -->
+<!-- Where does this run? What are the runtime constraints?
+     Include: OS, architecture, single-user vs multi-user, local vs remote, resource limits -->
+- **Runtime**: {e.g., macOS local CLI, single-user}
+- **Storage**: {e.g., SQLite file at ~/.alfred/alfred.db}
+- **External Dependencies**: {e.g., Voyage AI API (optional)}
+
 ## Component Design
 <!-- required -->
 <!-- Component granularity guidance:
@@ -49,6 +74,7 @@
   {interface or function signatures}
   ```
 - **Dependencies**: {other components}
+- **NFRs**: {NFR-N that this component must satisfy, or "—"}
 
 <!-- example:
 ### Component: JWTValidator
@@ -62,6 +88,7 @@
   }
   ```
 - **Dependencies**: `pkg/store`, `pkg/config`
+- **NFRs**: NFR-1 (respond within 200ms), NFR-2 (no plaintext secrets in logs)
 -->
 
 ## Sequence Diagram
@@ -109,11 +136,14 @@ CREATE TABLE {table_name} (
 
 ## Error Handling Design
 <!-- required — for S-sized tasks, a single sentence describing the error strategy suffices -->
-<!-- Define error categories and recovery strategies for this feature -->
+<!-- Define error categories and recovery strategies for this feature.
+     Include timeout values and retry policies for any I/O or network operations.
+     Retry policy format: {strategy} ({attempts}x, {backoff type}, {max wait})
+     Example: Exponential backoff (3x, 100/200/400ms, max 700ms) -->
 
-| Error Category | Example | Recovery Strategy | User Impact |
-|---------------|---------|-------------------|-------------|
-| {category} | {specific error} | {retry/fallback/fail-fast/degrade} | {what user sees} |
+| Error Category | Example | Recovery Strategy | Timeout | Retry Policy | User Impact |
+|---------------|---------|-------------------|---------|-------------|-------------|
+| {category} | {specific error} | {retry/fallback/fail-fast/degrade} | {timeout or N/A} | {retry policy or N/A} | {what user sees} |
 
 ## Observability Design
 <!-- optional: skip for S-sized tasks -->
