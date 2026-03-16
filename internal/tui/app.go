@@ -640,7 +640,7 @@ func (m *Model) updateKnowledge(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				"Knowledge", k.Source, title,
 			)
 		}
-	case msg.String() == " ": // space to toggle enabled/disabled
+	case key.Matches(msg, key.NewBinding(key.WithKeys(" ", "space"))): // space to toggle enabled/disabled
 		if m.knCursor < len(m.knowledge) {
 			k := &m.knowledge[m.knCursor]
 			if k.ID > 0 {
@@ -1860,54 +1860,41 @@ func (m Model) knowledgeView() string {
 			prefix = "> " + enabledMark
 		}
 
-		// Parse label into title + context.
+		// Title: content-based, not label-based for clarity.
 		title := extractKnowledgeTitle(k)
-		_, ctx := simplifyKnowledgeLabel(k.Label)
-		title = truncStr(title, m.width-36)
+		maxTitle := m.width - 40
+		if maxTitle < 20 {
+			maxTitle = 20
+		}
+		title = truncStr(title, maxTitle)
 
-		// Score + source tag + sub_type + hit_count + age.
-		scoreStr := "     "
+		// Tags: sub_type (most important) + age.
+		subTag := styledSubType(k.SubType)
+		age := dimStyle.Render(formatDuration(k.Age))
+		scoreStr := ""
 		if k.Score > 0 {
-			scoreStr = scoreStyle.Render(fmt.Sprintf("%3.0f%% ", k.Score*100))
-		}
-		sourceTag := sourceStyle(k.Source)
-		subTag := ""
-		if k.SubType != "" && k.Source == "memory" {
-			subTag = " " + styledSubType(k.SubType)
-		}
-		statusTag := ""
-		if k.Structured != "" {
-			var raw map[string]any
-			if json.Unmarshal([]byte(k.Structured), &raw) == nil {
-				if s, _ := raw["status"].(string); s != "" && s != "draft" {
-					statusTag = " " + styledKnowledgeStatus(s)
-				}
-			}
+			scoreStr = scoreStyle.Render(fmt.Sprintf("%3.0f%%", k.Score*100)) + " "
 		}
 		hitStr := ""
 		if k.HitCount > 0 {
 			hitStr = " " + hitCountStyle.Render(fmt.Sprintf("x%d", k.HitCount))
 		}
-		age := dimStyle.Render(formatDuration(k.Age))
 
-		// Context line (task slug / type).
-		ctxLine := ""
-		if ctx != "" {
-			ctxLine = dimStyle.Render(ctx)
-		}
+		// Context: task slug from label path.
+		_, ctx := simplifyKnowledgeLabel(k.Label)
 
 		if i == m.knCursor {
-			b.WriteString(titleStyle.Render(prefix) + scoreStr + sourceTag + subTag + statusTag + " " + titleStyle.Render(title) + "  " + age + hitStr + "\n")
-			if ctxLine != "" {
-				b.WriteString("    " + ctxLine + "\n")
+			b.WriteString(titleStyle.Render(prefix) + scoreStr + titleStyle.Render(title) + "  " + subTag + "  " + age + hitStr + "\n")
+			if ctx != "" {
+				b.WriteString("      " + dimStyle.Render(ctx) + "\n")
 			}
 		} else if !k.Enabled {
-			line := prefix + scoreStr + sourceTag + subTag + statusTag + " " + title + "  " + age + hitStr
+			line := prefix + scoreStr + title + "  " + subTag + "  " + age + hitStr
 			b.WriteString(dimStyle.Render(line) + "\n")
 		} else {
-			b.WriteString(prefix + scoreStr + sourceTag + subTag + statusTag + " " + title + "  " + age + hitStr + "\n")
-			if ctxLine != "" {
-				b.WriteString("    " + ctxLine + "\n")
+			b.WriteString(prefix + scoreStr + title + "  " + subTag + "  " + age + hitStr + "\n")
+			if ctx != "" {
+				b.WriteString("      " + dimStyle.Render(ctx) + "\n")
 			}
 		}
 	}

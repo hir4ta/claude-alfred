@@ -17,6 +17,9 @@ func runDashboard() error {
 	}
 
 	st, _ := openStore() // best-effort — Knowledge tab still works from files if DB unavailable
+	if st != nil {
+		defer st.Close()
+	}
 	ds := tui.NewFileDataSource(projectPath, st, nil)
 	model := tui.New(ds, resolvedVersion())
 

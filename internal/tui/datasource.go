@@ -505,7 +505,9 @@ func (ds *fileDataSource) ToggleEnabled(id int64, enabled bool) error {
 	if ds.st == nil {
 		return fmt.Errorf("no database connection")
 	}
-	return ds.st.SetEnabled(context.Background(), id, enabled)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return ds.st.SetEnabled(ctx, id, enabled)
 }
 
 func docsToKnowledge(docs []store.DocRow, scoreMap map[int64]float64, limit int) []KnowledgeEntry {
@@ -526,6 +528,7 @@ func docsToKnowledge(docs []store.DocRow, scoreMap map[int64]float64, limit int)
 			score = scoreMap[d.ID]
 		}
 		entries = append(entries, KnowledgeEntry{
+			ID:         d.ID,
 			Label:      d.SectionPath,
 			Source:     d.SourceType,
 			SubType:    d.SubType,
@@ -534,6 +537,7 @@ func docsToKnowledge(docs []store.DocRow, scoreMap map[int64]float64, limit int)
 			Structured: d.Structured,
 			Score:      score,
 			Age:        age,
+			Enabled:    d.Enabled,
 		})
 	}
 	return entries

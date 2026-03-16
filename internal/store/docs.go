@@ -341,18 +341,20 @@ func (s *Store) ListRecentMemories(ctx context.Context, limit int) ([]DocRow, er
 			&d.HitCount, &d.Structured); err != nil {
 			continue
 		}
+		d.Enabled = true // filtered by WHERE enabled = 1
 		docs = append(docs, d)
 	}
 	return docs, rows.Err()
 }
 
-// SetEnabled toggles the enabled status of a record.
+// SetEnabled toggles the enabled status of a memory record.
+// Scoped to source_type=memory to prevent accidental disabling of spec/project records.
 func (s *Store) SetEnabled(ctx context.Context, id int64, enabled bool) error {
 	val := 0
 	if enabled {
 		val = 1
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE records SET enabled = ? WHERE id = ?`, val, id)
+	_, err := s.db.ExecContext(ctx, `UPDATE records SET enabled = ? WHERE id = ? AND source_type = ?`, val, id, SourceMemory)
 	return err
 }
 

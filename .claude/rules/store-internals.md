@@ -15,6 +15,8 @@ paths:
 - SearchMemoriesKeyword: LIKE-based fallback for no-Voyage-key mode
 
 ## Schema
-- DB schema V1: fresh start (pre-v1 schemas rebuilt from scratch)
+- DB schema V6: enabled column for memory governance (V5→V6 additive migration)
 - Tables: records (memories/specs/project), embeddings (vector BLOBs), schema_version
+- `enabled` column: INTEGER NOT NULL DEFAULT 1; all search queries filter by `enabled = 1`
+- SetEnabled scoped to source_type=memory (prevents accidental spec/project disabling)
 - Store.DB() is test-only; production code uses Store methods (no raw SQL outside internal/store)

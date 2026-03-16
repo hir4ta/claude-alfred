@@ -315,11 +315,20 @@ func specDoUpdate(ctx context.Context, req mcp.CallToolRequest, st *store.Store,
 	}
 
 	// After session.md update: check if all Next Steps are completed → auto-complete.
+	// Uses the full completion path (decisions persistence + audit + epic sync).
 	if sf == spec.FileSession {
 		if ns := extractNextSteps(content); ns != "" && allStepsCompleted(ns) {
+			savedDecs := 0
+			if st != nil {
+				savedDecs = persistSpecDecisions(ctx, sd, taskSlug, st)
+			}
+			detail := buildCompletionDetail(sd, savedDecs)
+			spec.AppendAudit(projectPath, spec.AuditEntry{Action: "spec.complete", Target: taskSlug, Detail: detail, User: "auto"})
 			if newPrimary, err := spec.CompleteTask(projectPath, taskSlug); err == nil {
+				epic.SyncTaskStatus(projectPath, taskSlug, epic.StatusCompleted)
 				result["auto_completed"] = true
 				result["new_primary"] = newPrimary
+				result["decisions_saved"] = savedDecs
 			}
 		}
 	}
@@ -1002,8 +1011,9 @@ func persistSpecDecisions(ctx context.Context, sd *spec.SpecDir, taskSlug string
 		if title == "" || body == "" {
 			continue
 		}
-		// Skip template/example entries.
-		if strings.Contains(title, "{") || strings.Contains(body, "<!-- example") {
+		// Skip template/example entries (template placeholders or example blocks).
+		if strings.Contains(title, "{") || strings.Contains(title, "example") ||
+			strings.Contains(body, "<!-- example") || strings.Contains(body, "-- >") {
 			continue
 		}
 
