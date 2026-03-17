@@ -1,12 +1,11 @@
 {
   "mcpServers": {
     "alfred": {
-      "args": [
-        "serve"
-      ],
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/run.sh",
+      "command": "alfred",
+      "args": ["serve"],
       "env": {
-        "VOYAGE_API_KEY": "${VOYAGE_API_KEY}"
+        "VOYAGE_API_KEY": "${VOYAGE_API_KEY}",
+        "ALFRED_LANG": "${ALFRED_LANG}"
       }
     }
   }
