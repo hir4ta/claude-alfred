@@ -51,9 +51,17 @@ alfred fixes all three.
 export VOYAGE_API_KEY=your-key  # ~/.zshrc — enables semantic search (~$0.01/session)
 ```
 
-That's it. Hooks fire automatically. Memories accumulate. Context persists.
+Then set up your project:
+
+```
+/init    ← select "alfred" when prompted (or type the full command and pick from the list)
+```
+
+This generates steering docs, templates, and indexes existing knowledge.
 
 No Voyage key? alfred still works — FTS5 full-text search handles the fallback.
+
+> **Note**: Use `/init` (short form) instead of `/alfred:init` — Claude Code's autocomplete may misroute the `alfred:` prefix to another skill. This applies to all alfred skills: prefer `/brief`, `/attend`, `/mend` etc.
 
 ## Skills
 
