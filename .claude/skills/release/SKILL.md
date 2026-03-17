@@ -35,85 +35,65 @@ go test ./... -count=1
 go vet ./...
 ```
 
-## Plugin Bundle Update
+## Plugin Bundle + Marketplace Update
 
 1. **Check plugin/ source of truth**: `internal/install/content/` (rules, skills, agents) is the source.
    `plugin/` is generated — if plugin/ was edited directly, sync `internal/install/content/` first.
-   CI's `Verify plugin bundle is up to date` catches mismatches.
 2. Regenerate plugin/ directory (ldflags version injection is **required**):
    ```
    go run -ldflags "-X main.version=<VERSION>" ./cmd/alfred plugin-bundle ./plugin
    ```
-   Without ldflags, `version=dev` is used and CI will fail on diff
+3. Update `plugins[0].version` in `.claude-plugin/marketplace.json` to `<VERSION>`
+
+Both plugin/ and marketplace.json are included in the same release commit.
 
 ## README Badges
 
-README.md / README.ja.md のバッジは shields.io の動的バッジ（GitHub tag / license / workflow status）を使用しているため、リリース時の手動更新は不要。
+shields.io dynamic badges auto-update. Only update Go version badge if `go.mod` Go version changes.
 
-ただし Go バージョンバッジ (`go-%3E%3D1.25`) は静的値。`go.mod` の Go バージョンを上げた場合は README のバッジも更新すること。
+## Commit & Tag
 
-## Commit & Tag (Phase 1: Release binary)
-
-1. Stage changed files: `git add -f plugin/` (force-add because some plugin/ subdirs may be in .gitignore history)
+1. Stage all release files: `git add -f plugin/ .claude-plugin/marketplace.json`
    - Include other uncommitted files if agreed with user
-   - **DO NOT stage `.claude-plugin/marketplace.json` yet** (marketplace update is Phase 2)
 2. Commit message: `v<VERSION>: <one-line summary of commits>` (in English)
    - Generate summary from `git log <prev-tag>..HEAD --oneline`
-   - Write as if the developer authored it
    - **NEVER add Co-Authored-By** (public repository)
 3. `git tag v<VERSION>`
 
 ## Local Binary Update
 
-After tagging, before pushing, update the local `go/bin/alfred` binary:
-
 ```
 go install -ldflags "-X main.version=<VERSION> -X main.commit=$(git rev-parse --short HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" ./cmd/alfred
 ```
 
-This ensures `alfred version` immediately returns the new version.
-Without ldflags, `go install` uses `version=dev` and vcs fallback shows the old version.
+## Push & CI
 
-## Push & CI (Phase 1)
-
-**NEVER use `--tags`** (pushes all local tags, causing inconsistencies)
+**NEVER use `--tags`** (pushes all local tags)
 
 ```
 git push origin main
 git push origin v<VERSION>
 ```
 
-Always push individually.
-
 ### CI Monitoring
 
-1. Check Release workflow started: `gh run list --limit 1`
-2. Watch until completion: `gh run watch <run-id>`
-3. **If CI fails → abort. Do NOT proceed to Phase 2.** Fix the issue and re-release.
+1. `gh run list --limit 1` — check Release workflow started
+2. `gh run watch <run-id>` — watch until completion
+3. If CI fails → fix the issue, delete the tag (`git tag -d v<VERSION> && git push origin :refs/tags/v<VERSION>`), and re-release
 
-## Marketplace Update (Phase 2: after Release CI succeeds)
+## Verify Release
 
-**CRITICAL**: Only proceed after GitHub Release is confirmed successful.
-
-1. Verify release assets exist:
-   ```
-   gh release view v<VERSION> --json assets --jq '.assets[].name'
-   ```
-   Must include `alfred_darwin_arm64.tar.gz`, `alfred_darwin_amd64.tar.gz`, `alfred_linux_amd64.tar.gz`, `alfred_linux_arm64.tar.gz`, `checksums.txt`
-2. Update `plugins[0].version` in `.claude-plugin/marketplace.json`
-3. Commit: `chore: update marketplace to v<VERSION>`
-4. Push: `git push origin main`
+After CI succeeds, verify assets:
+```
+gh release view v<VERSION> --json assets --jq '.assets[].name'
+```
+Must include: `alfred_darwin_arm64.tar.gz`, `alfred_darwin_amd64.tar.gz`, `alfred_linux_amd64.tar.gz`, `alfred_linux_arm64.tar.gz`, `checksums.txt`
 
 ## Homebrew
 
-GoReleaser の `brews` セクションにより、リリースCI成功後に `hir4ta/homebrew-alfred` の formula が自動更新される。
-ユーザーは `brew tap hir4ta/alfred && brew install alfred` でインストール、`brew upgrade alfred` で更新可能。
-
-手動操作不要。CI が `HOMEBREW_TAP_TOKEN` シークレットを使って formula を push する。
+Auto-updated via GoReleaser `brews` section. No manual action needed.
 
 ## Completion Report
-
-Display the following on release completion:
 
 | Item | Value |
 |------|-------|
