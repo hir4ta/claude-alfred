@@ -23,7 +23,7 @@ jobs:
         run: npm ci
 
       - name: Install web dependencies
-        run: cd web && npm install
+        run: cd web && npm install --legacy-peer-deps
 
       - name: Type check
         run: npm run typecheck
