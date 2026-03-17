@@ -1,0 +1,130 @@
+import { resolve } from 'node:path';
+
+export interface HookEvent {
+  cwd: string;
+  source?: string;
+  transcript_path?: string;
+  trigger?: string;
+  custom_instructions?: string;
+  prompt?: string;
+  stop_hook_active?: boolean;
+  tool_name?: string;
+  tool_input?: unknown;
+  tool_response?: unknown;
+}
+
+export function notifyUser(format: string, ...args: unknown[]): void {
+  let msg = format;
+  for (const arg of args) {
+    msg = msg.replace('%s', String(arg)).replace('%v', String(arg)).replace('%d', String(arg));
+  }
+  process.stderr.write(`[alfred] ${msg}\n`);
+}
+
+export function emitAdditionalContext(eventName: string, context: string): void {
+  const out = {
+    hookSpecificOutput: {
+      hookEventName: eventName,
+      additionalContext: context,
+    },
+  };
+  try {
+    process.stdout.write(JSON.stringify(out) + '\n');
+  } catch { /* stdout errors are non-recoverable */ }
+}
+
+export function extractSection(content: string, heading: string): string {
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let inSection = false;
+  for (const line of lines) {
+    if (line === heading || line.startsWith(heading + ' ')) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && line.startsWith('## ')) break;
+    if (inSection) result.push(line);
+  }
+  return result.join('\n').trim();
+}
+
+export function truncateStr(s: string, maxLen: number): string {
+  s = s.trim().replaceAll('\n', ' ');
+  const runes = [...s];
+  if (runes.length <= maxLen) return s;
+  return runes.slice(0, maxLen).join('') + '...';
+}
+
+export async function runHook(event: string): Promise<void> {
+  // Read hook event from stdin.
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk as Buffer);
+    if (Buffer.concat(chunks).length > 2 * 1024 * 1024) break; // 2MB limit
+  }
+  const input = Buffer.concat(chunks).toString('utf-8');
+
+  let ev: HookEvent;
+  try {
+    ev = JSON.parse(input) as HookEvent;
+  } catch {
+    return; // fail-open
+  }
+
+  if (ev.stop_hook_active) return;
+
+  if (ev.cwd) {
+    ev.cwd = resolve(ev.cwd);
+  }
+
+  const timeouts: Record<string, number> = {
+    SessionStart: 4500,
+    PreCompact: 9000,
+    UserPromptSubmit: 9000,
+    PostToolUse: 5000,
+  };
+  const timeout = timeouts[event] ?? 5000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    switch (event) {
+      case 'SessionStart':
+        await handleSessionStart(ev, controller.signal);
+        break;
+      case 'PreCompact':
+        if (ev.cwd) await handlePreCompact(ev, controller.signal);
+        break;
+      case 'UserPromptSubmit':
+        await handleUserPromptSubmit(ev, controller.signal);
+        break;
+      case 'PostToolUse':
+        await handlePostToolUse(ev, controller.signal);
+        break;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Import handlers lazily to minimize cold start for unused events.
+
+async function handleSessionStart(ev: HookEvent, signal: AbortSignal): Promise<void> {
+  const { sessionStart } = await import('./session-start.js');
+  await sessionStart(ev, signal);
+}
+
+async function handlePreCompact(ev: HookEvent, signal: AbortSignal): Promise<void> {
+  const { preCompact } = await import('./pre-compact.js');
+  await preCompact(ev, signal);
+}
+
+async function handleUserPromptSubmit(ev: HookEvent, signal: AbortSignal): Promise<void> {
+  const { userPromptSubmit } = await import('./user-prompt.js');
+  await userPromptSubmit(ev, signal);
+}
+
+async function handlePostToolUse(ev: HookEvent, signal: AbortSignal): Promise<void> {
+  const { postToolUse } = await import('./post-tool.js');
+  await postToolUse(ev, signal);
+}

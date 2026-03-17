@@ -1,0 +1,187 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { HookEvent } from './dispatcher.js';
+import { notifyUser } from './dispatcher.js';
+import { openDefaultCached } from '../store/index.js';
+import { detectProject } from '../store/project.js';
+import { upsertKnowledge } from '../store/knowledge.js';
+import { readActive, readActiveState, SpecDir, completeTask } from '../spec/types.js';
+import { appendAudit } from '../spec/audit.js';
+import { syncTaskStatus } from '../epic/index.js';
+import type { KnowledgeRow } from '../types.js';
+
+export async function preCompact(ev: HookEvent, _signal: AbortSignal): Promise<void> {
+  if (!ev.cwd) return;
+
+  let store;
+  try { store = openDefaultCached(); } catch { return; }
+
+  const projectPath = ev.cwd;
+  const proj = detectProject(projectPath);
+
+  // Extract decisions from transcript if available.
+  if (ev.transcript_path) {
+    try {
+      const transcript = readFileSync(ev.transcript_path, 'utf-8');
+      const decisions = extractDecisions(transcript);
+      if (decisions.length > 0) {
+        for (const dec of decisions) {
+          const row: KnowledgeRow = {
+            id: 0,
+            filePath: `decisions/compact/${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}`,
+            contentHash: '',
+            title: dec.title,
+            content: dec.content,
+            subType: 'decision',
+            projectRemote: proj.remote,
+            projectPath: proj.path,
+            projectName: proj.name,
+            branch: proj.branch,
+            createdAt: '',
+            updatedAt: '',
+            hitCount: 0,
+            lastAccessed: '',
+            enabled: true,
+          };
+          upsertKnowledge(store, row);
+        }
+        notifyUser('extracted %d decisions from transcript', decisions.length);
+      }
+    } catch { /* transcript read failure is non-fatal */ }
+  }
+
+  // Save chapter memory (session snapshot).
+  try {
+    const taskSlug = readActive(projectPath);
+    const sd = new SpecDir(projectPath, taskSlug);
+    if (sd.exists()) {
+      const session = sd.readFile('session.md');
+      const chapterNum = (session.match(/## Compact Marker \[/g) ?? []).length + 1;
+      const project = proj.name;
+      const title = `${project} > ${taskSlug} > chapter-${chapterNum} > session-state`;
+
+      const row: KnowledgeRow = {
+        id: 0,
+        filePath: `chapters/${taskSlug}/chapter-${chapterNum}`,
+        contentHash: '',
+        title,
+        content: session.slice(0, 2000),
+        subType: 'general',
+        projectRemote: proj.remote,
+        projectPath: proj.path,
+        projectName: proj.name,
+        branch: proj.branch,
+        createdAt: '',
+        updatedAt: '',
+        hitCount: 0,
+        lastAccessed: '',
+        enabled: true,
+      };
+      upsertKnowledge(store, row);
+
+      // Write pending-compact breadcrumb for SessionStart to pick up.
+      const breadcrumb = {
+        claude_session_id: process.env['CLAUDE_SESSION_ID'] ?? '',
+        task_slug: taskSlug,
+        timestamp: new Date().toISOString(),
+      };
+      writeFileSync(
+        join(projectPath, '.alfred', '.pending-compact.json'),
+        JSON.stringify(breadcrumb),
+      );
+    }
+  } catch { /* fail-open */ }
+
+  // Auto-complete task if session.md indicates completion.
+  try {
+    const taskSlug = readActive(projectPath);
+    const sd = new SpecDir(projectPath, taskSlug);
+    const session = sd.readFile('session.md');
+    if (isSessionCompleted(session)) {
+      completeTask(projectPath, taskSlug);
+      syncTaskStatus(projectPath, taskSlug, 'completed');
+      appendAudit(projectPath, { action: 'spec.complete', target: taskSlug, detail: 'auto-completed during compact', user: 'auto' });
+      notifyUser("auto-completed task '%s'", taskSlug);
+    }
+  } catch { /* fail-open */ }
+
+  // Epic progress sync.
+  try {
+    const state = readActiveState(projectPath);
+    for (const task of state.tasks) {
+      if (task.status === 'completed') {
+        syncTaskStatus(projectPath, task.slug, 'completed');
+      }
+    }
+  } catch { /* fail-open */ }
+}
+
+interface Decision {
+  title: string;
+  content: string;
+}
+
+const DECISION_KEYWORDS = [
+  'decided', '決定した', 'going with', "we'll", 'chose', 'chosen',
+  'architecture', 'アーキテクチャ', 'design choice', 'decided to',
+];
+
+const RATIONALE_SIGNALS = ['because', 'since', 'reason', 'rationale', 'なぜなら', '理由'];
+const ALTERNATIVE_SIGNALS = ['instead of', 'rather than', 'alternative', 'considered', '代わりに'];
+const ARCH_TERMS = ['component', 'module', 'layer', 'service', 'interface', 'pattern', 'migration'];
+
+function extractDecisions(transcript: string): Decision[] {
+  const decisions: Decision[] = [];
+  const lines = transcript.split('\n');
+
+  for (const line of lines) {
+    let entry: { type?: string; role?: string; content?: string; message?: { role?: string; content?: string } };
+    try { entry = JSON.parse(line); } catch { continue; }
+
+    const text = typeof entry.content === 'string' ? entry.content
+      : typeof entry.message?.content === 'string' ? entry.message.content : '';
+    if (!text) continue;
+
+    // Only look at assistant messages for decisions.
+    const role = entry.role ?? entry.message?.role;
+    if (role !== 'assistant') continue;
+
+    const lower = text.toLowerCase();
+
+    // Base score from keyword matches.
+    let score = 0;
+    for (const kw of DECISION_KEYWORDS) {
+      if (lower.includes(kw)) { score = 0.35; break; }
+    }
+    if (score === 0) continue;
+
+    // Bonus signals.
+    if (RATIONALE_SIGNALS.some(s => lower.includes(s))) score += 0.15;
+    if (ALTERNATIVE_SIGNALS.some(s => lower.includes(s))) score += 0.15;
+    for (const term of ARCH_TERMS) {
+      if (lower.includes(term)) { score += 0.05; break; }
+    }
+
+    if (score < 0.40) continue;
+
+    // Extract a title from the first sentence.
+    const firstSentence = text.split(/[.!?\n]/)[0]?.trim() ?? 'Decision';
+    decisions.push({
+      title: firstSentence.slice(0, 100),
+      content: text.slice(0, 1000),
+    });
+  }
+
+  return decisions;
+}
+
+function isSessionCompleted(session: string): boolean {
+  const lower = session.toLowerCase();
+  // Check for explicit status markers.
+  if (lower.includes('status: completed') || lower.includes('status: done')) return true;
+
+  // Check if all Next Steps are checked.
+  const nextSteps = session.match(/^- \[[ x]\] .+$/gm);
+  if (!nextSteps || nextSteps.length === 0) return false;
+  return nextSteps.every(step => step.startsWith('- [x]'));
+}
