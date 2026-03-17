@@ -86,6 +86,20 @@ This generates steering docs, templates, and indexes existing knowledge.
 
 > **Note**: Use `/init` (short form) instead of `/alfred:init` — Claude Code's autocomplete may misroute the `alfred:` prefix to another skill. This applies to all alfred skills: prefer `/brief`, `/attend`, `/mend` etc.
 
+## Updating
+
+Both need to be updated together:
+
+```bash
+npm update -g claude-alfred        # CLI, hooks, MCP server, dashboard
+```
+
+```
+/plugin update alfred              # skills, agents, rules (in Claude Code)
+```
+
+Run `alfred doctor` to verify both are in sync.
+
 ## Skills
 
 | Skill | What it does |

@@ -86,6 +86,20 @@ Claude Code 内で、プロジェクトルートから:
 
 > **注意**: `/alfred:init` ではなく `/init` (短縮形) を使うこと。Claude Code の補完が `alfred:` プレフィックスを別スキルに誤ルーティングする場合がある。全 alfred スキル共通: `/brief`, `/attend`, `/mend` のように短縮形を推奨。
 
+## アップデート
+
+両方を一緒に更新する:
+
+```bash
+npm update -g claude-alfred        # CLI、hooks、MCP サーバー、ダッシュボード
+```
+
+```
+/plugin update alfred              # skills、agents、rules（Claude Code 内で）
+```
+
+`alfred doctor` でバージョンの一致を確認できる。
+
 ## スキル
 
 | スキル | やること |
