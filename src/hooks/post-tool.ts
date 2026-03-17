@@ -1,3 +1,6 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { HookEvent } from './dispatcher.js';
 import { notifyUser, emitAdditionalContext, extractSection } from './dispatcher.js';
 import { openDefaultCached } from '../store/index.js';
@@ -5,26 +8,34 @@ import { searchKnowledgeFTS } from '../store/fts.js';
 import { readActive, SpecDir } from '../spec/types.js';
 import { truncate } from '../mcp/helpers.js';
 
-// Exploration detection: track consecutive Read/Grep calls.
-let consecutiveExploreCount = 0;
+const EXPLORE_COUNTER_PATH = join(tmpdir(), 'alfred-explore-count');
+
+function readExploreCount(): number {
+  try { return parseInt(readFileSync(EXPLORE_COUNTER_PATH, 'utf-8'), 10) || 0; } catch { return 0; }
+}
+
+function writeExploreCount(n: number): void {
+  try { writeFileSync(EXPLORE_COUNTER_PATH, String(n)); } catch { /* best effort */ }
+}
 
 export async function postToolUse(ev: HookEvent, _signal: AbortSignal): Promise<void> {
   if (!ev.cwd || !ev.tool_name) return;
 
-  // Exploration detection.
+  // Exploration detection (persisted across short-lived hook processes via /tmp).
   if (ev.tool_name === 'Read' || ev.tool_name === 'Grep' || ev.tool_name === 'Glob') {
-    consecutiveExploreCount++;
-    if (consecutiveExploreCount >= 5) {
+    const count = readExploreCount() + 1;
+    writeExploreCount(count);
+    if (count >= 5) {
       try {
         readActive(ev.cwd); // has active spec → don't suggest
       } catch {
         notifyUser('tip: 5+ consecutive %s calls without a spec. Consider `/alfred:survey` to reverse-engineer a spec from the code.', ev.tool_name);
-        consecutiveExploreCount = 0;
+        writeExploreCount(0);
       }
     }
     return;
   }
-  consecutiveExploreCount = 0;
+  writeExploreCount(0);
 
   if (ev.tool_name === 'Bash') {
     await handleBashResult(ev);

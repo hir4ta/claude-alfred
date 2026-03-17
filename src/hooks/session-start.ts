@@ -19,15 +19,12 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
     return;
   }
 
-  // Run independent operations (fail-open).
-  const results = await Promise.allSettled([
-    Promise.resolve().then(() => ingestProjectClaudeMD(store, ev.cwd)),
-    Promise.resolve().then(() => syncKnowledgeIndex(store, ev.cwd)),
-  ]);
-  for (const r of results) {
-    if (r.status === 'rejected') {
-      notifyUser('warning: session init op failed: %s', r.reason);
-    }
+  // Run independent operations (fail-open, synchronous — Node.js single-threaded).
+  try { ingestProjectClaudeMD(store, ev.cwd); } catch (err) {
+    notifyUser('warning: CLAUDE.md ingest failed: %s', err);
+  }
+  try { syncKnowledgeIndex(store, ev.cwd); } catch (err) {
+    notifyUser('warning: knowledge sync failed: %s', err);
   }
 
   // Suggest /alfred:init if steering docs are missing.

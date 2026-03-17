@@ -25,10 +25,12 @@ export async function preCompact(ev: HookEvent, _signal: AbortSignal): Promise<v
       const transcript = readFileSync(ev.transcript_path, 'utf-8');
       const decisions = extractDecisions(transcript);
       if (decisions.length > 0) {
-        for (const dec of decisions) {
+        const ts = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15);
+        for (let idx = 0; idx < decisions.length; idx++) {
+          const dec = decisions[idx]!;
           const row: KnowledgeRow = {
             id: 0,
-            filePath: `decisions/compact/${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}`,
+            filePath: `decisions/compact/${ts}-${idx}`,
             contentHash: '',
             title: dec.title,
             content: dec.content,

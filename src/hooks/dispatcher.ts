@@ -14,10 +14,8 @@ export interface HookEvent {
 }
 
 export function notifyUser(format: string, ...args: unknown[]): void {
-  let msg = format;
-  for (const arg of args) {
-    msg = msg.replace('%s', String(arg)).replace('%v', String(arg)).replace('%d', String(arg));
-  }
+  let i = 0;
+  const msg = format.replace(/%[svd]/g, () => (i < args.length ? String(args[i++]) : ''));
   process.stderr.write(`[alfred] ${msg}\n`);
 }
 
@@ -48,19 +46,14 @@ export function extractSection(content: string, heading: string): string {
   return result.join('\n').trim();
 }
 
-export function truncateStr(s: string, maxLen: number): string {
-  s = s.trim().replaceAll('\n', ' ');
-  const runes = [...s];
-  if (runes.length <= maxLen) return s;
-  return runes.slice(0, maxLen).join('') + '...';
-}
-
 export async function runHook(event: string): Promise<void> {
   // Read hook event from stdin.
   const chunks: Buffer[] = [];
+  let totalLen = 0;
   for await (const chunk of process.stdin) {
     chunks.push(chunk as Buffer);
-    if (Buffer.concat(chunks).length > 2 * 1024 * 1024) break; // 2MB limit
+    totalLen += (chunk as Buffer).length;
+    if (totalLen > 2 * 1024 * 1024) break; // 2MB limit
   }
   const input = Buffer.concat(chunks).toString('utf-8');
 
