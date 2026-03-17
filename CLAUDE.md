@@ -84,7 +84,7 @@ node dist/cli.mjs version     # Show version
 - `alfred steering-init`: legacy CLI (redirects to /alfred:init), still functional with `--force`
 - Dossier init: injects `steering_context` (summary) or `steering_hint` (suggestion) in response JSON
 - Dossier update: accepts `file=steering/{filename}` for steering doc updates
-- ValidateSteering: checks tech.md vs go.mod drift, structure.md vs filesystem directory existence
+- ValidateSteering: checks tech.md vs package.json drift, structure.md vs filesystem directory existence
 - Templates: `internal/spec/templates/steering/*.tmpl` (separate embed.FS from spec templates)
 
 ### Spec Management
@@ -117,13 +117,13 @@ node dist/cli.mjs version     # Show version
 
 - `alfred dashboard`: HTTP server + browser open (localhost:7575)
 - React SPA: Vite 8 + TanStack Router (file-based) + TanStack Query + shadcn/ui + Tailwind CSS v4
-- Build: `task build` (bun run build → cp dist → go install with go:embed)
+- Build: `task build` (npm run build:web → tsdown bundle)
 - Dev mode: `ALFRED_DEV=1 alfred dashboard` + `task dev` (Vite HMR proxy)
 - 4 tabs: Overview (/) / Tasks (/tasks) / Knowledge (/knowledge) / Activity (/activity)
 - Review mode: line-numbered spec viewer, inline comments, Approve/Request Changes with confirmation dialog
 - SSE: EventSource → TanStack Query invalidation for real-time updates
 - Brand palette (DEC-15): session #40513b, decision #628141, pattern #2d8b7a, rule #e67e22, error #c0392b, purple #7b6b8d, dark #44403c
-- DataSource interface: 15 methods (internal/dashboard/types.go)
+- Dashboard API: Hono REST endpoints (src/api/server.ts)
 - Confidence: spec.ParseConfidence() (extracted from mcpserver to spec package)
 
 ### Knowledge & Search
@@ -159,7 +159,7 @@ node dist/cli.mjs version     # Show version
 
 - At each meaningful implementation milestone, perform **thorough self-review from multiple perspectives** (delegate to another agent if possible)
 - After self-review, update README.md / README.ja.md / CLAUDE.md to reflect changes
-- Maintain test coverage at **50% or above** (`go test -cover ./...`; hook handlers may be excluded)
+- Maintain test coverage at **50% or above** (`npm test`; hook handlers may be excluded)
 
 ## Compact Instructions
 
