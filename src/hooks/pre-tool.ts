@@ -3,10 +3,9 @@ import { join } from "node:path";
 import type { HookEvent } from "./dispatcher.js";
 import { isGateActive } from "./review-gate.js";
 import { denyTool, isSpecFilePath, tryReadActiveSpec } from "./spec-guard.js";
-import { readLastIntent } from "./state.js";
+import { IMPLEMENT_INTENTS, readLastIntent } from "./state.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
-const IMPLEMENT_INTENTS = new Set(["implement", "bugfix", "tdd"]);
 
 /**
  * PreToolUse handler: block Edit/Write on review-gate, intent guard, or unapproved spec.

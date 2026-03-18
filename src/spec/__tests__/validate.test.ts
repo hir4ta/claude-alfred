@@ -159,6 +159,26 @@ describe("validateSpec — min_fr_count", () => {
 	});
 });
 
+describe("validateSpec — JA template defaults (NFR-3)", () => {
+	const origLang = process.env.ALFRED_LANG;
+	beforeEach(() => { process.env.ALFRED_LANG = "ja"; });
+	afterEach(() => { process.env.ALFRED_LANG = origLang; });
+
+	it("L spec JA defaults have no fail checks", () => {
+		initSpec("test-l-ja", "L", "feature");
+		const result = validateSpec(tmpDir, "test-l-ja", "L", "feature");
+		const fails = result.checks.filter((c) => c.status === "fail");
+		expect(fails).toEqual([]);
+	});
+
+	it("D spec JA defaults have no fail checks", () => {
+		initSpec("test-d-ja", "D", "delta");
+		const result = validateSpec(tmpDir, "test-d-ja", "D", "delta");
+		const fails = result.checks.filter((c) => c.status === "fail");
+		expect(fails).toEqual([]);
+	});
+});
+
 describe("validateSpec — performance (NFR-1)", () => {
 	it("validates L spec in under 100ms", () => {
 		initSpec("test-perf", "L", "feature");

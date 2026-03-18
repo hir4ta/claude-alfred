@@ -121,13 +121,13 @@ export function validateSpec(
 		// Check for required sections in both EN and JA templates.
 		const requiredSectionsEN = ["Change Summary", "Files Affected", "Rationale", "Impact Scope", "Test Plan", "Rollback Strategy"];
 		const requiredSectionsJA = ["変更概要", "影響ファイル", "変更理由", "影響範囲", "テスト計画", "ロールバック手順"];
-		const hasSectionCount = requiredSectionsEN.filter((s) => deltaContent.includes(`## ${s}`)).length
-			+ requiredSectionsJA.filter((s) => deltaContent.includes(`## ${s}`)).length;
-		// Need at least 6 sections (one full set in either language)
+		const enCount = requiredSectionsEN.filter((s) => deltaContent.includes(`## ${s}`)).length;
+		const jaCount = requiredSectionsJA.filter((s) => deltaContent.includes(`## ${s}`)).length;
+		const bestCount = Math.max(enCount, jaCount);
 		checks.push(
-			hasSectionCount >= 6
+			bestCount >= 6
 				? { name: "delta_sections_present", status: "pass", message: "All delta sections present" }
-				: { name: "delta_sections_present", status: "fail", message: `Only ${hasSectionCount} delta sections found (need 6)` },
+				: { name: "delta_sections_present", status: "fail", message: `Only ${bestCount}/6 delta sections found` },
 		);
 
 		// 20. delta_change_ids

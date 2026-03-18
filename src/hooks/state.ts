@@ -64,6 +64,9 @@ export function writeStateText(cwd: string, name: string, data: string): void {
 
 // --- Intent state for spec-first enforcement ---
 
+/** Intents that require an active spec before source edits. Shared between UserPromptSubmit and PreToolUse. */
+export const IMPLEMENT_INTENTS = new Set(["implement", "bugfix", "tdd"]);
+
 const INTENT_FILE = "last-intent.json";
 const INTENT_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 

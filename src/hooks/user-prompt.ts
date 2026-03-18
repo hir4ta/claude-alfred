@@ -84,8 +84,8 @@ export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Prom
 	}
 
 	// Write intent state for PreToolUse spec-first enforcement.
-	if (ev.cwd) {
-		const IMPLEMENT_INTENTS = new Set(["implement", "bugfix", "tdd"]);
+	// Only write in alfred-initialized projects to avoid creating .alfred/.state/ in non-alfred projects.
+	if (ev.cwd && existsSync(join(ev.cwd, ".alfred"))) {
 		if (intent && IMPLEMENT_INTENTS.has(intent)) {
 			writeLastIntent(ev.cwd, intent);
 		} else {
@@ -289,7 +289,7 @@ function intentDescription(intent: string): string {
 
 // --- FR-1: Nudge dismissal tracking via .alfred/.state/ (survives across short-lived hook processes) ---
 
-import { readStateJSON, writeLastIntent, writeStateJSON } from "./state.js";
+import { IMPLEMENT_INTENTS, readStateJSON, writeLastIntent, writeStateJSON } from "./state.js";
 
 interface NudgeCounts {
 	[intent: string]: { count: number; lastNudged: string };

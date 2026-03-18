@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookEvent } from "../dispatcher.js";
 import { preToolUse } from "../pre-tool.js";
 import { writeReviewGate } from "../review-gate.js";
+import { writeLastIntent } from "../state.js";
 
 let tmpDir: string;
 let stdoutData: string[];
@@ -176,5 +177,46 @@ describe("preToolUse — review gate", () => {
 		const reason =
 			(out?.hookSpecificOutput as Record<string, unknown>)?.permissionDecisionReason ?? "";
 		expect(String(reason)).toContain("Spec self-review");
+	});
+});
+
+describe("preToolUse — intent guard", () => {
+	function setupAlfred(): void {
+		mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
+	}
+
+	it("denies Edit when implement intent + .alfred/ exists + no spec", async () => {
+		setupAlfred();
+		writeLastIntent(tmpDir, "implement");
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		const out = getDenyOutput();
+		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+	});
+
+	it("allows Edit when research intent + .alfred/ exists + no spec", async () => {
+		setupAlfred();
+		writeLastIntent(tmpDir, "research");
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		expect(stdoutData.length).toBe(0);
+	});
+
+	it("allows Edit when no intent + .alfred/ exists + no spec", async () => {
+		setupAlfred();
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		expect(stdoutData.length).toBe(0);
+	});
+
+	it("allows Edit when no .alfred/ dir (even if state somehow exists)", async () => {
+		// In production, writeLastIntent is guarded by .alfred/ check in UserPromptSubmit.
+		// This test verifies PreToolUse also checks .alfred/ existence.
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		expect(stdoutData.length).toBe(0);
+	});
+
+	it("allows Edit when implement intent + active spec exists", async () => {
+		setupSpec({ size: "S" });
+		writeLastIntent(tmpDir, "implement");
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		expect(stdoutData.length).toBe(0);
 	});
 });

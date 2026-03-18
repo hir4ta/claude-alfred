@@ -324,6 +324,8 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
 	}
 
 	// Validation gate: all sizes must pass validation (no fail checks).
+	// Two failure modes: (1) validateSpec returns fails → block completion.
+	// (2) validateSpec throws → fail-open, allow completion (NFR-2).
 	try {
 		const valSize = (task?.size ?? "L") as SpecSize;
 		const valSpecType = (task?.spec_type ?? "feature") as SpecType;
