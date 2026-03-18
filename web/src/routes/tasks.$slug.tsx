@@ -128,19 +128,17 @@ function TaskDetailPage() {
 					)}
 				</div>
 				<div className="min-w-0 flex-1">
-					{selectedFile && (
+					{selectedFile && task.review_status === "pending" ? (
 						<Tabs value={mode} onValueChange={(v) => setMode(v as "view" | "review")}>
 							<TabsList className="mb-3">
 								<TabsTrigger value="view" className="gap-1 text-xs">
 									<FileText className="h-3.5 w-3.5" />
 									View
 								</TabsTrigger>
-								{task.review_status === "pending" && (
-									<TabsTrigger value="review" className="gap-1 text-xs">
-										<MessageSquareText className="h-3.5 w-3.5" />
-										Review
-									</TabsTrigger>
-								)}
+								<TabsTrigger value="review" className="gap-1 text-xs">
+									<MessageSquareText className="h-3.5 w-3.5" />
+									Review
+								</TabsTrigger>
 							</TabsList>
 							<TabsContent value="view">
 								<SpecContentViewer content={content} file={selectedFile} />
@@ -154,7 +152,9 @@ function TaskDetailPage() {
 								/>
 							</TabsContent>
 						</Tabs>
-					)}
+					) : selectedFile ? (
+						<SpecContentViewer content={content} file={selectedFile} />
+					) : null}
 					{!selectedFile && (
 						<div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-stone-200">
 							<p className="text-sm text-muted-foreground">Select a spec file to view.</p>
@@ -229,13 +229,12 @@ function SpecContentViewer({ content, file }: { content: string; file: string })
 						prose-p:text-xs prose-p:leading-relaxed prose-p:my-1
 						prose-li:text-xs prose-li:my-0
 						prose-table:text-[11px]
-						prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:border prose-th:border-border prose-th:bg-muted/50 prose-th:whitespace-nowrap
-						prose-td:px-2 prose-td:py-1 prose-td:border prose-td:border-border
-						prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-foreground
-						prose-pre:p-0 prose-pre:bg-muted/50 prose-pre:text-foreground prose-pre:rounded-lg
-						[&_table]:w-full [&_table]:table-fixed
-						[&_td]:break-words [&_th]:break-words
-						[&_pre_code]:bg-transparent [&_pre_code]:p-3 [&_pre_code]:block [&_pre_code]:text-[11px] [&_pre_code]:leading-relaxed [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words">
+						prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:border prose-th:border-border prose-th:bg-muted/50
+						prose-td:px-2 prose-td:py-1 prose-td:border prose-td:border-border prose-td:break-words
+						prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-foreground prose-code:break-all
+						prose-pre:bg-muted/50 prose-pre:text-foreground prose-pre:rounded-lg prose-pre:overflow-x-hidden
+						[&_table]:w-full
+						[&_pre]:p-0 [&_pre_code]:bg-transparent [&_pre_code]:p-3 [&_pre_code]:block [&_pre_code]:text-[11px] [&_pre_code]:leading-relaxed [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-all [&_pre_code]:overflow-hidden">
 						{content ? (
 							<Markdown
 								components={{
