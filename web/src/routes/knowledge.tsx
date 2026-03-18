@@ -15,7 +15,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
 	knowledgeQueryOptions,
-	knowledgeSearchQueryOptions,
 	knowledgeStatsQueryOptions,
 	useToggleEnabledMutation,
 } from "@/lib/api";
@@ -26,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Archive, ArchiveRestore, BookOpen, Flame, Gavel, Lightbulb, Search, Shield } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Markdown from "react-markdown";
 
 export const Route = createFileRoute("/knowledge")({
@@ -34,32 +33,13 @@ export const Route = createFileRoute("/knowledge")({
 });
 
 function KnowledgePage() {
-	const [searchInput, setSearchInput] = useState("");
-	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [localFilter, setLocalFilter] = useState("");
 	const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
-	const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
-	const isSearching = debouncedSearch.length > 0;
 
-	const handleSearchChange = useCallback((value: string) => {
-		setSearchInput(value);
-		if (timerRef.current) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => setDebouncedSearch(value), 300);
-	}, []);
-
-	useEffect(() => {
-		return () => {
-			if (timerRef.current) clearTimeout(timerRef.current);
-		};
-	}, []);
-
-	const { data: browseData, isLoading: browseLoading } = useQuery(knowledgeQueryOptions());
-	const { data: searchData, isLoading: searchLoading } = useQuery(
-		knowledgeSearchQueryOptions(debouncedSearch),
-	);
+	const { data: browseData, isLoading } = useQuery(knowledgeQueryOptions());
 	const { data: statsData } = useQuery(knowledgeStatsQueryOptions());
 
-	const entries = isSearching ? (searchData?.entries ?? []) : (browseData?.entries ?? []);
+	const entries = browseData?.entries ?? [];
 	const filtered = localFilter
 		? entries.filter(
 				(e) =>
@@ -67,30 +47,21 @@ function KnowledgePage() {
 					e.content.toLowerCase().includes(localFilter.toLowerCase()),
 			)
 		: entries;
-	const isLoading = isSearching ? searchLoading : browseLoading;
 
 	return (
 		<div className="space-y-5">
-			{/* Search + stats */}
+			{/* Filter + stats */}
 			<div className="flex items-center gap-4">
 				<div className="relative flex-1 max-w-sm">
 					<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
-						placeholder="Semantic search..."
-						value={searchInput}
-						onChange={(e) => handleSearchChange(e.target.value)}
+						placeholder="Filter..."
+						value={localFilter}
+						onChange={(e) => setLocalFilter(e.target.value)}
 						className="pl-9"
 					/>
 				</div>
-				<Input
-					placeholder="Filter..."
-					value={localFilter}
-					onChange={(e) => setLocalFilter(e.target.value)}
-					className="w-32"
-				/>
-				{statsData && (
-					<StatsBar stats={statsData} isSearching={isSearching} searchData={searchData} />
-				)}
+				{statsData && <StatsBar stats={statsData} />}
 			</div>
 
 			{/* Grid */}
@@ -108,9 +79,7 @@ function KnowledgePage() {
 				</div>
 			) : (
 				<div className="flex h-40 items-center justify-center">
-					<p className="text-sm text-muted-foreground">
-						{isSearching ? "No results found." : "No memories yet."}
-					</p>
+					<p className="text-sm text-muted-foreground">No memories yet.</p>
 				</div>
 			)}
 
@@ -120,42 +89,24 @@ function KnowledgePage() {
 	);
 }
 
-function StatsBar({
-	stats,
-	isSearching,
-	searchData,
-}: {
-	stats: KnowledgeStats;
-	isSearching: boolean;
-	searchData?: { entries: KnowledgeEntry[]; method: string; partial: boolean };
-}) {
+function StatsBar({ stats }: { stats: KnowledgeStats }) {
 	return (
 		<div className="flex items-center gap-3 text-xs text-muted-foreground">
-			{isSearching && searchData ? (
-				<>
-					<span>
-						{searchData.entries.length} results via {searchData.method}
-					</span>
-					{searchData.partial && <span style={{ color: "#e67e22" }}>(timeout)</span>}
-				</>
-			) : (
-				<>
-					<span>{stats.total} entries</span>
-					<Separator orientation="vertical" className="h-3" />
-					<StatDot count={stats.bySubType.decision ?? 0} color={SUB_TYPE_COLORS.decision!} />
-					<StatDot count={stats.bySubType.pattern ?? 0} color={SUB_TYPE_COLORS.pattern!} />
-					<StatDot count={stats.bySubType.rule ?? 0} color={SUB_TYPE_COLORS.rule!} />
-					</>
-			)}
+			<span>{stats.total} entries</span>
+			<Separator orientation="vertical" className="h-3" />
+			<StatDot count={stats.bySubType.decision ?? 0} color={SUB_TYPE_COLORS.decision!} label="decision" />
+			<StatDot count={stats.bySubType.pattern ?? 0} color={SUB_TYPE_COLORS.pattern!} label="pattern" />
+			<StatDot count={stats.bySubType.rule ?? 0} color={SUB_TYPE_COLORS.rule!} label="rule" />
 		</div>
 	);
 }
 
-function StatDot({ count, color }: { count: number; color: string }) {
+function StatDot({ count, color, label }: { count: number; color: string; label: string }) {
 	return (
 		<span className="flex items-center gap-1">
 			<span className="size-1.5 rounded-full" style={{ backgroundColor: color }} />
-			{count}
+			<span>{count}</span>
+			<span className="text-muted-foreground/60">{label}</span>
 		</span>
 	);
 }
