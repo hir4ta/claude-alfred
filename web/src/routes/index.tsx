@@ -51,7 +51,7 @@ function OverviewPage() {
 					loading={tasksLoading}
 				/>
 				<StatCard
-					label="Memories"
+					label="Knowledge"
 					value={healthData?.total ?? 0}
 					icon={<Brain className="size-4" style={{ color: "#628141" }} />}
 				/>

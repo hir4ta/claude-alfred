@@ -195,8 +195,13 @@ export function createApp(
   });
 
   app.get('/api/health', (c) => {
-    const stats = getKnowledgeStats(store);
-    return c.json({ total: stats.total, bySubType: stats.bySubType });
+    // Project-scoped count to match Knowledge tab.
+    const entries = listAllKnowledge(store, proj.remote, proj.path, 10000);
+    const bySubType: Record<string, number> = {};
+    for (const e of entries) {
+      bySubType[e.subType] = (bySubType[e.subType] ?? 0) + 1;
+    }
+    return c.json({ total: entries.length, bySubType });
   });
 
   // --- Review API ---

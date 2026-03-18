@@ -140,7 +140,7 @@ function StatsBar({
 				</>
 			) : (
 				<>
-					<span>{stats.total} memories</span>
+					<span>{stats.total} entries</span>
 					<Separator orientation="vertical" className="h-3" />
 					<StatDot count={stats.bySubType.decision ?? 0} color={SUB_TYPE_COLORS.decision!} />
 					<StatDot count={stats.bySubType.pattern ?? 0} color={SUB_TYPE_COLORS.pattern!} />
