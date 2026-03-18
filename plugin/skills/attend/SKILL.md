@@ -1,14 +1,9 @@
 ---
 name: attend
 description: >
-  Fully autonomous development orchestrator. Given a task description, runs the
-  complete workflow: spec creation with parallel multi-agent review, user approval
-  via dashboard, phase-by-phase implementation with code-reviewer agent per phase,
-  test gate, and auto-commit. Updates session.md after each task completion for
-  real-time dashboard progress. Use when wanting end-to-end task completion from
-  spec to commit, "implement this", "build this feature", or fully autonomous
-  development. NOT for planning only (use /alfred:brief). NOT for code review
-  only (use /alfred:inspect).
+  Use when wanting end-to-end task completion from spec to commit, "implement
+  this", "build this feature", or fully autonomous development. NOT for planning
+  only (use /alfred:brief). NOT for code review only (use /alfred:inspect).
 user-invocable: true
 argument-hint: "task-slug description"
 allowed-tools: Read, Write, Edit, Glob, Grep, Agent, Bash(git diff *, git log *, git show *, git status *, git add *, git commit *, git merge-base *, git stash *, go test *, go vet *), AskUserQuestion, mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier, mcp__plugin_alfred_alfred__ledger
@@ -21,6 +16,15 @@ approval gates and BLOCKED recovery).
 
 - For review prompt templates, see [review-prompts.md](review-prompts.md)
 - For BLOCKED recovery and error handling, see [recovery.md](recovery.md)
+
+## Red Flags
+
+These thought patterns signal you are about to violate this skill's rules:
+
+- "I'll skip the spec review since it's simple" → Every spec gets 3-agent review. Complexity is misjudged most when it seems low.
+- "Let me just commit without the code reviewer" → Per-task review is mandatory. Skipping it means shipping unreviewed code.
+- "I can approve this myself instead of using the dashboard" → Text-based approval is explicitly rejected. Dashboard review exists for a reason.
+- "Session.md doesn't need updating after this small step" → Dashboard progress depends on session.md. Update after EVERY task, not in batch.
 
 ## Phase 0: Initialize
 

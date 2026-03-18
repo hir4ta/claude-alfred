@@ -1,11 +1,6 @@
 ---
 name: brief
 description: >
-  Structured spec generation with parallel multi-agent review per file.
-  Creates 7 spec files (requirements, design, tasks, test-specs, decisions, research, session)
-  in .alfred/specs/ using EARS notation, traceability IDs, and Gherkin test specs.
-  Each file is reviewed by 3 parallel agents before moving to the next.
-  After all files, user approves via `alfred dashboard`.
   Use when starting a new task, organizing a design, planning before implementation,
   or wanting a structured development plan. NOT for divergent brainstorming
   (use /alfred:salon). NOT for autonomous implementation (use /alfred:attend).
@@ -19,6 +14,15 @@ context: current
 
 Generate a structured spec through iterative file-by-file creation with
 parallel multi-agent review after each file.
+
+## Red Flags
+
+These thought patterns signal you are about to violate this skill's rules:
+
+- "This spec file doesn't need 3 reviewers" → All spec files get 3 parallel agents. Skipping reviewers leaves blind spots.
+- "I'll skip research.md since the answer is obvious" → Obvious answers are often wrong. Research validates assumptions.
+- "Low confidence is fine, I'll verify later" → Ungrounded specs propagate errors downstream. Flag and resolve now.
+- "I can write all files at once then review" → File-by-file review catches cross-file inconsistencies early.
 
 ## Spec v2 File System (7 files)
 

@@ -1,17 +1,12 @@
 ---
 name: inspect
 description: >
-  Multi-perspective quality review orchestrator with 6 specialized profiles
-  (code, config, security, docs, architecture, testing). Each profile uses a
-  curated checklist refreshed from the knowledge base. Evaluates inline (no
-  sub-agents), deduplicates findings, and produces a scored report with
-  actionable fixes. Auto-detects relevant profiles from git diff when no
-  profile is specified. Use when reviewing changes, before committing, after
-  a milestone, wanting a second opinion, checking security posture, auditing
-  configuration, or running a pre-release audit. Pass a profile name to focus
-  (e.g., "review security"), or --all for comprehensive audit across all 6
-  profiles. NOT for creating or modifying code (just ask directly). NOT for
-  skill-specific review against Anthropic guidelines (use /alfred:valet).
+  Use when reviewing changes, before committing, after a milestone, wanting a
+  second opinion, checking security posture, auditing configuration, or running
+  a pre-release audit. Pass a profile name to focus (e.g., "review security"),
+  or --all for all 6 profiles. NOT for creating or modifying code (just ask
+  directly). NOT for skill-specific review against Anthropic guidelines
+  (use /alfred:valet).
 user-invocable: true
 argument-hint: "[code|config|security|docs|architecture|testing|--all]"
 allowed-tools: Read, Glob, Grep, Bash(git diff *, git log *, git show *, git status *, go vet *, go test -cover *), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier, mcp__plugin_alfred_alfred__config-review

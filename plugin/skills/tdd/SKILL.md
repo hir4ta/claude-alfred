@@ -1,13 +1,9 @@
 ---
 name: tdd
 description: >
-  Autonomous TDD orchestrator — runs full red/green/refactor cycles with automatic
-  test pattern memory and coverage tracking. Given a feature description, creates
-  failing tests first, implements minimal code to pass, refactors, and iterates.
-  Searches past test patterns via ledger for reuse, saves new patterns for future
-  sessions. Use when wanting test-driven implementation, "build with tests first",
-  or /alfred:tdd. NOT for bug fixes (use /alfred:mend). NOT for code without tests
-  (just ask directly or use /alfred:attend).
+  Use when wanting test-driven implementation, "build with tests first", or
+  /alfred:tdd. NOT for bug fixes (use /alfred:mend). NOT for code without
+  tests (just ask directly or use /alfred:attend).
 user-invocable: true
 argument-hint: "task-slug feature-description"
 allowed-tools: Read, Write, Edit, Glob, Grep, Agent, Bash(git diff *, git log *, git show *, git status *, git add *, git commit *, git merge-base *, git rev-parse *, go test *, go vet *, go run *, npm test *, pytest *, cargo test *), mcp__plugin_alfred_alfred__dossier, mcp__plugin_alfred_alfred__ledger, mcp__plugin_alfred_alfred__roster
@@ -19,6 +15,15 @@ You are an autonomous TDD orchestrator. Execute the FULL workflow below
 without asking the user for input (except BLOCKED recovery on re-invocation).
 
 - For TDD cycle details and gate criteria, see [cycle.md](cycle.md)
+
+## Red Flags
+
+These thought patterns signal you are about to violate this skill's rules:
+
+- "This is too simple to test" → Simple code breaks. The test takes 30 seconds. Write it.
+- "I'll write the test after the implementation" → Tests written after pass immediately and prove nothing. RED comes first.
+- "I can skip the refactor phase, the code is clean enough" → Refactor is not optional. Technical debt compounds silently.
+- "One big test covers everything" → Small, focused tests pinpoint failures. Split it.
 
 ## Phase 0: Initialize
 

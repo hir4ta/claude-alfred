@@ -65,11 +65,15 @@ node dist/cli.mjs version     # Show version
 - Hook output: structured directive levels via `emitDirectives()` — [DIRECTIVE] (must comply), [WARNING] (should check), [CONTEXT] (reference). Max 3 DIRECTIVEs per invocation (NFR-5). Single `emitAdditionalContext()` call per hook (NFR-4)
 - Directive utility: `src/hooks/directives.ts` — `buildDirectiveOutput()`, `emitDirectives()`
 - Spec enforcement: UserPromptSubmit detects implement/bugfix/tdd intent + no active spec + .alfred/ exists → DIRECTIVE requiring spec creation
+- Spec approval gate (entry): UserPromptSubmit Stage 2 detects M/L/XL spec with review_status !== 'approved' → DIRECTIVE every prompt until approved (FR-7)
+- Directive persuasion: DirectiveItem supports opt-in `rationalizations` (counter-arguments) and `spiritVsLetter` (anti-shortcut sentence). Truncation drops rationalizations first to preserve Spirit vs Letter (NFR-1)
 - Semantic intent classification: Voyage embedding similarity (threshold >= 0.5) with keyword fallback. Prompt embedding reused for knowledge search (DEC-2)
 - Skill nudge learning: impressions tracked in /tmp; suppressed after 3 showings per intent. resetNudgeCount() exported for skill-use detection
+- 1% rule: SessionStart injects "invoke skills if even small chance applies" CONTEXT when .alfred/ exists (regardless of active spec)
 - Test failure detection: PostToolUse recognizes FAIL/FAILED/FAILURE patterns and suggests rollback before continuing
 - PostToolUse: git commit detection → proactive knowledge conflict warning (detectKnowledgeConflicts, threshold 0.70)
-- SessionStart: decision replay — injects up to 5 recent decision-type knowledge entries (last 7 days, project-scoped)
+- PostToolUse: Edit/Write → autoCheckNextSteps with file path context (FR-8: session.md progress auto-update)
+- SessionStart: decision replay — injects up to 5 recent decision-type knowledge entries (last 7 days, project-scoped). buildSpecContextItems returns items (no direct emit, NFR-4 compliant)
 - Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (7 spec files + 3 specialists per file + approval gate), attend (spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → knowledge)
 - brief/attend spec generation order: research → requirements → design → tasks → test-specs → decisions → session
 - @.claude/rules/hook-behavior.md (event pipelines, skill nudge, drift detection, dossier hints)

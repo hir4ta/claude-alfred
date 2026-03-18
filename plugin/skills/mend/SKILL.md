@@ -1,11 +1,6 @@
 ---
 name: mend
 description: >
-  Autonomous bug fix orchestrator with memory-enhanced diagnosis. Given a bug
-  description, reproduces the issue, performs root cause analysis from 2
-  perspectives (Tracer + Pattern Matcher with past bug recall), implements the
-  fix, verifies no regressions, reviews inline, and auto-commits. Searches past
-  bug memories via ledger to find similar patterns, saves resolution for reuse.
   Use when fixing a specific bug, resolving a test failure, or debugging an issue.
   NOT for new features (use /alfred:attend). NOT for code review only
   (use /alfred:inspect).
@@ -18,6 +13,15 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git diff *, git log *, git sh
 
 Execute the FULL workflow below without asking the user for input (except
 BLOCKED recovery on re-invocation). No sub-agents are spawned.
+
+## Red Flags
+
+These thought patterns signal you are about to violate this skill's rules:
+
+- "I already know the root cause" → This is confirmation bias. Follow the 2-perspective analysis.
+- "Let me just try this quick fix" → Symptom fixes mask root causes. Diagnose first.
+- "The regression tests aren't needed, the fix is isolated" → Isolated fixes have unexpected side effects. Verify.
+- "3 fix attempts failed but I'll try one more" → Stop. Reassess the architecture. The problem is deeper.
 
 ## Phase 0: Initialize
 

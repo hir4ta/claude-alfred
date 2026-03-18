@@ -53,6 +53,15 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
     await handleBashResult(ev, items, signal);
   }
 
+  // Auto-check Next Steps for Edit/Write using file path + tool name as context.
+  if ((ev.tool_name === 'Edit' || ev.tool_name === 'Write') && ev.tool_input) {
+    const input = ev.tool_input as Record<string, unknown>;
+    const filePath = typeof input.file_path === 'string' ? input.file_path : '';
+    if (filePath) {
+      autoCheckNextSteps(ev.cwd!, filePath);
+    }
+  }
+
   // Check spec completion on any tool that might update spec files (Edit, Write, Bash).
   if (['Edit', 'Write', 'Bash'].includes(ev.tool_name)) {
     checkSpecCompletion(ev.cwd!, items);
