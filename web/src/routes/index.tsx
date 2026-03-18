@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
 	decisionsQueryOptions,
 	epicsQueryOptions,
@@ -18,6 +19,28 @@ import { AlertTriangle, Brain, CheckCircle2, Circle, CircleCheck, CircleDot, Clo
 export const Route = createFileRoute("/")({
 	component: OverviewPage,
 });
+
+// Shimmer colors from brand palette — each task gets a unique color.
+const SHIMMER_COLORS = [
+	{ r: 45, g: 139, b: 122 }, // brand-pattern (teal)
+	{ r: 98, g: 129, b: 65 }, // brand-decision (olive)
+	{ r: 123, g: 107, b: 141 }, // brand-purple
+	{ r: 230, g: 126, b: 34 }, // brand-rule (orange)
+	{ r: 64, g: 81, b: 59 }, // brand-session (dark green)
+];
+
+function shimmerGradient(index: number) {
+	const c = SHIMMER_COLORS[index % SHIMMER_COLORS.length]!;
+	return `linear-gradient(90deg, rgba(${c.r},${c.g},${c.b},0.04) 0%, rgba(${c.r},${c.g},${c.b},0.12) 50%, rgba(${c.r},${c.g},${c.b},0.04) 100%)`;
+}
+
+const SIZE_LABELS: Record<string, string> = {
+	S: "Small — 3 spec files",
+	M: "Medium — 4-5 spec files",
+	L: "Large — 7 spec files",
+	XL: "Extra Large — 7 spec files",
+	D: "Delta — 2 spec files",
+};
 
 function OverviewPage() {
 	const { data: tasksData, isLoading: tasksLoading } = useQuery(tasksQueryOptions());
@@ -35,7 +58,7 @@ function OverviewPage() {
 				<StatCard
 					label="Total Tasks"
 					value={tasks.length}
-					icon={<ListIcon />}
+					icon={<Zap className="size-4" style={{ color: "#e67e22" }} />}
 					loading={tasksLoading}
 				/>
 				<StatCard
@@ -67,8 +90,8 @@ function OverviewPage() {
 						Tasks
 					</h2>
 					<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-						{tasks.map((task) => (
-							<TaskCard key={task.slug} task={task} isActive={task.slug === activeSlug} />
+						{tasks.map((task, i) => (
+							<TaskCard key={task.slug} task={task} isActive={task.slug === activeSlug} colorIndex={i} />
 						))}
 					</div>
 				</section>
@@ -82,10 +105,6 @@ function OverviewPage() {
 			</div>
 		</div>
 	);
-}
-
-function ListIcon() {
-	return <Zap className="size-4" style={{ color: "#e67e22" }} />;
 }
 
 function StatCard({
@@ -115,64 +134,69 @@ function StatCard({
 	);
 }
 
-function TaskCard({ task, isActive }: { task: TaskDetail; isActive: boolean }) {
+function TaskCard({ task, isActive, colorIndex }: { task: TaskDetail; isActive: boolean; colorIndex: number }) {
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
 	const isCompleted = task.status === "completed";
 	const firstUnchecked = task.next_steps?.find((s) => !s.done);
+	const c = SHIMMER_COLORS[colorIndex % SHIMMER_COLORS.length]!;
+	const accentColor = `rgb(${c.r},${c.g},${c.b})`;
 
 	return (
 		<Link to="/tasks/$slug" params={{ slug: task.slug }}>
 			<Card
 				className={cn(
-					"h-[160px] flex flex-col border-stone-200 transition-all hover:shadow-md hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600",
-					isActive && "ring-1 ring-brand-session/30",
+					"h-[148px] flex flex-col border-stone-200 transition-all hover:shadow-md hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600",
+					isActive && "ring-1",
 					isCompleted && "opacity-60",
 				)}
+				style={isActive ? { borderColor: `rgba(${c.r},${c.g},${c.b},0.3)` } : undefined}
 			>
-				<CardHeader className="pb-2">
+				<CardContent className="flex-1 flex flex-col p-4 gap-1.5">
+					{/* Header */}
 					<div className="flex items-center justify-between gap-2">
 						<div className="flex items-center gap-2 min-w-0">
 							{isCompleted ? (
-								<CircleCheck className="size-4 shrink-0 text-brand-pattern" />
+								<CircleCheck className="size-4 shrink-0" style={{ color: "#2d8b7a" }} />
 							) : isActive ? (
-								<CircleDot className="size-4 shrink-0 text-brand-session" />
+								<CircleDot className="size-4 shrink-0" style={{ color: accentColor }} />
 							) : (
-								<Circle className="size-4 shrink-0 text-muted-foreground/40" />
+								<Circle className="size-4 shrink-0 text-muted-foreground/30" />
 							)}
-							<CardTitle className="text-sm font-semibold truncate">{task.slug}</CardTitle>
+							<span className="text-sm font-semibold truncate">{task.slug}</span>
 						</div>
 						<div className="flex shrink-0 gap-1.5">
 							{task.size && (
-								<Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full">
-									{task.size}
-								</Badge>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full cursor-help">
+											{task.size}
+										</Badge>
+									</TooltipTrigger>
+									<TooltipContent>{SIZE_LABELS[task.size] ?? `Size: ${task.size}`}</TooltipContent>
+								</Tooltip>
 							)}
 						</div>
 					</div>
-				</CardHeader>
-				<CardContent className="flex-1 flex flex-col justify-between gap-2">
-					<div className="space-y-1.5">
+
+					{/* Focus + shimmer */}
+					<div className="flex-1 flex flex-col justify-center gap-1">
 						{task.focus && (
-							<p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">
-								{task.focus}
-							</p>
+							<p className="text-[11px] text-muted-foreground line-clamp-1">{task.focus}</p>
 						)}
 						{firstUnchecked && !isCompleted && (
-							<div className="relative overflow-hidden rounded px-2 py-1">
+							<div className="relative overflow-hidden rounded-md px-2 py-1">
 								<div
 									className="absolute inset-0 animate-shimmer"
-									style={{
-										background:
-											"linear-gradient(90deg, rgba(45,139,122,0.04) 0%, rgba(45,139,122,0.10) 50%, rgba(45,139,122,0.04) 100%)",
-										backgroundSize: "200% 100%",
-									}}
+									style={{ background: shimmerGradient(colorIndex), backgroundSize: "200% 100%" }}
 								/>
-								<p className="relative text-[11px] text-muted-foreground line-clamp-1">
+								<p className="relative text-[11px] line-clamp-1" style={{ color: accentColor }}>
 									→ {firstUnchecked.text}
 								</p>
 							</div>
 						)}
 					</div>
+
+					{/* Progress */}
 					<div className="flex items-center gap-2.5">
 						<Progress value={progress} className="h-1.5 flex-1" />
 						<span className="text-[11px] tabular-nums text-muted-foreground">
@@ -182,22 +206,6 @@ function TaskCard({ task, isActive }: { task: TaskDetail; isActive: boolean }) {
 				</CardContent>
 			</Card>
 		</Link>
-	);
-}
-
-function StatusBadge({ status }: { status: string }) {
-	const config: Record<string, { bg: string; text: string }> = {
-		active: { bg: "#40513b20", text: "#40513b" },
-		completed: { bg: "#2d8b7a20", text: "#2d8b7a" },
-	};
-	const c = config[status] ?? { bg: "#6b728020", text: "#6b7280" };
-	return (
-		<span
-			className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-			style={{ backgroundColor: c.bg, color: c.text }}
-		>
-			{status}
-		</span>
 	);
 }
 

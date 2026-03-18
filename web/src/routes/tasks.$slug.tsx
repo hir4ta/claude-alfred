@@ -2,9 +2,11 @@ import { ReviewPanel } from "@/components/review/ReviewPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
 	specContentQueryOptions,
 	specsQueryOptions,
@@ -15,8 +17,7 @@ import type { SpecEntry, TaskDetail, ValidationReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText, MessageSquareText, CircleCheck, CircleDot } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { CircleCheck, CircleDot, FileText, MessageSquareText } from "lucide-react";
 import { useState } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -25,6 +26,14 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 export const Route = createFileRoute("/tasks/$slug")({
 	component: TaskDetailPage,
 });
+
+const SIZE_LABELS: Record<string, string> = {
+	S: "Small — 3 spec files",
+	M: "Medium — 4-5 spec files",
+	L: "Large — 7 spec files",
+	XL: "Extra Large — 7 spec files",
+	D: "Delta — 2 spec files",
+};
 
 function TaskDetailPage() {
 	const { slug } = Route.useParams();
@@ -43,25 +52,136 @@ function TaskDetailPage() {
 		return <p className="text-sm text-muted-foreground">Task not found.</p>;
 	}
 
+	const firstUncheckedIdx = task.next_steps?.findIndex((s) => !s.done) ?? -1;
+
 	return (
 		<div className="space-y-4">
-			<TaskHeader task={task} validation={validationData} />
+			{/* Header */}
+			<div className="flex items-center gap-3">
+				{task.status === "completed" ? (
+					<CircleCheck className="size-5 shrink-0 text-brand-pattern" />
+				) : (
+					<CircleDot className="size-5 shrink-0 text-brand-session" />
+				)}
+				<h2 className="text-lg font-semibold" style={{ fontFamily: "var(--font-display)" }}>
+					{task.slug}
+				</h2>
+				{task.size && (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Badge variant="outline" className="cursor-help">{task.size}</Badge>
+						</TooltipTrigger>
+						<TooltipContent>{SIZE_LABELS[task.size] ?? `Size: ${task.size}`}</TooltipContent>
+					</Tooltip>
+				)}
+				{task.spec_type && (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Badge variant="outline" className="cursor-help">{task.spec_type}</Badge>
+						</TooltipTrigger>
+						<TooltipContent>Spec type: {task.spec_type}</TooltipContent>
+					</Tooltip>
+				)}
+				{task.review_status && (
+					<Badge
+						variant="outline"
+						className="text-xs"
+						style={{
+							borderColor:
+								task.review_status === "approved"
+									? "rgba(45,139,122,0.4)"
+									: task.review_status === "changes_requested"
+										? "rgba(230,126,34,0.4)"
+										: "rgba(107,114,128,0.3)",
+							color:
+								task.review_status === "approved"
+									? "#2d8b7a"
+									: task.review_status === "changes_requested"
+										? "#e67e22"
+										: "#6b7280",
+						}}
+					>
+						{task.review_status}
+					</Badge>
+				)}
+				{validationData && <ValidationBadge report={validationData} />}
+			</div>
+
+			{task.focus && (
+				<p className="text-sm text-muted-foreground pl-8">{task.focus}</p>
+			)}
+
 			<Separator />
-			<div className="flex gap-4">
-				<div className="w-48 shrink-0 space-y-3">
-					<SpecFileList specs={specs} selected={selectedFile} onSelect={setSelectedFile} />
-					{selectedFile && task.review_status === "pending" && (
-						<Button
-							size="sm"
-							variant="outline"
-							className="w-full gap-1.5 text-xs"
-							onClick={() => setMode(mode === "review" ? "view" : "review")}
-						>
-							<MessageSquareText className="h-3.5 w-3.5" />
-							{mode === "review" ? "Exit Review" : "Review"}
-						</Button>
+
+			{/* Main content: Next Steps (left) + Spec viewer (right) */}
+			<div className="flex gap-5">
+				{/* Left column: Next Steps + File list */}
+				<div className="w-56 shrink-0 space-y-4">
+					{/* Next Steps */}
+					{task.next_steps && task.next_steps.length > 0 && (
+						<div className="space-y-1">
+							<p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+								Next Steps
+							</p>
+							{task.next_steps.map((step, i) => {
+								const isCurrent = i === firstUncheckedIdx;
+								return (
+									<div
+										key={`step-${i}`}
+										className={cn(
+											"relative flex items-start gap-2 rounded-md px-2 py-1 transition-colors",
+											isCurrent && "overflow-hidden",
+										)}
+									>
+										{isCurrent && (
+											<div
+												className="absolute inset-0 animate-shimmer"
+												style={{
+													background:
+														"linear-gradient(90deg, rgba(45,139,122,0.03) 0%, rgba(45,139,122,0.10) 50%, rgba(45,139,122,0.03) 100%)",
+													backgroundSize: "200% 100%",
+												}}
+											/>
+										)}
+										<Checkbox checked={step.done} className="relative mt-0.5" />
+										<span
+											className={cn(
+												"relative text-[11px] leading-relaxed",
+												step.done && "line-through text-muted-foreground",
+												isCurrent && "font-medium",
+											)}
+										>
+											{step.text}
+										</span>
+									</div>
+								);
+							})}
+						</div>
 					)}
+
+					<Separator />
+
+					{/* File list */}
+					<div className="space-y-1">
+						<p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+							Spec Files
+						</p>
+						<SpecFileList specs={specs} selected={selectedFile} onSelect={setSelectedFile} />
+						{selectedFile && task.review_status === "pending" && (
+							<Button
+								size="sm"
+								variant="outline"
+								className="w-full gap-1.5 text-xs mt-2"
+								onClick={() => setMode(mode === "review" ? "view" : "review")}
+							>
+								<MessageSquareText className="h-3.5 w-3.5" />
+								{mode === "review" ? "Exit Review" : "Review"}
+							</Button>
+						)}
+					</div>
 				</div>
+
+				{/* Right column: Spec content */}
 				<div className="min-w-0 flex-1">
 					{selectedFile && (
 						<Tabs value={mode} onValueChange={(v) => setMode(v as "view" | "review")}>
@@ -91,95 +211,12 @@ function TaskDetailPage() {
 						</Tabs>
 					)}
 					{!selectedFile && (
-						<p className="text-sm text-muted-foreground">Select a spec file to view.</p>
+						<div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-stone-200">
+							<p className="text-sm text-muted-foreground">Select a spec file to view.</p>
+						</div>
 					)}
 				</div>
 			</div>
-		</div>
-	);
-}
-
-function TaskHeader({ task, validation }: { task: TaskDetail; validation?: ValidationReport }) {
-	const firstUncheckedIdx = task.next_steps?.findIndex((s) => !s.done) ?? -1;
-
-	return (
-		<div className="space-y-3">
-			<div className="flex items-center gap-3">
-				{task.status === "completed" ? (
-					<CircleCheck className="size-5 shrink-0 text-brand-pattern" />
-				) : (
-					<CircleDot className="size-5 shrink-0 text-brand-session" />
-				)}
-				<h2 className="text-lg font-semibold" style={{ fontFamily: "var(--font-display)" }}>
-					{task.slug}
-				</h2>
-				{task.size && <Badge variant="outline">{task.size}</Badge>}
-				{task.spec_type && <Badge variant="outline">{task.spec_type}</Badge>}
-				{task.review_status && (
-					<Badge
-						variant="outline"
-						className="text-xs"
-						style={{
-							borderColor:
-								task.review_status === "approved"
-									? "rgba(45,139,122,0.4)"
-									: task.review_status === "changes_requested"
-										? "rgba(230,126,34,0.4)"
-										: "rgba(107,114,128,0.3)",
-							color:
-								task.review_status === "approved"
-									? "#2d8b7a"
-									: task.review_status === "changes_requested"
-										? "#e67e22"
-										: "#6b7280",
-						}}
-					>
-						{task.review_status}
-					</Badge>
-				)}
-				{validation && <ValidationBadge report={validation} />}
-			</div>
-			{task.focus && (
-				<p className="text-sm text-muted-foreground pl-8">{task.focus}</p>
-			)}
-			{task.next_steps && task.next_steps.length > 0 && (
-				<div className="space-y-1 pl-8">
-					<p className="text-xs font-medium text-muted-foreground mb-2">Next Steps</p>
-					{task.next_steps.map((step, i) => {
-						const isCurrent = i === firstUncheckedIdx;
-						return (
-							<div
-								key={`step-${i}`}
-								className={cn(
-									"relative flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors",
-									isCurrent && "overflow-hidden",
-								)}
-							>
-								{isCurrent && (
-									<div
-										className="absolute inset-0 animate-shimmer"
-										style={{
-											background:
-												"linear-gradient(90deg, rgba(45,139,122,0.03) 0%, rgba(45,139,122,0.10) 50%, rgba(45,139,122,0.03) 100%)",
-											backgroundSize: "200% 100%",
-										}}
-									/>
-								)}
-								<Checkbox checked={step.done} className="relative" />
-								<span
-									className={cn(
-										"relative text-xs leading-relaxed",
-										step.done && "line-through text-muted-foreground",
-										isCurrent && "font-medium",
-									)}
-								>
-									{step.text}
-								</span>
-							</div>
-						);
-					})}
-				</div>
-			)}
 		</div>
 	);
 }
@@ -189,9 +226,17 @@ function ValidationBadge({ report }: { report: ValidationReport }) {
 	const failed = report.checks.filter((c) => c.status === "fail").length;
 	const color = failed > 0 ? "#c0392b" : "#2d8b7a";
 	return (
-		<Badge variant="outline" className="text-xs" style={{ borderColor: color, color }}>
-			{passed}P / {failed}F
-		</Badge>
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Badge variant="outline" className="text-xs cursor-help" style={{ borderColor: color, color }}>
+					{passed}P / {failed}F
+				</Badge>
+			</TooltipTrigger>
+			<TooltipContent>
+				<p>Validation: {passed} passed, {failed} failed</p>
+				<p className="opacity-75">Checks spec file existence and structure</p>
+			</TooltipContent>
+		</Tooltip>
 	);
 }
 
@@ -205,14 +250,14 @@ function SpecFileList({
 	onSelect: (file: string) => void;
 }) {
 	return (
-		<div className="space-y-1">
+		<div className="space-y-0.5">
 			{specs.map((spec) => (
 				<button
 					type="button"
 					key={spec.file}
 					onClick={() => onSelect(spec.file)}
 					className={cn(
-						"w-full rounded px-2 py-1.5 text-left text-sm transition-colors",
+						"w-full rounded-md px-2 py-1.5 text-left text-[12px] transition-colors",
 						"hover:bg-accent",
 						selected === spec.file && "bg-accent font-medium",
 					)}

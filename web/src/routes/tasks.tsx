@@ -12,6 +12,14 @@ export const Route = createFileRoute("/tasks")({
 	component: TasksLayout,
 });
 
+const SHIMMER_COLORS = [
+	{ r: 45, g: 139, b: 122 },
+	{ r: 98, g: 129, b: 65 },
+	{ r: 123, g: 107, b: 141 },
+	{ r: 230, g: 126, b: 34 },
+	{ r: 64, g: 81, b: 59 },
+];
+
 function TasksLayout() {
 	const { data } = useQuery(tasksQueryOptions());
 	const tasks = data?.tasks ?? [];
@@ -19,9 +27,9 @@ function TasksLayout() {
 
 	return (
 		<div className="flex gap-6">
-			<div className="w-80 shrink-0 space-y-3">
-				{tasks.map((task) => (
-					<TaskListCard key={task.slug} task={task} isActive={task.slug === activeSlug} />
+			<div className="w-72 shrink-0 space-y-3">
+				{tasks.map((task, i) => (
+					<TaskListCard key={task.slug} task={task} isActive={task.slug === activeSlug} colorIndex={i} />
 				))}
 				{tasks.length === 0 && <p className="text-sm text-muted-foreground">No tasks found.</p>}
 			</div>
@@ -32,29 +40,32 @@ function TasksLayout() {
 	);
 }
 
-function TaskListCard({ task, isActive }: { task: TaskDetail; isActive: boolean }) {
+function TaskListCard({ task, isActive, colorIndex }: { task: TaskDetail; isActive: boolean; colorIndex: number }) {
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
 	const isCompleted = task.status === "completed";
 	const firstUnchecked = task.next_steps?.find((s) => !s.done);
+	const c = SHIMMER_COLORS[colorIndex % SHIMMER_COLORS.length]!;
+	const accentColor = `rgb(${c.r},${c.g},${c.b})`;
 
 	return (
 		<Link to="/tasks/$slug" params={{ slug: task.slug }}>
 			<Card
 				className={cn(
-					"transition-colors hover:border-brand-pattern/30 cursor-pointer",
-					isActive && "border-brand-session/40 bg-brand-session/[0.04]",
+					"transition-all hover:shadow-sm cursor-pointer",
+					isActive && "ring-1",
 					isCompleted && "opacity-60",
 				)}
+				style={isActive ? { borderColor: `rgba(${c.r},${c.g},${c.b},0.35)` } : undefined}
 			>
 				<CardHeader className="p-3 pb-1.5">
 					<div className="flex items-center justify-between">
 						<div className="flex items-center gap-2 min-w-0">
 							{isCompleted ? (
-								<CircleCheck className="size-3.5 shrink-0 text-brand-pattern" />
+								<CircleCheck className="size-3.5 shrink-0" style={{ color: "#2d8b7a" }} />
 							) : isActive ? (
-								<CircleDot className="size-3.5 shrink-0 text-brand-session" />
+								<CircleDot className="size-3.5 shrink-0" style={{ color: accentColor }} />
 							) : (
-								<Circle className="size-3.5 shrink-0 text-muted-foreground/40" />
+								<Circle className="size-3.5 shrink-0 text-muted-foreground/30" />
 							)}
 							<CardTitle className="text-sm font-medium truncate">{task.slug}</CardTitle>
 						</div>
@@ -77,25 +88,29 @@ function TaskListCard({ task, isActive }: { task: TaskDetail; isActive: boolean 
 							{task.completed}/{task.total}
 						</span>
 					</div>
-					{firstUnchecked && !isCompleted && <NextStepHighlight step={firstUnchecked} />}
+					{firstUnchecked && !isCompleted && (
+						<NextStepHighlight step={firstUnchecked} colorIndex={colorIndex} />
+					)}
 				</CardContent>
 			</Card>
 		</Link>
 	);
 }
 
-function NextStepHighlight({ step }: { step: StepItem }) {
+function NextStepHighlight({ step, colorIndex }: { step: StepItem; colorIndex: number }) {
+	const c = SHIMMER_COLORS[colorIndex % SHIMMER_COLORS.length]!;
 	return (
 		<div className="relative overflow-hidden rounded-md px-2 py-1">
 			<div
 				className="absolute inset-0 animate-shimmer"
 				style={{
-					background:
-						"linear-gradient(90deg, rgba(45,139,122,0.03) 0%, rgba(45,139,122,0.10) 50%, rgba(45,139,122,0.03) 100%)",
+					background: `linear-gradient(90deg, rgba(${c.r},${c.g},${c.b},0.03) 0%, rgba(${c.r},${c.g},${c.b},0.12) 50%, rgba(${c.r},${c.g},${c.b},0.03) 100%)`,
 					backgroundSize: "200% 100%",
 				}}
 			/>
-			<p className="relative text-[10px] text-muted-foreground line-clamp-1">→ {step.text}</p>
+			<p className="relative text-[10px] line-clamp-1" style={{ color: `rgb(${c.r},${c.g},${c.b})` }}>
+				→ {step.text}
+			</p>
 		</div>
 	);
 }
