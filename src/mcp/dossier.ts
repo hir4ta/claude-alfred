@@ -23,12 +23,7 @@ import type { Store } from "../store/index.js";
 import { getKnowledgeByIDs, upsertKnowledge } from "../store/knowledge.js";
 import { detectProject } from "../store/project.js";
 import { vectorSearchKnowledge } from "../store/vectors.js";
-// types used by knowledge-extractor.ts (no longer directly in dossier.ts)
 import { truncate } from "./helpers.js";
-import {
-	extractPatterns,
-	saveKnowledgeEntries,
-} from "./knowledge-extractor.js";
 
 interface DossierParams {
 	action: string;
@@ -247,20 +242,8 @@ function dossierUpdate(projectPath: string, store: Store, params: DossierParams)
 	const result: Record<string, unknown> = { task_slug: taskSlug, file: params.file, mode };
 	const lang = process.env.ALFRED_LANG || "en";
 
-	// Immediate pattern extraction on design.md update.
-	// (decisions.md removed — decisions saved via ledger directly)
-	if (file === "design.md") {
-		try {
-			const fullContent = sd.readFile("design.md");
-			const patterns = extractPatterns(fullContent, taskSlug, lang);
-			if (patterns.length > 0) {
-				const saved = saveKnowledgeEntries(store, projectPath, patterns, "pattern");
-				if (saved > 0) result.patterns_extracted = saved;
-			}
-		} catch {
-			/* fail-open */
-		}
-	}
+	// design.md pattern auto-extraction removed (FR-6).
+	// Knowledge accumulation happens intentionally at Wave boundaries via ledger.
 
 	return jsonResult(result);
 }
@@ -376,15 +359,8 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
 		appendAudit(projectPath, { action: "spec.complete", target: taskSlug, user: "mcp" });
 		syncTaskStatus(projectPath, taskSlug, "completed");
 
-		// Auto-extract patterns from design.md on complete.
-		// (decisions extracted via ledger directly, not from decisions.md)
-		try {
-			const sd2 = new SpecDir(projectPath, taskSlug);
-			const lang = process.env.ALFRED_LANG || "en";
-			const designContent = sd2.readFile("design.md");
-			const pats = extractPatterns(designContent, taskSlug, lang);
-			saveKnowledgeEntries(store, projectPath, pats, "pattern");
-		} catch { /* design.md may not exist — fail-open */ }
+		// design.md pattern auto-extraction removed (FR-6).
+		// Knowledge accumulation happens intentionally at Wave boundaries via ledger.
 
 		const result: Record<string, unknown> = {
 			task_slug: taskSlug,

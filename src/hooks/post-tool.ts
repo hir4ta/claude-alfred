@@ -11,7 +11,8 @@ import { emitDirectives } from "./directives.js";
 import type { HookEvent } from "./dispatcher.js";
 import { extractSection, notifyUser } from "./dispatcher.js";
 
-import { addWorkedSlug, readStateText, writeStateText } from "./state.js";
+import { addWorkedSlug, parseWaveProgress, readStateText, readWaveProgress, writeStateText, writeWaveProgress } from "./state.js";
+import { writeReviewGate } from "./review-gate.js";
 
 function readExploreCount(cwd: string): number {
 	return parseInt(readStateText(cwd, "explore-count", "0"), 10) || 0;
@@ -196,10 +197,62 @@ function autoCheckTasks(projectPath: string, stdout: string): void {
 
 		if (changed) {
 			sd.writeFile("tasks.md", lines.join("\n"));
+			// Detect wave completion after updating tasks.md — emit directives directly.
+			const waveItems = detectWaveCompletion(projectPath, taskSlug, lines.join("\n"));
+			if (waveItems.length > 0) {
+				emitDirectives("PostToolUse", waveItems);
+			}
 		}
 	} catch {
 		/* fail-open */
 	}
+}
+
+/**
+ * Detect wave completion after tasks.md update.
+ * When all tasks in a wave are checked: emit DIRECTIVE + set review gate.
+ */
+export function detectWaveCompletion(
+	projectPath: string,
+	taskSlug: string,
+	tasksContent: string,
+): DirectiveItem[] {
+	const items: DirectiveItem[] = [];
+	try {
+		const progress = parseWaveProgress(tasksContent, taskSlug);
+		const prev = readWaveProgress(projectPath);
+
+		for (const [key, state] of Object.entries(progress.waves)) {
+			if (key === "closing") continue; // Closing Wave handled by Stop hook
+			if (state.total === 0 || state.checked < state.total) continue; // not complete
+
+			// Check if this wave was already reviewed (from prev state or current).
+			const prevWave = prev?.waves[key];
+			if (prevWave?.reviewed) {
+				state.reviewed = true;
+				continue;
+			}
+
+			// Wave just completed — emit DIRECTIVE and set gate.
+			items.push({
+				level: "DIRECTIVE",
+				message: `Wave ${key} complete (${state.checked}/${state.total} tasks). You MUST now: 1) Commit your changes, 2) Run self-review (delegate to alfred:code-reviewer or /alfred:inspect), 3) Save any learnings via \`ledger save\`. Then clear the gate with \`dossier action=gate sub_action=clear reason="..."\`.`,
+			});
+
+			writeReviewGate(projectPath, {
+				gate: "wave-review",
+				slug: taskSlug,
+				wave: parseInt(key, 10) || 0,
+				reason: `Wave ${key} self-review required`,
+			});
+		}
+
+		// Persist progress (tracking).
+		writeWaveProgress(projectPath, progress);
+	} catch {
+		/* fail-open */
+	}
+	return items;
 }
 
 /**

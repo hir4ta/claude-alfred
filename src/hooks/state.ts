@@ -113,3 +113,75 @@ export function addWorkedSlug(cwd: string, slug: string): void {
 export function resetWorkedSlugs(cwd: string): void {
 	writeStateJSON(cwd, WORKED_SLUGS_FILE, []);
 }
+
+// --- Wave progress tracking ---
+
+const WAVE_PROGRESS_FILE = "wave-progress.json";
+
+export interface WaveState {
+	total: number;
+	checked: number;
+	reviewed: boolean;
+}
+
+export interface WaveProgress {
+	slug: string;
+	current_wave: number;
+	waves: Record<string, WaveState>;
+}
+
+/** Read wave progress for the active spec. Returns null if not tracked yet. */
+export function readWaveProgress(cwd: string): WaveProgress | null {
+	return readStateJSON<WaveProgress | null>(cwd, WAVE_PROGRESS_FILE, null);
+}
+
+/** Write wave progress state. */
+export function writeWaveProgress(cwd: string, progress: WaveProgress): void {
+	writeStateJSON(cwd, WAVE_PROGRESS_FILE, progress);
+}
+
+/**
+ * Parse tasks.md content into per-wave task counts.
+ * Recognizes: "## Wave N: ..." and "## Wave: Closing" headers.
+ * Checkboxes: "- [x] ..." (checked) and "- [ ] ..." (unchecked).
+ */
+export function parseWaveProgress(tasksContent: string, slug: string): WaveProgress {
+	const lines = tasksContent.split("\n");
+	const waves: Record<string, WaveState> = {};
+	let currentWaveKey: string | null = null;
+	let firstIncompleteWave = 1;
+
+	for (const line of lines) {
+		// Match "## Wave N: ..." or "## Wave: Closing"
+		const waveHeader = line.match(/^## Wave\s+(\d+)/i);
+		const closingHeader = line.match(/^## Wave:\s*Closing/i);
+
+		if (waveHeader) {
+			currentWaveKey = waveHeader[1]!;
+			waves[currentWaveKey] = { total: 0, checked: 0, reviewed: false };
+		} else if (closingHeader) {
+			currentWaveKey = "closing";
+			waves[currentWaveKey] = { total: 0, checked: 0, reviewed: false };
+		} else if (currentWaveKey && line.match(/^- \[[ x]\] /)) {
+			waves[currentWaveKey]!.total++;
+			if (line.startsWith("- [x] ")) {
+				waves[currentWaveKey]!.checked++;
+			}
+		}
+	}
+
+	// Determine first incomplete wave number
+	for (const [key, state] of Object.entries(waves)) {
+		if (key === "closing") continue;
+		const num = parseInt(key, 10);
+		if (!isNaN(num) && state.checked < state.total) {
+			firstIncompleteWave = num;
+			break;
+		}
+		if (!isNaN(num) && state.checked === state.total) {
+			firstIncompleteWave = num + 1;
+		}
+	}
+
+	return { slug, current_wave: firstIncompleteWave, waves };
+}
