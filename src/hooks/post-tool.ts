@@ -50,6 +50,11 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
     await handleBashResult(ev, items, signal);
   }
 
+  // Check spec completion on any tool that might update spec files (Edit, Write, Bash).
+  if (['Edit', 'Write', 'Bash'].includes(ev.tool_name)) {
+    checkSpecCompletion(ev.cwd!, items);
+  }
+
   emitDirectives('PostToolUse', items);
 }
 
@@ -82,9 +87,6 @@ async function handleBashResult(ev: HookEvent, items: DirectiveItem[], signal: A
     if (isGitCommit(stdout) && !signal.aborted) {
       // FR-7: Proactive conflict warning after git commit.
       await checkKnowledgeConflicts(items);
-
-      // Spec completion reminder: if session shows done but spec still active.
-      checkSpecCompletion(ev.cwd!, items);
     }
   }
 }
