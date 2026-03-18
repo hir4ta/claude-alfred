@@ -48,6 +48,14 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
 		);
 	}
 
+	// Suggest /alfred:quarters if Claude Code settings are minimal.
+	const claudeDir = join(ev.cwd, ".claude");
+	if (!existsSync(join(claudeDir, "settings.json")) && existsSync(claudeDir)) {
+		notifyUser(
+			"tip: run `/alfred:quarters` for a guided Claude Code project setup (settings, hooks, rules)",
+		);
+	}
+
 	// Suggest ledger reflect when knowledge base has grown.
 	suggestLedgerReflect(store);
 

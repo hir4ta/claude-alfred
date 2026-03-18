@@ -44,6 +44,19 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 				writeExploreCount(ev.cwd, 0);
 			}
 		}
+
+		// Archive nudge: suggest /alfred:archive for large reference files.
+		if (ev.tool_name === "Read" && ev.tool_input) {
+			const input = ev.tool_input as Record<string, unknown>;
+			const filePath = typeof input.file_path === "string" ? input.file_path : "";
+			if (isArchivableFile(filePath)) {
+				items.push({
+					level: "CONTEXT",
+					message: `Large reference file detected (${filePath.split("/").pop()}). Consider \`/alfred:archive\` to ingest it as structured knowledge.`,
+				});
+			}
+		}
+
 		emitDirectives("PostToolUse", items);
 		return;
 	}
@@ -51,6 +64,16 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 
 	if (ev.tool_name === "Bash" && !signal.aborted) {
 		await handleBashResult(ev, items, signal);
+
+		// Harvest nudge: suggest /alfred:harvest after PR merge.
+		const bashResponse = ev.tool_response as { stdout?: string } | undefined;
+		const bashStdout = bashResponse?.stdout ?? "";
+		if (isPRMerge(bashStdout)) {
+			items.push({
+				level: "CONTEXT",
+				message: "PR merged. Consider `/alfred:harvest` to extract review insights as permanent knowledge.",
+			});
+		}
 	}
 
 	// Auto-check Next Steps + Tasks for Edit/Write using file path + tool name as context.
@@ -385,6 +408,19 @@ export function isGitCommit(stdout: string): boolean {
 		(stdout.includes("files changed") &&
 			(stdout.includes("insertion") || stdout.includes("deletion")))
 	);
+}
+
+/** Detect PR merge from gh CLI output. */
+function isPRMerge(stdout: string): boolean {
+	if (!stdout) return false;
+	return /✓ Merged|Pull request #\d+ merged|already merged/.test(stdout);
+}
+
+/** Detect large reference files suitable for /alfred:archive. */
+function isArchivableFile(filePath: string): boolean {
+	if (!filePath) return false;
+	const ext = filePath.toLowerCase().split(".").pop() ?? "";
+	return ["pdf", "csv", "tsv", "xlsx", "docx", "txt"].includes(ext);
 }
 
 /**
