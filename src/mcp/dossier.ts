@@ -13,6 +13,9 @@ import { initSpec } from '../spec/init.js';
 import { appendAudit } from '../spec/audit.js';
 import { syncTaskStatus, unlinkTaskFromAllEpics } from '../epic/index.js';
 import { searchPipeline, truncate } from './helpers.js';
+import { upsertKnowledge } from '../store/knowledge.js';
+import { detectProject } from '../store/project.js';
+import type { KnowledgeRow } from '../types.js';
 import { vectorSearchKnowledge } from '../store/vectors.js';
 import { getKnowledgeByIDs } from '../store/knowledge.js';
 import { searchKnowledgeFTS } from '../store/fts.js';
@@ -274,6 +277,10 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
     const newPrimary = completeTask(projectPath, taskSlug);
     appendAudit(projectPath, { action: 'spec.complete', target: taskSlug, user: 'mcp' });
     syncTaskStatus(projectPath, taskSlug, 'completed');
+
+    // Auto-save decisions.md entries as permanent knowledge.
+    saveDecisionsAsKnowledge(store, projectPath, taskSlug);
+
     const result: Record<string, unknown> = { task_slug: taskSlug, completed: true, new_primary: newPrimary };
     if (closingWarning) result['closing_wave_warning'] = closingWarning;
     return jsonResult(result);
@@ -478,4 +485,38 @@ function checkClosingWave(tasksContent: string): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Save accepted decisions from decisions.md as permanent knowledge entries.
+ * Called on spec completion to persist architectural decisions.
+ */
+function saveDecisionsAsKnowledge(store: Store, projectPath: string, taskSlug: string): void {
+  try {
+    const sd = new SpecDir(projectPath, taskSlug);
+    const decisions = sd.readFile('decisions.md');
+    const proj = detectProject(projectPath);
+
+    const sections = decisions.split(/\n## DEC-\d+/);
+    for (let i = 1; i < sections.length; i++) {
+      const section = sections[i]!;
+      const titleMatch = section.match(/^:\s*(.+)/);
+      const title = titleMatch ? titleMatch[1]!.trim() : `Decision ${i}`;
+      // Support both `**Status:** accepted` and `- Status: accepted` formats.
+      const statusMatch = section.match(/(?:- |\*\*)?Status:?\*?\*?\s*(\w+)/i);
+      if (statusMatch && statusMatch[1]!.toLowerCase() === 'accepted') {
+        const row: KnowledgeRow = {
+          id: 0,
+          filePath: `decisions/spec/${taskSlug}/dec-${i}`,
+          contentHash: '', title,
+          content: section.slice(0, 1000),
+          subType: 'decision',
+          projectRemote: proj.remote, projectPath: proj.path,
+          projectName: proj.name, branch: proj.branch,
+          createdAt: '', updatedAt: '', hitCount: 0, lastAccessed: '', enabled: true,
+        };
+        upsertKnowledge(store, row);
+      }
+    }
+  } catch { /* decisions.md may not exist for all spec sizes */ }
 }

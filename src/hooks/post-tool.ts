@@ -311,7 +311,7 @@ function saveKnowledgeOnCommit(projectPath: string): void {
       const section = decSections[i]!;
       const titleMatch = section.match(/^:\s*(.+)/);
       const title = titleMatch ? titleMatch[1]!.trim() : `Decision ${i}`;
-      const statusMatch = section.match(/- Status:\s*(\w+)/i);
+      const statusMatch = section.match(/(?:- |\*\*)?Status:?\*?\*?\s*(\w+)/i);
       if (statusMatch && statusMatch[1]!.toLowerCase() === 'accepted') {
         const row: KnowledgeRow = {
           id: 0,

@@ -366,7 +366,7 @@ function parseDecisionFields(content: string): { key: string; value: string }[] 
 }
 
 function cleanContent(content: string): string {
-	return content
+	const cleaned = content
 		.split("\n")
 		.filter(
 			(l) =>
@@ -384,4 +384,11 @@ function cleanContent(content: string): string {
 		})
 		.join("\n")
 		.trim();
+
+	// Break long single-line content at sentence boundaries for readability.
+	// Only applies when the entire content is a single paragraph (no existing newlines).
+	if (!cleaned.includes("\n") && cleaned.length > 120) {
+		return cleaned.replace(/。/g, "。\n\n").replace(/\.\s+/g, ".\n\n");
+	}
+	return cleaned;
 }
