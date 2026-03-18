@@ -71,14 +71,18 @@ async function ledgerSearch(store: Store, emb: Embedder | null, params: LedgerPa
   const result = await searchPipeline(store, emb, query, limit, overRetrieve);
   warnings.push(...result.warnings);
 
-  let docs = result.docs;
+  let scored = result.scoredDocs;
   if (params.sub_type) {
-    docs = docs.filter(d => d.subType === params.sub_type);
+    scored = scored.filter(sd => sd.doc.subType === params.sub_type);
   }
 
-  trackHitCounts(store, docs);
+  trackHitCounts(store, scored);
 
-  const results = docs.map(d => formatDoc(d, detail));
+  const results = scored.map(sd => ({
+    ...formatDoc(sd.doc, detail),
+    relevance_score: sd.score,
+    match_reason: sd.matchReason,
+  }));
 
   return jsonResult({
     query,

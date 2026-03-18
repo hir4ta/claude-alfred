@@ -61,10 +61,17 @@ node dist/cli.mjs version     # Show version
 
 ### Hooks & Events
 
-- Hook handler: short-lived process. UserPromptSubmit uses Voyage API (semantic search) or FTS5 fallback
+- Hook handler: short-lived process. All 4 hooks registered in hooks.json: SessionStart, PreCompact, UserPromptSubmit, PostToolUse
+- Hook output: structured directive levels via `emitDirectives()` — [DIRECTIVE] (must comply), [WARNING] (should check), [CONTEXT] (reference). Max 3 DIRECTIVEs per invocation (NFR-5). Single `emitAdditionalContext()` call per hook (NFR-4)
+- Directive utility: `src/hooks/directives.ts` — `buildDirectiveOutput()`, `emitDirectives()`
+- Spec enforcement: UserPromptSubmit detects implement/bugfix/tdd intent + no active spec + .alfred/ exists → DIRECTIVE requiring spec creation
+- Semantic intent classification: Voyage embedding similarity (threshold >= 0.5) with keyword fallback. Prompt embedding reused for knowledge search (DEC-2)
+- PostToolUse: git commit detection → proactive knowledge conflict warning (detectKnowledgeConflicts, threshold 0.70)
+- SessionStart: decision replay — injects up to 5 recent decision-type knowledge entries (last 7 days, project-scoped)
 - Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (7 spec files + 3 specialists per file + approval gate), attend (spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → knowledge)
 - brief/attend spec generation order: research → requirements → design → tasks → test-specs → decisions → session
 - @.claude/rules/hook-behavior.md (event pipelines, skill nudge, drift detection, dossier hints)
+- @.claude/rules/implementation-discipline.md (spec-first rule, wave self-review, commit discipline)
 
 ### Database & Schema
 
@@ -99,6 +106,9 @@ node dist/cli.mjs version     # Show version
 
 - Web review mode: Tasks tab → View/Review tabs (only when review_status=pending)
 - dossier action=review: read-only, returns latest review + unresolved comments
+- Approval gate (M/L/XL): dossier complete checks BOTH _active.md review_status AND verifyReviewFile() (review JSON existence + status=approved + zero unresolved comments)
+- PreCompact auto-complete: same approval gate applied — M+ specs skip auto-complete if review not approved
+- Legacy backward compat: specs without reviews/ directory pass approval gate (YAML-only, NFR-3)
 - brief Step 9: approval gate after spec creation
 - attend Phase 2.5: approval gate after agent review, awaiting_approval flag in Orchestrator State
 - Audit log: .alfred/audit.jsonl (spec.init, spec.delete, spec.complete, review.submit)
@@ -121,9 +131,11 @@ node dist/cli.mjs version     # Show version
 - Dev mode: `ALFRED_DEV=1 alfred dashboard` + `task dev` (Vite HMR proxy)
 - 4 tabs: Overview (/) / Tasks (/tasks) / Knowledge (/knowledge) / Activity (/activity)
 - Review mode: line-numbered spec viewer, inline comments, Approve/Request Changes with confirmation dialog
+- Review API: POST/GET /api/tasks/:slug/review (submit review + get status + history). Creates review JSON in .alfred/specs/{slug}/reviews/
+- Markdown rendering: react-markdown + react-syntax-highlighter for rich spec display
 - SSE: EventSource → TanStack Query invalidation for real-time updates
 - Brand palette (DEC-15): session #40513b, decision #628141, pattern #2d8b7a, rule #e67e22, error #c0392b, purple #7b6b8d, dark #44403c
-- Dashboard API: Hono REST endpoints (src/api/server.ts)
+- Dashboard API: Hono REST endpoints (src/api/server.ts). KnowledgeRow → KnowledgeEntry mapping via toKnowledgeEntry()
 - Confidence: spec.ParseConfidence() (extracted from mcpserver to spec package)
 
 ### Knowledge & Search
@@ -134,7 +146,7 @@ node dist/cli.mjs version     # Show version
 - Knowledge maturity: hit_count tracks search appearances, last_accessed for staleness
 - Knowledge promotion: general→pattern (5+ hits), pattern→rule (15+ hits); manual confirmation via ledger promote
 - Ledger tool actions: search, save, promote, candidates, reflect, audit-conventions
-- Search pipeline: Voyage vector search → rerank → recency signal → hit_count tracking → FTS5 fallback → keyword fallback
+- Search pipeline: Voyage vector search → rerank → recency signal → hit_count tracking → FTS5 fallback → keyword fallback. Returns ScoredDoc[] with per-doc score + matchReason
 - FTS5: knowledge_fts virtual table with bm25 ranking, auto-synced via triggers (title weighted 3x)
 - Tag alias expansion: auth→authentication/login/認証, 16 categories bilingual (EN/JP)
 - Knowledge governance: `enabled` column in knowledge_index; disabled entries excluded from search

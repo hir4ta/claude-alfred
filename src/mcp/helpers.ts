@@ -27,27 +27,33 @@ export function recencyFactor(createdAt: string, subType: string, now: Date): nu
   return factor < RECENCY_FLOOR ? RECENCY_FLOOR : factor;
 }
 
-export function applyRecencySignal(docs: KnowledgeRow[], now: Date): KnowledgeRow[] {
-  if (docs.length === 0) return docs;
+export interface ScoredDoc {
+  doc: KnowledgeRow;
+  score: number;
+  matchReason: string;
+}
+
+export interface SearchResult {
+  scoredDocs: ScoredDoc[];
+  searchMethod: string;
+  warnings: string[];
+}
+
+function applyRecencySignal(docs: KnowledgeRow[], method: string, now: Date): ScoredDoc[] {
+  if (docs.length === 0) return [];
 
   const scored = docs.map((doc, i) => {
     const posScore = 1.0 / (i + 1);
     const rf = recencyFactor(doc.createdAt, doc.subType, now);
     const stb = subTypeBoost(doc.subType);
-    return { doc, score: posScore * rf * stb };
+    return { doc, score: Math.round(posScore * rf * stb * 100) / 100, matchReason: method };
   });
 
   if (scored.length > 1) {
     scored.sort((a, b) => b.score - a.score);
   }
 
-  return scored.map(s => s.doc);
-}
-
-export interface SearchResult {
-  docs: KnowledgeRow[];
-  searchMethod: string;
-  warnings: string[];
+  return scored;
 }
 
 export async function searchPipeline(
@@ -58,7 +64,8 @@ export async function searchPipeline(
   overRetrieve: number,
   precomputedVec?: number[],
 ): Promise<SearchResult> {
-  const res: SearchResult = { docs: [], searchMethod: '', warnings: [] };
+  const res: SearchResult = { scoredDocs: [], searchMethod: '', warnings: [] };
+  let rawDocs: KnowledgeRow[] = [];
 
   if (emb) {
     try {
@@ -74,22 +81,22 @@ export async function searchPipeline(
           const d = docMap.get(id);
           if (d) ordered.push(d);
         }
-        res.docs = ordered;
+        rawDocs = ordered;
         res.searchMethod = 'vector';
 
         // Rerank if we have more results than needed.
-        if (res.docs.length > limit) {
+        if (rawDocs.length > limit) {
           try {
-            const contents = res.docs.map(d => d.title + '\n' + d.content);
+            const contents = rawDocs.map(d => d.title + '\n' + d.content);
             const reranked = await emb.rerank(query, contents, limit);
             if (reranked.length > 0) {
               const reorderedDocs: KnowledgeRow[] = [];
               for (const r of reranked) {
-                if (r.index >= 0 && r.index < res.docs.length) {
-                  reorderedDocs.push(res.docs[r.index]!);
+                if (r.index >= 0 && r.index < rawDocs.length) {
+                  reorderedDocs.push(rawDocs[r.index]!);
                 }
               }
-              res.docs = reorderedDocs;
+              rawDocs = reorderedDocs;
               res.searchMethod = 'vector+rerank';
             }
           } catch (err) {
@@ -103,33 +110,33 @@ export async function searchPipeline(
   }
 
   // Fallback to FTS5 search if no vector results.
-  if (res.docs.length === 0) {
+  if (rawDocs.length === 0) {
     res.searchMethod = 'fts5';
     try {
-      res.docs = searchKnowledgeFTS(store, query, limit);
+      rawDocs = searchKnowledgeFTS(store, query, limit);
     } catch (err) {
       res.warnings.push(`fts5 search failed: ${err}`);
       res.searchMethod = 'keyword';
       try {
-        res.docs = searchKnowledgeKeyword(store, query, limit);
+        rawDocs = searchKnowledgeKeyword(store, query, limit);
       } catch (err2) {
         res.warnings.push(`keyword search failed: ${err2}`);
       }
     }
   }
 
-  // Apply recency signal.
-  res.docs = applyRecencySignal(res.docs, new Date());
+  // Apply recency signal and produce ScoredDoc[].
+  res.scoredDocs = applyRecencySignal(rawDocs, res.searchMethod, new Date());
 
-  if (res.docs.length > limit) {
-    res.docs = res.docs.slice(0, limit);
+  if (res.scoredDocs.length > limit) {
+    res.scoredDocs = res.scoredDocs.slice(0, limit);
   }
 
   return res;
 }
 
-export function trackHitCounts(store: Store, docs: KnowledgeRow[]): void {
-  if (docs.length === 0) return;
-  const ids = docs.filter(d => d.id > 0).map(d => d.id);
+export function trackHitCounts(store: Store, scoredDocs: ScoredDoc[]): void {
+  if (scoredDocs.length === 0) return;
+  const ids = scoredDocs.filter(sd => sd.doc.id > 0).map(sd => sd.doc.id);
   incrementHitCount(store, ids);
 }

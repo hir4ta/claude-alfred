@@ -87,11 +87,13 @@ export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Prom
   const limit = 5;
   const result = await searchPipeline(store, emb, prompt, limit, limit * 3, promptVec ?? undefined);
 
-  if (result.docs.length > 0) {
-    trackHitCounts(store, result.docs);
-    const contextLines = result.docs.map(d => {
-      const label = d.subType !== 'general' ? `[${d.subType}]` : '';
-      return `- ${label} ${d.title}: ${truncate(d.content, 150)}`;
+  if (result.scoredDocs.length > 0) {
+    trackHitCounts(store, result.scoredDocs);
+    const contextLines = result.scoredDocs.map(sd => {
+      const sub = sd.doc.subType !== 'general' ? sd.doc.subType : '';
+      const scoreStr = sd.score.toFixed(2);
+      const prefix = sub ? `[${sub}|${scoreStr}|${sd.matchReason}]` : `[${scoreStr}|${sd.matchReason}]`;
+      return `- ${prefix} ${sd.doc.title}: ${truncate(sd.doc.content, 150)}`;
     });
     items.push({
       level: 'CONTEXT',
