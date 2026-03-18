@@ -82,7 +82,11 @@ async function handleBashResult(ev: HookEvent, items: DirectiveItem[], signal: A
   // On Bash success: auto-check NextSteps + check for git commit.
   if (response.exitCode === 0) {
     const stdout = response.stdout ?? '';
-    autoCheckNextSteps(ev.cwd!, stdout);
+    // Combine stdout + command input for broader matching.
+    const commandStr = typeof ev.tool_input === 'object' && ev.tool_input !== null
+      ? (ev.tool_input as { command?: string }).command ?? ''
+      : '';
+    autoCheckNextSteps(ev.cwd!, stdout + '\n' + commandStr);
 
     if (isGitCommit(stdout) && !signal.aborted) {
       // FR-7: Proactive conflict warning after git commit.
@@ -128,10 +132,12 @@ function autoCheckNextSteps(projectPath: string, stdout: string): void {
       if (!match) continue;
 
       const description = match[1]!.toLowerCase();
-      // Require 2+ word matches to avoid false positives from common words like "test", "build".
+      // Adaptive threshold: 2+ matches for descriptions with 3+ qualifying words, 1 match for shorter.
       const words = description.split(/\s+/).filter(w => w.length > 3);
-      const matchCount = words.filter(w => stdout.toLowerCase().includes(w)).length;
-      if (stdout && matchCount >= 2) {
+      const threshold = words.length >= 3 ? 2 : 1;
+      const lowerOut = stdout.toLowerCase();
+      const matchCount = words.filter(w => lowerOut.includes(w)).length;
+      if (stdout && words.length > 0 && matchCount >= threshold) {
         lines[i] = line.replace('- [ ]', '- [x]');
         changed = true;
       }
@@ -153,7 +159,7 @@ function autoCheckNextSteps(projectPath: string, stdout: string): void {
   } catch { /* fail-open */ }
 }
 
-/** Replace the first line after "## Currently Working On" with the new focus text. */
+/** Replace only the first non-empty content line after "## Currently Working On", preserving other content. */
 function updateCurrentlyWorkingOn(session: string, newFocus: string): string {
   const marker = '## Currently Working On';
   const idx = session.indexOf(marker);
@@ -162,11 +168,19 @@ function updateCurrentlyWorkingOn(session: string, newFocus: string): string {
   const afterMarker = session.indexOf('\n', idx);
   if (afterMarker === -1) return session;
 
-  // Find the content line(s) between this heading and the next heading.
-  const nextHeading = session.indexOf('\n##', afterMarker + 1);
-  const endIdx = nextHeading === -1 ? session.length : nextHeading;
+  // Find the first non-empty line after the heading.
+  const lines = session.slice(afterMarker + 1).split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.startsWith('## ')) break; // hit next heading
+    if (lines[i]!.trim()) {
+      // Replace this line only, keep everything else.
+      lines[i] = newFocus;
+      return session.slice(0, afterMarker + 1) + lines.join('\n');
+    }
+  }
 
-  return session.slice(0, afterMarker) + '\n\n' + newFocus + '\n' + session.slice(endIdx);
+  // No content line found — insert after heading.
+  return session.slice(0, afterMarker + 1) + '\n' + newFocus + '\n' + session.slice(afterMarker + 1);
 }
 
 /**
@@ -242,7 +256,9 @@ function checkSpecCompletion(projectPath: string, items: DirectiveItem[]): void 
     const lower = session.toLowerCase();
     const hasCompletedStatus = lower.includes('status: completed') || lower.includes('status: done');
 
-    const allSteps = session.match(/^- \[[ x]\] .+$/gm);
+    // Only check checkboxes in the Next Steps section, not the whole file.
+    const nextSteps = extractSection(session, '## Next Steps');
+    const allSteps = nextSteps ? nextSteps.match(/^- \[[ x]\] .+$/gm) : null;
     const allChecked = allSteps && allSteps.length > 0 && allSteps.every(s => s.startsWith('- [x]'));
 
     if (hasCompletedStatus || allChecked) {

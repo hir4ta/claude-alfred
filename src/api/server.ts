@@ -434,20 +434,17 @@ function resolveWebDist(): string {
   return join(process.cwd(), 'web', 'dist');
 }
 
-function dirMaxMtime(dir: string): number {
+function dirMaxMtime(dir: string, depth = 3): number {
   let maxT = 0;
   try {
     for (const entry of readdirSync(dir)) {
       try {
-        const info = statSync(join(dir, entry));
+        const full = join(dir, entry);
+        const info = statSync(full);
         if (info.mtimeMs > maxT) maxT = info.mtimeMs;
-        if (info.isDirectory()) {
-          for (const sub of readdirSync(join(dir, entry))) {
-            try {
-              const si = statSync(join(dir, entry, sub));
-              if (si.mtimeMs > maxT) maxT = si.mtimeMs;
-            } catch { continue; }
-          }
+        if (info.isDirectory() && depth > 1) {
+          const sub = dirMaxMtime(full, depth - 1);
+          if (sub > maxT) maxT = sub;
         }
       } catch { continue; }
     }
