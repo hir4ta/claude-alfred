@@ -24,7 +24,7 @@ alfred fixes all three.
 
 **Specs that adapt.** Small bug? 3 files. Medium feature? 5. Large system? All 7. alfred auto-detects the right scope — or you can pick a bugfix template with surgical precision (reproduction steps, root cause, fix strategy).
 
-**Memory that compounds.** Every decision, every bug fix, every "we tried X and it didn't work" gets stored as Markdown files in `.alfred/knowledge/` — git-friendly, human-readable, team-shareable. A SQLite search index provides semantic search across all knowledge. Contradictions are detected automatically. Next time you hit a similar problem, alfred surfaces the relevant experience — before you even ask.
+**Memory that compounds.** Every decision, every bug fix, every "we tried X and it didn't work" gets stored as structured JSON files in `.alfred/knowledge/` — three types only: **decisions** (one-time choices with reasoning and rejected alternatives), **patterns** (repeatable practices with conditions and expected outcomes), and **rules** (enforceable standards with priority and rationale). Git-friendly, human-readable, team-shareable. A SQLite search index provides semantic search across all knowledge. Contradictions are detected automatically. Next time you hit a similar problem, alfred surfaces the relevant experience — before you even ask.
 
 **Reliability signals.** Every spec item gets a grounding level — `verified`, `reviewed`, `inferred`, or `speculative`. You can instantly see which requirements are battle-tested and which are guesswork. Typos in grounding values get caught, not silently ignored.
 
@@ -36,7 +36,7 @@ alfred fixes all three.
 
 **Proactive skill suggestions.** alfred doesn't wait to be asked. It detects what you're doing — researching, designing, implementing, fixing bugs — and suggests the right skill at the right time. Explored code for a while? "Try `/alfred:survey`." Got research findings? "Save them with `ledger`." Three tasks piling up? "Group them with `roster`."
 
-**Approval gates that can't be bypassed.** Specs go through a review cycle before implementation. Comment on any line in the browser dashboard, approve or request changes — like a GitHub PR review, but for your specs. The gate verifies both the review status *and* the existence of a signed review file, so manually editing the status won't get you past it.
+**Approval gates that can't be bypassed.** Specs go through a review cycle before implementation. Comment on any line in the browser dashboard, approve or request changes — like a GitHub PR review, but for your specs. The gate verifies both the review status *and* the existence of a signed review file, so manually editing the status won't get you past it. **Hard enforcement**: PreToolUse hooks physically block Edit/Write operations on unapproved M/L/XL specs. Stop hooks prevent Claude from finishing until all tasks are checked off, self-reviews are done, and the spec is closed.
 
 **Project context that sticks.** Steering documents (product purpose, code structure, tech stack) are auto-generated from your project and injected into every spec. Your AI always knows your architecture.
 
@@ -123,7 +123,7 @@ Run `alfred doctor` to verify both are in sync.
 |------|---------|
 | `dossier` | Spec lifecycle — init (with size/type), update, status, switch, complete, delete, history, rollback, review, validate |
 | `roster` | Epic management — group tasks with dependencies, track progress |
-| `ledger` | Knowledge — search, save (Markdown+frontmatter), promote, reflect, audit-conventions |
+| `ledger` | Knowledge — search, save (structured JSON: decision/pattern/rule), promote (pattern→rule), reflect, audit-conventions |
 
 ## Hooks
 
@@ -131,10 +131,12 @@ Run automatically. You don't touch these.
 
 | Event | What happens |
 |-------|-------------|
-| SessionStart | Restores spec context, ingests CLAUDE.md, adapts injection depth to project maturity, suggests `ledger reflect` when knowledge base needs attention |
-| PreCompact | Extracts decisions, saves structured chapter memory (Markdown), syncs epic progress, detects research patterns and reminds to save knowledge |
-| UserPromptSubmit | Semantic search + file context boost + **skill nudge** (detects intent → suggests the right skill) |
-| PostToolUse | Detects Bash errors + searches memory for similar past fixes. After commits: spec drift detection. After 5+ Read/Grep: suggests `/alfred:survey` |
+| SessionStart | Restores spec context, ingests CLAUDE.md, adapts injection depth to project maturity, 1% rule skill activation |
+| PreCompact | Extracts decisions, saves chapter snapshots, syncs epic progress, detects research patterns |
+| UserPromptSubmit | Semantic search + file context boost + **skill nudge** + **spec approval gate** (blocks implement intent on unapproved M/L/XL specs) |
+| PostToolUse | Detects Bash errors + searches memory. After commits: spec drift detection + auto-save decisions. Edit/Write: auto-check Next Steps progress |
+| **PreToolUse** | **Hard enforcement**: blocks Edit/Write when active M/L/XL spec is not approved. `.alfred/` edits and Read/Grep always allowed |
+| **Stop** | **Quality gate**: blocks Claude from stopping until all Next Steps are checked, Wave self-reviews are done, and `dossier complete` is called |
 
 ## Browser dashboard
 
@@ -171,21 +173,32 @@ Fuzzy matching catches typos: "authetication" still finds "authentication".
 
 ## Knowledge architecture
 
-Knowledge is stored as Markdown files with YAML frontmatter — the source of truth lives in your project directory, not a binary database.
+Knowledge is stored as structured JSON files — three types, no ambiguity. The source of truth lives in your project directory, not a binary database.
 
 ```
 .alfred/knowledge/
-├── decisions/dec-auth-jwt.md    # design decisions
-├── patterns/pat-error-handling.md  # reusable patterns
-└── rules/rul-no-mock-db.md     # enforced standards
+├── decisions/
+│   └── dec-auth-jwt.json        # one-time choices with reasoning + rejected alternatives
+├── patterns/
+│   └── pat-error-handling.json  # repeatable practices with conditions + expected outcomes
+└── rules/
+    └── rule-no-mock-db.json     # enforceable standards with priority + rationale
 ```
 
+Each type has a strict schema (inspired by [mneme](https://github.com/hir4ta/mneme)):
+- **Decisions**: `title`, `decision`, `reasoning`, `alternatives[]`, `tags[]`, `status`
+- **Patterns**: `type` (good/bad/error-solution), `context`, `pattern`, `applicationConditions`, `expectedOutcomes`
+- **Rules**: `key`, `text` (imperative), `category`, `priority` (p0/p1/p2), `rationale`, `sourceRef`
+
+All entries are saved via templated parameters (no freetext) — zero format drift across sessions.
+
 - **Git-friendly**: commit knowledge to share with your team, review in PRs
-- **Human-readable**: `cat` any file to see exactly what alfred knows
+- **Atomic writes**: temp file + rename prevents corruption on crash
 - **Rebuildable**: the SQLite search index is derived from these files — delete the DB, it rebuilds on next session
-- **Sub-type decay**: Assumptions decay in 30 days. Proven rules last 120 days. Each knowledge type has its own half-life.
+- **Sub-type decay**: Patterns decay in 90 days. Proven rules last 120 days. Each type has its own half-life.
+- **Promotion**: patterns auto-promote to rules at 15+ search hits
 - **Contradiction detection**: When two entries say opposite things ("use JWT" vs "avoid JWT"), alfred flags the conflict.
-- **Project-aware**: knowledge is tagged with git remote URL and branch, enabling cross-project search.
+- **Multilingual**: `ALFRED_LANG` controls the language of saved knowledge content
 
 ## Adaptive specs
 
@@ -239,14 +252,16 @@ You
   |
   v
 Hooks (invisible)
-  |-- SessionStart     -> restore context, adapt to project maturity
-  |-- PreCompact       -> save decisions as JSON, chapter memory, epic progress
-  |-- UserPromptSubmit -> vector search + FTS5 + file boost -> inject memories
-  |-- PostToolUse      -> detect errors -> surface related past fixes
+  |-- SessionStart     -> restore context, 1% rule, adapt to project maturity
+  |-- PreCompact       -> save snapshots, extract decisions, epic progress
+  |-- UserPromptSubmit -> vector search + FTS5 + skill nudge + spec approval check
+  |-- PostToolUse      -> detect errors, auto-check Next Steps, drift detection
+  |-- PreToolUse       -> BLOCK Edit/Write on unapproved M/L/XL specs
+  |-- Stop             -> BLOCK stop until all tasks done + self-review + complete
   |
   v
 Storage
-  |-- .alfred/knowledge/   -> Markdown+frontmatter (source of truth, git-friendly)
+  |-- .alfred/knowledge/   -> JSON (decisions/, patterns/, rules/) — source of truth
   |-- .alfred/specs/       -> spec files + version history + reviews
   |-- .alfred/epics/       -> epic YAML + task dependencies
   |-- .alfred/steering/    -> project context (product, structure, tech)
