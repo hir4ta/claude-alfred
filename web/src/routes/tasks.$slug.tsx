@@ -193,7 +193,7 @@ function SpecContentViewer({ content, file }: { content: string; file: string })
 						prose-table:text-[12px]
 						prose-th:px-3 prose-th:py-1.5 prose-th:text-left prose-th:border prose-th:border-border prose-th:bg-muted/50
 						prose-td:px-3 prose-td:py-1.5 prose-td:border prose-td:border-border
-						[&_table]:table-auto
+						[&_table]:!w-auto
 						prose-code:text-[12px] prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-foreground
 						prose-pre:bg-muted prose-pre:text-foreground prose-pre:rounded-lg prose-pre:my-2
 						[&_pre]:p-0 [&_pre_code]:bg-transparent [&_pre_code]:text-foreground [&_pre_code]:p-3 [&_pre_code]:block [&_pre_code]:text-[12px] [&_pre_code]:leading-relaxed [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words">
