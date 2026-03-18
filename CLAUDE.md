@@ -22,6 +22,47 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 | `src/cli.ts` | CLI entry point (citty dispatch) |
 | `web/` | React SPA: Vite 8, TanStack Router/Query, shadcn/ui, Tailwind CSS v4, Biome |
 
+## Spec-Driven Development Flow (Invariant)
+
+### Concept Hierarchy
+
+**Spec > Wave > Task** — this hierarchy is immutable.
+
+- A **Spec** contains one or more **Waves**
+- A **Wave** contains one or more **Tasks**
+- Progress updates happen per Task completion
+- Knowledge accumulation and self-review happen per Wave completion
+
+### Development Flow
+
+1. **Spec Creation** — Create spec documents via `/alfred:brief` or `dossier action=init`
+2. **Self-Review** (all sizes including S/D)
+   - OK → User approval request (M/L/XL only; S/D exempt)
+   - NG → Fix → Self-review (loop until OK)
+3. **User Spec Review** (M/L/XL only, via `alfred dashboard`)
+   - OK → Implementation phase
+   - NG → Back to step 1
+4. **Implementation** (per Wave)
+   - a. Per Task completion: auto-update tasks.md + session.md progress (PostToolUse hook)
+   - b. Per Wave completion:
+     - Commit changes
+     - Self-review (DENY gate: Edit/Write blocked until reviewed)
+     - Knowledge accumulation via `ledger save` (DIRECTIVE)
+5. **All Waves Complete** → Final self-review (Closing Wave)
+   - OK → `dossier action=complete` (summary creation)
+   - NG → Fix → Self-review (loop until OK)
+
+### Enforcement
+
+| Step | Mechanism | Level |
+|------|-----------|-------|
+| Spec required | UserPromptSubmit + PreToolUse | DENY |
+| Spec approval (M/L/XL) | PreToolUse + dossier complete | DENY |
+| Wave self-review | review-gate.json via PreToolUse | DENY |
+| Wave commit + knowledge | PostToolUse DIRECTIVE | DIRECTIVE |
+| Task progress update | PostToolUse autoCheckTasks | Automatic |
+| Final self-review | Closing Wave checkbox + Stop hook | CONTEXT |
+
 ## Commands
 
 Taskfile (task runner) を使用。`task` コマンドで実行。
@@ -112,7 +153,7 @@ node dist/cli.mjs version     # Show version
 - Dossier init: injects `steering_context` (summary) or `steering_hint` (suggestion) in response JSON
 - Dossier update: accepts `file=steering/{filename}` for steering doc updates
 - ValidateSteering: checks tech.md vs package.json drift, structure.md vs filesystem directory existence
-- Templates: `internal/spec/templates/steering/*.tmpl` (separate embed.FS from spec templates)
+- Templates: steering doc templates are currently not implemented (planned: file-based templates under `src/spec/templates/`)
 
 ### Spec Management
 

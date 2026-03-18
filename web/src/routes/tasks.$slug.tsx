@@ -17,21 +17,24 @@ import {
 	tasksQueryOptions,
 	validationQueryOptions,
 } from "@/lib/api";
+import { useI18n, dateLocale } from "@/lib/i18n";
+import type { TranslationKey } from "@/lib/i18n";
 import type { TaskDetail, ValidationReport } from "@/lib/types";
 
 export const Route = createFileRoute("/tasks/$slug")({
 	component: TaskDetailPage,
 });
 
-const SIZE_LABELS: Record<string, string> = {
-	S: "Small — 3 spec files",
-	M: "Medium — 4-5 spec files",
-	L: "Large — 7 spec files",
-	XL: "Extra Large — 7 spec files",
-	D: "Delta — 2 spec files",
+const SIZE_LABEL_KEYS: Record<string, TranslationKey> = {
+	S: "size.S",
+	M: "size.M",
+	L: "size.L",
+	XL: "size.XL",
+	D: "size.D",
 };
 
 function TaskDetailPage() {
+	const { t } = useI18n();
 	const { slug } = Route.useParams();
 	const queryClient = useQueryClient();
 	const { data: tasksData } = useQuery(tasksQueryOptions());
@@ -74,7 +77,7 @@ function TaskDetailPage() {
 		(task?.review_status === "approved" || !["M", "L", "XL"].includes(task?.size ?? ""));
 
 	if (!task) {
-		return <p className="text-sm text-muted-foreground">Task not found.</p>;
+		return <p className="text-sm text-muted-foreground">{t("task.notFound")}</p>;
 	}
 
 	return (
@@ -87,7 +90,7 @@ function TaskDetailPage() {
 				{task.status !== "completed" && task.next_steps && task.next_steps.length > 0 && (
 					<div className="rounded-lg border bg-card p-4 space-y-2">
 						<h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-							Next Steps
+							{t("tasks.nextSteps")}
 						</h3>
 						<div className="space-y-1">
 							{task.next_steps.map((step, i) => (
@@ -115,11 +118,11 @@ function TaskDetailPage() {
 								onClick={() => setConfirmComplete(true)}
 							>
 								<CheckCircle2 className="size-3.5" />
-								Complete Task
+								{t("task.completeTask")}
 							</Button>
 						) : (
 							<div className="space-y-2">
-								<p className="text-xs text-muted-foreground">Mark this task as completed?</p>
+								<p className="text-xs text-muted-foreground">{t("task.confirmComplete")}</p>
 								<div className="flex gap-2">
 									<Button
 										size="sm"
@@ -127,7 +130,7 @@ function TaskDetailPage() {
 										onClick={() => completeMutation.mutate()}
 										disabled={completeMutation.isPending}
 									>
-										{completeMutation.isPending ? "..." : "Confirm"}
+										{completeMutation.isPending ? "..." : t("task.confirm")}
 									</Button>
 									<Button
 										size="sm"
@@ -135,7 +138,7 @@ function TaskDetailPage() {
 										className="flex-1 text-xs"
 										onClick={() => setConfirmComplete(false)}
 									>
-										Cancel
+										{t("task.cancel")}
 									</Button>
 								</div>
 								{completeMutation.isError && (
@@ -170,7 +173,7 @@ function TaskDetailPage() {
 				})}
 				{specs.length === 0 && (
 					<div className="flex h-40 items-center justify-center rounded-lg border border-dashed">
-						<p className="text-sm text-muted-foreground">No spec files found.</p>
+						<p className="text-sm text-muted-foreground">{t("task.noSpecs")}</p>
 					</div>
 				)}
 			</div>
@@ -185,6 +188,7 @@ function TaskInfoCard({
 	task: TaskDetail;
 	validationData?: ValidationReport;
 }) {
+	const { t, locale } = useI18n();
 	const isCompleted = task.status === "completed";
 
 	return (
@@ -217,7 +221,7 @@ function TaskInfoCard({
 								{task.size}
 							</Badge>
 						</TooltipTrigger>
-						<TooltipContent>{SIZE_LABELS[task.size] ?? `Size: ${task.size}`}</TooltipContent>
+						<TooltipContent>{SIZE_LABEL_KEYS[task.size] ? t(SIZE_LABEL_KEYS[task.size]) : `Size: ${task.size}`}</TooltipContent>
 					</Tooltip>
 				)}
 				{task.spec_type && <Badge variant="outline">{task.spec_type}</Badge>}
@@ -252,13 +256,13 @@ function TaskInfoCard({
 				{task.started_at && (
 					<div className="flex items-center gap-2 text-xs text-muted-foreground">
 						<Calendar className="size-3 shrink-0" />
-						<span>Started: {formatDate(task.started_at)}</span>
+						<span>{t("task.started")}: {formatDate(task.started_at, locale)}</span>
 					</div>
 				)}
 				{task.completed_at && (
 					<div className="flex items-center gap-2 text-xs" style={{ color: "#2d8b7a" }}>
 						<CircleCheck className="size-3 shrink-0" />
-						<span>Completed: {formatDate(task.completed_at)}</span>
+						<span>{t("task.completed")}: {formatDate(task.completed_at, locale)}</span>
 					</div>
 				)}
 			</div>
@@ -269,7 +273,7 @@ function TaskInfoCard({
 					<Separator />
 					<div>
 						<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-							Focus
+							{t("task.focus")}
 						</p>
 						<p className="text-xs leading-relaxed">{task.focus}</p>
 					</div>
@@ -285,6 +289,7 @@ function TaskInfoCard({
 }
 
 function ValidationBadge({ report }: { report: ValidationReport }) {
+	const { t } = useI18n();
 	const passed = report.checks.filter((c) => c.status === "pass").length;
 	const failed = report.checks.filter((c) => c.status === "fail").length;
 	const color = failed > 0 ? "#c0392b" : "#2d8b7a";
@@ -301,17 +306,17 @@ function ValidationBadge({ report }: { report: ValidationReport }) {
 			</TooltipTrigger>
 			<TooltipContent>
 				<p>
-					Validation: {passed} passed, {failed} failed
+					{t("task.validation")}: {passed} {t("task.passed")}, {failed} {t("task.failed")}
 				</p>
 			</TooltipContent>
 		</Tooltip>
 	);
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: "en" | "ja" = "en"): string {
 	try {
 		const d = new Date(iso);
-		return d.toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric" });
+		return d.toLocaleDateString(dateLocale(locale), { year: "numeric", month: "short", day: "numeric" });
 	} catch {
 		return iso;
 	}

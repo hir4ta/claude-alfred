@@ -29,11 +29,11 @@ paths:
 - Wave: Closing required in all tasks.md: self-review, CLAUDE.md update, test verification, knowledge save
 
 ## Templates
-- Spec templates: embed.FS in `internal/spec/templates/*.tmpl templates/bugfix/*.tmpl`, rendered via `text/template` (TemplateData: TaskSlug, Description, Date, SpecType)
-- v4 templates include inline guidance (HTML comments) for: granularity heuristics, confidence calibration, EARS pattern selection + limitations, ADR lifecycle, test strategy, done criteria, FR inter-dependencies + priority + verification method, negative requirements (NR-N), data dictionary, design tenets (Amazon-style), system context (C4 L1), Mermaid sequence diagrams, observability/security design, per-task risk/verify/accept/rollback, test speed categories, regression risk, concurrency tests, property-based tests, performance tests (p50/p95/p99), performance baseline, codebase impact analysis, technical debt assessment, decision scope/validity
-- Bugfix template: templates/bugfix/bugfix.md.tmpl (Bug Summary, Severity & Impact P0-P3, Reproduction Steps, Root Cause Analysis with 5 Whys, Fix Strategy, Regression Prevention)
-- Delta template: templates/delta.md.tmpl (Change Summary, Files Affected with CHG-N IDs, Before/After per CHG-N, Rationale, Impact Scope, Test Plan, Rollback Strategy)
-- Template 2-layer resolution: `.alfred/templates/specs/` and `.alfred/templates/steering/` (user override) > embedded defaults
+- Spec templates: `src/spec/templates.ts` — inline EN/JA templates rendered via `renderForSize()` (TemplateData: TaskSlug, Description, Date, SpecType)
+- Supported file templates: requirements.md, bugfix.md, delta.md, design.md, tasks.md, test-specs.md, research.md, session.md
+- Bugfix template: Bug Summary, Severity & Impact P0-P3, Reproduction Steps, Root Cause Analysis with 5 Whys, Fix Strategy, Regression Prevention
+- Delta template: Change Summary, Files Affected with CHG-N IDs, Before/After per CHG-N, Rationale, Impact Scope, Test Plan, Rollback Strategy
+- Template 2-layer resolution (planned): `.alfred/templates/specs/` (user override) > embedded defaults
 
 ## Traceability
 - EARS notation: requirements use 6 patterns (Ubiquitous, WHEN, WHILE, WHERE, IF-THEN, Complex)

@@ -50,12 +50,13 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 		await handleBashResult(ev, items, signal);
 	}
 
-	// Auto-check Next Steps for Edit/Write using file path + tool name as context.
+	// Auto-check Next Steps + Tasks for Edit/Write using file path + tool name as context.
 	if ((ev.tool_name === "Edit" || ev.tool_name === "Write") && ev.tool_input) {
 		const input = ev.tool_input as Record<string, unknown>;
 		const filePath = typeof input.file_path === "string" ? input.file_path : "";
 		if (filePath) {
 			autoCheckNextSteps(ev.cwd!, filePath);
+			autoCheckTasks(ev.cwd!, filePath);
 		}
 		// Track worked slug for session-scoped Stop hook reminders.
 		try {
@@ -114,6 +115,7 @@ async function handleBashResult(
 				? ((ev.tool_input as { command?: string }).command ?? "")
 				: "";
 		autoCheckNextSteps(ev.cwd!, `${stdout}\n${commandStr}`);
+		autoCheckTasks(ev.cwd!, `${stdout}\n${commandStr}`);
 
 		if (isGitCommit(stdout) && !signal.aborted) {
 			// Living Spec auto-append: track new source files in design.md.
@@ -159,6 +161,72 @@ async function searchErrorContext(
 	} catch {
 		/* search failure is non-fatal */
 	}
+}
+
+/**
+ * Auto-check tasks.md checkboxes when implementation matches task descriptions.
+ * Uses word matching (like autoCheckNextSteps) plus file path matching for backtick-quoted paths.
+ */
+function autoCheckTasks(projectPath: string, stdout: string): void {
+	try {
+		const taskSlug = readActive(projectPath);
+		const sd = new SpecDir(projectPath, taskSlug);
+
+		let tasks: string;
+		try {
+			tasks = sd.readFile("tasks.md");
+		} catch {
+			return; // no tasks.md
+		}
+
+		const lines = tasks.split("\n");
+		let changed = false;
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i]!;
+			const match = line.match(/^- \[ \] (.+)$/);
+			if (!match) continue;
+
+			const description = match[1]!;
+			if (matchTaskDescription(description, stdout)) {
+				lines[i] = line.replace("- [ ]", "- [x]");
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			sd.writeFile("tasks.md", lines.join("\n"));
+		}
+	} catch {
+		/* fail-open */
+	}
+}
+
+/**
+ * Match a task description against stdout/file path context.
+ * Two strategies:
+ * 1. File path match: backtick-quoted paths in description matched against stdout
+ * 2. Word match: adaptive threshold (same as autoCheckNextSteps)
+ */
+export function matchTaskDescription(description: string, stdout: string): boolean {
+	if (!stdout || !description) return false;
+	const lowerOut = stdout.toLowerCase();
+
+	// Strategy 1: File path matching — extract backtick-quoted paths from description.
+	const backtickPaths = description.match(/`([^`]+\.[a-z]+)`/g);
+	if (backtickPaths) {
+		for (const quoted of backtickPaths) {
+			const path = quoted.slice(1, -1); // strip backticks
+			if (lowerOut.includes(path.toLowerCase())) return true;
+		}
+	}
+
+	// Strategy 2: Word matching (same algorithm as autoCheckNextSteps).
+	const lowerDesc = description.toLowerCase();
+	const words = lowerDesc.split(/\s+/).filter((w) => w.length > 3);
+	const threshold = words.length >= 3 ? 2 : 1;
+	const matchCount = words.filter((w) => lowerOut.includes(w)).length;
+	return words.length > 0 && matchCount >= threshold;
 }
 
 function autoCheckNextSteps(projectPath: string, stdout: string): void {

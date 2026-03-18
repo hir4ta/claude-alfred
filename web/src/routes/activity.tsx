@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { activityQueryOptions, epicsQueryOptions } from "@/lib/api";
+import { useI18n, dateLocale } from "@/lib/i18n";
 import type { ActivityEntry, EpicSummary } from "@/lib/types";
 
 export const Route = createFileRoute("/activity")({
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/activity")({
 const FILTERS = ["all", "spec.init", "spec.complete", "review.submit"] as const;
 
 function ActivityPage() {
+	const { t } = useI18n();
 	const [filter, setFilter] = useState<string>("all");
 	const { data: activityData, isLoading } = useQuery(
 		activityQueryOptions(100, filter === "all" ? undefined : filter),
@@ -39,7 +41,7 @@ function ActivityPage() {
 				<TabsList>
 					{FILTERS.map((f) => (
 						<TabsTrigger key={f} value={f} className="text-xs">
-							{f === "all" ? "All" : f}
+							{f === "all" ? t("activity.all") : f}
 						</TabsTrigger>
 					))}
 				</TabsList>
@@ -61,16 +63,17 @@ function ActivityPage() {
 }
 
 function ActivityTable({ entries }: { entries: ActivityEntry[] }) {
+	const { t, locale } = useI18n();
 	const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
 	return (
 		<Table>
 			<TableHeader>
 				<TableRow>
-					<TableHead className="w-44">Timestamp</TableHead>
-					<TableHead className="w-32">Action</TableHead>
-					<TableHead>Target</TableHead>
-					<TableHead>Detail</TableHead>
+					<TableHead className="w-44">{t("activity.timestamp")}</TableHead>
+					<TableHead className="w-32">{t("activity.action")}</TableHead>
+					<TableHead>{t("activity.target")}</TableHead>
+					<TableHead>{t("activity.detail")}</TableHead>
 				</TableRow>
 			</TableHeader>
 			<TableBody>
@@ -84,7 +87,7 @@ function ActivityTable({ entries }: { entries: ActivityEntry[] }) {
 							onClick={() => hasDetail && setExpandedIdx(isExpanded ? null : i)}
 						>
 							<TableCell className="text-xs text-muted-foreground font-mono align-top">
-								{formatTimestamp(entry.timestamp)}
+								{formatTimestamp(entry.timestamp, locale)}
 							</TableCell>
 							<TableCell className="align-top">
 								<ActionBadge action={entry.action} />
@@ -103,7 +106,7 @@ function ActivityTable({ entries }: { entries: ActivityEntry[] }) {
 				{entries.length === 0 && (
 					<TableRow>
 						<TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-							No activity found.
+							{t("activity.noActivity")}
 						</TableCell>
 					</TableRow>
 				)}
@@ -130,9 +133,10 @@ function ActionBadge({ action }: { action: string }) {
 }
 
 function EpicSection({ epics }: { epics: EpicSummary[] }) {
+	const { t } = useI18n();
 	return (
 		<div className="space-y-3">
-			<h3 className="text-sm font-medium text-foreground">Epics</h3>
+			<h3 className="text-sm font-medium text-foreground">{t("activity.epics")}</h3>
 			<div className="grid gap-3 sm:grid-cols-2">
 				{epics.map((epic) => {
 					const progress = epic.total > 0 ? (epic.completed / epic.total) * 100 : 0;
@@ -182,10 +186,10 @@ function EpicSection({ epics }: { epics: EpicSummary[] }) {
 	);
 }
 
-function formatTimestamp(ts: string): string {
+function formatTimestamp(ts: string, locale: "en" | "ja" = "en"): string {
 	try {
 		const d = new Date(ts);
-		return d.toLocaleString("ja-JP", {
+		return d.toLocaleString(dateLocale(locale), {
 			month: "2-digit",
 			day: "2-digit",
 			hour: "2-digit",

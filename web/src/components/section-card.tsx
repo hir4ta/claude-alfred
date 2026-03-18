@@ -4,6 +4,7 @@ import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** Spec file → brand color mapping */
@@ -36,6 +37,7 @@ export function SectionCard({
 	approved,
 	onApprove,
 }: SectionCardProps) {
+	const { t } = useI18n();
 	const [open, setOpen] = useState(defaultOpen);
 	const borderColor = color ?? SPEC_FILE_COLORS[title] ?? "#44403c";
 
@@ -70,7 +72,7 @@ export function SectionCard({
 						)}
 					>
 						<Check className={cn("size-3", approved ? "opacity-100" : "opacity-30")} />
-						{approved ? "Approved" : "Approve"}
+						{approved ? t("section.approved") : t("section.approve")}
 					</button>
 				)}
 			</div>

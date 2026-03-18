@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
 import { Activity, BookOpen, LayoutDashboard, ListChecks } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useI18n } from "@/lib/i18n";
+import type { TranslationKey } from "@/lib/i18n";
 import { versionQueryOptions } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -15,21 +17,37 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 const tabs = [
-	{ to: "/", label: "Overview", icon: LayoutDashboard },
-	{ to: "/tasks", label: "Tasks", icon: ListChecks },
-	{ to: "/knowledge", label: "Knowledge", icon: BookOpen },
-	{ to: "/activity", label: "Activity", icon: Activity },
+	{ to: "/", labelKey: "nav.overview" as TranslationKey, icon: LayoutDashboard },
+	{ to: "/tasks", labelKey: "nav.tasks" as TranslationKey, icon: ListChecks },
+	{ to: "/knowledge", labelKey: "nav.knowledge" as TranslationKey, icon: BookOpen },
+	{ to: "/activity", labelKey: "nav.activity" as TranslationKey, icon: Activity },
 ] as const;
+
+function LanguageToggle() {
+	const { locale, setLocale } = useI18n();
+	return (
+		<button
+			type="button"
+			onClick={() => setLocale(locale === "en" ? "ja" : "en")}
+			className="flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+		>
+			<span className={cn("transition-opacity", locale === "en" ? "opacity-100" : "opacity-40")}>EN</span>
+			<span className="text-border">/</span>
+			<span className={cn("transition-opacity", locale === "ja" ? "opacity-100" : "opacity-40")}>JA</span>
+		</button>
+	);
+}
 
 function VersionBadge() {
 	const { data } = useQuery(versionQueryOptions());
 	if (!data?.version) return null;
 	return (
-		<span className="ml-auto text-[11px] text-muted-foreground/60 font-mono">v{data.version}</span>
+		<span className="text-[11px] text-muted-foreground/60 font-mono">v{data.version}</span>
 	);
 }
 
 function RootLayout() {
+	const { t } = useI18n();
 	return (
 		<TooltipProvider>
 			<div className="flex min-h-screen flex-col bg-background">
@@ -58,12 +76,15 @@ function RootLayout() {
 										}}
 									>
 										<Icon className="size-4" />
-										{tab.label}
+										{t(tab.labelKey)}
 									</Link>
 								);
 							})}
 						</nav>
-						<VersionBadge />
+						<div className="ml-auto flex items-center gap-3">
+							<LanguageToggle />
+							<VersionBadge />
+						</div>
 					</div>
 				</header>
 				<main className="mx-auto w-full max-w-7xl flex-1 px-6 py-6">

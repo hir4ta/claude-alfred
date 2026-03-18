@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { tasksQueryOptions } from "@/lib/api";
 import type { TaskDetail } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tasks")({
@@ -22,6 +23,7 @@ const SHIMMER_COLORS = [
 ];
 
 function TasksLayout() {
+	const { t } = useI18n();
 	const { data } = useQuery(tasksQueryOptions());
 	const allTasks = data?.tasks ?? [];
 	const { slug: selectedSlug } = useParams({ strict: false }) as { slug?: string };
@@ -49,16 +51,25 @@ function TasksLayout() {
 						onClick={() => setShowCompleted(!showCompleted)}
 						className="w-full text-[10px] text-muted-foreground hover:text-foreground transition-colors py-1"
 					>
-						{showCompleted ? "Hide completed" : `Show completed (${completedTasks.length})`}
+						{showCompleted ? t("tasks.hideCompleted") : `${t("tasks.showCompleted")} (${completedTasks.length})`}
 					</button>
 				)}
 
-				{tasks.length === 0 && allTasks.length === 0 && <p className="text-sm text-muted-foreground">No tasks found.</p>}
+				{tasks.length === 0 && allTasks.length === 0 && <p className="text-sm text-muted-foreground">{t("tasks.noTasks")}</p>}
 			</div>
 			<div className="min-w-0 flex-1">
 				<Outlet />
 			</div>
 		</div>
+	);
+}
+
+function NextStepsLabel({ completed, total }: { completed: number; total: number }) {
+	const { t } = useI18n();
+	return (
+		<span>
+			{t("tasks.nextSteps")} ({completed}/{total})
+		</span>
 	);
 }
 
@@ -148,9 +159,7 @@ function TaskAccordionCard({
 						}}
 						className="flex w-full items-center justify-between border-t border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground hover:bg-accent/50 transition-colors"
 					>
-						<span>
-							Next Steps ({task.completed}/{task.total})
-						</span>
+						<NextStepsLabel completed={task.completed} total={task.total} />
 						<ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
 					</button>
 

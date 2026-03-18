@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isGitCommit, isTestFailure } from "../post-tool.js";
+import { isGitCommit, isTestFailure, matchTaskDescription } from "../post-tool.js";
 import { readStateText, writeStateText } from "../state.js";
 
 let tmpDir: string;
@@ -90,5 +90,68 @@ describe("isGitCommit", () => {
 
 	it("returns false for empty string", () => {
 		expect(isGitCommit("")).toBe(false);
+	});
+});
+
+describe("matchTaskDescription", () => {
+	describe("file path matching (backtick-quoted)", () => {
+		it("matches exact file path in backticks", () => {
+			const desc = "T-1.1: Create `web/src/lib/i18n.tsx` — context, provider (FR-1)";
+			expect(matchTaskDescription(desc, "/Users/dev/project/web/src/lib/i18n.tsx")).toBe(true);
+		});
+
+		it("matches file path case-insensitively", () => {
+			const desc = "T-1.1: Create `src/hooks/Post-Tool.ts`";
+			expect(matchTaskDescription(desc, "/path/to/src/hooks/post-tool.ts")).toBe(true);
+		});
+
+		it("does not match partial file name without extension", () => {
+			const desc = "T-1.1: Update `README`";
+			// No file extension in backticks → not treated as file path
+			expect(matchTaskDescription(desc, "README")).toBe(false);
+		});
+
+		it("matches when multiple backtick paths, one matches", () => {
+			const desc = "T-1.2: Update `main.tsx` and `app.tsx`";
+			expect(matchTaskDescription(desc, "/project/src/main.tsx")).toBe(true);
+		});
+	});
+
+	describe("word matching (adaptive threshold)", () => {
+		it("matches with 2+ words for longer descriptions", () => {
+			const desc = "T-1.3: Replace hardcoded strings in route files (FR-2)";
+			expect(matchTaskDescription(desc, "replaced hardcoded strings in routes")).toBe(true);
+		});
+
+		it("matches with threshold=2 for descriptions with 3+ long words", () => {
+			const desc = "T-1.5: Build verification step";
+			expect(matchTaskDescription(desc, "build verification completed")).toBe(true);
+		});
+
+		it("does not match unrelated content", () => {
+			const desc = "T-1.1: Create i18n context provider with translations";
+			expect(matchTaskDescription(desc, "git status\nnothing to commit")).toBe(false);
+		});
+
+		it("filters words shorter than 4 chars", () => {
+			const desc = "T-1.1: Add new API for auth";
+			// "Add", "new", "API", "for" are all <= 3 chars → only "auth" qualifies
+			expect(matchTaskDescription(desc, "auth endpoint added")).toBe(true);
+		});
+	});
+
+	describe("edge cases", () => {
+		it("returns false for empty stdout", () => {
+			expect(matchTaskDescription("T-1.1: Something", "")).toBe(false);
+		});
+
+		it("returns false for empty description", () => {
+			expect(matchTaskDescription("", "some output")).toBe(false);
+		});
+
+		it("prefers file path match over word match", () => {
+			const desc = "T-1.1: Create `src/foo.ts` — unrelated words here";
+			expect(matchTaskDescription(desc, "src/foo.ts")).toBe(true);
+		});
 	});
 });

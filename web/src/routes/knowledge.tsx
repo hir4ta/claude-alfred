@@ -26,6 +26,7 @@ import {
 import { contentPreview, formatDate, formatLabel } from "@/lib/format";
 import type { KnowledgeEntry, KnowledgeStats } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/knowledge")({
@@ -33,6 +34,7 @@ export const Route = createFileRoute("/knowledge")({
 });
 
 function KnowledgePage() {
+	const { t } = useI18n();
 	const [localFilter, setLocalFilter] = useState("");
 	const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
 
@@ -55,7 +57,7 @@ function KnowledgePage() {
 				<div className="relative flex-1 max-w-sm">
 					<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
-						placeholder="Filter..."
+						placeholder={t("knowledge.filter")}
 						value={localFilter}
 						onChange={(e) => setLocalFilter(e.target.value)}
 						className="pl-9"
@@ -79,7 +81,7 @@ function KnowledgePage() {
 				</div>
 			) : (
 				<div className="flex h-40 items-center justify-center">
-					<p className="text-sm text-muted-foreground">No memories yet.</p>
+					<p className="text-sm text-muted-foreground">{t("knowledge.noMemories")}</p>
 				</div>
 			)}
 
@@ -90,9 +92,10 @@ function KnowledgePage() {
 }
 
 function StatsBar({ stats }: { stats: KnowledgeStats }) {
+	const { t } = useI18n();
 	return (
 		<div className="flex items-center gap-3 text-xs text-muted-foreground">
-			<span>{stats.total} entries</span>
+			<span>{stats.total} {t("knowledge.entries")}</span>
 			<Separator orientation="vertical" className="h-3" />
 			<StatDot
 				count={stats.bySubType.decision ?? 0}
@@ -126,14 +129,15 @@ const SUB_TYPE_ICONS: Record<string, React.ReactNode> = {
 	snapshot: <BookOpen className="size-3.5" />,
 };
 
-const SUB_TYPE_LABELS: Record<string, string> = {
-	rule: "Rule",
-	decision: "Decision",
-	pattern: "Pattern",
-	snapshot: "Snapshot",
+const SUB_TYPE_LABEL_KEYS: Record<string, "knowledge.rule" | "knowledge.decision" | "knowledge.pattern" | "knowledge.snapshot"> = {
+	rule: "knowledge.rule",
+	decision: "knowledge.decision",
+	pattern: "knowledge.pattern",
+	snapshot: "knowledge.snapshot",
 };
 
 function KnowledgeCard({ entry, onSelect }: { entry: KnowledgeEntry; onSelect: () => void }) {
+	const { t, locale } = useI18n();
 	const { title } = formatLabel(entry.label);
 	const color = SUB_TYPE_COLORS[entry.sub_type] ?? SUB_TYPE_COLORS.snapshot!;
 	const toggleMutation = useToggleEnabledMutation();
@@ -157,13 +161,13 @@ function KnowledgeCard({ entry, onSelect }: { entry: KnowledgeEntry; onSelect: (
 							{icon}
 						</div>
 						<span className="text-[11px] font-medium" style={{ color }}>
-							{SUB_TYPE_LABELS[entry.sub_type] ?? entry.sub_type}
+							{SUB_TYPE_LABEL_KEYS[entry.sub_type] ? t(SUB_TYPE_LABEL_KEYS[entry.sub_type]) : entry.sub_type}
 						</span>
 					</div>
 					<div className="flex items-center gap-3">
 						{entry.hit_count > 0 && (
 							<span className="text-[10px] tabular-nums text-muted-foreground">
-								{entry.hit_count} hits
+								{entry.hit_count} {t("knowledge.hits")}
 							</span>
 						)}
 						<Tooltip>
@@ -185,7 +189,7 @@ function KnowledgeCard({ entry, onSelect }: { entry: KnowledgeEntry; onSelect: (
 								</button>
 							</TooltipTrigger>
 							<TooltipContent>
-								{entry.enabled ? "Archive (exclude from search)" : "Restore to search"}
+								{entry.enabled ? t("knowledge.archiveHint") : t("knowledge.restoreHint")}
 							</TooltipContent>
 						</Tooltip>
 					</div>
@@ -203,7 +207,7 @@ function KnowledgeCard({ entry, onSelect }: { entry: KnowledgeEntry; onSelect: (
 							<span>·</span>
 						</>
 					)}
-					<span>{formatDate(entry.saved_at ?? "")}</span>
+					<span>{formatDate(entry.saved_at ?? "", locale)}</span>
 				</div>
 			</CardContent>
 		</Card>
@@ -217,6 +221,7 @@ function KnowledgeDialog({
 	entry: KnowledgeEntry | null;
 	onClose: () => void;
 }) {
+	const { t, locale } = useI18n();
 	if (!entry) return null;
 
 	const { title, source } = formatLabel(entry.label);
@@ -238,7 +243,7 @@ function KnowledgeDialog({
 						</div>
 						<div className="flex items-center gap-2">
 							<span className="text-xs font-semibold" style={{ color }}>
-								{SUB_TYPE_LABELS[entry.sub_type] ?? entry.sub_type}
+								{SUB_TYPE_LABEL_KEYS[entry.sub_type] ? t(SUB_TYPE_LABEL_KEYS[entry.sub_type]) : entry.sub_type}
 							</span>
 							{source && <span className="text-xs text-muted-foreground">· {source}</span>}
 						</div>
@@ -251,15 +256,15 @@ function KnowledgeDialog({
 					</DialogTitle>
 					<DialogDescription asChild>
 						<div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-							<span>Saved {formatDate(entry.saved_at ?? "")}</span>
+							<span>{t("knowledge.saved")} {formatDate(entry.saved_at ?? "", locale)}</span>
 							<Tooltip>
 								<TooltipTrigger asChild>
-									<span className="cursor-help tabular-nums">{entry.hit_count} hits</span>
+									<span className="cursor-help tabular-nums">{entry.hit_count} {t("knowledge.hits")}</span>
 								</TooltipTrigger>
 								<TooltipContent className="text-left">
-									<p>Search result appearances</p>
-									<p className="opacity-75">5+ → pattern candidate</p>
-									<p className="opacity-75">15+ → rule candidate</p>
+									<p>{t("knowledge.searchAppearances")}</p>
+									<p className="opacity-75">{t("knowledge.patternCandidate")}</p>
+									<p className="opacity-75">{t("knowledge.ruleCandidate")}</p>
 								</TooltipContent>
 							</Tooltip>
 							<Badge
@@ -270,7 +275,7 @@ function KnowledgeDialog({
 									color: entry.enabled ? "#2d8b7a" : "#6b7280",
 								}}
 							>
-								{entry.enabled ? "Active" : "Archived"}
+								{entry.enabled ? t("knowledge.active") : t("knowledge.archived")}
 							</Badge>
 							<Button
 								size="sm"
@@ -281,11 +286,11 @@ function KnowledgeDialog({
 							>
 								{entry.enabled ? (
 									<>
-										<Archive className="size-3.5" /> Archive
+										<Archive className="size-3.5" /> {t("knowledge.archive")}
 									</>
 								) : (
 									<>
-										<ArchiveRestore className="size-3.5" /> Restore
+										<ArchiveRestore className="size-3.5" /> {t("knowledge.restore")}
 									</>
 								)}
 							</Button>

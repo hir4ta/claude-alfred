@@ -14,6 +14,8 @@ import {
 	tasksQueryOptions,
 } from "@/lib/api";
 import type { DecisionEntry, EpicSummary, MemoryHealthStats, TaskDetail } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
+import type { TranslationKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -34,15 +36,16 @@ function shimmerGradient(index: number) {
 	return `linear-gradient(90deg, rgba(${c.r},${c.g},${c.b},0.04) 0%, rgba(${c.r},${c.g},${c.b},0.12) 50%, rgba(${c.r},${c.g},${c.b},0.04) 100%)`;
 }
 
-const SIZE_LABELS: Record<string, string> = {
-	S: "Small — 3 spec files",
-	M: "Medium — 4-5 spec files",
-	L: "Large — 7 spec files",
-	XL: "Extra Large — 7 spec files",
-	D: "Delta — 2 spec files",
+const SIZE_LABEL_KEYS: Record<string, TranslationKey> = {
+	S: "size.S",
+	M: "size.M",
+	L: "size.L",
+	XL: "size.XL",
+	D: "size.D",
 };
 
 function OverviewPage() {
+	const { t } = useI18n();
 	const { data: tasksData, isLoading: tasksLoading } = useQuery(tasksQueryOptions());
 	const { data: healthData } = useQuery(healthQueryOptions());
 	const { data: epicsData } = useQuery(epicsQueryOptions());
@@ -55,25 +58,25 @@ function OverviewPage() {
 			{/* Stats row */}
 			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				<StatCard
-					label="Total Tasks"
+					label={t("overview.totalTasks")}
 					value={tasks.length}
 					icon={<Zap className="size-4" style={{ color: "#e67e22" }} />}
 					loading={tasksLoading}
 				/>
 				<StatCard
-					label="Active"
+					label={t("overview.active")}
 					value={tasks.filter((t) => t.status === "active").length}
 					icon={<Clock className="size-4" style={{ color: "#40513b" }} />}
 					loading={tasksLoading}
 				/>
 				<StatCard
-					label="Completed"
+					label={t("overview.completed")}
 					value={tasks.filter((t) => t.status === "completed").length}
 					icon={<CheckCircle2 className="size-4" style={{ color: "#2d8b7a" }} />}
 					loading={tasksLoading}
 				/>
 				<StatCard
-					label="Knowledge"
+					label={t("overview.knowledge")}
 					value={healthData?.total ?? 0}
 					icon={<Brain className="size-4" style={{ color: "#628141" }} />}
 				/>
@@ -86,7 +89,7 @@ function OverviewPage() {
 						className="text-sm font-semibold uppercase tracking-wider text-muted-foreground"
 						style={{ fontFamily: "var(--font-display)" }}
 					>
-						Tasks
+						{t("overview.tasks")}
 					</h2>
 					<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						{tasks.map((task, i) => (
@@ -149,6 +152,7 @@ function TaskCard({
 	task: TaskDetail;
 	colorIndex: number;
 }) {
+	const { t } = useI18n();
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
 	const isCompleted = task.status === "completed";
 	const firstUnchecked = task.next_steps?.find((s) => !s.done);
@@ -185,7 +189,7 @@ function TaskCard({
 											{task.size}
 										</Badge>
 									</TooltipTrigger>
-									<TooltipContent>{SIZE_LABELS[task.size] ?? `Size: ${task.size}`}</TooltipContent>
+									<TooltipContent>{SIZE_LABEL_KEYS[task.size] ? t(SIZE_LABEL_KEYS[task.size]) : `Size: ${task.size}`}</TooltipContent>
 								</Tooltip>
 							)}
 						</div>
@@ -228,26 +232,27 @@ function TaskCard({
 }
 
 function HealthCard({ stats }: { stats?: MemoryHealthStats }) {
+	const { t } = useI18n();
 	if (!stats) return null;
 	return (
 		<Card className="border-stone-200 dark:border-stone-700">
 			<CardHeader className="pb-3">
 				<CardTitle className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>
-					Memory Health
+					{t("overview.memoryHealth")}
 				</CardTitle>
 			</CardHeader>
 			<CardContent className="space-y-4">
 				<div className="grid grid-cols-3 gap-3 text-center">
-					<MetricBlock value={stats.total} label="Total" />
+					<MetricBlock value={stats.total} label={t("overview.total")} />
 					<MetricBlock
 						value={stats.stale_count}
-						label="Stale"
+						label={t("overview.stale")}
 						warn={stats.stale_count > 0}
 						warnColor="#e67e22"
 					/>
 					<MetricBlock
 						value={stats.conflict_count}
-						label="Conflicts"
+						label={t("overview.conflicts")}
 						warn={stats.conflict_count > 0}
 						warnColor="#c0392b"
 					/>
@@ -282,14 +287,21 @@ function MetricBlock({
 	);
 }
 
+function VitalityLabel() {
+	const { t } = useI18n();
+	return (
+		<p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+			{t("overview.vitality")}
+		</p>
+	);
+}
+
 function VitalityDist({ dist }: { dist: [number, number, number, number, number] }) {
 	const labels = ["0-20", "21-40", "41-60", "61-80", "81-100"];
 	const max = Math.max(...dist, 1);
 	return (
 		<div className="space-y-1.5">
-			<p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-				Vitality
-			</p>
+			<VitalityLabel />
 			<div className="flex items-end gap-1.5 h-10">
 				{dist.map((count, i) => (
 					<div key={labels[i]} className="flex-1 flex flex-col items-center gap-1">
@@ -310,12 +322,13 @@ function VitalityDist({ dist }: { dist: [number, number, number, number, number]
 }
 
 function EpicProgressCard({ epics }: { epics?: EpicSummary[] }) {
+	const { t } = useI18n();
 	if (!epics || epics.length === 0) return null;
 	return (
 		<Card className="border-stone-200 dark:border-stone-700">
 			<CardHeader className="pb-3">
 				<CardTitle className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>
-					Epics
+					{t("overview.epics")}
 				</CardTitle>
 			</CardHeader>
 			<CardContent className="space-y-3">
@@ -339,12 +352,13 @@ function EpicProgressCard({ epics }: { epics?: EpicSummary[] }) {
 }
 
 function RecentDecisionsCard({ decisions }: { decisions?: DecisionEntry[] }) {
+	const { t } = useI18n();
 	if (!decisions || decisions.length === 0) return null;
 	return (
 		<Card className="border-stone-200 dark:border-stone-700">
 			<CardHeader className="pb-3">
 				<CardTitle className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>
-					Recent Decisions
+					{t("overview.recentDecisions")}
 				</CardTitle>
 			</CardHeader>
 			<CardContent>

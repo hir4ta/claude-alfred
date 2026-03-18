@@ -13,7 +13,8 @@ export function formatLabel(raw: string): { title: string; source: string } {
 }
 
 // Format ISO date to relative or short date.
-export function formatDate(iso: string): string {
+// When called without locale (from contexts without i18n), defaults to English.
+export function formatDate(iso: string, locale?: "en" | "ja"): string {
 	if (!iso) return "";
 	try {
 		const d = new Date(iso);
@@ -21,11 +22,16 @@ export function formatDate(iso: string): string {
 		const diffMs = now.getTime() - d.getTime();
 		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-		if (diffDays === 0) return "today";
-		if (diffDays === 1) return "yesterday";
-		if (diffDays < 7) return `${diffDays}d ago`;
-		if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-		return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
+		const isJa = locale === "ja";
+		if (diffDays === 0) return isJa ? "今日" : "today";
+		if (diffDays === 1) return isJa ? "昨日" : "yesterday";
+		if (diffDays < 7) return isJa ? `${diffDays}日前` : `${diffDays}d ago`;
+		if (diffDays < 30) {
+			const weeks = Math.floor(diffDays / 7);
+			return isJa ? `${weeks}週前` : `${weeks}w ago`;
+		}
+		const dateLocale = isJa ? "ja-JP" : "en-US";
+		return d.toLocaleDateString(dateLocale, { month: "short", day: "numeric" });
 	} catch {
 		return iso;
 	}
