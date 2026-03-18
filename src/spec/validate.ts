@@ -252,7 +252,7 @@ export function validateSpec(
 
 	// ---- 8. closing_wave ----
 	if (expectedFiles.includes("tasks.md")) {
-		const hasClosing = /## Wave:\s*[Cc]losing/i.test(tasksContent);
+		const hasClosing = /## (?:Wave:\s*)?[Cc]losing(?:\s+[Ww]ave)?/i.test(tasksContent);
 		checks.push(
 			hasClosing
 				? { name: "closing_wave", status: "pass", message: "Closing wave found in tasks.md" }

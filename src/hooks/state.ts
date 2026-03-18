@@ -154,7 +154,7 @@ export function parseWaveProgress(tasksContent: string, slug: string): WaveProgr
 	for (const line of lines) {
 		// Match "## Wave N: ..." or "## Wave: Closing"
 		const waveHeader = line.match(/^## Wave\s+(\d+)/i);
-		const closingHeader = line.match(/^## Wave:\s*Closing/i);
+		const closingHeader = line.match(/^## (?:Wave:\s*)?Closing(?:\s+Wave)?/i);
 
 		if (waveHeader) {
 			currentWaveKey = waveHeader[1]!;

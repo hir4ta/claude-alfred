@@ -85,6 +85,16 @@ export function createApp(
 				}
 			}
 
+			// Fallback to tasks.md checkboxes when session.md has no Next Steps.
+			if (stepLines.length === 0) {
+				try {
+					const tasksContent = sd.readFile("tasks.md");
+					for (const tl of tasksContent.split("\n")) {
+						if (tl.match(/^- \[[ x]\] /)) stepLines.push(tl);
+					}
+				} catch { /* no tasks.md */ }
+			}
+
 			if (stepLines.length > 0) {
 				const nextSteps = stepLines.map((s) => ({
 					text: s.replace(/^- \[[ x]\] /, ""),

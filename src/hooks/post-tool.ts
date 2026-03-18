@@ -29,12 +29,14 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 
 	// Exploration detection (persisted across short-lived hook processes via .alfred/.state/).
 	if (ev.tool_name === "Read" || ev.tool_name === "Grep" || ev.tool_name === "Glob") {
-		const count = readExploreCount(ev.cwd) + 1;
-		writeExploreCount(ev.cwd, count);
-		if (count >= 5) {
-			try {
-				readActive(ev.cwd); // has active spec → don't suggest
-			} catch {
+		// Skip explore tracking entirely when active spec exists (FR-9).
+		let hasActiveSpec = false;
+		try { readActive(ev.cwd); hasActiveSpec = true; } catch { /* no active spec */ }
+
+		if (!hasActiveSpec) {
+			const count = readExploreCount(ev.cwd) + 1;
+			writeExploreCount(ev.cwd, count);
+			if (count >= 5) {
 				items.push({
 					level: "WARNING",
 					message: `5+ consecutive ${ev.tool_name} calls without a spec. Consider \`/alfred:survey\` to reverse-engineer a spec from the code.`,

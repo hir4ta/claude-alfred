@@ -101,19 +101,34 @@ export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Prom
 	}
 
 	// FR-1: Skill nudge with dismissal suppression.
+	// FR-8: Suppress nudge for implement/review/plan when actively working on a spec.
 	if (intent && intent !== "save-knowledge") {
 		const skill = INTENT_TO_SKILL[intent];
 		if (skill) {
-			const impressions = getNudgeImpressions(ev.cwd, intent);
-			if (impressions < 3) {
-				items.push({
-					level: "CONTEXT",
-					message: `Skill suggestion: ${skill} — ${intentDescription(intent)}`,
-				});
-				// Track that we nudged this intent (will be checked next time).
-				recordNudge(ev.cwd, intent);
+			// Suppress nudge when actively implementing (active spec + slug in worked-slugs).
+			const suppressIntents = new Set(["implement", "review", "plan", "bugfix", "tdd"]);
+			let suppressed = false;
+			if (suppressIntents.has(intent) && ev.cwd) {
+				try {
+					const state = readActiveState(ev.cwd);
+					const primary = state.primary;
+					const worked = readWorkedSlugs(ev.cwd);
+					if (primary && worked.includes(primary)) {
+						suppressed = true;
+					}
+				} catch { /* no active spec */ }
 			}
-			// If dismissed 3+ times, suppress silently.
+
+			if (!suppressed) {
+				const impressions = getNudgeImpressions(ev.cwd, intent);
+				if (impressions < 3) {
+					items.push({
+						level: "CONTEXT",
+						message: `Skill suggestion: ${skill} — ${intentDescription(intent)}`,
+					});
+					recordNudge(ev.cwd, intent);
+				}
+			}
 		}
 	}
 
