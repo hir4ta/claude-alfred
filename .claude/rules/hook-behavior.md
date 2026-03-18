@@ -46,6 +46,16 @@ paths:
 - dossier init suggested_search: always includes ledger search suggestion with description keywords
 - dossier init: returns `suggested_knowledge` (related knowledge via vector search + FTS5 fallback, sub_type boosted)
 
+## PreToolUse
+- Review gate enforcement: reads `.alfred/.state/review-gate.json`, blocks Edit/Write when gate active + slug matches active spec
+- Gate types: `spec-review` (auto-set on dossier init), `wave-review` (set per wave via `dossier action=gate`)
+- Enforcement order: .alfred/ exempt → review-gate → approval gate (M/L/XL unapproved)
+- Gate clear: `dossier action=gate sub_action=clear reason="..."` (reason required, audit logged)
+
+## Stop (review gate)
+- Blocks stopping when review-gate is active (before existing Next Steps / self-review checks)
+- DEC-4: stop_hook_active=true overrides gate blocking (infinite loop prevention)
+
 ## Misc
 - Background embedding: embed-async/embed-doc subcommands for async Voyage API calls
 - Orphan cleanup: CleanOrphanedEmbeddings runs during PreCompact (not per-insert)

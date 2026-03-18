@@ -25,7 +25,7 @@ export function createMCPServer(store: Store, emb: Embedder | null, version: str
 		"dossier",
 		`Unified spec management for development tasks. Persists context across compaction and sessions.
 
-Actions: status (read-only), init, update, switch, complete, delete (2-phase: preview then confirm=true), history, rollback, review, validate (read-only).
+Actions: status (read-only), init, update, switch, complete, delete (2-phase: preview then confirm=true), history, rollback, review, validate (read-only), gate (review gate management).
 
 task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).
 Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix). S=3 files, M=4-5 files, L/XL=7 files.`,
@@ -42,6 +42,7 @@ Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix).
 					"rollback",
 					"review",
 					"validate",
+					"gate",
 				])
 				.describe("Action to perform"),
 			project_path: z.string().optional().describe("Project root path (defaults to cwd)"),
@@ -69,6 +70,19 @@ Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix).
 				.boolean()
 				.optional()
 				.describe("Required for delete: preview first, then confirm=true"),
+			sub_action: z
+				.enum(["set", "clear", "status"])
+				.optional()
+				.describe("Gate sub-action (for gate action)"),
+			gate_type: z
+				.enum(["spec-review", "wave-review"])
+				.optional()
+				.describe("Gate type (for gate set)"),
+			wave: z.number().optional().describe("Wave number (for gate set type=wave-review)"),
+			reason: z
+				.string()
+				.optional()
+				.describe("Review summary (required for gate clear)"),
 		},
 		async (params) => {
 			return handleDossier(store, emb, params);

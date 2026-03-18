@@ -1,28 +1,44 @@
 import type { HookEvent } from "./dispatcher.js";
+import { isGateActive } from "./review-gate.js";
 import { denyTool, isSpecFilePath, tryReadActiveSpec } from "./spec-guard.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
 
 /**
- * PreToolUse handler: block Edit/Write when active M/L/XL spec is not approved.
+ * PreToolUse handler: block Edit/Write on review-gate or unapproved spec.
+ * Enforcement order: .alfred/ exempt → review-gate → approval gate.
  * Fail-open: any error results in allowing the tool (NFR-2).
  */
 export async function preToolUse(ev: HookEvent): Promise<void> {
 	const toolName = ev.tool_name ?? "";
 
-	// FR-2/FR-3: Only block Edit/Write. Everything else passes through.
+	// Only block Edit/Write. Everything else passes through.
 	if (!BLOCKABLE_TOOLS.has(toolName)) return;
 
-	// FR-7: .alfred/ edits are always allowed (spec creation/update).
+	// .alfred/ edits are always allowed (spec creation/update).
 	const toolInput = (ev.tool_input ?? {}) as Record<string, unknown>;
 	const filePath = typeof toolInput.file_path === "string" ? toolInput.file_path : "";
 	if (filePath && isSpecFilePath(ev.cwd, filePath)) return;
 
-	// DEC-2: No active spec = free coding, no block.
+	// Review gate: blocks source edits until spec/wave review is completed.
+	const gate = isGateActive(ev.cwd);
+	if (gate) {
+		const gateLabel =
+			gate.gate === "wave-review" ? `Wave ${gate.wave ?? "?"} review` : "Spec self-review";
+		const reason = [
+			`${gateLabel} required for spec '${gate.slug}'. Complete review, then run: dossier action=gate sub_action=clear reason="<review summary>"`,
+			`- Gate reason: ${gate.reason}`,
+			'- "I already reviewed mentally" → Run actual review (3-agent or /alfred:inspect), then clear the gate',
+		].join("\n");
+		denyTool(reason);
+		return;
+	}
+
+	// No active spec = free coding, no block.
 	const spec = tryReadActiveSpec(ev.cwd);
 	if (!spec) return;
 
-	// FR-1: M/L/XL with unapproved review → deny.
+	// M/L/XL with unapproved review → deny.
 	if (["M", "L", "XL"].includes(spec.size) && spec.reviewStatus !== "approved") {
 		const reason = [
 			`Spec '${spec.slug}' (size ${spec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,

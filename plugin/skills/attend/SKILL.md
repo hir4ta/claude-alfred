@@ -101,6 +101,13 @@ File generation order: research → requirements → design → tasks → test-s
 - Write final session.md with Next Steps derived from **tasks.md T-IDs**
 - Update state: `phase: approval-gate`
 
+### 1h. Clear spec-review gate
+After all spec files reviewed and fixed, clear the review gate:
+```
+dossier action=gate sub_action=clear reason="3-agent review completed for all spec files. Findings: [summarize key findings and fixes]"
+```
+This is MANDATORY — PreToolUse blocks source Edit/Write until gate is cleared.
+
 ## Phase 2: Approval Gate (dashboard)
 
 Wait for user approval via `alfred dashboard` before proceeding:
@@ -145,6 +152,17 @@ After each implementation task:
 5. If PASS → advance to next task (Phase 3) or Phase 5 if all tasks done
 
 **IMPORTANT**: Always spawn the code-reviewer agent. Never skip review.
+
+### Wave boundary review gate
+
+When all tasks in a Wave are completed (before starting next Wave):
+1. Set wave-review gate: `dossier action=gate sub_action=set gate_type=wave-review wave=N`
+2. Spawn code-reviewer agent for the Wave's full diff
+3. Fix any Critical/Warning findings
+4. Clear gate: `dossier action=gate sub_action=clear reason="Wave N review: [summary]"`
+5. Proceed to next Wave
+
+This is MANDATORY — PreToolUse blocks source Edit/Write until wave-review gate is cleared.
 
 ## Phase 5: Final Self-Review (code-reviewer agent)
 

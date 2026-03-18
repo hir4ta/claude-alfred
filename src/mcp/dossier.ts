@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Embedder } from "../embedder/index.js";
 import { syncTaskStatus, unlinkTaskFromAllEpics } from "../epic/index.js";
+import { clearReviewGate, readReviewGate, writeReviewGate } from "../hooks/review-gate.js";
 import { appendAudit } from "../spec/audit.js";
 import { initSpec } from "../spec/init.js";
 import type { SpecFile, SpecSize, SpecType } from "../spec/types.js";
@@ -37,6 +38,11 @@ interface DossierParams {
 	spec_type?: string;
 	version?: string;
 	confirm?: boolean;
+	// Gate action params
+	sub_action?: string;
+	gate_type?: string;
+	wave?: number;
+	reason?: string;
 }
 
 function jsonResult(data: unknown) {
@@ -80,6 +86,8 @@ export async function handleDossier(store: Store, emb: Embedder | null, params: 
 			return dossierReview(projectPath, params);
 		case "validate":
 			return dossierValidate(projectPath, params);
+		case "gate":
+			return dossierGate(projectPath, params);
 		default:
 			return errorResult(`unknown action: ${params.action}`);
 	}
@@ -143,6 +151,18 @@ async function dossierInit(
 
 	if (params.description) {
 		result.suggested_search = `Before writing specs, search past experience: ledger action=search query="${truncate(params.description, 80)}"`;
+	}
+
+	// Auto-set spec-review gate (FR-2/FR-6: all sizes, including S/D).
+	try {
+		writeReviewGate(projectPath, {
+			gate: "spec-review",
+			slug: params.task_slug,
+			reason: "Spec created. Run thorough self-review before requesting approval.",
+		});
+		result.review_gate = "spec-review";
+	} catch {
+		/* fail-open: gate write failure doesn't block init */
 	}
 
 	return jsonResult(result);
@@ -352,6 +372,17 @@ function dossierDelete(projectPath: string, params: DossierParams) {
 	try {
 		const allRemoved = removeTask(projectPath, params.task_slug);
 		unlinkTaskFromAllEpics(projectPath, params.task_slug);
+
+		// FR-8: Clean up review gate if it belongs to the deleted spec.
+		try {
+			const gate = readReviewGate(projectPath);
+			if (gate && gate.slug === params.task_slug) {
+				clearReviewGate(projectPath);
+			}
+		} catch {
+			/* fail-open */
+		}
+
 		appendAudit(projectPath, { action: "spec.delete", target: params.task_slug, user: "mcp" });
 		return jsonResult({
 			task_slug: params.task_slug,
@@ -542,6 +573,93 @@ function dossierValidate(projectPath: string, params: DossierParams) {
 		checks,
 		summary: `${passed}/${checks.length} checks passed`,
 	});
+}
+
+function dossierGate(projectPath: string, params: DossierParams) {
+	const subAction = params.sub_action;
+	if (!subAction) return errorResult("sub_action is required for gate (set/clear/status)");
+
+	switch (subAction) {
+		case "set": {
+			const gateType = params.gate_type;
+			if (gateType !== "spec-review" && gateType !== "wave-review") {
+				return errorResult('gate_type must be "spec-review" or "wave-review"');
+			}
+			if (gateType === "wave-review" && (params.wave == null || params.wave < 1)) {
+				return errorResult("wave (number >= 1) is required for wave-review gate");
+			}
+
+			let taskSlug = params.task_slug;
+			if (!taskSlug) {
+				try {
+					taskSlug = readActive(projectPath);
+				} catch (err) {
+					return errorResult(`no active spec: ${err}`);
+				}
+			}
+
+			const gateReason =
+				params.reason ??
+				(gateType === "spec-review"
+					? "Spec review required."
+					: `Wave ${params.wave} review required.`);
+
+			writeReviewGate(projectPath, {
+				gate: gateType,
+				slug: taskSlug,
+				wave: gateType === "wave-review" ? params.wave : undefined,
+				reason: gateReason,
+			});
+
+			appendAudit(projectPath, {
+				action: "gate.set",
+				target: taskSlug,
+				detail: `${gateType}${params.wave ? ` wave=${params.wave}` : ""}`,
+				user: "mcp",
+			});
+
+			return jsonResult({
+				gate: gateType,
+				slug: taskSlug,
+				wave: params.wave,
+				set: true,
+			});
+		}
+
+		case "clear": {
+			if (!params.reason || params.reason.trim() === "") {
+				return errorResult(
+					'reason is required for gate clear — describe what was reviewed (e.g., "3-agent review completed, 0 critical issues")',
+				);
+			}
+
+			const gate = readReviewGate(projectPath);
+			if (!gate) {
+				return jsonResult({ cleared: false, reason: "no active review gate to clear" });
+			}
+
+			const reason = truncate(params.reason, 500);
+			clearReviewGate(projectPath);
+
+			appendAudit(projectPath, {
+				action: "gate.clear",
+				target: gate.slug,
+				detail: reason,
+				user: "mcp",
+			});
+
+			return jsonResult({ cleared: true, reason });
+		}
+
+		case "status": {
+			const gate = readReviewGate(projectPath);
+			if (!gate) return jsonResult({ gate: null });
+			return jsonResult(gate);
+		}
+
+		default:
+			return errorResult(`unknown gate sub_action: ${subAction} (valid: set/clear/status)`);
+	}
 }
 
 /**

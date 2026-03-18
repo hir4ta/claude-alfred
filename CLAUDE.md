@@ -75,9 +75,11 @@ node dist/cli.mjs version     # Show version
 - PostToolUse: git commit detection → proactive knowledge conflict warning (detectKnowledgeConflicts, threshold 0.70)
 - PostToolUse: Edit/Write → autoCheckNextSteps with file path context (FR-8: session.md progress auto-update)
 - SessionStart: decision replay — injects up to 5 recent decision-type knowledge entries (last 7 days, project-scoped). buildSpecContextItems returns items (no direct emit, NFR-4 compliant)
-- PreToolUse: HARD enforcement — blocks Edit/Write for unapproved M/L/XL specs via permissionDecision: "deny". Fail-open on errors (NFR-2). .alfred/ edits always allowed. S/D exempt
-- Stop: HARD enforcement — blocks Claude from stopping when active spec has unchecked Next Steps, pending self-review, or dossier complete not called. stop_hook_active=true → allow (DEC-4 infinite loop prevention)
+- Review gate: `src/hooks/review-gate.ts` — HARD enforcement via `.alfred/.state/review-gate.json`. Two gate types: `spec-review` (auto-set on dossier init, all sizes) and `wave-review` (set manually per wave). PreToolUse blocks Edit/Write when gate active + slug matches active spec. Gate cleared via `dossier action=gate sub_action=clear reason="..."` (reason required, audit logged). Fail-open on errors.
+- PreToolUse: HARD enforcement — (1) review-gate blocks Edit/Write until spec/wave review completed, (2) approval gate blocks Edit/Write for unapproved M/L/XL specs. Enforcement order: .alfred/ exempt → review-gate → approval gate. Fail-open on errors (NFR-2). .alfred/ edits always allowed
+- Stop: HARD enforcement — blocks Claude from stopping when review-gate is active, or active spec has unchecked Next Steps, pending self-review, or dossier complete not called. stop_hook_active=true → allow (DEC-4 infinite loop prevention)
 - Shared spec-guard utilities: `src/hooks/spec-guard.ts` — tryReadActiveSpec, isSpecFilePath, countUncheckedNextSteps, hasUncheckedSelfReview, denyTool, blockStop
+- Dossier gate action: `dossier action=gate` with sub_action=set/clear/status. Set requires gate_type + optional wave. Clear requires reason (audit trail). Both set/clear logged to audit.jsonl
 - Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (7 spec files + 3 specialists per file + approval gate), attend (spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → knowledge)
 - brief/attend spec generation order: research → requirements → design → tasks → test-specs → decisions → session
 - @.claude/rules/hook-behavior.md (event pipelines, skill nudge, drift detection, dossier hints)

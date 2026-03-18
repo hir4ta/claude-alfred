@@ -181,6 +181,13 @@ Spawn 3 agents simultaneously via Agent tool. Each reads research.md and returns
 
 No review needed for session.md — it's a status file.
 
+### 10b. Clear spec-review gate
+After all spec files reviewed and fixed, clear the review gate:
+```
+dossier action=gate sub_action=clear reason="3-agent review completed for all spec files. Findings: [summarize key findings and fixes]"
+```
+This is MANDATORY — PreToolUse blocks source Edit/Write until gate is cleared.
+
 ### 11. [OUTPUT] Summary to user
 
 ```

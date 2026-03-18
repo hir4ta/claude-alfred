@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookEvent } from "../dispatcher.js";
 import { preToolUse } from "../pre-tool.js";
+import { writeReviewGate } from "../review-gate.js";
 
 let tmpDir: string;
 let stdoutData: string[];
@@ -110,5 +111,70 @@ describe("preToolUse", () => {
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
 		const out = getDenyOutput();
 		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+	});
+});
+
+describe("preToolUse — review gate", () => {
+	it("denies Edit when spec-review gate is active", async () => {
+		setupSpec({ size: "L", reviewStatus: "approved" });
+		writeReviewGate(tmpDir, {
+			gate: "spec-review",
+			slug: "test-task",
+			reason: "Spec created.",
+		});
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		const out = getDenyOutput();
+		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+	});
+
+	it("denies Write when wave-review gate is active", async () => {
+		setupSpec({ size: "L", reviewStatus: "approved" });
+		writeReviewGate(tmpDir, {
+			gate: "wave-review",
+			slug: "test-task",
+			wave: 1,
+			reason: "Wave 1 review.",
+		});
+		await preToolUse(makeEvent("Write", join(tmpDir, "src/new.ts")));
+		const out = getDenyOutput();
+		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+	});
+
+	it("allows Edit when gate slug does not match active spec (stale)", async () => {
+		setupSpec({ size: "L", reviewStatus: "approved" });
+		writeReviewGate(tmpDir, {
+			gate: "spec-review",
+			slug: "other-task",
+			reason: "Old spec.",
+		});
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		expect(stdoutData.length).toBe(0);
+	});
+
+	it("allows .alfred/ edits even when gate is active", async () => {
+		setupSpec({ size: "L", reviewStatus: "approved" });
+		writeReviewGate(tmpDir, {
+			gate: "spec-review",
+			slug: "test-task",
+			reason: "Spec created.",
+		});
+		await preToolUse(makeEvent("Edit", join(tmpDir, ".alfred/specs/test-task/design.md")));
+		expect(stdoutData.length).toBe(0);
+	});
+
+	it("gate takes priority over approval gate", async () => {
+		setupSpec({ size: "M", reviewStatus: "approved" });
+		writeReviewGate(tmpDir, {
+			gate: "spec-review",
+			slug: "test-task",
+			reason: "Spec created.",
+		});
+		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		const out = getDenyOutput();
+		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+		// Verify it's the gate message, not the approval gate
+		const reason =
+			(out?.hookSpecificOutput as Record<string, unknown>)?.permissionDecisionReason ?? "";
+		expect(String(reason)).toContain("Spec self-review");
 	});
 });
