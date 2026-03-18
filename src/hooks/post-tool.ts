@@ -5,7 +5,7 @@ import type { HookEvent } from './dispatcher.js';
 import { notifyUser } from './dispatcher.js';
 import { openDefaultCached } from '../store/index.js';
 import { searchKnowledgeFTS, detectKnowledgeConflicts } from '../store/fts.js';
-import { readActive, SpecDir } from '../spec/types.js';
+import { readActive, readActiveState, SpecDir } from '../spec/types.js';
 import { truncate } from '../mcp/helpers.js';
 import { extractSection } from './dispatcher.js';
 import type { DirectiveItem } from './directives.js';
@@ -79,9 +79,12 @@ async function handleBashResult(ev: HookEvent, items: DirectiveItem[], signal: A
     const stdout = response.stdout ?? '';
     autoCheckNextSteps(ev.cwd!, stdout);
 
-    // FR-7: Proactive conflict warning after git commit.
     if (isGitCommit(stdout) && !signal.aborted) {
+      // FR-7: Proactive conflict warning after git commit.
       await checkKnowledgeConflicts(items);
+
+      // Spec completion reminder: if session shows done but spec still active.
+      checkSpecCompletion(ev.cwd!, items);
     }
   }
 }
@@ -193,4 +196,34 @@ async function checkKnowledgeConflicts(items: DirectiveItem[]): Promise<void> {
       });
     }
   } catch { /* conflict detection failure is non-fatal */ }
+}
+
+/**
+ * Check if active spec should be completed after a git commit.
+ * Detects: all Next Steps checked OR session status=completed, but spec still active.
+ */
+function checkSpecCompletion(projectPath: string, items: DirectiveItem[]): void {
+  try {
+    const slug = readActive(projectPath);
+    const state = readActiveState(projectPath);
+    const task = state.tasks.find(t => t.slug === slug);
+    if (!task || task.status === 'completed') return;
+
+    const sd = new SpecDir(projectPath, slug);
+    const session = sd.readFile('session.md');
+
+    // Check completion signals.
+    const lower = session.toLowerCase();
+    const hasCompletedStatus = lower.includes('status: completed') || lower.includes('status: done');
+
+    const allSteps = session.match(/^- \[[ x]\] .+$/gm);
+    const allChecked = allSteps && allSteps.length > 0 && allSteps.every(s => s.startsWith('- [x]'));
+
+    if (hasCompletedStatus || allChecked) {
+      items.push({
+        level: 'DIRECTIVE',
+        message: `Task '${slug}' appears complete (${hasCompletedStatus ? 'status marker' : 'all steps checked'}). MUST call \`dossier action=complete\` to close the spec.`,
+      });
+    }
+  } catch { /* no active spec or read failure — skip */ }
 }
