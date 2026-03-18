@@ -1,6 +1,6 @@
-import { mkdirSync, writeFileSync, renameSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import type { Store } from '../store/index.js';
 import type { Embedder } from '../embedder/index.js';
 import { searchPipeline, trackHitCounts, truncate } from './helpers.js';
@@ -170,7 +170,6 @@ function toKebabId(prefix: string, title: string): string {
     .replace(/-$/, '');
   if (ascii.length >= 3) return `${prefix}-${ascii}`;
   // Non-ASCII fallback: use short hash of original title.
-  const { createHash } = require('node:crypto') as typeof import('node:crypto');
   const hash = createHash('sha256').update(title).digest('hex').slice(0, 12);
   return `${prefix}-${hash}`;
 }
@@ -180,8 +179,13 @@ function toKebabId(prefix: string, title: string): string {
  */
 function atomicWriteSync(filePath: string, data: string): void {
   const tmp = filePath + '.tmp.' + process.pid;
-  writeFileSync(tmp, data);
-  renameSync(tmp, filePath);
+  try {
+    writeFileSync(tmp, data);
+    renameSync(tmp, filePath);
+  } catch (err) {
+    try { unlinkSync(tmp); } catch { /* cleanup best-effort */ }
+    throw err;
+  }
 }
 
 /**

@@ -125,6 +125,9 @@ export async function searchPipeline(
     }
   }
 
+  // Exclude internal-only types (snapshots) from search results.
+  rawDocs = rawDocs.filter(d => d.subType !== 'snapshot');
+
   // Apply recency signal and produce ScoredDoc[].
   res.scoredDocs = applyRecencySignal(rawDocs, res.searchMethod, new Date());
 

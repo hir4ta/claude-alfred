@@ -6,7 +6,7 @@ paths:
 # Store Implementation Patterns
 
 ## Vector Search
-- BLOB storage + Go native cosine similarity (no sqlite-vec)
+- BLOB storage + TypeScript native cosine similarity (no sqlite-vec)
 - Dimension validation on insert
 - `embeddings.source` = "knowledge" (JOIN with knowledge_index for enabled filter)
 
@@ -23,5 +23,5 @@ paths:
 - Store.DB() is test-only; production code uses Store methods
 
 ## Search
-- SubTypeHalfLife(subType) in fts.go: assumption=30d, inference=45d, general=60d, pattern=90d, decision=90d, rule=120d
+- SubTypeHalfLife(subType) in fts.ts: assumption=30d, inference=45d, snapshot=30d, pattern=90d, decision=90d, rule=120d
 - DetectKnowledgeConflicts threshold 0.70 with classifyConflict keyword polarity
