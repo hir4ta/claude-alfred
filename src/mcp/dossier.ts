@@ -25,6 +25,11 @@ import { detectProject } from "../store/project.js";
 import { vectorSearchKnowledge } from "../store/vectors.js";
 import type { DecisionEntry, KnowledgeRow, PatternEntry } from "../types.js";
 import { truncate } from "./helpers.js";
+import {
+	extractDecisions,
+	extractPatterns,
+	saveKnowledgeEntries,
+} from "./knowledge-extractor.js";
 import { writeKnowledgeFile } from "./ledger.js";
 
 interface DossierParams {
@@ -70,7 +75,7 @@ export async function handleDossier(store: Store, emb: Embedder | null, params: 
 		case "init":
 			return dossierInit(projectPath, store, emb, params);
 		case "update":
-			return dossierUpdate(projectPath, params);
+			return dossierUpdate(projectPath, store, params);
 		case "status":
 			return dossierStatus(projectPath);
 		case "switch":
@@ -212,7 +217,7 @@ async function searchRelatedKnowledge(
 	}
 }
 
-function dossierUpdate(projectPath: string, params: DossierParams) {
+function dossierUpdate(projectPath: string, store: Store, params: DossierParams) {
 	if (!params.file) return errorResult("file is required for update");
 	if (!params.content) return errorResult("content is required for update");
 	const mode = params.mode ?? "append";
@@ -241,7 +246,38 @@ function dossierUpdate(projectPath: string, params: DossierParams) {
 		return errorResult(`${mode} failed: ${err}`);
 	}
 
-	return jsonResult({ task_slug: taskSlug, file: params.file, mode });
+	const result: Record<string, unknown> = { task_slug: taskSlug, file: params.file, mode };
+	const lang = process.env.ALFRED_LANG || "en";
+
+	// FR-1: Immediate decision extraction on decisions.md update.
+	if (file === "decisions.md") {
+		try {
+			const fullContent = sd.readFile("decisions.md");
+			const decisions = extractDecisions(fullContent, taskSlug, lang);
+			if (decisions.length > 0) {
+				const saved = saveKnowledgeEntries(store, projectPath, decisions, "decision");
+				if (saved > 0) result.decisions_extracted = saved;
+			}
+		} catch {
+			/* fail-open */
+		}
+	}
+
+	// FR-2: Immediate pattern extraction on design.md update.
+	if (file === "design.md") {
+		try {
+			const fullContent = sd.readFile("design.md");
+			const patterns = extractPatterns(fullContent, taskSlug, lang);
+			if (patterns.length > 0) {
+				const saved = saveKnowledgeEntries(store, projectPath, patterns, "pattern");
+				if (saved > 0) result.patterns_extracted = saved;
+			}
+		} catch {
+			/* fail-open */
+		}
+	}
+
+	return jsonResult(result);
 }
 
 function dossierStatus(projectPath: string) {
@@ -355,11 +391,21 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
 		appendAudit(projectPath, { action: "spec.complete", target: taskSlug, user: "mcp" });
 		syncTaskStatus(projectPath, taskSlug, "completed");
 
-		// Auto-save decisions.md entries as permanent knowledge.
-		saveDecisionsAsKnowledge(store, projectPath, taskSlug);
-
-		// Auto-extract patterns from design.md components.
-		const patternCount = savePatternsAsKnowledge(store, projectPath, taskSlug);
+		// Auto-save decisions + patterns as permanent knowledge.
+		const lang = process.env.ALFRED_LANG || "en";
+		try {
+			const sd2 = new SpecDir(projectPath, taskSlug);
+			try {
+				const decContent = sd2.readFile("decisions.md");
+				const decs = extractDecisions(decContent, taskSlug, lang);
+				saveKnowledgeEntries(store, projectPath, decs, "decision");
+			} catch { /* decisions.md may not exist */ }
+			try {
+				const designContent = sd2.readFile("design.md");
+				const pats = extractPatterns(designContent, taskSlug, lang);
+				saveKnowledgeEntries(store, projectPath, pats, "pattern");
+			} catch { /* design.md may not exist */ }
+		} catch { /* fail-open */ }
 
 		const result: Record<string, unknown> = {
 			task_slug: taskSlug,
@@ -367,7 +413,6 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
 			new_primary: newPrimary,
 		};
 		if (closingWarning) result.closing_wave_warning = closingWarning;
-		if (patternCount > 0) result.patterns_extracted = patternCount;
 
 		// Prompt Claude to save additional patterns/rules via ledger.
 		result.knowledge_prompt =
@@ -685,143 +730,4 @@ function checkClosingWave(tasksContent: string): string | undefined {
 	return undefined;
 }
 
-/**
- * Extract patterns from design.md Components section.
- * Each component becomes a pattern entry capturing the architectural approach.
- */
-function savePatternsAsKnowledge(store: Store, projectPath: string, taskSlug: string): number {
-	let count = 0;
-	try {
-		const sd = new SpecDir(projectPath, taskSlug);
-		const design = sd.readFile("design.md");
-		const proj = detectProject(projectPath);
-		const lang = process.env.ALFRED_LANG || "en";
-		const now = new Date().toISOString();
-
-		// Extract Components section.
-		const compIdx = design.indexOf("## Components");
-		if (compIdx === -1) return 0;
-		const compSection = design.slice(compIdx);
-		const nextSection = compSection.indexOf("\n## ", 3);
-		const body = nextSection === -1 ? compSection : compSection.slice(0, nextSection);
-
-		// Find ### Component headers with descriptions.
-		const compRegex = /###\s+(?:C\d+:\s*)?(.+?)(?:\s*\(.*?\))?\n([\s\S]*?)(?=\n###|\n##|$)/g;
-		let match: RegExpExecArray | null;
-		while ((match = compRegex.exec(body)) !== null) {
-			const compName = match[1]!.trim();
-			const compBody = match[2]!.trim();
-			if (!compName || compBody.length < 20) continue;
-
-			const entry: PatternEntry = {
-				id: `pat-spec-${taskSlug}-${compName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "").slice(0, 40)}`,
-				type: "good",
-				title: `${compName} (from ${taskSlug})`,
-				context: `Architectural pattern used in task ${taskSlug}`,
-				pattern: truncate(compBody, 500),
-				applicationConditions: `When building similar ${compName.toLowerCase()} components`,
-				expectedOutcomes: "Consistent architecture following established patterns",
-				tags: [taskSlug, "architecture"],
-				createdAt: now,
-				status: "approved",
-				lang,
-			};
-
-			const filePath = writeKnowledgeFile(projectPath, "pattern", entry.id, entry);
-			const row: KnowledgeRow = {
-				id: 0,
-				filePath,
-				contentHash: "",
-				title: entry.title,
-				content: JSON.stringify(entry),
-				subType: "pattern",
-				projectRemote: proj.remote,
-				projectPath: proj.path,
-				projectName: proj.name,
-				branch: proj.branch,
-				createdAt: "",
-				updatedAt: "",
-				hitCount: 0,
-				lastAccessed: "",
-				enabled: true,
-			};
-			upsertKnowledge(store, row);
-			count++;
-		}
-	} catch {
-		/* design.md may not exist for all spec sizes — fail-open */
-	}
-	return count;
-}
-
-/**
- * Save accepted decisions from decisions.md as permanent knowledge entries.
- * Called on spec completion to persist architectural decisions.
- */
-function saveDecisionsAsKnowledge(store: Store, projectPath: string, taskSlug: string): void {
-	try {
-		const sd = new SpecDir(projectPath, taskSlug);
-		const decisions = sd.readFile("decisions.md");
-		const proj = detectProject(projectPath);
-		const lang = process.env.ALFRED_LANG || "en";
-		const now = new Date().toISOString();
-
-		const sections = decisions.split(/\n## DEC-\d+/);
-		for (let i = 1; i < sections.length; i++) {
-			const section = sections[i]!;
-			const titleMatch = section.match(/^:\s*(.+)/);
-			const title = titleMatch ? titleMatch[1]!.trim() : `Decision ${i}`;
-			const statusMatch = section.match(/(?:- |\*\*)?Status:?\*?\*?\s*(\w+)/i);
-			if (statusMatch && statusMatch[1]!.toLowerCase() === "accepted") {
-				// Parse structured fields from Markdown.
-				const decisionMatch = section.match(/\*\*Decision:\*\*\s*(.+)/i);
-				const reasoningMatch =
-					section.match(/\*\*Rationale:\*\*\s*(.+)/i) ??
-					section.match(/\*\*Reasoning:\*\*\s*(.+)/i);
-				const alternativesMatch = section.match(/\*\*Alternatives rejected:\*\*\s*(.+)/i);
-
-				const entry: DecisionEntry = {
-					id: `dec-spec-${taskSlug}-${i}`,
-					title,
-					context: (section.match(/\*\*Context:\*\*\s*(.+)/i)?.[1] ?? "").trim(),
-					decision: (decisionMatch?.[1] ?? "").trim(),
-					reasoning: (reasoningMatch?.[1] ?? "").trim(),
-					alternatives: alternativesMatch
-						? alternativesMatch[1]!
-								.split(/[;,]/)
-								.map((a) => a.trim())
-								.filter(Boolean)
-						: [],
-					tags: [taskSlug],
-					createdAt: now,
-					status: "approved",
-					lang,
-				};
-
-				// Write JSON file to disk (source of truth).
-				const filePath = writeKnowledgeFile(projectPath, "decision", entry.id, entry);
-
-				const row: KnowledgeRow = {
-					id: 0,
-					filePath,
-					contentHash: "",
-					title,
-					content: JSON.stringify(entry),
-					subType: "decision",
-					projectRemote: proj.remote,
-					projectPath: proj.path,
-					projectName: proj.name,
-					branch: proj.branch,
-					createdAt: "",
-					updatedAt: "",
-					hitCount: 0,
-					lastAccessed: "",
-					enabled: true,
-				};
-				upsertKnowledge(store, row);
-			}
-		}
-	} catch {
-		/* decisions.md may not exist for all spec sizes */
-	}
-}
+// Note: saveDecisionsAsKnowledge and savePatternsAsKnowledge extracted to knowledge-extractor.ts

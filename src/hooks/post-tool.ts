@@ -1,3 +1,4 @@
+import { extractReviewFindings, saveKnowledgeEntries } from "../mcp/knowledge-extractor.js";
 import { truncate } from "../mcp/helpers.js";
 import { readActive, readActiveState, SpecDir } from "../spec/types.js";
 import { detectKnowledgeConflicts, searchKnowledgeFTS } from "../store/fts.js";
@@ -61,6 +62,11 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 	// Check spec completion on any tool that might update spec files (Edit, Write, Bash).
 	if (["Edit", "Write", "Bash"].includes(ev.tool_name)) {
 		checkSpecCompletion(ev.cwd!, items);
+	}
+
+	// FR-3: Extract knowledge from review agent findings.
+	if (ev.tool_name === "Agent" && ev.tool_response) {
+		extractReviewKnowledge(ev.cwd!, ev.tool_response);
 	}
 
 	emitDirectives("PostToolUse", items);
@@ -317,6 +323,29 @@ function checkSpecCompletion(projectPath: string, items: DirectiveItem[]): void 
  * Save knowledge from spec on git commit — ensures decisions and session
  * snapshots accumulate even without PreCompact (1M context).
  */
+function extractReviewKnowledge(projectPath: string, toolResponse: unknown): void {
+	try {
+		const lang = process.env.ALFRED_LANG || "en";
+		let taskSlug = "";
+		try {
+			taskSlug = readActive(projectPath);
+		} catch {
+			taskSlug = "unknown";
+		}
+
+		const findings = extractReviewFindings(toolResponse, taskSlug, lang);
+		if (findings.length === 0) return;
+
+		const store = openDefaultCached();
+		const saved = saveKnowledgeEntries(store, projectPath, findings, "pattern");
+		if (saved > 0) {
+			notifyUser("extracted %d pattern(s) from review findings", saved);
+		}
+	} catch {
+		/* fail-open: review extraction errors don't affect PostToolUse */
+	}
+}
+
 function saveKnowledgeOnCommit(projectPath: string): void {
 	let store;
 	try {
