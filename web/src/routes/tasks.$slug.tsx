@@ -272,24 +272,31 @@ function SpecFileList({
 
 function SpecContentViewer({ content, file }: { content: string; file: string }) {
 	return (
-		<Card>
-			<CardHeader className="py-2 px-4">
-				<CardTitle className="text-sm font-medium">{file}</CardTitle>
-			</CardHeader>
+		<Card className="!gap-0 !py-0">
+			<div className="px-4 py-2.5 border-b border-border">
+				<span className="text-sm font-bold">{file}</span>
+			</div>
 			<CardContent className="p-0">
 				<ScrollArea className="h-[600px]">
 					<div className="p-4 prose prose-sm prose-stone dark:prose-invert max-w-none
-						prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
+						prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
+						prose-h1:text-base prose-h1:mt-0 prose-h1:mb-2
 						prose-p:text-xs prose-p:leading-relaxed prose-p:my-1
 						prose-li:text-xs prose-li:my-0
-						prose-table:text-xs
-						prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:border prose-th:border-border prose-th:bg-muted/50
+						prose-table:text-[11px]
+						prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:border prose-th:border-border prose-th:bg-muted/50 prose-th:whitespace-nowrap
 						prose-td:px-2 prose-td:py-1 prose-td:border prose-td:border-border
-						prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-						prose-pre:p-0 prose-pre:bg-transparent">
+						prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-foreground
+						prose-pre:p-0 prose-pre:bg-muted/50 prose-pre:text-foreground prose-pre:rounded-lg
+						[&_table]:block [&_table]:overflow-x-auto [&_table]:w-full
+						[&_pre_code]:bg-transparent [&_pre_code]:p-3 [&_pre_code]:block [&_pre_code]:text-[11px] [&_pre_code]:leading-relaxed">
 						{content ? (
 							<Markdown
 								components={{
+									// Strip the first H1 title (redundant with file name header).
+									h1({ children }) {
+										return <h1 className="!mt-0 !mb-1 !text-base">{children}</h1>;
+									},
 									code({ className, children, ...props }) {
 										const match = /language-(\w+)/.exec(className || "");
 										const codeStr = String(children).replace(/\n$/, "");

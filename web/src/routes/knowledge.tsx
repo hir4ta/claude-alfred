@@ -239,8 +239,12 @@ function KnowledgeCard({
 					{contentPreview(entry.content, 100)}
 				</p>
 				<div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-					{source && <span className="truncate max-w-[140px]">{source}</span>}
-					{source && <span>·</span>}
+					{entry.project_name && (
+						<>
+							<span className="font-medium" style={{ color: "#40513b" }}>{entry.project_name}</span>
+							<span>·</span>
+						</>
+					)}
 					<span>{formatDate(entry.saved_at ?? "")}</span>
 				</div>
 			</CardContent>

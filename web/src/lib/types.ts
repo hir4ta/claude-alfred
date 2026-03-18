@@ -51,6 +51,7 @@ export interface KnowledgeEntry {
 	score?: number;
 	saved_at?: string;
 	enabled: boolean;
+	project_name?: string;
 }
 
 export interface ActivityEntry {

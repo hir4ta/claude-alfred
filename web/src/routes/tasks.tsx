@@ -51,7 +51,7 @@ function TaskListCard({ task, isActive, colorIndex }: { task: TaskDetail; isActi
 		<Link to="/tasks/$slug" params={{ slug: task.slug }}>
 			<Card
 				className={cn(
-					"transition-all hover:shadow-sm cursor-pointer",
+					"!gap-0 !py-0 transition-all hover:shadow-sm cursor-pointer",
 					isActive && "ring-1",
 					isCompleted && "opacity-60",
 				)}

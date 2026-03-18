@@ -150,8 +150,25 @@ export function createApp(
 
   app.get('/api/knowledge', (c) => {
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10) || 50, 500);
-    const entries = listAllKnowledge(store, proj.remote, proj.path, limit);
-    return c.json({ entries: entries.map(toKnowledgeEntry) });
+    // Show all projects — cross-project knowledge dashboard.
+    const rows = store.db.prepare(`
+      SELECT id, file_path, content_hash, title, content, sub_type,
+             project_remote, project_path, project_name, branch,
+             created_at, updated_at, hit_count, last_accessed, enabled
+      FROM knowledge_index ORDER BY updated_at DESC LIMIT ?
+    `).all(limit) as Array<Record<string, unknown>>;
+    const entries = rows.map((r: Record<string, unknown>) => ({
+      id: r.id,
+      label: r.title as string,
+      source: r.file_path as string,
+      sub_type: r.sub_type as string,
+      hit_count: r.hit_count as number,
+      content: r.content as string,
+      saved_at: r.created_at as string,
+      enabled: r.enabled === 1,
+      project_name: r.project_name as string,
+    }));
+    return c.json({ entries });
   });
 
   app.get('/api/knowledge/search', (c) => {
@@ -163,13 +180,8 @@ export function createApp(
   });
 
   app.get('/api/knowledge/stats', (c) => {
-    // Project-scoped stats to match Knowledge tab listing.
-    const entries = listAllKnowledge(store, proj.remote, proj.path, 10000);
-    const bySubType: Record<string, number> = {};
-    for (const e of entries) {
-      bySubType[e.subType] = (bySubType[e.subType] ?? 0) + 1;
-    }
-    return c.json({ total: entries.length, bySubType, avgHitCount: 0 });
+    const stats = getKnowledgeStats(store);
+    return c.json(stats);
   });
 
   app.patch('/api/knowledge/:id/enabled', async (c) => {
@@ -200,13 +212,8 @@ export function createApp(
   });
 
   app.get('/api/health', (c) => {
-    // Project-scoped count to match Knowledge tab.
-    const entries = listAllKnowledge(store, proj.remote, proj.path, 10000);
-    const bySubType: Record<string, number> = {};
-    for (const e of entries) {
-      bySubType[e.subType] = (bySubType[e.subType] ?? 0) + 1;
-    }
-    return c.json({ total: entries.length, bySubType });
+    const stats = getKnowledgeStats(store);
+    return c.json({ total: stats.total, bySubType: stats.bySubType });
   });
 
   // --- Review API ---

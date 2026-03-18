@@ -145,7 +145,7 @@ function TaskCard({ task, isActive, colorIndex }: { task: TaskDetail; isActive: 
 		<Link to="/tasks/$slug" params={{ slug: task.slug }}>
 			<Card
 				className={cn(
-					"h-[148px] flex flex-col border-stone-200 transition-all hover:shadow-md hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600",
+					"h-[140px] !gap-0 !py-0 border-stone-200 transition-all hover:shadow-md hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600",
 					isActive && "ring-1",
 					isCompleted && "opacity-60",
 				)}
