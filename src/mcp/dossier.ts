@@ -153,6 +153,13 @@ async function dossierInit(
 		result.suggested_search = `Before writing specs, search past experience: ledger action=search query="${truncate(params.description, 80)}"`;
 	}
 
+	// Language directive — tell Claude which language to write spec content in.
+	const lang = process.env.ALFRED_LANG || "en";
+	result.lang = lang;
+	if (lang !== "en") {
+		result.lang_directive = `Write ALL spec content in ${lang === "ja" ? "Japanese (日本語)" : lang}. Technical terms and IDs (FR-N, T-N.N, etc.) stay in English.`;
+	}
+
 	// Auto-set spec-review gate (FR-2/FR-6: all sizes, including S/D).
 	try {
 		writeReviewGate(projectPath, {
@@ -241,10 +248,15 @@ function dossierUpdate(projectPath: string, store: Store, params: DossierParams)
 	}
 
 	const result: Record<string, unknown> = { task_slug: taskSlug, file: params.file, mode };
-	const lang = process.env.ALFRED_LANG || "en";
 
 	// design.md pattern auto-extraction removed (FR-6).
 	// Knowledge accumulation happens intentionally at Wave boundaries via ledger.
+
+	// Language directive for consistent spec language.
+	const lang = process.env.ALFRED_LANG || "en";
+	if (lang !== "en") {
+		result.lang = lang;
+	}
 
 	return jsonResult(result);
 }
