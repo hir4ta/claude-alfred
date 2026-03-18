@@ -68,7 +68,7 @@ export async function preCompact(ev: HookEvent, _signal: AbortSignal): Promise<v
         contentHash: '',
         title,
         content: session.slice(0, 2000),
-        subType: 'general',
+        subType: 'snapshot',
         projectRemote: proj.remote,
         projectPath: proj.path,
         projectName: proj.name,

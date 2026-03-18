@@ -111,41 +111,66 @@ function splitMarkdownSections(md: string): Array<{ path: string; content: strin
 
 function syncKnowledgeIndex(store: ReturnType<typeof openDefaultCached>, projectPath: string): void {
   const knowledgeDir = join(projectPath, '.alfred', 'knowledge');
-  let files: string[];
-  try {
-    files = readdirSync(knowledgeDir).filter(f => f.endsWith('.md'));
-  } catch { return; }
-
-  if (files.length === 0) return;
-
   const proj = detectProject(projectPath);
   let synced = 0;
 
-  for (const file of files) {
-    try {
-      const content = readFileSync(join(knowledgeDir, file), 'utf-8');
-      const { frontmatter, body } = parseFrontmatter(content);
-      const row: KnowledgeRow = {
-        id: 0,
-        filePath: file,
-        contentHash: '',
-        title: frontmatter.id ?? file.replace('.md', ''),
-        content: body,
-        subType: frontmatter.type ?? 'general',
-        projectRemote: proj.remote,
-        projectPath: proj.path,
-        projectName: proj.name,
-        branch: proj.branch,
-        createdAt: frontmatter.created_at ?? '',
-        updatedAt: '',
-        hitCount: 0,
-        lastAccessed: '',
-        enabled: true,
-      };
-      const { changed } = upsertKnowledge(store, row);
-      if (changed) synced++;
-    } catch { continue; }
+  // Walk decisions/, patterns/, rules/ subdirectories for JSON files.
+  for (const typeDir of ['decisions', 'patterns', 'rules']) {
+    const dir = join(knowledgeDir, typeDir);
+    let files: string[];
+    try { files = readdirSync(dir).filter(f => f.endsWith('.json')); } catch { continue; }
+
+    for (const file of files) {
+      try {
+        const raw = readFileSync(join(dir, file), 'utf-8');
+        const entry = JSON.parse(raw) as { id?: string; title?: string; createdAt?: string };
+        const filePath = `${typeDir}/${file}`;
+        const subType = typeDir === 'decisions' ? 'decision' : typeDir === 'patterns' ? 'pattern' : 'rule';
+        const row: KnowledgeRow = {
+          id: 0,
+          filePath,
+          contentHash: '',
+          title: entry.title ?? entry.id ?? file.replace('.json', ''),
+          content: raw,
+          subType,
+          projectRemote: proj.remote,
+          projectPath: proj.path,
+          projectName: proj.name,
+          branch: proj.branch,
+          createdAt: entry.createdAt ?? '',
+          updatedAt: '',
+          hitCount: 0,
+          lastAccessed: '',
+          enabled: true,
+        };
+        const { changed } = upsertKnowledge(store, row);
+        if (changed) synced++;
+      } catch { continue; }
+    }
   }
+
+  // Legacy: also sync any .md files at root level (backward compat, will be removed later).
+  try {
+    const mdFiles = readdirSync(knowledgeDir).filter(f => f.endsWith('.md'));
+    for (const file of mdFiles) {
+      try {
+        const content = readFileSync(join(knowledgeDir, file), 'utf-8');
+        const { frontmatter, body } = parseFrontmatter(content);
+        const row: KnowledgeRow = {
+          id: 0, filePath: file, contentHash: '',
+          title: frontmatter.id ?? file.replace('.md', ''),
+          content: body,
+          subType: frontmatter.type === 'decision' ? 'decision' : frontmatter.type === 'pattern' ? 'pattern' : frontmatter.type === 'rule' ? 'rule' : 'snapshot',
+          projectRemote: proj.remote, projectPath: proj.path,
+          projectName: proj.name, branch: proj.branch,
+          createdAt: frontmatter.created_at ?? '', updatedAt: '',
+          hitCount: 0, lastAccessed: '', enabled: true,
+        };
+        const { changed } = upsertKnowledge(store, row);
+        if (changed) synced++;
+      } catch { continue; }
+    }
+  } catch { /* no legacy files */ }
 
   if (synced > 0) {
     notifyUser('synced %d knowledge files to index', synced);

@@ -8,7 +8,7 @@ export function subTypeHalfLife(subType: string): number {
   switch (subType) {
     case 'assumption': return 30;
     case 'inference': return 45;
-    case 'general': return 60;
+    case 'snapshot': return 30;
     case 'pattern': return 90;
     case 'decision': return 90;
     case 'rule': return 120;

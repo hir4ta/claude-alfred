@@ -15,7 +15,7 @@ import { syncTaskStatus, unlinkTaskFromAllEpics } from '../epic/index.js';
 import { searchPipeline, truncate } from './helpers.js';
 import { upsertKnowledge } from '../store/knowledge.js';
 import { detectProject } from '../store/project.js';
-import type { KnowledgeRow } from '../types.js';
+import type { KnowledgeRow, DecisionEntry } from '../types.js';
 import { vectorSearchKnowledge } from '../store/vectors.js';
 import { getKnowledgeByIDs } from '../store/knowledge.js';
 import { searchKnowledgeFTS } from '../store/fts.js';
@@ -217,6 +217,8 @@ function dossierStatus(projectPath: string) {
     review_status: task?.review_status ?? 'pending',
   };
   if (task?.completed_at) result['completed_at'] = task.completed_at;
+
+  result['lang'] = process.env['ALFRED_LANG'] || 'en';
 
   // Read all spec file contents.
   if (sd.exists()) {
@@ -496,20 +498,41 @@ function saveDecisionsAsKnowledge(store: Store, projectPath: string, taskSlug: s
     const sd = new SpecDir(projectPath, taskSlug);
     const decisions = sd.readFile('decisions.md');
     const proj = detectProject(projectPath);
+    const lang = process.env['ALFRED_LANG'] || 'en';
+    const now = new Date().toISOString();
 
     const sections = decisions.split(/\n## DEC-\d+/);
     for (let i = 1; i < sections.length; i++) {
       const section = sections[i]!;
       const titleMatch = section.match(/^:\s*(.+)/);
       const title = titleMatch ? titleMatch[1]!.trim() : `Decision ${i}`;
-      // Support both `**Status:** accepted` and `- Status: accepted` formats.
       const statusMatch = section.match(/(?:- |\*\*)?Status:?\*?\*?\s*(\w+)/i);
       if (statusMatch && statusMatch[1]!.toLowerCase() === 'accepted') {
+        // Parse structured fields from Markdown.
+        const decisionMatch = section.match(/\*\*Decision:\*\*\s*(.+)/i);
+        const reasoningMatch = section.match(/\*\*Rationale:\*\*\s*(.+)/i) ?? section.match(/\*\*Reasoning:\*\*\s*(.+)/i);
+        const alternativesMatch = section.match(/\*\*Alternatives rejected:\*\*\s*(.+)/i);
+
+        const entry: DecisionEntry = {
+          id: `dec-spec-${taskSlug}-${i}`,
+          title,
+          context: (section.match(/\*\*Context:\*\*\s*(.+)/i)?.[1] ?? '').trim(),
+          decision: (decisionMatch?.[1] ?? '').trim(),
+          reasoning: (reasoningMatch?.[1] ?? '').trim(),
+          alternatives: alternativesMatch
+            ? alternativesMatch[1]!.split(/[;,]/).map(a => a.trim()).filter(Boolean)
+            : [],
+          tags: [taskSlug],
+          createdAt: now,
+          status: 'approved',
+          lang,
+        };
+
         const row: KnowledgeRow = {
           id: 0,
-          filePath: `decisions/spec/${taskSlug}/dec-${i}`,
+          filePath: `decisions/${entry.id}.json`,
           contentHash: '', title,
-          content: section.slice(0, 1000),
+          content: JSON.stringify(entry),
           subType: 'decision',
           projectRemote: proj.remote, projectPath: proj.path,
           projectName: proj.name, branch: proj.branch,

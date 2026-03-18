@@ -77,26 +77,38 @@ Actions: init, status, link, unlink, order, list, update, delete (2-phase: previ
 Actions:
 - search (default): Search past memories AND completed specs
 - save: Save a new memory entry for future retrieval
-- promote: Promote a memory's sub_type (general→pattern or pattern→rule)
-- candidates: List memories that qualify for promotion based on hit_count
-- reflect: Health report — stats, conflicts, stale memories, promotion candidates
+- promote: Promote a memory's sub_type (pattern→rule)
+- candidates: List patterns that qualify for promotion to rule based on hit_count
+- reflect: Health report — stats, conflicts, promotion candidates
 - audit-conventions: Check pattern/rule memories against the codebase for drift`,
     {
       action: z.enum(['search', 'save', 'promote', 'candidates', 'reflect', 'stale', 'audit-conventions']).describe('Action to perform'),
       id: z.number().optional().describe('Record ID (required for promote)'),
       query: z.string().optional().describe('Search query'),
-      content: z.string().optional().describe('Content to save'),
-      label: z.string().optional().describe('Short label for saved memory'),
-      project: z.string().optional().describe("Project name (default: 'general')"),
+      label: z.string().optional().describe('Short label for saved entry'),
       limit: z.number().optional().describe('Maximum search results (default: 10)'),
       detail: z.enum(['compact', 'summary', 'full']).optional().describe('Response verbosity'),
-      sub_type: z.enum(['general', 'decision', 'pattern', 'rule']).optional().describe('Memory classification'),
-      title: z.string().optional().describe('Structured knowledge: title'),
-      context_text: z.string().optional().describe('Structured knowledge: context'),
-      reasoning: z.string().optional().describe('Structured knowledge: reasoning'),
-      alternatives: z.string().optional().describe('Comma-separated rejected alternatives'),
-      category: z.string().optional().describe('Rule category'),
-      priority: z.string().optional().describe('Rule priority p0/p1/p2'),
+      sub_type: z.enum(['decision', 'pattern', 'rule']).optional().describe('Knowledge type (required for save)'),
+      title: z.string().optional().describe('Entry title'),
+      // Decision fields
+      decision: z.string().optional().describe('Decision: what was decided'),
+      reasoning: z.string().optional().describe('Decision: why this choice'),
+      alternatives: z.string().optional().describe('Decision: comma-separated rejected alternatives with reasons'),
+      context_text: z.string().optional().describe('Decision/Pattern: context or background'),
+      // Pattern fields
+      pattern_type: z.enum(['good', 'bad', 'error-solution']).optional().describe('Pattern: type'),
+      pattern: z.string().optional().describe('Pattern: concrete steps'),
+      application_conditions: z.string().optional().describe('Pattern: when to apply'),
+      expected_outcomes: z.string().optional().describe('Pattern: expected results'),
+      // Rule fields
+      key: z.string().optional().describe('Rule: machine-readable key'),
+      text: z.string().optional().describe('Rule: imperative text'),
+      category: z.string().optional().describe('Rule: category'),
+      priority: z.enum(['p0', 'p1', 'p2']).optional().describe('Rule: priority'),
+      rationale: z.string().optional().describe('Rule: rationale'),
+      source_ref: z.string().optional().describe('Rule: source reference JSON {"type":"pattern","id":"..."}'),
+      // Common
+      tags: z.string().optional().describe('Comma-separated tags'),
       project_path: z.string().optional().describe('Project root path'),
     },
     async (params) => {

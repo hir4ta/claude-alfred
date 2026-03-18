@@ -98,7 +98,7 @@ export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Prom
   if (result.scoredDocs.length > 0) {
     trackHitCounts(store, result.scoredDocs);
     const contextLines = result.scoredDocs.map(sd => {
-      const sub = sd.doc.subType !== 'general' ? sd.doc.subType : '';
+      const sub = sd.doc.subType !== 'snapshot' ? sd.doc.subType : '';
       const scoreStr = sd.score.toFixed(2);
       const prefix = sub ? `[${sub}|${scoreStr}|${sd.matchReason}]` : `[${scoreStr}|${sd.matchReason}]`;
       const explanation = buildRelevanceExplanation(sd);
@@ -234,12 +234,12 @@ export function checkSpecRequired(cwd: string, intent: string | null): Directive
 
 function intentDescription(intent: string): string {
   switch (intent) {
-    case 'research': return '調査・リサーチの構造化';
-    case 'plan': return '仕様策定→承認→実装の自律フロー';
-    case 'implement': return '仕様策定→承認→実装の自律フロー';
-    case 'bugfix': return '再現→分析→修正→検証の自律バグ修正';
-    case 'review': return '6プロファイル品質レビュー';
-    case 'tdd': return 'Red→Green→Refactor の自律TDD';
+    case 'research': return 'Research and investigation structuring';
+    case 'plan': return 'Spec creation → approval → implementation';
+    case 'implement': return 'Spec creation → approval → implementation';
+    case 'bugfix': return 'Reproduce → analyze → fix → verify';
+    case 'review': return '6-profile quality review';
+    case 'tdd': return 'Red → Green → Refactor autonomous TDD';
     default: return '';
   }
 }

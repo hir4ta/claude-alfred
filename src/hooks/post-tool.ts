@@ -336,7 +336,7 @@ function saveKnowledgeOnCommit(projectPath: string): void {
       filePath: `snapshots/${slug}/commit-${ts}`,
       contentHash: '', title: `${proj.name} > ${slug} > progress`,
       content: session.slice(0, 2000),
-      subType: 'general',
+      subType: 'snapshot',
       projectRemote: proj.remote, projectPath: proj.path,
       projectName: proj.name, branch: proj.branch,
       createdAt: '', updatedAt: '', hitCount: 0, lastAccessed: '', enabled: true,
@@ -344,13 +344,12 @@ function saveKnowledgeOnCommit(projectPath: string): void {
     upsertKnowledge(store, row);
   } catch { /* fail-open */ }
 
-  // 3. Auto-promote eligible knowledge (general→pattern at 5+ hits, pattern→rule at 15+).
+  // 3. Auto-promote eligible knowledge (pattern→rule at 15+ hits).
   try {
     const candidates = getPromotionCandidates(store);
     for (const c of candidates) {
-      const newType = c.subType === 'general' ? 'pattern' : 'rule';
-      promoteSubType(store, c.id, newType);
-      notifyUser("auto-promoted knowledge '%s' to %s (%d hits)", c.title, newType, c.hitCount);
+      promoteSubType(store, c.id, 'rule');
+      notifyUser("auto-promoted knowledge '%s' to rule (%d hits)", c.title, c.hitCount);
     }
   } catch { /* fail-open */ }
 }

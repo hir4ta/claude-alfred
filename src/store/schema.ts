@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS knowledge_index (
     content_hash    TEXT NOT NULL,
     title           TEXT NOT NULL,
     content         TEXT NOT NULL,
-    sub_type        TEXT NOT NULL DEFAULT 'general',
+    sub_type        TEXT NOT NULL DEFAULT 'decision',
     project_remote  TEXT DEFAULT '',
     project_path    TEXT NOT NULL,
     project_name    TEXT NOT NULL DEFAULT '',

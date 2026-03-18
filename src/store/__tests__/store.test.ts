@@ -51,7 +51,7 @@ describe('Knowledge CRUD', () => {
     contentHash: '',
     title: 'Test Entry',
     content: 'This is test content',
-    subType: 'general',
+    subType: 'decision',
     projectRemote: 'github.com/user/repo',
     projectPath: '/tmp/repo',
     projectName: 'repo',
@@ -128,12 +128,12 @@ describe('Knowledge CRUD', () => {
   });
 
   it('promotes sub_type', () => {
-    const row = makeRow({ subType: 'general' });
+    const row = makeRow({ subType: 'pattern' });
     const { id } = upsertKnowledge(store, row);
-    promoteSubType(store, id, 'pattern');
+    promoteSubType(store, id, 'rule');
 
     const fetched = getKnowledgeByID(store, id);
-    expect(fetched!.subType).toBe('pattern');
+    expect(fetched!.subType).toBe('rule');
   });
 
   it('counts knowledge', () => {
@@ -143,11 +143,11 @@ describe('Knowledge CRUD', () => {
   });
 
   it('returns knowledge stats', () => {
-    upsertKnowledge(store, makeRow({ filePath: 'a.md', subType: 'general' }));
+    upsertKnowledge(store, makeRow({ filePath: 'a.md', subType: 'pattern' }));
     upsertKnowledge(store, makeRow({ filePath: 'b.md', subType: 'decision' }));
     const stats = getKnowledgeStats(store);
     expect(stats.total).toBe(2);
-    expect(stats.bySubType['general']).toBe(1);
+    expect(stats.bySubType['pattern']).toBe(1);
     expect(stats.bySubType['decision']).toBe(1);
     expect(stats.avgHitCount).toBe(0);
     expect(stats.topAccessed).toHaveLength(2);
@@ -194,7 +194,7 @@ describe('Vectors', () => {
   it('vector search returns sorted results', () => {
     const row1: KnowledgeRow = {
       id: 0, filePath: 'a.md', contentHash: '', title: 'A', content: 'A',
-      subType: 'general', projectRemote: '', projectPath: '/tmp', projectName: 'test',
+      subType: 'decision', projectRemote: '', projectPath: '/tmp', projectName: 'test',
       branch: '', createdAt: '', updatedAt: '', hitCount: 0, lastAccessed: '', enabled: true,
     };
     const row2 = { ...row1, filePath: 'b.md', title: 'B', content: 'B' };
@@ -213,7 +213,7 @@ describe('Vectors', () => {
   it('cleans orphaned embeddings', () => {
     const row: KnowledgeRow = {
       id: 0, filePath: 'a.md', contentHash: '', title: 'A', content: 'A',
-      subType: 'general', projectRemote: '', projectPath: '/tmp', projectName: 'test',
+      subType: 'decision', projectRemote: '', projectPath: '/tmp', projectName: 'test',
       branch: '', createdAt: '', updatedAt: '', hitCount: 0, lastAccessed: '', enabled: true,
     };
     const { id } = upsertKnowledge(store, row);
@@ -248,14 +248,14 @@ describe('FTS', () => {
 
   it('sub type half life values', () => {
     expect(subTypeHalfLife('rule')).toBe(120);
-    expect(subTypeHalfLife('general')).toBe(60);
+    expect(subTypeHalfLife('snapshot')).toBe(30);
     expect(subTypeHalfLife('assumption')).toBe(30);
   });
 
   it('sub type boost values', () => {
     expect(subTypeBoost('rule')).toBe(2.0);
     expect(subTypeBoost('decision')).toBe(1.5);
-    expect(subTypeBoost('general')).toBe(1.0);
+    expect(subTypeBoost('snapshot')).toBe(1.0);
   });
 });
 

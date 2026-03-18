@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Store } from '../store/index.js';
 import type { Embedder } from '../embedder/index.js';
 import { searchPipeline, trackHitCounts, truncate } from './helpers.js';
@@ -7,24 +9,37 @@ import {
   getKnowledgeStats, promoteSubType,
 } from '../store/knowledge.js';
 import { detectKnowledgeConflicts } from '../store/fts.js';
-import type { KnowledgeRow } from '../types.js';
+import type { KnowledgeRow, DecisionEntry, PatternEntry, RuleEntry } from '../types.js';
+import { VALID_SUB_TYPES } from '../types.js';
 
 interface LedgerParams {
   action: string;
   id?: number;
   query?: string;
-  content?: string;
   label?: string;
-  project?: string;
   limit?: number;
   detail?: string;
   sub_type?: string;
   title?: string;
-  context_text?: string;
+  // Decision fields
+  decision?: string;
   reasoning?: string;
   alternatives?: string;
+  context_text?: string;
+  // Pattern fields
+  pattern_type?: string;
+  pattern?: string;
+  application_conditions?: string;
+  expected_outcomes?: string;
+  // Rule fields
+  key?: string;
+  text?: string;
   category?: string;
   priority?: string;
+  rationale?: string;
+  source_ref?: string;
+  // Common
+  tags?: string;
   project_path?: string;
 }
 
@@ -53,19 +68,17 @@ export async function handleLedger(
   }
 }
 
+// --- Search ---
+
 async function ledgerSearch(store: Store, emb: Embedder | null, params: LedgerParams) {
   const query = params.query ?? '';
+  const lang = process.env['ALFRED_LANG'] || 'en';
   let limit = params.limit ?? 10;
   const detail = params.detail ?? 'summary';
   const warnings: string[] = [];
 
-  if (limit > 100) {
-    limit = 100;
-    warnings.push('limit capped to 100');
-  }
-  if (!query.trim()) {
-    return errorResult('query is required for search');
-  }
+  if (limit > 100) { limit = 100; warnings.push('limit capped to 100'); }
+  if (!query.trim()) return errorResult('query is required for search');
 
   const overRetrieve = Math.max(limit * 3, 30);
   const result = await searchPipeline(store, emb, query, limit, overRetrieve);
@@ -75,6 +88,8 @@ async function ledgerSearch(store: Store, emb: Embedder | null, params: LedgerPa
   if (params.sub_type) {
     scored = scored.filter(sd => sd.doc.subType === params.sub_type);
   }
+  // Exclude snapshots from search results.
+  scored = scored.filter(sd => sd.doc.subType !== 'snapshot');
 
   trackHitCounts(store, scored);
 
@@ -85,91 +100,196 @@ async function ledgerSearch(store: Store, emb: Embedder | null, params: LedgerPa
   }));
 
   return jsonResult({
-    query,
-    results,
-    count: results.length,
+    query, results, count: results.length,
     search_method: result.searchMethod,
+    lang,
     ...(warnings.length > 0 ? { warning: warnings.join('; ') } : {}),
   });
 }
 
 function formatDoc(d: KnowledgeRow, detail: string) {
-  const base: Record<string, unknown> = { title: d.title };
-  if (d.subType !== 'general') base['sub_type'] = d.subType;
+  const base: Record<string, unknown> = { title: d.title, sub_type: d.subType };
   if (detail === 'compact') return base;
 
   base['file_path'] = d.filePath;
   base['saved_at'] = d.createdAt;
 
-  if (detail === 'full') {
-    base['content'] = d.content;
-  } else {
-    base['content'] = truncate(d.content, 200);
+  // Try parsing JSON content for structured display.
+  if (detail === 'full' || detail === 'summary') {
+    try {
+      const parsed = JSON.parse(d.content);
+      if (d.subType === 'decision') {
+        base['decision'] = parsed.decision;
+        base['reasoning'] = detail === 'full' ? parsed.reasoning : truncate(parsed.reasoning ?? '', 200);
+        if (detail === 'full' && parsed.alternatives) base['alternatives'] = parsed.alternatives;
+        if (parsed.tags) base['tags'] = parsed.tags;
+      } else if (d.subType === 'pattern') {
+        base['pattern_type'] = parsed.type;
+        base['pattern'] = detail === 'full' ? parsed.pattern : truncate(parsed.pattern ?? '', 200);
+        if (detail === 'full') {
+          base['application_conditions'] = parsed.applicationConditions;
+          base['expected_outcomes'] = parsed.expectedOutcomes;
+        }
+        if (parsed.tags) base['tags'] = parsed.tags;
+      } else if (d.subType === 'rule') {
+        base['key'] = parsed.key;
+        base['text'] = parsed.text;
+        base['priority'] = parsed.priority;
+        if (detail === 'full') {
+          base['rationale'] = parsed.rationale;
+          base['source_ref'] = parsed.sourceRef;
+        }
+        if (parsed.tags) base['tags'] = parsed.tags;
+      } else {
+        // Fallback for snapshot or unknown types.
+        base['content'] = detail === 'full' ? d.content : truncate(d.content, 200);
+      }
+    } catch {
+      // Legacy plain text content — fallback.
+      base['content'] = detail === 'full' ? d.content : truncate(d.content, 200);
+    }
   }
   return base;
 }
 
+// --- Save ---
+
+function toLang(): string {
+  return process.env['ALFRED_LANG'] || 'en';
+}
+
+function toKebabId(prefix: string, title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 50)
+    .replace(/-$/, '');
+  return `${prefix}-${slug || 'untitled'}`;
+}
+
+function parseTags(tagsStr: string | undefined): string[] {
+  return (tagsStr ?? '').split(',').map(t => t.trim()).filter(Boolean);
+}
+
 async function ledgerSave(store: Store, emb: Embedder | null, params: LedgerParams) {
-  if (!params.content) return errorResult('content is required for save');
+  const subType = params.sub_type;
+  if (!subType || !(VALID_SUB_TYPES as readonly string[]).includes(subType)) {
+    return errorResult('sub_type must be decision, pattern, or rule');
+  }
+  if (!params.title) return errorResult('title is required for save');
   if (!params.label) return errorResult('label is required for save');
 
-  const project = params.project ?? 'general';
-  const subType = params.sub_type ?? 'general';
+  const now = new Date().toISOString();
+  const lang = toLang();
+  const tags = parseTags(params.tags);
+  let entry: DecisionEntry | PatternEntry | RuleEntry;
+  let id: string;
+
+  switch (subType) {
+    case 'decision': {
+      if (!params.decision) return errorResult('decision field is required for decision type');
+      if (!params.reasoning) return errorResult('reasoning field is required for decision type');
+      id = toKebabId('dec', params.title);
+      entry = {
+        id, title: params.title,
+        context: params.context_text ?? '',
+        decision: params.decision,
+        reasoning: params.reasoning,
+        alternatives: (params.alternatives ?? '').split('\n').filter(Boolean),
+        tags, createdAt: now, status: 'approved', lang,
+      } satisfies DecisionEntry;
+      break;
+    }
+    case 'pattern': {
+      if (!params.pattern) return errorResult('pattern field is required for pattern type');
+      id = toKebabId('pat', params.title);
+      entry = {
+        id, title: params.title,
+        type: (params.pattern_type as PatternEntry['type']) ?? 'good',
+        context: params.context_text ?? '',
+        pattern: params.pattern,
+        applicationConditions: params.application_conditions ?? '',
+        expectedOutcomes: params.expected_outcomes ?? '',
+        tags, createdAt: now, status: 'approved', lang,
+      } satisfies PatternEntry;
+      break;
+    }
+    case 'rule': {
+      if (!params.text) return errorResult('text field is required for rule type');
+      if (!params.key) return errorResult('key field is required for rule type');
+      id = toKebabId('rule', params.title);
+      let sourceRef: RuleEntry['sourceRef'];
+      if (params.source_ref) {
+        try { sourceRef = JSON.parse(params.source_ref); } catch { /* ignore */ }
+      }
+      entry = {
+        id, title: params.title,
+        key: params.key, text: params.text,
+        category: params.category ?? '',
+        priority: (params.priority as RuleEntry['priority']) ?? 'p1',
+        rationale: params.rationale ?? '',
+        sourceRef, tags, createdAt: now, status: 'approved', lang,
+      } satisfies RuleEntry;
+      break;
+    }
+    default:
+      return errorResult('sub_type must be decision, pattern, or rule');
+  }
+
+  // Write JSON file to .alfred/knowledge/{type}/{id}.json
   const projectPath = params.project_path ?? process.cwd();
+  const typeDir = subType === 'decision' ? 'decisions' : subType === 'pattern' ? 'patterns' : 'rules';
+  const knowledgeDir = join(projectPath, '.alfred', 'knowledge', typeDir);
+  mkdirSync(knowledgeDir, { recursive: true });
+  const filePath = join(typeDir, `${id}.json`);
+  writeFileSync(join(projectPath, '.alfred', 'knowledge', filePath), JSON.stringify(entry, null, 2) + '\n');
+
+  // DB upsert for search index.
   const projInfo = detectProject(projectPath);
-
-  const now = new Date();
-  const ts = now.toISOString().replace(/[:.]/g, '').slice(0, 15);
-  const filePath = `memories/${project}/manual/${ts}`;
-  const title = `${project} > manual > ${params.label}`;
-
   const row: KnowledgeRow = {
-    id: 0,
-    filePath,
-    contentHash: '',
-    title,
-    content: params.content,
+    id: 0, filePath,
+    contentHash: '', title: params.title,
+    content: JSON.stringify(entry),
     subType,
-    projectRemote: projInfo.remote,
-    projectPath: projInfo.path,
-    projectName: projInfo.name,
-    branch: projInfo.branch,
-    createdAt: '',
-    updatedAt: '',
-    hitCount: 0,
-    lastAccessed: '',
-    enabled: true,
+    projectRemote: projInfo.remote, projectPath: projInfo.path,
+    projectName: projInfo.name, branch: projInfo.branch,
+    createdAt: '', updatedAt: '', hitCount: 0, lastAccessed: '', enabled: true,
   };
+  const { id: dbId, changed } = upsertKnowledge(store, row);
 
-  const { id, changed } = upsertKnowledge(store, row);
-
+  // Async embedding.
   let embeddingStatus = 'none';
   if (emb && changed) {
     const model = emb.model;
-    emb.embedForStorage(params.content).then(async (vec) => {
+    const embText = `${params.title} ${params.context_text ?? ''} ${params.decision ?? params.pattern ?? params.text ?? ''}`;
+    emb.embedForStorage(embText).then(async (vec) => {
       const { insertEmbedding } = await import('../store/vectors.js');
-      insertEmbedding(store, 'knowledge', id, model, vec);
+      insertEmbedding(store, 'knowledge', dbId, model, vec);
     }).catch(err => {
-      console.error(`[alfred] embedding failed for ${id}: ${err}`);
+      console.error(`[alfred] embedding failed for ${dbId}: ${err}`);
     });
     embeddingStatus = 'pending';
   }
 
   return jsonResult({
     status: changed ? 'saved' : 'unchanged (duplicate)',
-    id,
-    title,
-    file_path: filePath,
-    embedding_status: embeddingStatus,
+    id: dbId, entry_id: id, title: params.title,
+    file_path: filePath, embedding_status: embeddingStatus, lang,
   });
 }
+
+// --- Promote ---
 
 async function ledgerPromote(store: Store, params: LedgerParams) {
   if (!params.id) return errorResult('id is required for promote');
   if (!params.sub_type) return errorResult('sub_type is required for promote');
+  if (params.sub_type !== 'rule') return errorResult('promotion target must be "rule" (pattern→rule only)');
 
   const doc = getKnowledgeByID(store, params.id);
   if (!doc) return errorResult(`knowledge ${params.id} not found`);
+  if (doc.subType !== 'pattern') return errorResult('only patterns can be promoted to rules');
 
   try {
     promoteSubType(store, params.id, params.sub_type);
@@ -185,22 +305,23 @@ async function ledgerPromote(store: Store, params: LedgerParams) {
   });
 }
 
+// --- Candidates ---
+
 async function ledgerCandidates(store: Store) {
   const candidates = getPromotionCandidates(store);
   const results = candidates.map(d => ({
-    id: d.id,
-    title: d.title,
-    hit_count: d.hitCount,
-    current: d.subType,
-    suggested: d.subType === 'general' ? 'pattern' : 'rule',
+    id: d.id, title: d.title, hit_count: d.hitCount,
+    current: d.subType, suggested: 'rule',
   }));
-
   return jsonResult({ candidates: results, count: results.length });
 }
 
-async function ledgerReflect(store: Store, emb: Embedder | null, params: LedgerParams) {
+// --- Reflect ---
+
+async function ledgerReflect(store: Store, emb: Embedder | null, _params: LedgerParams) {
   const stats = getKnowledgeStats(store);
   const candidates = getPromotionCandidates(store);
+  const lang = toLang();
 
   let duplicates: Array<Record<string, unknown>> = [];
   let contradictions: Array<Record<string, unknown>> = [];
@@ -215,24 +336,17 @@ async function ledgerReflect(store: Store, emb: Embedder | null, params: LedgerP
           similarity: Math.round(c.similarity * 100) / 100,
           type: c.type,
         };
-        if (c.type === 'potential_contradiction') {
-          contradictions.push(entry);
-        } else {
-          duplicates.push(entry);
-        }
+        if (c.type === 'potential_contradiction') contradictions.push(entry);
+        else duplicates.push(entry);
       }
     } catch (err) {
-      // Conflict detection is best-effort.
       console.error(`[alfred] conflict detection failed: ${err}`);
     }
   }
 
   const promotionCandidates = candidates.map(d => ({
-    id: d.id,
-    title: d.title,
-    hit_count: d.hitCount,
-    current: d.subType,
-    suggested: d.subType === 'general' ? 'pattern' : 'rule',
+    id: d.id, title: d.title, hit_count: d.hitCount,
+    current: d.subType, suggested: 'rule',
   }));
 
   return jsonResult({
@@ -241,13 +355,9 @@ async function ledgerReflect(store: Store, emb: Embedder | null, params: LedgerP
       by_sub_type: stats.bySubType,
       avg_hit_count: Math.round(stats.avgHitCount * 100) / 100,
       most_accessed: stats.topAccessed.map(d => ({
-        title: d.title,
-        hit_count: d.hitCount,
-        sub_type: d.subType,
+        title: d.title, hit_count: d.hitCount, sub_type: d.subType,
       })),
     },
-    duplicates,
-    contradictions,
-    promotion_candidates: promotionCandidates,
+    duplicates, contradictions, promotion_candidates: promotionCandidates, lang,
   });
 }

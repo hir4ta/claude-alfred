@@ -152,8 +152,7 @@ export function getPromotionCandidates(store: Store): KnowledgeRow[] {
            created_at, updated_at, hit_count, last_accessed, enabled
     FROM knowledge_index
     WHERE enabled = 1
-      AND ((sub_type = 'general' AND hit_count >= 5)
-        OR (sub_type = 'pattern' AND hit_count >= 15))
+      AND (sub_type = 'pattern' AND hit_count >= 15)
     ORDER BY hit_count DESC
   `).all() as RawKnowledgeRow[];
   return rows.map(mapRow);
