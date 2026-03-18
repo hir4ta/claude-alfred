@@ -1,6 +1,8 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { versionQueryOptions } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { QueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 import { Activity, BookOpen, LayoutDashboard, ListChecks } from "lucide-react";
 
@@ -19,6 +21,16 @@ const tabs = [
 	{ to: "/activity", label: "Activity", icon: Activity },
 ] as const;
 
+function VersionBadge() {
+	const { data } = useQuery(versionQueryOptions());
+	if (!data?.version) return null;
+	return (
+		<span className="ml-auto text-[11px] text-muted-foreground/60 font-mono">
+			v{data.version}
+		</span>
+	);
+}
+
 function RootLayout() {
 	return (
 		<TooltipProvider>
@@ -26,7 +38,7 @@ function RootLayout() {
 				<header className="sticky top-0 z-50 border-b border-border/60 bg-card/90 backdrop-blur-md">
 					<div className="mx-auto flex h-14 max-w-7xl items-center gap-8 px-6">
 						<span
-							className="text-base font-semibold tracking-tight"
+							className="text-xl font-bold tracking-tight"
 							style={{ fontFamily: "var(--font-display)", color: "#40513b" }}
 						>
 							alfred
@@ -53,6 +65,7 @@ function RootLayout() {
 								);
 							})}
 						</nav>
+						<VersionBadge />
 					</div>
 				</header>
 				<main className="mx-auto w-full max-w-7xl flex-1 px-6 py-6">
