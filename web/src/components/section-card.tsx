@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -24,9 +24,11 @@ interface SectionCardProps {
 	content: string;
 	color?: string;
 	defaultOpen?: boolean;
+	approved?: boolean;
+	onApprove?: (file: string, approved: boolean) => void;
 }
 
-export function SectionCard({ title, content, color, defaultOpen = false }: SectionCardProps) {
+export function SectionCard({ title, content, color, defaultOpen = false, approved, onApprove }: SectionCardProps) {
 	const [open, setOpen] = useState(defaultOpen);
 	const borderColor = color ?? SPEC_FILE_COLORS[title] ?? "#44403c";
 
@@ -35,16 +37,33 @@ export function SectionCard({ title, content, color, defaultOpen = false }: Sect
 			className="rounded-lg border bg-card overflow-hidden transition-colors hover:border-border/80"
 			style={{ borderLeftWidth: 3, borderLeftColor: borderColor }}
 		>
-			<button
-				type="button"
-				onClick={() => setOpen(!open)}
-				className="flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-accent/30"
-			>
-				<span className="text-sm font-medium">{title.replace(".md", "")}</span>
-				<ChevronDown
-					className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")}
-				/>
-			</button>
+			<div className="flex items-center justify-between px-4 py-2.5">
+				<button
+					type="button"
+					onClick={() => setOpen(!open)}
+					className="flex items-center gap-2 text-left transition-colors hover:opacity-70 flex-1 min-w-0"
+				>
+					<span className="text-sm font-medium">{title.replace(".md", "")}</span>
+					<ChevronDown
+						className={cn("size-4 text-muted-foreground transition-transform shrink-0", open && "rotate-180")}
+					/>
+				</button>
+				{onApprove && (
+					<button
+						type="button"
+						onClick={() => onApprove(title, !approved)}
+						className={cn(
+							"flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all shrink-0 ml-2",
+							approved
+								? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800"
+								: "bg-muted text-muted-foreground border border-transparent hover:border-border hover:bg-accent",
+						)}
+					>
+						<Check className={cn("size-3", approved ? "opacity-100" : "opacity-30")} />
+						{approved ? "Approved" : "Approve"}
+					</button>
+				)}
+			</div>
 
 			{open && (
 				<div className="border-t px-4 py-3">

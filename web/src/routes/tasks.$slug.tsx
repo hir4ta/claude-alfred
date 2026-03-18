@@ -6,15 +6,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+	completeTask,
+	fileApprovalsQueryOptions,
+	setFileApproval,
 	specContentQueryOptions,
 	specsQueryOptions,
 	tasksQueryOptions,
 	validationQueryOptions,
 } from "@/lib/api";
 import type { SpecEntry, TaskDetail, ValidationReport } from "@/lib/types";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar, CircleCheck, CircleDot, MessageSquareText } from "lucide-react";
+import { Calendar, CheckCircle2, CircleCheck, CircleDot, MessageSquareText } from "lucide-react";
 import { useState } from "react";
 
 export const Route = createFileRoute("/tasks/$slug")({
@@ -31,20 +34,46 @@ const SIZE_LABELS: Record<string, string> = {
 
 function TaskDetailPage() {
 	const { slug } = Route.useParams();
+	const queryClient = useQueryClient();
 	const { data: tasksData } = useQuery(tasksQueryOptions());
 	const { data: specsData } = useQuery(specsQueryOptions(slug));
 	const { data: validationData } = useQuery(validationQueryOptions(slug));
+	const { data: approvalsData } = useQuery(fileApprovalsQueryOptions(slug));
 	const [reviewFile, setReviewFile] = useState<string | null>(null);
+	const [confirmComplete, setConfirmComplete] = useState(false);
 
 	const task = tasksData?.tasks.find((t) => t.slug === slug);
 	const specs = specsData?.specs ?? [];
+	const approvals = approvalsData?.approvals ?? {};
 
 	// Fetch all spec contents in parallel
 	const specContents = useQueries({
 		queries: specs.map((spec) => specContentQueryOptions(slug, spec.file)),
 	});
 
-	const isPending = task?.review_status === "pending";
+	const completeMutation = useMutation({
+		mutationFn: () => completeTask(slug),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["tasks"] });
+			setConfirmComplete(false);
+		},
+	});
+
+	const approveMutation = useMutation({
+		mutationFn: ({ file, approved }: { file: string; approved: boolean }) =>
+			setFileApproval(slug, file, approved),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["file-approvals", slug] });
+			queryClient.invalidateQueries({ queryKey: ["tasks"] });
+		},
+	});
+
+	const isPending = task?.review_status === "pending" || (task?.review_status !== "approved" && !task?.review_status);
+	const isActive = task?.status !== "completed";
+	const canComplete = isActive && (
+		task?.review_status === "approved" ||
+		!["M", "L", "XL"].includes(task?.size ?? "")
+	);
 
 	if (!task) {
 		return <p className="text-sm text-muted-foreground">Task not found.</p>;
@@ -73,26 +102,45 @@ function TaskDetailPage() {
 					</div>
 				)}
 
-				{/* Spec file list for review mode */}
-				{isPending && (
-					<div className="rounded-lg border bg-card p-4 space-y-2">
-						<h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Review</h3>
-						{specs.map((spec) => (
-							<button
-								type="button"
-								key={spec.file}
-								onClick={() => setReviewFile(reviewFile === spec.file ? null : spec.file)}
-								className={`w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent ${
-									reviewFile === spec.file ? "bg-accent font-medium" : ""
-								}`}
-								style={{ borderLeft: `3px solid ${SPEC_FILE_COLORS[spec.file] ?? "#44403c"}` }}
+				{/* Complete button */}
+				{canComplete && (
+					<div className="rounded-lg border bg-card p-4">
+						{!confirmComplete ? (
+							<Button
+								size="sm"
+								variant="outline"
+								className="w-full gap-1.5 text-xs"
+								onClick={() => setConfirmComplete(true)}
 							>
-								<div className="flex items-center gap-1.5">
-									<MessageSquareText className="size-3 shrink-0 text-muted-foreground" />
-									{spec.file.replace(".md", "")}
+								<CheckCircle2 className="size-3.5" />
+								Complete Task
+							</Button>
+						) : (
+							<div className="space-y-2">
+								<p className="text-xs text-muted-foreground">Mark this task as completed?</p>
+								<div className="flex gap-2">
+									<Button
+										size="sm"
+										className="flex-1 text-xs"
+										onClick={() => completeMutation.mutate()}
+										disabled={completeMutation.isPending}
+									>
+										{completeMutation.isPending ? "..." : "Confirm"}
+									</Button>
+									<Button
+										size="sm"
+										variant="outline"
+										className="flex-1 text-xs"
+										onClick={() => setConfirmComplete(false)}
+									>
+										Cancel
+									</Button>
 								</div>
-							</button>
-						))}
+								{completeMutation.isError && (
+									<p className="text-xs text-red-500">{completeMutation.error.message}</p>
+								)}
+							</div>
+						)}
 					</div>
 				)}
 			</div>
@@ -113,12 +161,15 @@ function TaskDetailPage() {
 						{specs.map((spec, i) => {
 							const content = specContents[i]?.data?.content ?? "";
 							if (!content) return null;
+							const showApprove = isActive && isPending && spec.file !== "session.md";
 							return (
 								<SectionCard
 									key={spec.file}
 									title={spec.file}
 									content={content}
 									defaultOpen={spec.file === "session.md"}
+									approved={showApprove ? approvals[spec.file] === true : undefined}
+									onApprove={showApprove ? (file, approved) => approveMutation.mutate({ file, approved }) : undefined}
 								/>
 							);
 						})}

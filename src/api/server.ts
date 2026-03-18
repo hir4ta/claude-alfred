@@ -8,6 +8,7 @@ import type { Store } from '../store/index.js';
 import type { Embedder } from '../embedder/index.js';
 import {
   SpecDir, readActiveState, writeActiveState, VALID_SLUG, filesForSize,
+  completeTask, verifyReviewFile,
 } from '../spec/types.js';
 import type { SpecFile, SpecSize, SpecType, ReviewStatus } from '../spec/types.js';
 import { listAllEpics } from '../epic/index.js';
@@ -351,6 +352,123 @@ export function createApp(
     });
 
     return c.json({ ok: true, review_status: reviewStatus, file: filename });
+  });
+
+  // --- Complete API ---
+
+  app.post('/api/tasks/:slug/complete', async (c) => {
+    const slug = c.req.param('slug');
+    if (!VALID_SLUG.test(slug)) return c.json({ error: 'invalid slug' }, 400);
+
+    const sd = new SpecDir(projectPath, slug);
+    if (!sd.exists()) return c.json({ error: 'spec not found' }, 404);
+
+    // Read task state.
+    let state;
+    try { state = readActiveState(projectPath); } catch {
+      return c.json({ error: 'failed to read active state' }, 500);
+    }
+    const task = state.tasks.find(t => t.slug === slug);
+    if (!task) return c.json({ error: 'task not found' }, 404);
+    if (task.status === 'completed') return c.json({ error: 'task already completed' }, 400);
+
+    // Approval gate: M/L/XL require approved review.
+    if (['M', 'L', 'XL'].includes(task.size ?? '')) {
+      if (task.review_status !== 'approved') {
+        return c.json({ error: `${task.size} spec requires approval before completion` }, 400);
+      }
+      const verification = verifyReviewFile(projectPath, slug);
+      if (!verification.valid) {
+        return c.json({ error: `review verification failed: ${verification.reason}` }, 400);
+      }
+    }
+
+    // Complete the task.
+    try {
+      const newPrimary = completeTask(projectPath, slug);
+      appendAudit(projectPath, {
+        action: 'spec.complete',
+        target: slug,
+        detail: 'completed via dashboard',
+        user: 'dashboard',
+      });
+      return c.json({ ok: true, new_primary: newPrimary });
+    } catch (err) {
+      return c.json({ error: String(err) }, 500);
+    }
+  });
+
+  // --- File-level Approval API ---
+
+  app.get('/api/tasks/:slug/file-approvals', (c) => {
+    const slug = c.req.param('slug');
+    if (!VALID_SLUG.test(slug)) return c.json({ error: 'invalid slug' }, 400);
+
+    const approvalsPath = join(new SpecDir(projectPath, slug).dir(), 'file-approvals.json');
+    try {
+      const data = JSON.parse(readFileSync(approvalsPath, 'utf-8')) as Record<string, boolean>;
+      return c.json({ approvals: data });
+    } catch {
+      return c.json({ approvals: {} });
+    }
+  });
+
+  app.post('/api/tasks/:slug/file-approvals', async (c) => {
+    const slug = c.req.param('slug');
+    if (!VALID_SLUG.test(slug)) return c.json({ error: 'invalid slug' }, 400);
+
+    const sd = new SpecDir(projectPath, slug);
+    if (!sd.exists()) return c.json({ error: 'spec not found' }, 404);
+
+    let body: { file: string; approved: boolean };
+    try { body = await c.req.json(); } catch {
+      return c.json({ error: 'invalid JSON body' }, 400);
+    }
+
+    const VALID_SPEC_FILES = new Set([
+      'requirements.md', 'design.md', 'tasks.md', 'test-specs.md',
+      'decisions.md', 'research.md', 'session.md', 'bugfix.md', 'delta.md',
+    ]);
+    if (!VALID_SPEC_FILES.has(body.file)) return c.json({ error: 'invalid spec file' }, 400);
+
+    // Read existing approvals.
+    const approvalsPath = join(sd.dir(), 'file-approvals.json');
+    let approvals: Record<string, boolean> = {};
+    try { approvals = JSON.parse(readFileSync(approvalsPath, 'utf-8')); } catch { /* new file */ }
+
+    approvals[body.file] = body.approved;
+    writeFileSync(approvalsPath, JSON.stringify(approvals, null, 2));
+
+    // Check if all spec files are approved → auto-submit review approval.
+    let state;
+    try { state = readActiveState(projectPath); } catch { return c.json({ approvals }); }
+    const task = state.tasks.find(t => t.slug === slug);
+    const size = (task?.size ?? 'L') as SpecSize;
+    const specType = (task?.spec_type ?? 'feature') as SpecType;
+    const expectedFiles = filesForSize(size, specType);
+    const allApproved = expectedFiles.every(f => approvals[f] === true);
+
+    if (allApproved && task && task.review_status !== 'approved') {
+      // Auto-submit approval review.
+      const ts = new Date().toISOString();
+      const review = { timestamp: ts, status: 'approved', comments: [] };
+      const reviewsDir = join(sd.dir(), 'reviews');
+      mkdirSync(reviewsDir, { recursive: true });
+      const filename = `review-${ts.replace(/[:.]/g, '')}-${Date.now() % 10000}.json`;
+      writeFileSync(join(reviewsDir, filename), JSON.stringify(review, null, 2));
+
+      task.review_status = 'approved' as ReviewStatus;
+      writeActiveState(projectPath, state);
+
+      appendAudit(projectPath, {
+        action: 'review.submit',
+        target: slug,
+        detail: 'approved (all files approved via dashboard)',
+        user: 'dashboard',
+      });
+    }
+
+    return c.json({ approvals, all_approved: allApproved });
   });
 
   // --- SSE ---

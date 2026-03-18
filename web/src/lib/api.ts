@@ -174,6 +174,39 @@ export async function submitReview(
 	return res.json();
 }
 
+export async function completeTask(slug: string) {
+	const res = await fetch(taskURL(slug, "complete"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({ error: res.statusText }));
+		throw new Error(body.error ?? `HTTP ${res.status}`);
+	}
+	return res.json();
+}
+
+export const fileApprovalsQueryOptions = (slug: string) =>
+	queryOptions({
+		queryKey: ["file-approvals", slug],
+		queryFn: () => fetchJSON<{ approvals: Record<string, boolean> }>(taskURL(slug, "file-approvals")),
+		staleTime: LIVE_STALE,
+		enabled: !!slug,
+	});
+
+export async function setFileApproval(slug: string, file: string, approved: boolean) {
+	const res = await fetch(taskURL(slug, "file-approvals"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ file, approved }),
+	});
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({ error: res.statusText }));
+		throw new Error(body.error ?? `HTTP ${res.status}`);
+	}
+	return res.json() as Promise<{ approvals: Record<string, boolean>; all_approved: boolean }>;
+}
+
 // --- Hooks (convenience wrappers) ---
 
 export function useTasksQuery() {
