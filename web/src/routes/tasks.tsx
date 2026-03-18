@@ -1,13 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { ChevronDown, Circle, CircleCheck, CircleDot } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { tasksQueryOptions } from "@/lib/api";
-import type { StepItem, TaskDetail } from "@/lib/types";
+import type { TaskDetail } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { Link, Outlet, createFileRoute } from "@tanstack/react-router";
-import { ChevronDown, CircleCheck, CircleDot, Circle } from "lucide-react";
-import { useState } from "react";
 
 export const Route = createFileRoute("/tasks")({
 	component: TasksLayout,
@@ -35,7 +35,9 @@ function TasksLayout() {
 				{/* Active Tasks */}
 				{activeTasks.length > 0 && (
 					<div className="space-y-2">
-						<h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">Active</h3>
+						<h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
+							Active
+						</h3>
 						{activeTasks.map((task, i) => (
 							<TaskAccordionCard
 								key={task.slug}
@@ -50,7 +52,9 @@ function TasksLayout() {
 				{/* Completed Tasks */}
 				{completedTasks.length > 0 && (
 					<div className="space-y-2">
-						<h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">Completed</h3>
+						<h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
+							Completed
+						</h3>
 						{completedTasks.map((task, i) => (
 							<TaskAccordionCard
 								key={task.slug}
@@ -75,7 +79,11 @@ function TaskAccordionCard({
 	task,
 	isActive,
 	colorIndex,
-}: { task: TaskDetail; isActive: boolean; colorIndex: number }) {
+}: {
+	task: TaskDetail;
+	isActive: boolean;
+	colorIndex: number;
+}) {
 	const [expanded, setExpanded] = useState(false);
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
 	const isCompleted = task.status === "completed";
@@ -94,11 +102,7 @@ function TaskAccordionCard({
 			style={isActive ? { borderColor: `rgba(${c.r},${c.g},${c.b},0.35)` } : undefined}
 		>
 			{/* Card header — always visible, clickable to navigate */}
-			<Link
-				to="/tasks/$slug"
-				params={{ slug: task.slug }}
-				className="block p-3 pb-2"
-			>
+			<Link to="/tasks/$slug" params={{ slug: task.slug }} className="block p-3 pb-2">
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2 min-w-0">
 						{isCompleted ? (
@@ -119,7 +123,9 @@ function TaskAccordionCard({
 			{/* Compact info — always visible */}
 			<div className="px-3 pb-2 space-y-1.5">
 				{task.project_name && (
-					<p className="text-[10px] font-medium" style={{ color: "#40513b" }}>{task.project_name}</p>
+					<p className="text-[10px] font-medium" style={{ color: "#40513b" }}>
+						{task.project_name}
+					</p>
 				)}
 				{task.focus && (
 					<p className="text-[11px] text-muted-foreground line-clamp-1">{task.focus}</p>
@@ -151,13 +157,16 @@ function TaskAccordionCard({
 				<>
 					<button
 						type="button"
-						onClick={(e) => { e.preventDefault(); setExpanded(!expanded); }}
+						onClick={(e) => {
+							e.preventDefault();
+							setExpanded(!expanded);
+						}}
 						className="flex w-full items-center justify-between border-t border-border/50 px-3 py-1.5 text-[10px] text-muted-foreground hover:bg-accent/50 transition-colors"
 					>
-						<span>Next Steps ({task.completed}/{task.total})</span>
-						<ChevronDown
-							className={cn("size-3 transition-transform", expanded && "rotate-180")}
-						/>
+						<span>
+							Next Steps ({task.completed}/{task.total})
+						</span>
+						<ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
 					</button>
 
 					{expanded && (

@@ -25,13 +25,17 @@ tasks:
     desc: Run all checks (tsc + Biome lint)
     cmds:
       - npm run typecheck
-      - task: web:check
+      - npm run lint
 
   fix:
-    desc: Auto-fix Biome lint/format issues
-    dir: "{{.WEB_DIR}}"
+    desc: Auto-fix Biome lint/format issues (safe)
     cmds:
-      - npm run check:fix
+      - npm run lint:fix
+
+  fix:unsafe:
+    desc: Auto-fix all Biome issues including unsafe fixes
+    cmds:
+      - npx biome check --write --unsafe src/ web/src/
 
   test:
     desc: Run vitest
@@ -58,8 +62,3 @@ tasks:
     generates:
       - dist/**/*
 
-  web:check:
-    desc: Run Biome lint/format check
-    dir: "{{.WEB_DIR}}"
-    cmds:
-      - npm run check

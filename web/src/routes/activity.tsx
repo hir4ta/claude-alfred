@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -13,9 +16,6 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { activityQueryOptions, epicsQueryOptions } from "@/lib/api";
 import type { ActivityEntry, EpicSummary } from "@/lib/types";
-import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 
 export const Route = createFileRoute("/activity")({
 	component: ActivityPage,
@@ -92,13 +92,9 @@ function ActivityTable({ entries }: { entries: ActivityEntry[] }) {
 							<TableCell className="text-sm align-top">{entry.target}</TableCell>
 							<TableCell className="text-xs text-muted-foreground">
 								{isExpanded ? (
-									<div className="whitespace-pre-wrap break-words max-w-lg">
-										{entry.detail}
-									</div>
+									<div className="whitespace-pre-wrap break-words max-w-lg">{entry.detail}</div>
 								) : (
-									<div className="max-w-xs truncate">
-										{entry.detail}
-									</div>
+									<div className="max-w-xs truncate">{entry.detail}</div>
 								)}
 							</TableCell>
 						</TableRow>

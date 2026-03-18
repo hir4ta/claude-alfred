@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Brain, CheckCircle2, Circle, CircleCheck, CircleDot, Clock, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -12,9 +15,6 @@ import {
 } from "@/lib/api";
 import type { DecisionEntry, EpicSummary, MemoryHealthStats, TaskDetail } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { Link, createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Brain, CheckCircle2, Circle, CircleCheck, CircleDot, Clock, Zap } from "lucide-react";
 
 export const Route = createFileRoute("/")({
 	component: OverviewPage,
@@ -91,7 +91,12 @@ function OverviewPage() {
 					</h2>
 					<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						{tasks.map((task, i) => (
-							<TaskCard key={task.slug} task={task} isActive={task.slug === activeSlug} colorIndex={i} />
+							<TaskCard
+								key={task.slug}
+								task={task}
+								isActive={task.slug === activeSlug}
+								colorIndex={i}
+							/>
 						))}
 					</div>
 				</section>
@@ -112,7 +117,12 @@ function StatCard({
 	value,
 	icon,
 	loading,
-}: { label: string; value: number; icon: React.ReactNode; loading?: boolean }) {
+}: {
+	label: string;
+	value: number;
+	icon: React.ReactNode;
+	loading?: boolean;
+}) {
 	return (
 		<Card className="border-stone-200 dark:border-stone-700">
 			<CardContent className="flex items-center gap-4 py-4">
@@ -134,7 +144,15 @@ function StatCard({
 	);
 }
 
-function TaskCard({ task, isActive, colorIndex }: { task: TaskDetail; isActive: boolean; colorIndex: number }) {
+function TaskCard({
+	task,
+	isActive,
+	colorIndex,
+}: {
+	task: TaskDetail;
+	isActive: boolean;
+	colorIndex: number;
+}) {
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
 	const isCompleted = task.status === "completed";
 	const firstUnchecked = task.next_steps?.find((s) => !s.done);
@@ -168,7 +186,10 @@ function TaskCard({ task, isActive, colorIndex }: { task: TaskDetail; isActive: 
 							{task.size && (
 								<Tooltip>
 									<TooltipTrigger asChild>
-										<Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full cursor-help">
+										<Badge
+											variant="outline"
+											className="text-[10px] px-1.5 py-0 rounded-full cursor-help"
+										>
 											{task.size}
 										</Badge>
 									</TooltipTrigger>
@@ -181,7 +202,9 @@ function TaskCard({ task, isActive, colorIndex }: { task: TaskDetail; isActive: 
 					{/* Focus + shimmer */}
 					<div className="flex-1 flex flex-col justify-center gap-1">
 						{task.project_name && (
-							<p className="text-[10px] font-medium" style={{ color: accentColor }}>{task.project_name}</p>
+							<p className="text-[10px] font-medium" style={{ color: accentColor }}>
+								{task.project_name}
+							</p>
 						)}
 						{task.focus && (
 							<p className="text-[11px] text-muted-foreground line-clamp-1">{task.focus}</p>
@@ -248,7 +271,12 @@ function MetricBlock({
 	label,
 	warn,
 	warnColor,
-}: { value: number; label: string; warn?: boolean; warnColor?: string }) {
+}: {
+	value: number;
+	label: string;
+	warn?: boolean;
+	warnColor?: string;
+}) {
 	return (
 		<div className="rounded-lg bg-accent/50 px-2 py-2.5">
 			<p

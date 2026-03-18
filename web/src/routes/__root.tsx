@@ -1,10 +1,10 @@
+import type { QueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
+import { Activity, BookOpen, LayoutDashboard, ListChecks } from "lucide-react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { versionQueryOptions } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { QueryClient } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
-import { Link, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
-import { Activity, BookOpen, LayoutDashboard, ListChecks } from "lucide-react";
 
 interface RouterContext {
 	queryClient: QueryClient;
@@ -25,9 +25,7 @@ function VersionBadge() {
 	const { data } = useQuery(versionQueryOptions());
 	if (!data?.version) return null;
 	return (
-		<span className="ml-auto text-[11px] text-muted-foreground/60 font-mono">
-			v{data.version}
-		</span>
+		<span className="ml-auto text-[11px] text-muted-foreground/60 font-mono">v{data.version}</span>
 	);
 }
 

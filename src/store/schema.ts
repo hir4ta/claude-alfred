@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type Database from "better-sqlite3";
 
 export const SCHEMA_VERSION = 8;
 
@@ -83,115 +83,171 @@ CREATE INDEX IF NOT EXISTS idx_session_links_master ON session_links(master_sess
 `;
 
 const TAG_ALIASES: Record<string, string[]> = {
-  auth: ['authentication', 'login', '認証', 'ログイン'],
-  db: ['database', 'sqlite', 'データベース'],
-  api: ['endpoint', 'rest', 'graphql'],
-  test: ['testing', 'テスト', 'spec'],
-  security: ['セキュリティ', 'vulnerability', '脆弱性'],
-  config: ['configuration', 'settings', '設定'],
-  deploy: ['deployment', 'デプロイ', 'release'],
-  perf: ['performance', 'パフォーマンス', 'optimization', '最適化'],
-  error: ['エラー', 'bug', 'バグ', 'failure'],
-  hook: ['hooks', 'フック', 'lifecycle'],
-  memory: ['メモリ', 'knowledge', 'ナレッジ'],
-  spec: ['specification', '仕様', 'requirement'],
-  embed: ['embedding', '埋め込み', 'vector', 'ベクトル'],
-  search: ['検索', 'query', 'クエリ'],
-  refactor: ['リファクタ', 'cleanup', 'restructure'],
-  ci: ['ci/cd', 'pipeline', 'github actions'],
+	auth: ["authentication", "login", "認証", "ログイン"],
+	db: ["database", "sqlite", "データベース"],
+	api: ["endpoint", "rest", "graphql"],
+	test: ["testing", "テスト", "spec"],
+	security: ["セキュリティ", "vulnerability", "脆弱性"],
+	config: ["configuration", "settings", "設定"],
+	deploy: ["deployment", "デプロイ", "release"],
+	perf: ["performance", "パフォーマンス", "optimization", "最適化"],
+	error: ["エラー", "bug", "バグ", "failure"],
+	hook: ["hooks", "フック", "lifecycle"],
+	memory: ["メモリ", "knowledge", "ナレッジ"],
+	spec: ["specification", "仕様", "requirement"],
+	embed: ["embedding", "埋め込み", "vector", "ベクトル"],
+	search: ["検索", "query", "クエリ"],
+	refactor: ["リファクタ", "cleanup", "restructure"],
+	ci: ["ci/cd", "pipeline", "github actions"],
 };
 
 const LEGACY_TABLES = [
-  'records_fts', 'records', 'session_links',
-  'tag_aliases',
-  'docs', 'docs_fts', 'crawl_meta', 'doc_feedback', 'instincts',
-  'patterns', 'pattern_tags', 'pattern_files', 'patterns_fts',
-  'alerts', 'alert_events',
-  'suggestion_outcomes', 'failure_solutions', 'solution_chains',
-  'learned_episodes', 'feedbacks', 'coaching_cache',
-  'snr_history', 'signal_outcomes', 'user_pattern_effectiveness',
-  'user_profile', 'user_preferences', 'adaptive_baselines',
-  'workflow_sequences', 'file_co_changes',
-  'live_session_phases', 'live_session_files',
-  'global_tool_sequences', 'global_tool_trigrams',
-  'tags', 'preferences',
-  'sessions', 'events', 'compact_events', 'decisions', 'tool_failures',
+	"records_fts",
+	"records",
+	"session_links",
+	"tag_aliases",
+	"docs",
+	"docs_fts",
+	"crawl_meta",
+	"doc_feedback",
+	"instincts",
+	"patterns",
+	"pattern_tags",
+	"pattern_files",
+	"patterns_fts",
+	"alerts",
+	"alert_events",
+	"suggestion_outcomes",
+	"failure_solutions",
+	"solution_chains",
+	"learned_episodes",
+	"feedbacks",
+	"coaching_cache",
+	"snr_history",
+	"signal_outcomes",
+	"user_pattern_effectiveness",
+	"user_profile",
+	"user_preferences",
+	"adaptive_baselines",
+	"workflow_sequences",
+	"file_co_changes",
+	"live_session_phases",
+	"live_session_files",
+	"global_tool_sequences",
+	"global_tool_trigrams",
+	"tags",
+	"preferences",
+	"sessions",
+	"events",
+	"compact_events",
+	"decisions",
+	"tool_failures",
 ];
 
 const LEGACY_TRIGGERS = [
-  'records_fts_ai', 'records_fts_ad', 'records_fts_au',
-  'patterns_fts_ai', 'patterns_fts_ad', 'patterns_fts_au',
-  'decisions_fts_ai', 'decisions_fts_ad', 'decisions_fts_au',
-  'docs_fts_ai', 'docs_fts_ad', 'docs_fts_au',
-  'ki_fts_ai', 'ki_fts_ad', 'ki_fts_au',
+	"records_fts_ai",
+	"records_fts_ad",
+	"records_fts_au",
+	"patterns_fts_ai",
+	"patterns_fts_ad",
+	"patterns_fts_au",
+	"decisions_fts_ai",
+	"decisions_fts_ad",
+	"decisions_fts_au",
+	"docs_fts_ai",
+	"docs_fts_ad",
+	"docs_fts_au",
+	"ki_fts_ai",
+	"ki_fts_ad",
+	"ki_fts_au",
 ];
 
 const LEGACY_INDEXES = [
-  'idx_records_source_type', 'idx_records_crawled_at', 'idx_records_sub_type',
-  'idx_embeddings_source',
-  'idx_docs_source_type', 'idx_docs_crawled_at',
-  'idx_wseq_task', 'idx_cochange_a',
-  'idx_live_phases_session', 'idx_live_files_session',
-  'idx_gts_from', 'idx_gtt_t1t2',
-  'idx_decisions_session', 'idx_decisions_timestamp',
-  'idx_instincts_scope', 'idx_instincts_domain', 'idx_instincts_confidence',
-  'idx_ki_project', 'idx_ki_sub_type', 'idx_ki_updated',
+	"idx_records_source_type",
+	"idx_records_crawled_at",
+	"idx_records_sub_type",
+	"idx_embeddings_source",
+	"idx_docs_source_type",
+	"idx_docs_crawled_at",
+	"idx_wseq_task",
+	"idx_cochange_a",
+	"idx_live_phases_session",
+	"idx_live_files_session",
+	"idx_gts_from",
+	"idx_gtt_t1t2",
+	"idx_decisions_session",
+	"idx_decisions_timestamp",
+	"idx_instincts_scope",
+	"idx_instincts_domain",
+	"idx_instincts_confidence",
+	"idx_ki_project",
+	"idx_ki_sub_type",
+	"idx_ki_updated",
 ];
 
 const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 function dropSafe(db: Database.Database, kind: string, name: string): void {
-  if (!SAFE_IDENTIFIER.test(name)) {
-    throw new Error(`store: unsafe identifier in DROP ${kind}: "${name}"`);
-  }
-  db.exec(`DROP ${kind} IF EXISTS ${name}`);
+	if (!SAFE_IDENTIFIER.test(name)) {
+		throw new Error(`store: unsafe identifier in DROP ${kind}: "${name}"`);
+	}
+	db.exec(`DROP ${kind} IF EXISTS ${name}`);
 }
 
 function seedTagAliases(db: Database.Database): void {
-  const stmt = db.prepare('INSERT OR IGNORE INTO tag_aliases (tag, alias) VALUES (?, ?)');
-  for (const [tag, aliases] of Object.entries(TAG_ALIASES)) {
-    for (const alias of aliases) {
-      stmt.run(tag, alias);
-    }
-  }
+	const stmt = db.prepare("INSERT OR IGNORE INTO tag_aliases (tag, alias) VALUES (?, ?)");
+	for (const [tag, aliases] of Object.entries(TAG_ALIASES)) {
+		for (const alias of aliases) {
+			stmt.run(tag, alias);
+		}
+	}
 }
 
 function rebuildFromScratch(db: Database.Database): void {
-  for (const trigger of LEGACY_TRIGGERS) {
-    dropSafe(db, 'TRIGGER', trigger);
-  }
-  for (const table of LEGACY_TABLES) {
-    dropSafe(db, 'TABLE', table);
-  }
-  for (const table of ['knowledge_fts', 'knowledge_index', 'embeddings', 'session_links', 'tag_aliases', 'schema_version']) {
-    dropSafe(db, 'TABLE', table);
-  }
-  for (const idx of LEGACY_INDEXES) {
-    dropSafe(db, 'INDEX', idx);
-  }
-  db.exec(DDL);
-  seedTagAliases(db);
+	for (const trigger of LEGACY_TRIGGERS) {
+		dropSafe(db, "TRIGGER", trigger);
+	}
+	for (const table of LEGACY_TABLES) {
+		dropSafe(db, "TABLE", table);
+	}
+	for (const table of [
+		"knowledge_fts",
+		"knowledge_index",
+		"embeddings",
+		"session_links",
+		"tag_aliases",
+		"schema_version",
+	]) {
+		dropSafe(db, "TABLE", table);
+	}
+	for (const idx of LEGACY_INDEXES) {
+		dropSafe(db, "INDEX", idx);
+	}
+	db.exec(DDL);
+	seedTagAliases(db);
 }
 
 function setSchemaVersion(db: Database.Database, ver: number): void {
-  db.exec('DELETE FROM schema_version');
-  db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(ver);
-  db.pragma(`user_version = ${ver}`);
+	db.exec("DELETE FROM schema_version");
+	db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(ver);
+	db.pragma(`user_version = ${ver}`);
 }
 
 export function migrate(db: Database.Database): void {
-  let current = 0;
-  try {
-    const row = db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number } | undefined;
-    if (row) current = row.version;
-  } catch {
-    // Table doesn't exist yet.
-  }
-  if (current === SCHEMA_VERSION) return;
+	let current = 0;
+	try {
+		const row = db.prepare("SELECT version FROM schema_version LIMIT 1").get() as
+			| { version: number }
+			| undefined;
+		if (row) current = row.version;
+	} catch {
+		// Table doesn't exist yet.
+	}
+	if (current === SCHEMA_VERSION) return;
 
-  const txn = db.transaction(() => {
-    rebuildFromScratch(db);
-    setSchemaVersion(db, SCHEMA_VERSION);
-  });
-  txn();
+	const txn = db.transaction(() => {
+		rebuildFromScratch(db);
+		setSchemaVersion(db, SCHEMA_VERSION);
+	});
+	txn();
 }

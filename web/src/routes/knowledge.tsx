@@ -1,3 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { Archive, ArchiveRestore, BookOpen, Gavel, Lightbulb, Search, Shield } from "lucide-react";
+import { useState } from "react";
+import Markdown from "react-markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,11 +27,6 @@ import { contentPreview, formatDate, formatLabel } from "@/lib/format";
 import type { KnowledgeEntry, KnowledgeStats } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { Archive, ArchiveRestore, BookOpen, Flame, Gavel, Lightbulb, Search, Shield } from "lucide-react";
-import { useState } from "react";
-import Markdown from "react-markdown";
 
 export const Route = createFileRoute("/knowledge")({
 	component: KnowledgePage,
@@ -94,8 +94,16 @@ function StatsBar({ stats }: { stats: KnowledgeStats }) {
 		<div className="flex items-center gap-3 text-xs text-muted-foreground">
 			<span>{stats.total} entries</span>
 			<Separator orientation="vertical" className="h-3" />
-			<StatDot count={stats.bySubType.decision ?? 0} color={SUB_TYPE_COLORS.decision!} label="decision" />
-			<StatDot count={stats.bySubType.pattern ?? 0} color={SUB_TYPE_COLORS.pattern!} label="pattern" />
+			<StatDot
+				count={stats.bySubType.decision ?? 0}
+				color={SUB_TYPE_COLORS.decision!}
+				label="decision"
+			/>
+			<StatDot
+				count={stats.bySubType.pattern ?? 0}
+				color={SUB_TYPE_COLORS.pattern!}
+				label="pattern"
+			/>
 			<StatDot count={stats.bySubType.rule ?? 0} color={SUB_TYPE_COLORS.rule!} label="rule" />
 		</div>
 	);
@@ -125,14 +133,8 @@ const SUB_TYPE_LABELS: Record<string, string> = {
 	snapshot: "Snapshot",
 };
 
-function KnowledgeCard({
-	entry,
-	onSelect,
-}: {
-	entry: KnowledgeEntry;
-	onSelect: () => void;
-}) {
-	const { title, source } = formatLabel(entry.label);
+function KnowledgeCard({ entry, onSelect }: { entry: KnowledgeEntry; onSelect: () => void }) {
+	const { title } = formatLabel(entry.label);
 	const color = SUB_TYPE_COLORS[entry.sub_type] ?? SUB_TYPE_COLORS.snapshot!;
 	const toggleMutation = useToggleEnabledMutation();
 	const icon = SUB_TYPE_ICONS[entry.sub_type] ?? SUB_TYPE_ICONS.snapshot;
@@ -175,10 +177,16 @@ function KnowledgeCard({
 									className="transition-colors hover:opacity-70"
 									style={{ color: "#7b6b8d" }}
 								>
-									{entry.enabled ? <Archive className="size-3.5" /> : <ArchiveRestore className="size-3.5" />}
+									{entry.enabled ? (
+										<Archive className="size-3.5" />
+									) : (
+										<ArchiveRestore className="size-3.5" />
+									)}
 								</button>
 							</TooltipTrigger>
-							<TooltipContent>{entry.enabled ? "Archive (exclude from search)" : "Restore to search"}</TooltipContent>
+							<TooltipContent>
+								{entry.enabled ? "Archive (exclude from search)" : "Restore to search"}
+							</TooltipContent>
 						</Tooltip>
 					</div>
 				</div>
@@ -189,7 +197,9 @@ function KnowledgeCard({
 				<div className="flex items-center gap-2 text-[10px] text-muted-foreground">
 					{entry.project_name && (
 						<>
-							<span className="font-medium" style={{ color: "#40513b" }}>{entry.project_name}</span>
+							<span className="font-medium" style={{ color: "#40513b" }}>
+								{entry.project_name}
+							</span>
 							<span>·</span>
 						</>
 					)}
@@ -212,7 +222,7 @@ function KnowledgeDialog({
 	const { title, source } = formatLabel(entry.label);
 	const color = SUB_TYPE_COLORS[entry.sub_type] ?? SUB_TYPE_COLORS.snapshot!;
 	const icon = SUB_TYPE_ICONS[entry.sub_type] ?? SUB_TYPE_ICONS.snapshot;
-	const fields = parseDecisionFields(entry.content);
+	const _fields = parseDecisionFields(entry.content);
 	const toggleMutation = useToggleEnabledMutation();
 
 	return (
@@ -230,9 +240,7 @@ function KnowledgeDialog({
 							<span className="text-xs font-semibold" style={{ color }}>
 								{SUB_TYPE_LABELS[entry.sub_type] ?? entry.sub_type}
 							</span>
-							{source && (
-								<span className="text-xs text-muted-foreground">· {source}</span>
-							)}
+							{source && <span className="text-xs text-muted-foreground">· {source}</span>}
 						</div>
 					</div>
 					<DialogTitle
@@ -288,12 +296,14 @@ function KnowledgeDialog({
 				<Separator />
 
 				<ScrollArea className="flex-1 -mx-6 px-6">
-					<div className="prose prose-sm prose-stone dark:prose-invert max-w-none py-3
+					<div
+						className="prose prose-sm prose-stone dark:prose-invert max-w-none py-3
 						prose-headings:text-sm prose-headings:font-semibold
 						prose-p:text-sm prose-p:leading-relaxed prose-p:my-1
 						prose-li:text-sm prose-li:my-0.5
 						prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-						prose-strong:font-semibold">
+						prose-strong:font-semibold"
+					>
 						<Markdown>{cleanContent(entry.content)}</Markdown>
 					</div>
 				</ScrollArea>

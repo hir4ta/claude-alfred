@@ -5,7 +5,6 @@ import type {
 	DecisionsResponse,
 	EpicsResponse,
 	KnowledgeResponse,
-
 	KnowledgeStats,
 	MemoryHealthStats,
 	Review,
@@ -72,7 +71,6 @@ export const knowledgeStatsQueryOptions = () =>
 		queryFn: () => fetchJSON<KnowledgeStats>("/api/knowledge/stats"),
 		staleTime: REF_STALE,
 	});
-
 
 export const activityQueryOptions = (limit = 50, filter?: string) =>
 	queryOptions({
@@ -179,7 +177,8 @@ export async function completeTask(slug: string) {
 export const fileApprovalsQueryOptions = (slug: string) =>
 	queryOptions({
 		queryKey: ["file-approvals", slug],
-		queryFn: () => fetchJSON<{ approvals: Record<string, boolean> }>(taskURL(slug, "file-approvals")),
+		queryFn: () =>
+			fetchJSON<{ approvals: Record<string, boolean> }>(taskURL(slug, "file-approvals")),
 		staleTime: LIVE_STALE,
 		enabled: !!slug,
 	});

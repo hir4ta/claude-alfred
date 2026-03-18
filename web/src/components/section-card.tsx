@@ -1,9 +1,9 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
 /** Spec file → brand color mapping */
@@ -28,7 +28,14 @@ interface SectionCardProps {
 	onApprove?: (file: string, approved: boolean) => void;
 }
 
-export function SectionCard({ title, content, color, defaultOpen = false, approved, onApprove }: SectionCardProps) {
+export function SectionCard({
+	title,
+	content,
+	color,
+	defaultOpen = false,
+	approved,
+	onApprove,
+}: SectionCardProps) {
 	const [open, setOpen] = useState(defaultOpen);
 	const borderColor = color ?? SPEC_FILE_COLORS[title] ?? "#44403c";
 
@@ -45,7 +52,10 @@ export function SectionCard({ title, content, color, defaultOpen = false, approv
 				>
 					<span className="text-sm font-medium">{title.replace(".md", "")}</span>
 					<ChevronDown
-						className={cn("size-4 text-muted-foreground transition-transform shrink-0", open && "rotate-180")}
+						className={cn(
+							"size-4 text-muted-foreground transition-transform shrink-0",
+							open && "rotate-180",
+						)}
 					/>
 				</button>
 				{onApprove && (
@@ -67,7 +77,8 @@ export function SectionCard({ title, content, color, defaultOpen = false, approv
 
 			{open && (
 				<div className="border-t px-4 py-3">
-					<div className="prose prose-sm prose-stone dark:prose-invert max-w-none
+					<div
+						className="prose prose-sm prose-stone dark:prose-invert max-w-none
 						prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
 						prose-h1:text-base prose-h1:mt-0 prose-h1:mb-2
 						prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-1
@@ -78,7 +89,8 @@ export function SectionCard({ title, content, color, defaultOpen = false, approv
 						prose-code:text-[12px] prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-foreground
 						prose-pre:bg-muted prose-pre:text-foreground prose-pre:rounded-lg prose-pre:my-2
 						[&_pre]:p-0 [&_pre_code]:bg-transparent [&_pre_code]:text-foreground [&_pre_code]:p-3 [&_pre_code]:block [&_pre_code]:text-[12px] [&_pre_code]:leading-relaxed [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-all
-						[&_code]:break-all">
+						[&_code]:break-all"
+					>
 						<Markdown
 							remarkPlugins={[remarkGfm]}
 							components={{

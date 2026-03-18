@@ -1,32 +1,32 @@
-import type { SpecFile, SpecSize, SpecType } from './types.js';
-import { filesForSize } from './types.js';
+import type { SpecFile, SpecSize, SpecType } from "./types.js";
+import { filesForSize } from "./types.js";
 
 export interface TemplateData {
-  taskSlug: string;
-  description: string;
-  date: string;
-  specType: string;
+	taskSlug: string;
+	description: string;
+	date: string;
+	specType: string;
 }
 
 export function renderForSize(
-  size: SpecSize,
-  specType: SpecType,
-  data: TemplateData,
+	size: SpecSize,
+	specType: SpecType,
+	data: TemplateData,
 ): Map<SpecFile, string> {
-  const files = filesForSize(size, specType);
-  const rendered = new Map<SpecFile, string>();
-  for (const f of files) {
-    rendered.set(f, renderTemplate(f, data));
-  }
-  return rendered;
+	const files = filesForSize(size, specType);
+	const rendered = new Map<SpecFile, string>();
+	for (const f of files) {
+		rendered.set(f, renderTemplate(f, data));
+	}
+	return rendered;
 }
 
 function renderTemplate(file: SpecFile, data: TemplateData): string {
-  switch (file) {
-    case 'requirements.md':
-      return `# Requirements: ${data.taskSlug}
+	switch (file) {
+		case "requirements.md":
+			return `# Requirements: ${data.taskSlug}
 
-> ${data.description || 'No description provided.'}
+> ${data.description || "No description provided."}
 
 ## Goal
 
@@ -43,10 +43,10 @@ function renderTemplate(file: SpecFile, data: TemplateData): string {
 <!-- NFR-1: Performance, security, etc. -->
 `;
 
-    case 'bugfix.md':
-      return `# Bugfix: ${data.taskSlug}
+		case "bugfix.md":
+			return `# Bugfix: ${data.taskSlug}
 
-> ${data.description || 'No description provided.'}
+> ${data.description || "No description provided."}
 
 ## Bug Summary
 
@@ -69,10 +69,10 @@ function renderTemplate(file: SpecFile, data: TemplateData): string {
 ## Regression Prevention
 `;
 
-    case 'delta.md':
-      return `# Delta: ${data.taskSlug}
+		case "delta.md":
+			return `# Delta: ${data.taskSlug}
 
-> ${data.description || 'No description provided.'}
+> ${data.description || "No description provided."}
 
 ## Change Summary
 
@@ -93,8 +93,8 @@ function renderTemplate(file: SpecFile, data: TemplateData): string {
 ## Rollback Strategy
 `;
 
-    case 'design.md':
-      return `# Design: ${data.taskSlug}
+		case "design.md":
+			return `# Design: ${data.taskSlug}
 
 ## System Context
 
@@ -109,8 +109,8 @@ function renderTemplate(file: SpecFile, data: TemplateData): string {
 | FR-1   |           | T-1.1   | TS-1.1  |
 `;
 
-    case 'tasks.md':
-      return `# Tasks: ${data.taskSlug}
+		case "tasks.md":
+			return `# Tasks: ${data.taskSlug}
 
 ## Wave 1: Core Implementation
 
@@ -129,8 +129,8 @@ function renderTemplate(file: SpecFile, data: TemplateData): string {
 - [ ] Save key learnings to knowledge
 `;
 
-    case 'test-specs.md':
-      return `# Test Specs: ${data.taskSlug}
+		case "test-specs.md":
+			return `# Test Specs: ${data.taskSlug}
 
 ## TS-1.1: [Test Title]
 
@@ -145,8 +145,8 @@ Then [expected result]
 \`\`\`
 `;
 
-    case 'decisions.md':
-      return `# Decisions: ${data.taskSlug}
+		case "decisions.md":
+			return `# Decisions: ${data.taskSlug}
 
 ## DEC-1: [Decision Title]
 
@@ -157,8 +157,8 @@ Then [expected result]
 - Alternatives:
 `;
 
-    case 'research.md':
-      return `# Research: ${data.taskSlug}
+		case "research.md":
+			return `# Research: ${data.taskSlug}
 
 ## Discovery
 
@@ -169,8 +169,8 @@ Then [expected result]
 ## Done Criteria
 `;
 
-    case 'session.md':
-      return `# Session: ${data.taskSlug}
+		case "session.md":
+			return `# Session: ${data.taskSlug}
 
 - Date: ${data.date}
 - Status: active
@@ -184,7 +184,7 @@ Then [expected result]
 - [ ] Fill in requirements details
 `;
 
-    default:
-      return `# ${file}\n`;
-  }
+		default:
+			return `# ${file}\n`;
+	}
 }

@@ -1,3 +1,7 @@
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { Calendar, CheckCircle2, CircleCheck, CircleDot } from "lucide-react";
+import { useState } from "react";
 import { SectionCard } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,10 +18,6 @@ import {
 	validationQueryOptions,
 } from "@/lib/api";
 import type { TaskDetail, ValidationReport } from "@/lib/types";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { Calendar, CheckCircle2, CircleCheck, CircleDot } from "lucide-react";
-import { useState } from "react";
 
 export const Route = createFileRoute("/tasks/$slug")({
 	component: TaskDetailPage,
@@ -69,10 +69,9 @@ function TaskDetailPage() {
 	const needsReview = ["M", "L", "XL"].includes(task?.size ?? "");
 	const isPending = needsReview && task?.review_status !== "approved";
 	const isActive = task?.status !== "completed";
-	const canComplete = isActive && (
-		task?.review_status === "approved" ||
-		!["M", "L", "XL"].includes(task?.size ?? "")
-	);
+	const canComplete =
+		isActive &&
+		(task?.review_status === "approved" || !["M", "L", "XL"].includes(task?.size ?? ""));
 
 	if (!task) {
 		return <p className="text-sm text-muted-foreground">Task not found.</p>;
@@ -87,12 +86,16 @@ function TaskDetailPage() {
 				{/* Next Steps (if active) */}
 				{task.status !== "completed" && task.next_steps && task.next_steps.length > 0 && (
 					<div className="rounded-lg border bg-card p-4 space-y-2">
-						<h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Next Steps</h3>
+						<h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+							Next Steps
+						</h3>
 						<div className="space-y-1">
 							{task.next_steps.map((step, i) => (
 								<div key={`step-${i}`} className="flex items-start gap-2">
 									<Checkbox checked={step.done} className="mt-0.5" />
-									<span className={`text-xs leading-relaxed ${step.done ? "line-through text-muted-foreground" : ""}`}>
+									<span
+										className={`text-xs leading-relaxed ${step.done ? "line-through text-muted-foreground" : ""}`}
+									>
 										{step.text}
 									</span>
 								</div>
@@ -157,7 +160,11 @@ function TaskDetailPage() {
 							content={content}
 							defaultOpen={spec.file === "session.md"}
 							approved={showApprove ? approvals[spec.file] === true : undefined}
-							onApprove={showApprove ? (file, approved) => approveMutation.mutate({ file, approved }) : undefined}
+							onApprove={
+								showApprove
+									? (file, approved) => approveMutation.mutate({ file, approved })
+									: undefined
+							}
 						/>
 					);
 				})}
@@ -171,7 +178,13 @@ function TaskDetailPage() {
 	);
 }
 
-function TaskInfoCard({ task, validationData }: { task: TaskDetail; validationData?: ValidationReport }) {
+function TaskInfoCard({
+	task,
+	validationData,
+}: {
+	task: TaskDetail;
+	validationData?: ValidationReport;
+}) {
 	const isCompleted = task.status === "completed";
 
 	return (
@@ -200,26 +213,30 @@ function TaskInfoCard({ task, validationData }: { task: TaskDetail; validationDa
 				{task.size && (
 					<Tooltip>
 						<TooltipTrigger asChild>
-							<Badge variant="outline" className="cursor-help">{task.size}</Badge>
+							<Badge variant="outline" className="cursor-help">
+								{task.size}
+							</Badge>
 						</TooltipTrigger>
 						<TooltipContent>{SIZE_LABELS[task.size] ?? `Size: ${task.size}`}</TooltipContent>
 					</Tooltip>
 				)}
-				{task.spec_type && (
-					<Badge variant="outline">{task.spec_type}</Badge>
-				)}
+				{task.spec_type && <Badge variant="outline">{task.spec_type}</Badge>}
 				{task.review_status && (
 					<Badge
 						variant="outline"
 						style={{
 							borderColor:
-								task.review_status === "approved" ? "rgba(45,139,122,0.4)"
-								: task.review_status === "changes_requested" ? "rgba(230,126,34,0.4)"
-								: "rgba(107,114,128,0.3)",
+								task.review_status === "approved"
+									? "rgba(45,139,122,0.4)"
+									: task.review_status === "changes_requested"
+										? "rgba(230,126,34,0.4)"
+										: "rgba(107,114,128,0.3)",
 							color:
-								task.review_status === "approved" ? "#2d8b7a"
-								: task.review_status === "changes_requested" ? "#e67e22"
-								: "#6b7280",
+								task.review_status === "approved"
+									? "#2d8b7a"
+									: task.review_status === "changes_requested"
+										? "#e67e22"
+										: "#6b7280",
 						}}
 					>
 						{task.review_status}
@@ -251,7 +268,9 @@ function TaskInfoCard({ task, validationData }: { task: TaskDetail; validationDa
 				<>
 					<Separator />
 					<div>
-						<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Focus</p>
+						<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+							Focus
+						</p>
 						<p className="text-xs leading-relaxed">{task.focus}</p>
 					</div>
 				</>
@@ -272,12 +291,18 @@ function ValidationBadge({ report }: { report: ValidationReport }) {
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<Badge variant="outline" className="text-xs cursor-help" style={{ borderColor: color, color }}>
+				<Badge
+					variant="outline"
+					className="text-xs cursor-help"
+					style={{ borderColor: color, color }}
+				>
 					{passed}P / {failed}F
 				</Badge>
 			</TooltipTrigger>
 			<TooltipContent>
-				<p>Validation: {passed} passed, {failed} failed</p>
+				<p>
+					Validation: {passed} passed, {failed} failed
+				</p>
 			</TooltipContent>
 		</Tooltip>
 	);

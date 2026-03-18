@@ -19,6 +19,8 @@
     "build:web": "cd web && npm run build",
     "dev": "tsx watch src/cli.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "biome check src/ web/src/",
+    "lint:fix": "biome check --write src/ web/src/",
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "node dist/postinstall.mjs || true",
@@ -28,6 +30,7 @@
     "better-sqlite3": "^12"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.7",
     "@hono/node-server": "^1",
     "@modelcontextprotocol/sdk": "^1.27",
     "@tsconfig/node22": "^22.0.5",
