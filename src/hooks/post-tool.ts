@@ -139,10 +139,34 @@ function autoCheckNextSteps(projectPath: string, stdout: string): void {
 
     if (changed) {
       const updatedSection = lines.join('\n');
-      const updatedSession = session.replace(nextStepsSection, updatedSection);
+      let updatedSession = session.replace(nextStepsSection, updatedSection);
+
+      // Auto-update "Currently Working On" to the next unchecked step.
+      const nextUnchecked = lines.find(l => l.startsWith('- [ ] '));
+      if (nextUnchecked) {
+        const nextText = nextUnchecked.replace('- [ ] ', '');
+        updatedSession = updateCurrentlyWorkingOn(updatedSession, nextText);
+      }
+
       sd.writeFile('session.md', updatedSession);
     }
   } catch { /* fail-open */ }
+}
+
+/** Replace the first line after "## Currently Working On" with the new focus text. */
+function updateCurrentlyWorkingOn(session: string, newFocus: string): string {
+  const marker = '## Currently Working On';
+  const idx = session.indexOf(marker);
+  if (idx === -1) return session;
+
+  const afterMarker = session.indexOf('\n', idx);
+  if (afterMarker === -1) return session;
+
+  // Find the content line(s) between this heading and the next heading.
+  const nextHeading = session.indexOf('\n##', afterMarker + 1);
+  const endIdx = nextHeading === -1 ? session.length : nextHeading;
+
+  return session.slice(0, afterMarker) + '\n\n' + newFocus + '\n' + session.slice(endIdx);
 }
 
 /**
