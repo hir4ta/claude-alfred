@@ -230,7 +230,7 @@ function SpecContentViewer({ content, file }: { content: string; file: string })
 									},
 								}}
 							>
-								{content}
+								{content.replace(/<!--[\s\S]*?-->/g, "")}
 							</Markdown>
 						) : (
 							<p className="text-xs text-muted-foreground">Loading...</p>

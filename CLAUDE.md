@@ -61,7 +61,7 @@ node dist/cli.mjs version     # Show version
 
 ### Hooks & Events
 
-- Hook handler: short-lived process. All 4 hooks registered in hooks.json: SessionStart, PreCompact, UserPromptSubmit, PostToolUse
+- Hook handler: short-lived process. 6 hooks registered in hooks.json: SessionStart, PreCompact, UserPromptSubmit, PostToolUse, PreToolUse, Stop
 - Hook output: structured directive levels via `emitDirectives()` — [DIRECTIVE] (must comply), [WARNING] (should check), [CONTEXT] (reference). Max 3 DIRECTIVEs per invocation (NFR-5). Single `emitAdditionalContext()` call per hook (NFR-4)
 - Directive utility: `src/hooks/directives.ts` — `buildDirectiveOutput()`, `emitDirectives()`
 - Spec enforcement: UserPromptSubmit detects implement/bugfix/tdd intent + no active spec + .alfred/ exists → DIRECTIVE requiring spec creation
@@ -74,6 +74,9 @@ node dist/cli.mjs version     # Show version
 - PostToolUse: git commit detection → proactive knowledge conflict warning (detectKnowledgeConflicts, threshold 0.70)
 - PostToolUse: Edit/Write → autoCheckNextSteps with file path context (FR-8: session.md progress auto-update)
 - SessionStart: decision replay — injects up to 5 recent decision-type knowledge entries (last 7 days, project-scoped). buildSpecContextItems returns items (no direct emit, NFR-4 compliant)
+- PreToolUse: HARD enforcement — blocks Edit/Write for unapproved M/L/XL specs via permissionDecision: "deny". Fail-open on errors (NFR-2). .alfred/ edits always allowed. S/D exempt
+- Stop: HARD enforcement — blocks Claude from stopping when active spec has unchecked Next Steps, pending self-review, or dossier complete not called. stop_hook_active=true → allow (DEC-4 infinite loop prevention)
+- Shared spec-guard utilities: `src/hooks/spec-guard.ts` — tryReadActiveSpec, isSpecFilePath, countUncheckedNextSteps, hasUncheckedSelfReview, denyTool, blockStop
 - Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (7 spec files + 3 specialists per file + approval gate), attend (spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → knowledge)
 - brief/attend spec generation order: research → requirements → design → tasks → test-specs → decisions → session
 - @.claude/rules/hook-behavior.md (event pipelines, skill nudge, drift detection, dossier hints)
