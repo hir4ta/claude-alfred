@@ -185,7 +185,7 @@ function SpecContentViewer({ content, file }: { content: string; file: string })
 		<Card className="!gap-0 !py-0">
 			<CardContent className="p-0">
 				<ScrollArea className="h-[calc(100vh-220px)]">
-					<div className="p-5 prose prose-sm prose-stone dark:prose-invert max-w-none
+					<div className="p-5 overflow-hidden prose prose-sm prose-stone dark:prose-invert max-w-none
 						prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
 						prose-h1:text-base prose-h1:mt-0 prose-h1:mb-2
 						prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-1
@@ -195,8 +195,9 @@ function SpecContentViewer({ content, file }: { content: string; file: string })
 						prose-td:px-3 prose-td:py-1.5 prose-td:border prose-td:border-border
 						[&_table]:!w-auto
 						prose-code:text-[12px] prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-foreground
-						prose-pre:bg-muted prose-pre:text-foreground prose-pre:rounded-lg prose-pre:my-2 prose-pre:!w-auto prose-pre:inline-block
-						[&_pre]:p-0 [&_pre_code]:bg-transparent [&_pre_code]:text-foreground [&_pre_code]:p-3 [&_pre_code]:block [&_pre_code]:text-[12px] [&_pre_code]:leading-relaxed [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words">
+						prose-pre:bg-muted prose-pre:text-foreground prose-pre:rounded-lg prose-pre:my-2
+						[&_pre]:p-0 [&_pre_code]:bg-transparent [&_pre_code]:text-foreground [&_pre_code]:p-3 [&_pre_code]:block [&_pre_code]:text-[12px] [&_pre_code]:leading-relaxed [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-all
+						[&_code]:break-all">
 						{content ? (
 							<Markdown
 								remarkPlugins={[remarkGfm]}
@@ -213,7 +214,7 @@ function SpecContentViewer({ content, file }: { content: string; file: string })
 													style={oneDark}
 													language={match[1]}
 													PreTag="div"
-													customStyle={{ fontSize: "0.75rem", borderRadius: "0.375rem", margin: 0, width: "auto", display: "inline-block" }}
+													customStyle={{ fontSize: "0.75rem", borderRadius: "0.375rem", margin: 0 }}
 													wrapLongLines
 												>
 													{codeStr}
