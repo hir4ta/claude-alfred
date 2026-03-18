@@ -61,6 +61,8 @@ function ActivityPage() {
 }
 
 function ActivityTable({ entries }: { entries: ActivityEntry[] }) {
+	const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
 	return (
 		<Table>
 			<TableHeader>
@@ -72,20 +74,36 @@ function ActivityTable({ entries }: { entries: ActivityEntry[] }) {
 				</TableRow>
 			</TableHeader>
 			<TableBody>
-				{entries.map((entry, i) => (
-					<TableRow key={`${entry.timestamp}-${i}`}>
-						<TableCell className="text-xs text-muted-foreground font-mono">
-							{formatTimestamp(entry.timestamp)}
-						</TableCell>
-						<TableCell>
-							<ActionBadge action={entry.action} />
-						</TableCell>
-						<TableCell className="text-sm">{entry.target}</TableCell>
-						<TableCell className="text-xs text-muted-foreground max-w-xs truncate">
-							{entry.detail}
-						</TableCell>
-					</TableRow>
-				))}
+				{entries.map((entry, i) => {
+					const isExpanded = expandedIdx === i;
+					const hasDetail = !!entry.detail && entry.detail.length > 40;
+					return (
+						<TableRow
+							key={`${entry.timestamp}-${i}`}
+							className={hasDetail ? "cursor-pointer hover:bg-accent/50" : ""}
+							onClick={() => hasDetail && setExpandedIdx(isExpanded ? null : i)}
+						>
+							<TableCell className="text-xs text-muted-foreground font-mono align-top">
+								{formatTimestamp(entry.timestamp)}
+							</TableCell>
+							<TableCell className="align-top">
+								<ActionBadge action={entry.action} />
+							</TableCell>
+							<TableCell className="text-sm align-top">{entry.target}</TableCell>
+							<TableCell className="text-xs text-muted-foreground">
+								{isExpanded ? (
+									<div className="whitespace-pre-wrap break-words max-w-lg">
+										{entry.detail}
+									</div>
+								) : (
+									<div className="max-w-xs truncate">
+										{entry.detail}
+									</div>
+								)}
+							</TableCell>
+						</TableRow>
+					);
+				})}
 				{entries.length === 0 && (
 					<TableRow>
 						<TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
