@@ -1,12 +1,16 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { HookEvent } from "./dispatcher.js";
 import { isGateActive } from "./review-gate.js";
 import { denyTool, isSpecFilePath, tryReadActiveSpec } from "./spec-guard.js";
+import { readLastIntent } from "./state.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
+const IMPLEMENT_INTENTS = new Set(["implement", "bugfix", "tdd"]);
 
 /**
- * PreToolUse handler: block Edit/Write on review-gate or unapproved spec.
- * Enforcement order: .alfred/ exempt → review-gate → approval gate.
+ * PreToolUse handler: block Edit/Write on review-gate, intent guard, or unapproved spec.
+ * Enforcement order: .alfred/ exempt → review-gate → intent guard → approval gate.
  * Fail-open: any error results in allowing the tool (NFR-2).
  */
 export async function preToolUse(ev: HookEvent): Promise<void> {
@@ -34,8 +38,21 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// No active spec = free coding, no block.
+	// Intent guard: blocks source edits when implement intent detected but no active spec.
 	const spec = tryReadActiveSpec(ev.cwd);
+	if (!spec && ev.cwd && existsSync(join(ev.cwd, ".alfred"))) {
+		const intent = readLastIntent(ev.cwd);
+		if (intent && IMPLEMENT_INTENTS.has(intent)) {
+			const reason = [
+				"No active spec. Create a spec before implementing: /alfred:brief or dossier action=init",
+				'- "This change is too small for a spec" → Use dossier init size=S (adds <2min)',
+				'- "I\'ll create the spec after" → The Stop hook will block you from finishing without a spec',
+			].join("\n");
+			denyTool(reason);
+			return;
+		}
+		return; // No spec, no implement intent → free coding
+	}
 	if (!spec) return;
 
 	// M/L/XL with unapproved review → deny.

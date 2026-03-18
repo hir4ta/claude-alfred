@@ -6,6 +6,7 @@ import { clearReviewGate, readReviewGate, writeReviewGate } from "../hooks/revie
 import { appendAudit } from "../spec/audit.js";
 import { initSpec } from "../spec/init.js";
 import type { SpecFile, SpecSize, SpecType } from "../spec/types.js";
+import { validateSpec } from "../spec/validate.js";
 import {
 	completeTask,
 	filesForSize,
@@ -322,7 +323,22 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
 		}
 	}
 
-	// FR-3: Check closing wave completion.
+	// Validation gate: all sizes must pass validation (no fail checks).
+	try {
+		const valSize = (task?.size ?? "L") as SpecSize;
+		const valSpecType = (task?.spec_type ?? "feature") as SpecType;
+		const valResult = validateSpec(projectPath, taskSlug, valSize, valSpecType);
+		if (valResult.failed > 0) {
+			const errors = valResult.checks.filter((c) => c.status === "fail").map((c) => c.message);
+			return errorResult(
+				`validation gate: ${valResult.failed} check(s) failed. Fix before completing.\n${errors.join("\n")}`,
+			);
+		}
+	} catch {
+		/* fail-open: validation errors don't block completion */
+	}
+
+	// Check closing wave completion.
 	let closingWarning: string | undefined;
 	try {
 		const sd = new SpecDir(projectPath, taskSlug);
@@ -526,8 +542,6 @@ function dossierValidate(projectPath: string, params: DossierParams) {
 		}
 	}
 
-	// Placeholder: full 22-check validation will be implemented later.
-	// For now, run basic structural checks.
 	const sd = new SpecDir(projectPath, taskSlug);
 	if (!sd.exists()) return errorResult(`spec dir not found: ${sd.dir()}`);
 
@@ -535,43 +549,19 @@ function dossierValidate(projectPath: string, params: DossierParams) {
 	const task = state.tasks.find((t) => t.slug === taskSlug);
 	const size = (task?.size ?? "L") as SpecSize;
 	const specType = (task?.spec_type ?? "feature") as SpecType;
-	const expectedFiles = filesForSize(size, specType);
 
-	const checks: Array<{ name: string; status: string; message: string }> = [];
+	const result = validateSpec(projectPath, taskSlug, size, specType);
+	const blocking = result.checks.filter((c) => c.status === "fail");
+	const warnings = result.checks.filter((c) => c.status === "warn");
 
-	// Check required files exist.
-	for (const f of expectedFiles) {
-		try {
-			sd.readFile(f);
-			checks.push({ name: `file_exists:${f}`, status: "pass", message: `${f} exists` });
-		} catch {
-			checks.push({ name: `file_exists:${f}`, status: "fail", message: `${f} missing` });
-		}
-	}
-
-	// Check closing wave in tasks.md.
-	try {
-		const tasksContent = sd.readFile("tasks.md");
-		if (tasksContent.includes("## Wave: Closing") || tasksContent.includes("## Wave: closing")) {
-			checks.push({
-				name: "closing_wave",
-				status: "pass",
-				message: "Closing wave found in tasks.md",
-			});
-		} else {
-			checks.push({ name: "closing_wave", status: "fail", message: "No closing wave in tasks.md" });
-		}
-	} catch {
-		/* tasks.md may not exist for all sizes */
-	}
-
-	const passed = checks.filter((c) => c.status === "pass").length;
 	return jsonResult({
 		task_slug: taskSlug,
 		size,
 		spec_type: specType,
-		checks,
-		summary: `${passed}/${checks.length} checks passed`,
+		checks: result.checks,
+		summary: result.summary,
+		blocking_issues: blocking.map((c) => c.message),
+		warnings: warnings.map((c) => c.message),
 	});
 }
 

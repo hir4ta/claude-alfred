@@ -61,3 +61,28 @@ export function writeStateText(cwd: string, name: string, data: string): void {
 		/* best effort */
 	}
 }
+
+// --- Intent state for spec-first enforcement ---
+
+const INTENT_FILE = "last-intent.json";
+const INTENT_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+interface IntentState {
+	intent: string;
+	timestamp: number;
+}
+
+export function writeLastIntent(cwd: string, intent: string | null): void {
+	if (!intent) {
+		writeStateJSON(cwd, INTENT_FILE, null);
+		return;
+	}
+	writeStateJSON(cwd, INTENT_FILE, { intent, timestamp: Date.now() } satisfies IntentState);
+}
+
+export function readLastIntent(cwd: string): string | null {
+	const data = readStateJSON<IntentState | null>(cwd, INTENT_FILE, null);
+	if (!data || !data.intent || !data.timestamp) return null;
+	if (Date.now() - data.timestamp > INTENT_EXPIRY_MS) return null; // expired
+	return data.intent;
+}
