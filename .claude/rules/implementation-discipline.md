@@ -14,6 +14,13 @@ After completing each Wave in tasks.md:
 2. Fix all Critical and Warning findings before proceeding to next Wave
 3. Update session.md with review results
 
+## Spec Completion Rule
+
+After all implementation is done:
+1. MUST call `dossier action=complete` to close the spec
+2. Never leave specs in active state after work is finished
+3. If approval gate blocks completion, submit review via dashboard first
+
 ## Commit Discipline
 
 - Commit at Wave boundaries, not mid-Wave

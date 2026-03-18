@@ -13,7 +13,7 @@ import type { DecisionEntry, EpicSummary, MemoryHealthStats, TaskDetail } from "
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Brain, CheckCircle2, Clock, Zap } from "lucide-react";
+import { AlertTriangle, Brain, CheckCircle2, Circle, CircleCheck, CircleDot, Clock, Zap } from "lucide-react";
 
 export const Route = createFileRoute("/")({
 	component: OverviewPage,
@@ -66,7 +66,7 @@ function OverviewPage() {
 					>
 						Tasks
 					</h2>
-					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+					<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						{tasks.map((task) => (
 							<TaskCard key={task.slug} task={task} isActive={task.slug === activeSlug} />
 						))}
@@ -117,46 +117,68 @@ function StatCard({
 
 function TaskCard({ task, isActive }: { task: TaskDetail; isActive: boolean }) {
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
+	const isCompleted = task.status === "completed";
+	const firstUnchecked = task.next_steps?.find((s) => !s.done);
 
 	return (
 		<Link to="/tasks/$slug" params={{ slug: task.slug }}>
 			<Card
 				className={cn(
-					"border-stone-200 transition-all hover:shadow-md hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600",
+					"h-[160px] flex flex-col border-stone-200 transition-all hover:shadow-md hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600",
 					isActive && "ring-1 ring-brand-session/30",
+					isCompleted && "opacity-60",
 				)}
 			>
 				<CardHeader className="pb-2">
 					<div className="flex items-center justify-between gap-2">
-						<CardTitle className="text-sm font-semibold truncate">{task.slug}</CardTitle>
+						<div className="flex items-center gap-2 min-w-0">
+							{isCompleted ? (
+								<CircleCheck className="size-4 shrink-0 text-brand-pattern" />
+							) : isActive ? (
+								<CircleDot className="size-4 shrink-0 text-brand-session" />
+							) : (
+								<Circle className="size-4 shrink-0 text-muted-foreground/40" />
+							)}
+							<CardTitle className="text-sm font-semibold truncate">{task.slug}</CardTitle>
+						</div>
 						<div className="flex shrink-0 gap-1.5">
 							{task.size && (
 								<Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full">
 									{task.size}
 								</Badge>
 							)}
-							<StatusBadge status={task.status} />
 						</div>
 					</div>
 				</CardHeader>
-				<CardContent className="space-y-2.5">
-					{task.focus && (
-						<p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-							{task.focus}
-						</p>
-					)}
+				<CardContent className="flex-1 flex flex-col justify-between gap-2">
+					<div className="space-y-1.5">
+						{task.focus && (
+							<p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">
+								{task.focus}
+							</p>
+						)}
+						{firstUnchecked && !isCompleted && (
+							<div className="relative overflow-hidden rounded px-2 py-1">
+								<div
+									className="absolute inset-0 animate-shimmer"
+									style={{
+										background:
+											"linear-gradient(90deg, rgba(45,139,122,0.04) 0%, rgba(45,139,122,0.10) 50%, rgba(45,139,122,0.04) 100%)",
+										backgroundSize: "200% 100%",
+									}}
+								/>
+								<p className="relative text-[11px] text-muted-foreground line-clamp-1">
+									→ {firstUnchecked.text}
+								</p>
+							</div>
+						)}
+					</div>
 					<div className="flex items-center gap-2.5">
 						<Progress value={progress} className="h-1.5 flex-1" />
 						<span className="text-[11px] tabular-nums text-muted-foreground">
 							{task.completed}/{task.total}
 						</span>
 					</div>
-					{task.has_blocker && (
-						<div className="flex items-center gap-1.5 text-xs" style={{ color: "#c0392b" }}>
-							<AlertTriangle className="size-3" />
-							<span className="line-clamp-1">{task.blocker_text}</span>
-						</div>
-					)}
 				</CardContent>
 			</Card>
 		</Link>

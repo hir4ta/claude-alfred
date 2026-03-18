@@ -15,7 +15,8 @@ import type { SpecEntry, TaskDetail, ValidationReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText, MessageSquareText } from "lucide-react";
+import { FileText, MessageSquareText, CircleCheck, CircleDot } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -99,10 +100,19 @@ function TaskDetailPage() {
 }
 
 function TaskHeader({ task, validation }: { task: TaskDetail; validation?: ValidationReport }) {
+	const firstUncheckedIdx = task.next_steps?.findIndex((s) => !s.done) ?? -1;
+
 	return (
-		<div className="space-y-2">
+		<div className="space-y-3">
 			<div className="flex items-center gap-3">
-				<h2 className="text-lg font-semibold">{task.slug}</h2>
+				{task.status === "completed" ? (
+					<CircleCheck className="size-5 shrink-0 text-brand-pattern" />
+				) : (
+					<CircleDot className="size-5 shrink-0 text-brand-session" />
+				)}
+				<h2 className="text-lg font-semibold" style={{ fontFamily: "var(--font-display)" }}>
+					{task.slug}
+				</h2>
 				{task.size && <Badge variant="outline">{task.size}</Badge>}
 				{task.spec_type && <Badge variant="outline">{task.spec_type}</Badge>}
 				{task.review_status && (
@@ -129,17 +139,45 @@ function TaskHeader({ task, validation }: { task: TaskDetail; validation?: Valid
 				)}
 				{validation && <ValidationBadge report={validation} />}
 			</div>
-			{task.focus && <p className="text-sm text-muted-foreground">{task.focus}</p>}
+			{task.focus && (
+				<p className="text-sm text-muted-foreground pl-8">{task.focus}</p>
+			)}
 			{task.next_steps && task.next_steps.length > 0 && (
-				<div className="space-y-1">
-					<p className="text-xs font-medium text-muted-foreground">Next Steps</p>
-					{task.next_steps.map((step, i) => (
-						<div key={`step-${i}`} className="flex items-center gap-2 text-sm">
-							<span className={cn("text-xs", step.done && "line-through text-muted-foreground")}>
-								{step.done ? "[x]" : "[ ]"} {step.text}
-							</span>
-						</div>
-					))}
+				<div className="space-y-1 pl-8">
+					<p className="text-xs font-medium text-muted-foreground mb-2">Next Steps</p>
+					{task.next_steps.map((step, i) => {
+						const isCurrent = i === firstUncheckedIdx;
+						return (
+							<div
+								key={`step-${i}`}
+								className={cn(
+									"relative flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors",
+									isCurrent && "overflow-hidden",
+								)}
+							>
+								{isCurrent && (
+									<div
+										className="absolute inset-0 animate-shimmer"
+										style={{
+											background:
+												"linear-gradient(90deg, rgba(45,139,122,0.03) 0%, rgba(45,139,122,0.10) 50%, rgba(45,139,122,0.03) 100%)",
+											backgroundSize: "200% 100%",
+										}}
+									/>
+								)}
+								<Checkbox checked={step.done} className="relative" />
+								<span
+									className={cn(
+										"relative text-xs leading-relaxed",
+										step.done && "line-through text-muted-foreground",
+										isCurrent && "font-medium",
+									)}
+								>
+									{step.text}
+								</span>
+							</div>
+						);
+					})}
 				</div>
 			)}
 		</div>
