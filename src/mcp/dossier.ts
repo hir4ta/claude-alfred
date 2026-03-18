@@ -26,6 +26,13 @@ import { detectProject } from "../store/project.js";
 import { vectorSearchKnowledge } from "../store/vectors.js";
 import { truncate } from "./helpers.js";
 
+/** Truncate at the last newline before maxLen to avoid mid-line cuts. */
+function truncateAtNewline(s: string, maxLen: number): string {
+	if (s.length <= maxLen) return s;
+	const lastNewline = s.lastIndexOf("\n", maxLen);
+	return lastNewline > 0 ? s.slice(0, lastNewline) : s.slice(0, maxLen);
+}
+
 interface DossierParams {
 	action: string;
 	project_path?: string;
@@ -143,7 +150,7 @@ async function dossierInit(
 		const sfPath = join(steeringDir, sf);
 		if (existsSync(sfPath)) {
 			try {
-				steeringParts.push(readFileSync(sfPath, "utf-8"));
+				steeringParts.push(truncateAtNewline(readFileSync(sfPath, "utf-8"), 3000));
 			} catch { /* ignore */ }
 		}
 	}
@@ -301,8 +308,7 @@ function dossierStatus(projectPath: string) {
 		const sfPath = join(steeringDir, sf);
 		if (existsSync(sfPath)) {
 			try {
-				// First 300 chars per file for summary.
-				steeringSummary.push(readFileSync(sfPath, "utf-8").slice(0, 300));
+				steeringSummary.push(truncateAtNewline(readFileSync(sfPath, "utf-8"), 800));
 			} catch { /* ignore */ }
 		}
 	}
