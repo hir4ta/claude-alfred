@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useParams } from "@tanstack/react-router";
-import { ChevronDown, CircleCheck, CircleDot } from "lucide-react";
+import { ChevronDown, CircleCheck, CircleDashed, CirclePause, CircleX } from "lucide-react";
 import { useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -87,10 +87,9 @@ function TaskAccordionCard({
 	const [expanded, setExpanded] = useState(false);
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
 	const isCompleted = task.status === "completed" || task.status === "done" || task.status === "cancelled";
-	const firstUnchecked = task.next_steps?.find((s) => !s.done);
+	const firstUncheckedIdx = task.next_steps?.findIndex((s) => !s.done) ?? -1;
 	const c = SHIMMER_COLORS[colorIndex % SHIMMER_COLORS.length]!;
 	const accentColor = `rgb(${c.r},${c.g},${c.b})`;
-	const firstUncheckedIdx = task.next_steps?.findIndex((s) => !s.done) ?? -1;
 
 	return (
 		<div
@@ -105,11 +104,7 @@ function TaskAccordionCard({
 			<Link to="/tasks/$slug" params={{ slug: task.slug }} className="block p-3 pb-2">
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2 min-w-0">
-						{isCompleted ? (
-							<CircleCheck className="size-3.5 shrink-0" style={{ color: "#2d8b7a" }} />
-						) : (
-							<CircleDot className="size-3.5 shrink-0" style={{ color: accentColor }} />
-						)}
+						<TaskStatusIcon status={task.status} />
 						<span className="text-sm font-medium truncate">{task.slug}</span>
 					</div>
 					<div className="flex items-center gap-1 shrink-0">
@@ -132,7 +127,7 @@ function TaskAccordionCard({
 					<p className="text-[11px] text-muted-foreground line-clamp-1">{task.focus}</p>
 				)}
 				<div className="flex items-center gap-2">
-					<Progress value={progress} className="h-1 flex-1" />
+					<Progress value={progress} className="h-1 flex-1 [&>div]:bg-[#e67e22]" />
 					<span className="text-[10px] tabular-nums text-muted-foreground">
 						{task.completed}/{task.total}
 					</span>
@@ -194,4 +189,23 @@ function TaskAccordionCard({
 			)}
 		</div>
 	);
+}
+
+/** Brand-colored status icon for task cards. */
+function TaskStatusIcon({ status }: { status: string }) {
+	switch (status) {
+		case "done":
+		case "completed":
+			return <CircleCheck className="size-3.5 shrink-0" style={{ color: "#2d8b7a" }} />;
+		case "review":
+			return <CircleDashed className="size-3.5 shrink-0" style={{ color: "#e67e22" }} />;
+		case "deferred":
+			return <CirclePause className="size-3.5 shrink-0" style={{ color: "#7b6b8d" }} />;
+		case "cancelled":
+			return <CircleX className="size-3.5 shrink-0" style={{ color: "#c0392b" }} />;
+		case "pending":
+			return <CircleDashed className="size-3.5 shrink-0" style={{ color: "#9ca3af" }} />;
+		default: // in-progress, active
+			return <CircleDashed className="size-3.5 shrink-0 animate-spin" style={{ color: "#628141", animationDuration: "3s" }} />;
+	}
 }
