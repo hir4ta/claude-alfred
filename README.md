@@ -6,6 +6,8 @@
 
 A development butler for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Specs, memory, reviews — all automatic.
 
+**Other tools suggest. alfred enforces.**
+
 [Japanese README](README.ja.md)
 
 ## 30-second version
@@ -40,17 +42,19 @@ Optional: add `export VOYAGE_API_KEY=your-key` to `~/.zshrc` for semantic search
 
 ## What makes it different
 
-**Specs that don't disappear.** Requirements, design, tasks, test specs — structured markdown that survives compacts and sessions. 2 files for a quick fix, 5 for a big feature. Size auto-detected.
+Most spec tools give you slash commands that say "you should write a spec first." alfred uses Claude Code's hook system to **physically block** Edit and Write until you do. That's the core difference — enforcement happens at the tool level, not the prompt level.
 
-**Memory that stacks up.** Every decision, pattern, and hard-won lesson goes to `.alfred/knowledge/` as structured JSON. Three types: decisions, patterns, rules. Git-friendly, team-shareable. alfred surfaces relevant experience before you ask.
+**Enforcement, not suggestions.** Three layers gate your code edits. An intent guard blocks implementation without a spec. A review gate blocks the next wave until you've reviewed the last one. An approval gate blocks M/L/XL specs until a human signs off in the dashboard. You can't YAML-edit your way past it — the signed review file gets checked too.
 
-**Reviews you can't skip.** Three enforcement layers block Edit/Write until you've reviewed. A review gate for each wave, an approval gate for M/L/XL specs, an intent guard that stops implementation without a spec. You can't YAML-edit your way past it — the signed review file gets checked too.
+**Knowledge that grows up.** Every decision, pattern, and hard-won lesson goes to `.alfred/knowledge/` as structured JSON. Patterns auto-promote to rules after 15+ search hits. Each knowledge type has its own half-life — rules stay relevant for 120 days, assumptions fade after 30. Contradictions are detected automatically. Git-friendly, team-shareable, and alfred surfaces relevant experience before you ask.
 
-**Specs that stay honest.** After every commit, alfred diffs your changes against the spec. Touched a component not in the design? You'll hear about it.
+**Specs that stay honest.** After every commit, alfred diffs your changes against the design doc. Touched a component not in the spec? You'll hear about it. New source files get auto-appended to the right component section — your spec stays in sync without manual updates.
 
-**Skills that show up on their own.** Researching? alfred suggests `/brief`. Fixing a bug? `/mend`. Merged a PR? `/harvest`. No memorization needed — it watches what you're doing.
+**Context that adapts.** alfred adjusts how much it injects based on project maturity. A new project gets full spec context on session start. A mature one with 20+ knowledge entries gets just the current task and goal — no context bloat.
 
-**A dashboard that's actually useful.** `alfred dashboard` opens `localhost:7575` with live task progress, spec review with inline comments, knowledge health, and activity timeline. English/Japanese toggle.
+**Skills that show up on their own.** Researching? alfred suggests `/brief`. Fixing a bug? `/mend`. Merged a PR? `/harvest`. No memorization needed — it classifies your intent (semantic or keyword, bilingual) and nudges the right skill.
+
+**A dashboard that's actually useful.** `alfred dashboard` opens `localhost:7575` with live task progress, spec review with line-level comments, file-by-file approval, knowledge health, and activity timeline. English/Japanese toggle.
 
 ## Skills
 
