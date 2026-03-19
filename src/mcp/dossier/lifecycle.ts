@@ -287,7 +287,7 @@ export function dossierCheck(projectPath: string, params: DossierParams) {
 	// Detect wave completion (reuse logic from post-tool).
 	const waveMessages: string[] = [];
 	try {
-		const { detectWaveCompletion } = require("../hooks/post-tool.js");
+		const { detectWaveCompletion } = require("../../hooks/post-tool.js");
 		const waveItems = detectWaveCompletion(projectPath, taskSlug, updatedContent);
 		for (const item of waveItems) {
 			waveMessages.push(item.message);

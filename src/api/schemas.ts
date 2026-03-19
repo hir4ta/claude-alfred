@@ -72,7 +72,7 @@ export const KnowledgeEntrySchema = z.object({
 	hit_count: z.number(),
 	content: z.string(),
 	saved_at: z.string().optional(),
-	enabled: z.union([z.boolean(), z.number()]),
+	enabled: z.boolean(),
 	project_name: z.string().optional(),
 });
 
@@ -148,7 +148,7 @@ export const DecisionEntrySchema = z.object({
 	hit_count: z.number(),
 	content: z.string(),
 	saved_at: z.string().optional(),
-	enabled: z.union([z.boolean(), z.number()]),
+	enabled: z.boolean(),
 	project_name: z.string().optional(),
 });
 

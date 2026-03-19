@@ -34,7 +34,7 @@ function toKnowledgeEntry(r: KnowledgeRow) {
 		hit_count: r.hitCount,
 		content: r.content,
 		saved_at: r.createdAt,
-		enabled: r.enabled,
+		enabled: Boolean(r.enabled),
 		project_name: r.projectName,
 	};
 }
