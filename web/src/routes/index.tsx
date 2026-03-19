@@ -63,7 +63,12 @@ function OverviewPage() {
 	const { data: epicsData } = useQuery(epicsQueryOptions());
 	const { data: decisionsData } = useQuery(decisionsQueryOptions(5));
 
-	const tasks = tasksData?.tasks ?? [];
+	const tasks = [...(tasksData?.tasks ?? [])].sort((a, b) => {
+		// Newest first by started_at (descending).
+		const aTime = a.started_at ?? "";
+		const bTime = b.started_at ?? "";
+		return bTime.localeCompare(aTime);
+	});
 
 	return (
 		<div className="space-y-8">

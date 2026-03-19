@@ -17,16 +17,16 @@ function getInitialLocale(): Locale {
 const translations = {
 	// Header tabs
 	"nav.overview": { en: "Overview", ja: "概要" },
-	"nav.tasks": { en: "Tasks", ja: "タスク" },
+	"nav.tasks": { en: "Specs", ja: "スペック" },
 	"nav.knowledge": { en: "Knowledge", ja: "ナレッジ" },
 	"nav.activity": { en: "Activity", ja: "アクティビティ" },
 
 	// Overview stats
-	"overview.totalTasks": { en: "Total Tasks", ja: "タスク合計" },
+	"overview.totalTasks": { en: "Total Specs", ja: "スペック合計" },
 	"overview.active": { en: "Active", ja: "アクティブ" },
 	"overview.completed": { en: "Completed", ja: "完了" },
 	"overview.knowledge": { en: "Knowledge", ja: "ナレッジ" },
-	"overview.tasks": { en: "Tasks", ja: "タスク" },
+	"overview.tasks": { en: "Specs", ja: "スペック" },
 	"overview.memoryHealth": { en: "Memory Health", ja: "メモリ健全性" },
 	"overview.total": { en: "Total", ja: "合計" },
 	"overview.stale": { en: "Stale", ja: "陳腐化" },
@@ -47,16 +47,16 @@ const translations = {
 	// Tasks sidebar
 	"tasks.hideCompleted": { en: "Hide completed", ja: "完了を非表示" },
 	"tasks.showCompleted": { en: "Show completed", ja: "完了を表示" },
-	"tasks.noTasks": { en: "No tasks found.", ja: "タスクが見つかりません。" },
+	"tasks.noTasks": { en: "No specs found.", ja: "スペックが見つかりません。" },
 	"tasks.nextSteps": { en: "Next Steps", ja: "次のステップ" },
 	"tasks.waves": { en: "Waves", ja: "Wave" },
 
 	// Task detail
-	"task.completeTask": { en: "Complete Task", ja: "タスクを完了" },
-	"task.confirmComplete": { en: "Mark this task as completed?", ja: "このタスクを完了にしますか？" },
+	"task.completeTask": { en: "Complete Spec", ja: "スペックを完了" },
+	"task.confirmComplete": { en: "Mark this spec as completed?", ja: "このスペックを完了にしますか？" },
 	"task.confirm": { en: "Confirm", ja: "確認" },
 	"task.cancel": { en: "Cancel", ja: "キャンセル" },
-	"task.notFound": { en: "Task not found.", ja: "タスクが見つかりません。" },
+	"task.notFound": { en: "Spec not found.", ja: "スペックが見つかりません。" },
 	"task.noSpecs": { en: "No spec files found.", ja: "スペックファイルが見つかりません。" },
 	"task.started": { en: "Started", ja: "開始" },
 	"task.completed": { en: "Completed", ja: "完了" },
