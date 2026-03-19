@@ -2,7 +2,7 @@ import type { HookEvent } from "./dispatcher.js";
 import { isGateActive } from "./review-gate.js";
 import {
 	blockStop,
-	countUncheckedNextSteps,
+	countUncheckedTasks,
 	hasUncheckedSelfReview,
 	tryReadActiveSpec,
 } from "./spec-guard.js";
@@ -11,7 +11,7 @@ import { readWorkedSlugs } from "./state.js";
 /**
  * Stop handler:
  * - review-gate active → BLOCK (hard enforcement)
- * - unchecked Next Steps / self-review / incomplete spec → CONTEXT reminder (no block)
+ * - unchecked tasks / self-review / incomplete spec → CONTEXT reminder (no block)
  * - Session-scoped: only reminds about specs worked on in this session (via worked-slugs).
  *   Fallback: if no worked-slugs recorded (read-only session), uses current primary.
  * DEC-4: stop_hook_active=true → always allow (infinite loop prevention).
@@ -46,9 +46,9 @@ export async function stop(ev: HookEvent): Promise<void> {
 
 	const reminders: string[] = [];
 
-	const unchecked = countUncheckedNextSteps(ev.cwd, spec.slug);
+	const unchecked = countUncheckedTasks(ev.cwd, spec.slug);
 	if (unchecked > 0) {
-		reminders.push(`${unchecked} unchecked Next Steps in spec '${spec.slug}'`);
+		reminders.push(`${unchecked} unchecked task(s) in spec '${spec.slug}'`);
 	}
 
 	if (hasUncheckedSelfReview(ev.cwd, spec.slug)) {

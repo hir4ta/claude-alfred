@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-	countUncheckedNextSteps,
+	countUncheckedTasks,
 	hasUncheckedSelfReview,
 	isSpecFilePath,
 	tryReadActiveSpec,
@@ -94,23 +94,23 @@ describe("isSpecFilePath", () => {
 	});
 });
 
-describe("countUncheckedNextSteps", () => {
+describe("countUncheckedTasks", () => {
 	it("counts unchecked items in tasks.md", () => {
 		setupSpec({
 			tasksContent: "# Tasks\n- [x] Done\n- [ ] Todo 1\n- [ ] Todo 2\n",
 		});
-		expect(countUncheckedNextSteps(tmpDir, "test-task")).toBe(2);
+		expect(countUncheckedTasks(tmpDir, "test-task")).toBe(2);
 	});
 
 	it("returns 0 when all checked", () => {
 		setupSpec({
 			tasksContent: "# Tasks\n- [x] Done 1\n- [x] Done 2\n",
 		});
-		expect(countUncheckedNextSteps(tmpDir, "test-task")).toBe(0);
+		expect(countUncheckedTasks(tmpDir, "test-task")).toBe(0);
 	});
 
 	it("returns 0 when no tasks.md", () => {
-		expect(countUncheckedNextSteps(tmpDir, "nonexistent")).toBe(0);
+		expect(countUncheckedTasks(tmpDir, "nonexistent")).toBe(0);
 	});
 });
 

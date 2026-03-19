@@ -100,7 +100,7 @@ Analyze the bug from 2 perspectives in a single structured response:
 
 After EVERY phase transition:
 - Update tasks.md via `dossier` action=update (mode=replace)
-- Mark completed Next Steps as `[x]` immediately (dashboard UX)
+- Mark completed tasks as `[x]` via `dossier action=check task_id="T-N.N"` (dashboard UX)
 
 ## Guardrails
 

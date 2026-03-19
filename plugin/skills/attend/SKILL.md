@@ -98,11 +98,7 @@ File generation order: research → requirements → design → tasks → test-s
 - Save decisions directly via `ledger action=save sub_type=decision` (not as a spec file)
 - Include title, context, decision, reasoning, alternatives
 
-### 1g. tasks.md
-- Write final tasks.md with Next Steps derived from **tasks.md T-IDs**
-- Update state: `phase: approval-gate`
-
-### 1h. Clear spec-review gate
+### 1g. Clear spec-review gate
 After all spec files reviewed and fixed, clear the review gate:
 ```
 dossier action=gate sub_action=clear reason="3-agent review completed for all spec files. Findings: [summarize key findings and fixes]"
@@ -129,11 +125,11 @@ This is MANDATORY — PreToolUse blocks source Edit/Write until gate is cleared.
 
 ## Phase 3: Implementation
 
-Read task breakdown from tasks.md Next Steps.
+Read task breakdown from tasks.md waves.
 
 **Per implementation task:**
 1. Record: `phase_start_commit` = `git rev-parse HEAD`
-2. Read the task from Next Steps
+2. Read the next unchecked task from tasks.md
 3. Implement using Edit/Write/Bash — work directly
 4. **Immediately update tasks.md**: mark this task as `[x]` done
 5. Proceed to Phase 4 (per-task review)
@@ -204,7 +200,7 @@ This is MANDATORY — PostToolUse auto-sets the wave-review gate when a Wave com
 After EVERY phase transition and after EVERY task completion:
 - Update `## Orchestrator State` in tasks.md via `dossier` action=update
 - Include: phase, iteration, blocked status, awaiting_approval
-- Mark completed Next Steps as `[x]`
+- Mark completed tasks as `[x]` via `dossier action=check task_id="T-N.N"`
 
 ## Guardrails
 

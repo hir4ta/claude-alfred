@@ -74,28 +74,28 @@ function getContextOutput(): string {
 
 describe("stop", () => {
 	it("allows stop when stop_hook_active=true (DEC-4 infinite loop prevention)", async () => {
-		setupSpec({ size: "M", sessionContent: "## Next Steps\n- [ ] Unchecked\n" });
+		setupSpec({ size: "M", sessionContent: "## Wave 1\n- [ ] Unchecked\n" });
 		await stop(makeEvent({ stopHookActive: true }));
 		expect(stdoutData.length).toBe(0);
 	});
 
-	it("does NOT block on unchecked Next Steps (CONTEXT only, stderr)", async () => {
+	it("does NOT block on unchecked task(s) (CONTEXT only, stderr)", async () => {
 		setupSpec({
 			size: "M",
-			sessionContent: "## Next Steps\n- [x] Done\n- [ ] Todo 1\n- [ ] Todo 2\n",
+			sessionContent: "## Wave 1\n- [x] Done\n- [ ] Todo 1\n- [ ] Todo 2\n",
 		});
 		await stop(makeEvent());
 		const block = getBlockOutput();
 		expect(block).toBeNull(); // No block
 		expect(stdoutData.length).toBe(0); // No stdout (avoids JSON validation error)
 		const ctx = getContextOutput();
-		expect(ctx).toContain("unchecked Next Steps");
+		expect(ctx).toContain("unchecked task(s)");
 	});
 
 	it("does NOT block on unchecked self-review (CONTEXT only, stderr)", async () => {
 		setupSpec({
 			size: "M",
-			sessionContent: "## Next Steps\n- [ ] セルフレビュー\n",
+			sessionContent: "## Wave 1\n- [ ] セルフレビュー\n",
 		});
 		await stop(makeEvent());
 		expect(getBlockOutput()).toBeNull();
@@ -106,7 +106,7 @@ describe("stop", () => {
 	it("emits dossier complete reminder as CONTEXT via stderr", async () => {
 		setupSpec({
 			size: "M",
-			sessionContent: "## Next Steps\n- [x] All done\n",
+			sessionContent: "## Wave 1\n- [x] All done\n",
 		});
 		await stop(makeEvent());
 		expect(getBlockOutput()).toBeNull();
@@ -123,7 +123,7 @@ describe("stop", () => {
 		setupSpec({
 			size: "M",
 			status: "completed",
-			sessionContent: "## Next Steps\n- [ ] Something unchecked\n",
+			sessionContent: "## Wave 1\n- [ ] Something unchecked\n",
 		});
 		await stop(makeEvent());
 		expect(stdoutData.length).toBe(0);
@@ -144,7 +144,7 @@ describe("stop", () => {
 	it("skips reminders when primary spec was NOT worked on (session-scoped)", async () => {
 		setupSpec({
 			size: "M",
-			sessionContent: "## Next Steps\n- [ ] Todo 1\n",
+			sessionContent: "## Wave 1\n- [ ] Todo 1\n",
 		});
 		// Record a different slug as worked — primary 'test-task' was not worked on.
 		mkdirSync(join(tmpDir, ".alfred", ".state"), { recursive: true });
@@ -157,7 +157,7 @@ describe("stop", () => {
 	it("shows reminders when primary spec WAS worked on (session-scoped)", async () => {
 		setupSpec({
 			size: "M",
-			sessionContent: "## Next Steps\n- [ ] Todo 1\n",
+			sessionContent: "## Wave 1\n- [ ] Todo 1\n",
 		});
 		mkdirSync(join(tmpDir, ".alfred", ".state"), { recursive: true });
 		resetWorkedSlugs(tmpDir);
@@ -165,18 +165,18 @@ describe("stop", () => {
 		await stop(makeEvent());
 		expect(stdoutData.length).toBe(0);
 		const ctx = getContextOutput();
-		expect(ctx).toContain("unchecked Next Steps");
+		expect(ctx).toContain("unchecked task(s)");
 	});
 
 	it("falls back to primary spec when no worked-slugs recorded (read-only session)", async () => {
 		setupSpec({
 			size: "M",
-			sessionContent: "## Next Steps\n- [ ] Todo 1\n",
+			sessionContent: "## Wave 1\n- [ ] Todo 1\n",
 		});
 		// No worked-slugs at all (empty array or file doesn't exist).
 		await stop(makeEvent());
 		expect(stdoutData.length).toBe(0);
 		const ctx = getContextOutput();
-		expect(ctx).toContain("unchecked Next Steps");
+		expect(ctx).toContain("unchecked task(s)");
 	});
 });

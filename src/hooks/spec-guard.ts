@@ -63,9 +63,9 @@ export function isSpecFilePath(cwd: string | undefined, filePath: string): boole
 }
 
 /**
- * Count unchecked tasks (`- [ ]`) in tasks.md.
+ * Count unchecked task checkboxes (`- [ ]`) in tasks.md.
  */
-export function countUncheckedNextSteps(cwd: string | undefined, slug: string): number {
+export function countUncheckedTasks(cwd: string | undefined, slug: string): number {
 	if (!cwd) return 0;
 	try {
 		const tasks = readFileSync(join(cwd, ".alfred", "specs", slug, "tasks.md"), "utf-8");

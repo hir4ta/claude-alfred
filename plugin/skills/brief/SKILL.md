@@ -33,7 +33,7 @@ These thought patterns signal you are about to violate this skill's rules:
 | tasks.md | Wave-based task decomposition + parallel markers | T-N.N |
 | test-specs.md | Gherkin test cases + edge cases + coverage matrix | TS-N.N |
 | research.md | Investigation + gap analysis + implementation options | — |
-| tasks.md | Status + next steps + orchestrator state | — |
+| tasks.md | Wave-based task decomposition + parallel markers | T-N.N |
 
 ## Core Principle
 Each spec file is written, then reviewed by 3 parallel agents (Architect, Devil's
@@ -172,18 +172,7 @@ Save all decisions directly via `ledger action=save sub_type=decision`:
 
 **Fix**: Apply fixes, rewrite if needed.
 
-### 10. [SESSION] Write tasks.md
-
-**Write**: Call `dossier` action=update, file=tasks.md with:
-- Status: active
-- Currently Working On
-- Next Steps: derive from **tasks.md T-IDs** (as unchecked items referencing T-N.N)
-- Recent Decisions (last 3)
-- Blockers
-
-No review needed for tasks.md — it's a status file.
-
-### 10b. Clear spec-review gate
+### 10. Clear spec-review gate
 After all spec files reviewed and fixed, clear the review gate:
 ```
 dossier action=gate sub_action=clear reason="3-agent review completed for all spec files. Findings: [summarize key findings and fixes]"
@@ -216,8 +205,7 @@ Please decide on these open questions:
 
 **S/D specs**: Skip this step — spec is ready for implementation after self-review.
 
-1. Add `## Review Status\npending` to tasks.md
-2. Tell the user:
+1. Tell the user:
    ```
    Spec ready for your review.
    Run `alfred dashboard` → Tasks tab → select '{task-slug}' → review spec files.
