@@ -37,6 +37,7 @@ interface DossierParams {
 	action: string;
 	project_path?: string;
 	task_slug?: string;
+	task_id?: string;
 	description?: string;
 	file?: string;
 	content?: string;
@@ -95,6 +96,8 @@ export async function handleDossier(store: Store, emb: Embedder | null, params: 
 			return dossierValidate(projectPath, params);
 		case "gate":
 			return dossierGate(projectPath, params);
+		case "check":
+			return dossierCheck(projectPath, params);
 		default:
 			return errorResult(`unknown action: ${params.action}`);
 	}
@@ -735,6 +738,75 @@ function checkClosingWave(tasksContent: string): string | undefined {
 	}
 
 	return undefined;
+}
+
+// --- Check (task completion) ---
+
+function dossierCheck(projectPath: string, params: DossierParams) {
+	const taskId = params.task_id;
+	if (!taskId) return errorResult("task_id is required for check (e.g. 'T-1.2')");
+
+	let taskSlug: string;
+	try {
+		taskSlug = readActive(projectPath);
+	} catch {
+		return errorResult("no active spec");
+	}
+
+	const sd = new SpecDir(projectPath, taskSlug);
+	let tasks: string;
+	try {
+		tasks = sd.readFile("tasks.md");
+	} catch {
+		return errorResult("tasks.md not found");
+	}
+
+	const lines = tasks.split("\n");
+	let checked = false;
+	const taskIdLower = taskId.toLowerCase();
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i]!;
+		// Match unchecked task lines containing the task_id
+		if (line.match(/^- \[ \] /) && line.toLowerCase().includes(taskIdLower)) {
+			lines[i] = line.replace("- [ ]", "- [x]");
+			checked = true;
+			break; // Only check one task per call
+		}
+	}
+
+	if (!checked) {
+		// Check if it's already checked
+		const alreadyChecked = lines.some(
+			(l) => l.match(/^- \[x\] /) && l.toLowerCase().includes(taskIdLower),
+		);
+		if (alreadyChecked) {
+			return jsonResult({ task_id: taskId, status: "already_checked" });
+		}
+		return errorResult(`task_id "${taskId}" not found in tasks.md`);
+	}
+
+	const updatedContent = lines.join("\n");
+	sd.writeFile("tasks.md", updatedContent);
+
+	// Detect wave completion (reuse logic from post-tool).
+	const waveMessages: string[] = [];
+	try {
+		const { detectWaveCompletion } = require("../hooks/post-tool.js");
+		const waveItems = detectWaveCompletion(projectPath, taskSlug, updatedContent);
+		for (const item of waveItems) {
+			waveMessages.push(item.message);
+		}
+	} catch {
+		/* wave detection is optional */
+	}
+
+	return jsonResult({
+		task_id: taskId,
+		status: "checked",
+		task_slug: taskSlug,
+		...(waveMessages.length > 0 ? { wave_completion: waveMessages } : {}),
+	});
 }
 
 // Note: saveDecisionsAsKnowledge and savePatternsAsKnowledge extracted to knowledge-extractor.ts

@@ -207,6 +207,7 @@ function autoCheckTasks(projectPath: string, stdout: string, items: DirectiveIte
 
 		const lines = tasks.split("\n");
 		let changed = false;
+		let uncheckedCount = 0;
 
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i]!;
@@ -217,6 +218,8 @@ function autoCheckTasks(projectPath: string, stdout: string, items: DirectiveIte
 			if (matchTaskDescription(description, stdout)) {
 				lines[i] = line.replace("- [ ]", "- [x]");
 				changed = true;
+			} else {
+				uncheckedCount++;
 			}
 		}
 
@@ -226,6 +229,13 @@ function autoCheckTasks(projectPath: string, stdout: string, items: DirectiveIte
 			// Detect wave completion — results aggregated into caller's items.
 			const waveItems = detectWaveCompletion(projectPath, taskSlug, updatedContent);
 			items.push(...waveItems);
+		} else if (uncheckedCount > 0) {
+			// C fallback: no auto-check matched, but unchecked tasks remain.
+			// Nudge LLM to use dossier check action.
+			items.push({
+				level: "CONTEXT",
+				message: `${uncheckedCount} unchecked task(s) in tasks.md. If you just completed a task, call \`dossier action=check task_id="T-X.Y"\` to mark it done.`,
+			});
 		}
 	} catch {
 		/* fail-open */
@@ -297,6 +307,17 @@ export function matchTaskDescription(description: string, stdout: string): boole
 			const path = quoted.slice(1, -1); // strip backticks
 			if (lowerOut.includes(path.toLowerCase())) return true;
 		}
+	}
+
+	// Strategy 3: Filename partial match — extract filenames with extensions from description
+	// (no backticks required). Match against the end of file paths in stdout.
+	const filenamePattern = /\b([\w.-]+\.[a-z]{1,4})\b/gi;
+	const filenames = [...description.matchAll(filenamePattern)]
+		.map((m) => m[1]!.toLowerCase())
+		.filter((f) => f.length > 4 && !f.startsWith(".")); // skip short/hidden files
+	for (const filename of filenames) {
+		// Match filename at end of a path (after / or at start) in stdout
+		if (lowerOut.includes(`/${filename}`) || lowerOut.includes(filename)) return true;
 	}
 
 	// Strategy 2: Word matching — stricter than autoCheckNextSteps to avoid false positives.

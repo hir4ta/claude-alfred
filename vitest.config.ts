@@ -13,5 +13,10 @@ export default defineConfig({
   ],
   test: {
     pool: 'forks',
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/__tests__/**', 'src/spec/templates/**', 'src/api/**', 'src/embedder/**', 'src/cli.ts', 'src/postinstall.ts'],
+    },
   },
 });

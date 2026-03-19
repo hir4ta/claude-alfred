@@ -237,6 +237,123 @@ describe("dossier history & rollback", () => {
 	});
 });
 
+describe("dossier gate", () => {
+	it("sets spec-review gate", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "gate-test",
+		});
+		const result = await handleDossier(store, null, {
+			action: "gate",
+			project_path: tmpDir,
+			sub_action: "set",
+			gate_type: "spec-review",
+		});
+		const data = parseResult(result);
+		// Gate set returns confirmation - check it didn't error
+		expect(data.error).toBeUndefined();
+	});
+
+	it("gets gate status", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "gate-status",
+		});
+		const result = await handleDossier(store, null, {
+			action: "gate",
+			project_path: tmpDir,
+			sub_action: "status",
+		});
+		const data = parseResult(result);
+		expect(data).toBeDefined();
+	});
+
+	it("clears gate with reason", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "gate-clear",
+		});
+		await handleDossier(store, null, {
+			action: "gate",
+			project_path: tmpDir,
+			sub_action: "set",
+			gate_type: "spec-review",
+		});
+		const result = await handleDossier(store, null, {
+			action: "gate",
+			project_path: tmpDir,
+			sub_action: "clear",
+			reason: "Self-review completed",
+		});
+		const data = parseResult(result);
+		expect(data.cleared).toBe(true);
+	});
+});
+
+describe("dossier review", () => {
+	it("returns no review when none submitted", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "rev-test",
+		});
+		const result = await handleDossier(store, null, {
+			action: "review",
+			project_path: tmpDir,
+			task_slug: "rev-test",
+		});
+		const data = parseResult(result);
+		expect(data.review_status).toBeDefined();
+	});
+});
+
+describe("dossier init sizes", () => {
+	it("auto-detects S for short description", async () => {
+		const result = await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "size-s",
+			description: "Fix typo",
+		});
+		expect(parseResult(result).size).toBe("S");
+	});
+
+	it("auto-detects M for medium description", async () => {
+		const result = await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "size-m",
+			description: "Add user authentication with JWT tokens, refresh token rotation, session management, and proper error handling for expired tokens. Include rate limiting for login attempts and password reset functionality with email verification.",
+		});
+		expect(parseResult(result).size).toBe("M");
+	});
+
+	it("respects explicit size", async () => {
+		const result = await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "size-xl",
+			size: "XL",
+			description: "test",
+		});
+		expect(parseResult(result).size).toBe("XL");
+	});
+
+	it("creates bugfix spec type", async () => {
+		const result = await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "bug-fix",
+			spec_type: "bugfix",
+		});
+		const data = parseResult(result);
+		expect(data.spec_type).toBe("bugfix");
+	});
+});
+
 describe("dossier validate", () => {
 	it("validates spec structure", async () => {
 		await handleDossier(store, null, {
@@ -252,5 +369,110 @@ describe("dossier validate", () => {
 		const data = parseResult(result);
 		expect(data.checks).toBeDefined();
 		expect(data.summary).toContain("passed");
+	});
+});
+
+describe("dossier check", () => {
+	it("checks a task by task_id", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "check-test",
+		});
+		// Write tasks.md with unchecked tasks
+		await handleDossier(store, null, {
+			action: "update",
+			project_path: tmpDir,
+			file: "tasks.md",
+			content: "# Tasks\n\n## Wave 1 (FR-1)\n\n- [ ] T-1.1: First task\n- [ ] T-1.2: Second task\n\n## Closing Wave\n\n- [ ] Review",
+			mode: "replace",
+		});
+
+		const result = await handleDossier(store, null, {
+			action: "check",
+			project_path: tmpDir,
+			task_id: "T-1.1",
+		});
+		const data = parseResult(result);
+		expect(data.status).toBe("checked");
+		expect(data.task_id).toBe("T-1.1");
+	});
+
+	it("detects already checked task", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "check-dup",
+		});
+		await handleDossier(store, null, {
+			action: "update",
+			project_path: tmpDir,
+			file: "tasks.md",
+			content: "# Tasks\n\n## Wave 1 (FR-1)\n\n- [x] T-1.1: Already done\n\n## Closing Wave\n\n- [ ] Review",
+			mode: "replace",
+		});
+
+		const result = await handleDossier(store, null, {
+			action: "check",
+			project_path: tmpDir,
+			task_id: "T-1.1",
+		});
+		const data = parseResult(result);
+		expect(data.status).toBe("already_checked");
+	});
+
+	it("returns error for missing task_id", async () => {
+		const result = await handleDossier(store, null, {
+			action: "check",
+			project_path: tmpDir,
+		});
+		const data = parseResult(result);
+		expect(data.error).toContain("task_id");
+	});
+
+	it("returns error when task_id not found", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "check-miss",
+		});
+		await handleDossier(store, null, {
+			action: "update",
+			project_path: tmpDir,
+			file: "tasks.md",
+			content: "# Tasks\n\n## Wave 1 (FR-1)\n\n- [ ] T-1.1: Only task\n\n## Closing Wave\n\n- [ ] Review",
+			mode: "replace",
+		});
+
+		const result = await handleDossier(store, null, {
+			action: "check",
+			project_path: tmpDir,
+			task_id: "T-9.9",
+		});
+		const data = parseResult(result);
+		expect(data.error).toContain("not found");
+	});
+
+	it("case-insensitive task_id matching", async () => {
+		await handleDossier(store, null, {
+			action: "init",
+			project_path: tmpDir,
+			task_slug: "check-case",
+		});
+		await handleDossier(store, null, {
+			action: "update",
+			project_path: tmpDir,
+			file: "tasks.md",
+			content: "# Tasks\n\n## Wave 1 (FR-1)\n\n- [ ] T-1.1: Case test\n\n## Closing Wave\n\n- [ ] Review",
+			mode: "replace",
+		});
+
+		const result = await handleDossier(store, null, {
+			action: "check",
+			project_path: tmpDir,
+			task_id: "t-1.1",
+		});
+		const data = parseResult(result);
+		expect(data.status).toBe("checked");
 	});
 });

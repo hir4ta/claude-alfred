@@ -27,3 +27,6 @@ coverage/
 # plugin/ is generated output from `alfred plugin-bundle`.
 # Source of truth: internal/install/content/ (skills, agents, rules)
 # All plugin/ files are tracked (required for marketplace distribution).
+
+# serena mcp 
+.serena

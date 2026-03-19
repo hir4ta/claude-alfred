@@ -25,7 +25,7 @@ export function createMCPServer(store: Store, emb: Embedder | null, version: str
 		"dossier",
 		`Unified spec management for development tasks. Persists context across compaction and sessions.
 
-Actions: status (read-only), init, update, switch, complete, delete (2-phase: preview then confirm=true), history, rollback, review, validate (read-only), gate (review gate management).
+Actions: status (read-only), init, update, switch, complete, delete (2-phase: preview then confirm=true), history, rollback, review, validate (read-only), gate (review gate management), check (mark task completed).
 
 task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).
 Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix). S=3 files, M=4-5 files, L/XL=7 files.`,
@@ -43,6 +43,7 @@ Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix).
 					"review",
 					"validate",
 					"gate",
+					"check",
 				])
 				.describe("Action to perform"),
 			project_path: z.string().optional().describe("Project root path (defaults to cwd)"),
@@ -83,6 +84,10 @@ Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix).
 				.string()
 				.optional()
 				.describe("Review summary (required for gate clear)"),
+			task_id: z
+				.string()
+				.optional()
+				.describe('Task ID to mark as completed (for check action, e.g. "T-1.2")'),
 		},
 		async (params) => {
 			return handleDossier(store, emb, params);

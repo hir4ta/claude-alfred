@@ -215,6 +215,40 @@ describe("matchTaskDescription", () => {
 		});
 	});
 
+	describe("filename partial match (Strategy 3, no backticks)", () => {
+		it("matches filename in full file path", () => {
+			const desc = "T-1.2: session-start.test.ts (新規)";
+			expect(matchTaskDescription(desc, "/Users/dev/src/hooks/__tests__/session-start.test.ts")).toBe(true);
+		});
+
+		it("matches filename case-insensitively", () => {
+			const desc = "T-1.3: Pre-Compact.test.ts 追加";
+			expect(matchTaskDescription(desc, "/path/to/pre-compact.test.ts")).toBe(true);
+		});
+
+		it("matches multiple filenames, one matches", () => {
+			const desc = "T-1.4: post-tool.test.ts拡張 + user-prompt.test.ts拡張";
+			expect(matchTaskDescription(desc, "/path/to/post-tool.test.ts")).toBe(true);
+		});
+
+		it("does not match short filename-like strings", () => {
+			const desc = "T-1.1: Fix a.ts";
+			// "a.ts" is too short (4 chars, filtered by length > 4)
+			expect(matchTaskDescription(desc, "/path/to/something.ts")).toBe(false);
+		});
+
+		it("matches vitest.config.ts in file path", () => {
+			const desc = "T-1.1: vitest.config.ts coverage設定";
+			expect(matchTaskDescription(desc, "/project/vitest.config.ts")).toBe(true);
+		});
+
+		it("does not match filename substring of another file", () => {
+			const desc = "T-1.2: ledger.test.ts (新規)";
+			// Should match ledger.test.ts but not knowledge-ledger.test.ts
+			expect(matchTaskDescription(desc, "/path/to/ledger.test.ts")).toBe(true);
+		});
+	});
+
 	describe("edge cases", () => {
 		it("returns false for empty stdout", () => {
 			expect(matchTaskDescription("T-1.1: Something", "")).toBe(false);
