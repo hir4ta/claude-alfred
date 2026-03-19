@@ -44,12 +44,11 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 3. **User Spec Review** (M/L/XL only, via `alfred dashboard`)
    - OK → Implementation phase
    - NG → Back to step 1
-4. **Implementation** (per Wave)
-   - a. Per Task completion: auto-update tasks.md progress (PostToolUse hook)
-   - b. Per Wave completion:
-     - Commit changes
-     - Self-review (DENY gate: Edit/Write blocked until reviewed)
-     - Knowledge accumulation via `ledger save` (DIRECTIVE)
+4. **Implementation** (per Wave, Wave-centric enforcement)
+   - Each Wave ends with T-N.R Review: commit → self-review → knowledge save
+   - Task completion: explicit `dossier action=check task_id="T-X.Y"` (no heuristic auto-check)
+   - Wave completion: git commit detected → review gate set → Edit/Write blocked until reviewed
+   - Knowledge accumulation via `ledger save` (DIRECTIVE)
 5. **All Waves Complete** → Final self-review (Closing Wave)
    - OK → `dossier action=complete` (summary creation)
    - NG → Fix → Self-review (loop until OK)
@@ -62,7 +61,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 | Spec approval (M/L/XL) | PreToolUse + dossier complete | DENY |
 | Wave self-review | review-gate.json via PreToolUse | DENY |
 | Wave commit + knowledge | PostToolUse DIRECTIVE | DIRECTIVE |
-| Task progress update | PostToolUse autoCheckTasks | Automatic |
+| Task progress update | Explicit `dossier action=check` | Manual |
 | Final self-review | Closing Wave checkbox + Stop hook | CONTEXT |
 
 ## Commands
