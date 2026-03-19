@@ -157,10 +157,6 @@ Run `alfred doctor` to verify both are in sync.
 | Skill | What it does |
 |-------|-------------|
 | `/alfred:init` | Project onboarding. Multi-agent codebase exploration, steering docs, template setup |
-| `/alfred:quarters` | Project-wide Claude Code configuration wizard (settings, hooks, rules) |
-| `/alfred:furnish` | Creates or polishes a single config file (skill, rule, hook, CLAUDE.md, etc.) |
-| `/alfred:valet` | Audits skills against Anthropic's official guide. Scores 21 checks across 6 categories |
-| `/alfred:concierge` | Quick reference for all alfred capabilities |
 
 ## MCP tools
 
@@ -176,7 +172,7 @@ These run automatically. You don't configure them.
 
 | Event | What happens |
 |-------|-------------|
-| SessionStart | Restores spec context, syncs knowledge index, suggests missing setup (`/alfred:init`, `/alfred:quarters`) |
+| SessionStart | Restores spec context, syncs knowledge index, suggests missing setup (`/alfred:init`) |
 | UserPromptSubmit | Semantic search + skill suggestions + spec enforcement (blocks implementation without a spec, blocks unapproved M/L/XL) |
 | PreToolUse | Three-layer enforcement — review gate, intent guard, approval gate. Blocks Edit/Write when gates are active |
 | PostToolUse | Auto-updates task progress in tasks.md and session.md. Detects wave completion and sets review gates. Drift detection after commits. Suggests `/alfred:harvest` after PR merge, `/alfred:archive` for large reference files |

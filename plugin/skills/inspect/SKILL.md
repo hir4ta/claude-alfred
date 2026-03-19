@@ -5,8 +5,7 @@ description: >
   second opinion, checking security posture, auditing configuration, or running
   a pre-release audit. Pass a profile name to focus (e.g., "review security"),
   or --all for all 6 profiles. NOT for creating or modifying code (just ask
-  directly). NOT for skill-specific review against Anthropic guidelines
-  (use /alfred:valet).
+  directly).
 user-invocable: true
 argument-hint: "[code|config|security|docs|architecture|testing|--all]"
 allowed-tools: Read, Glob, Grep, Bash(git diff *, git log *, git show *, git status *, go vet *, go test -cover *), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier, mcp__plugin_alfred_alfred__config-review

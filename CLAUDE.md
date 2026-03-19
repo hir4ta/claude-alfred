@@ -219,7 +219,7 @@ node dist/cli.mjs version     # Show version
 
 ### Naming Convention (Butler Theme)
 
-- Skills: brief, attend, tdd, inspect, mend, survey, salon, polish, valet, furnish, quarters, archive, concierge, harvest
+- Skills: brief, attend, tdd, inspect, mend, survey, salon, polish, archive, harvest
 - MCP tools: dossier (spec management), roster (epic management), ledger (knowledge)
 
 ### Deliberation Style

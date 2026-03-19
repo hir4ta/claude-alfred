@@ -150,24 +150,6 @@ describe("sessionStart", () => {
 		expect((store.db.prepare("SELECT COUNT(*) as c FROM knowledge_index").get() as any).c).toBe(0);
 	});
 
-	it("suggests quarters when .claude exists but no settings.json", async () => {
-		mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
-		mkdirSync(join(tmpDir, ".claude"), { recursive: true });
-		mkdirSync(join(tmpDir, ".alfred", "steering"), { recursive: true });
-		writeFileSync(join(tmpDir, ".alfred", "steering", "product.md"), "# Product");
-
-		const stderr = suppressStderr();
-		const stdout = suppressStdout();
-		try {
-			const { sessionStart } = await import("../session-start.js");
-			await sessionStart({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
-			expect(stderr.lines.some((l) => l.includes("/alfred:quarters"))).toBe(true);
-		} finally {
-			stderr.restore();
-			stdout.restore();
-		}
-	});
-
 	it("injects 1% rule context when .alfred exists", async () => {
 		mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
 		mkdirSync(join(tmpDir, ".alfred", "steering"), { recursive: true });

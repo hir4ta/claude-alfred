@@ -48,14 +48,6 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
 		);
 	}
 
-	// Suggest /alfred:quarters if Claude Code settings are minimal.
-	const claudeDir = join(ev.cwd, ".claude");
-	if (!existsSync(join(claudeDir, "settings.json")) && existsSync(claudeDir)) {
-		notifyUser(
-			"tip: run `/alfred:quarters` for a guided Claude Code project setup (settings, hooks, rules)",
-		);
-	}
-
 	// Suggest ledger reflect when knowledge base has grown.
 	suggestLedgerReflect(store);
 
@@ -67,7 +59,7 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
 		items.push({
 			level: "CONTEXT",
 			message:
-				"If there is even a small chance an alfred skill applies to this task, invoke it. Check /alfred:concierge for available skills.",
+				"If there is even a small chance an alfred skill applies to this task, invoke it.",
 		});
 	}
 
