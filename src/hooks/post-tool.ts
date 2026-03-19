@@ -154,9 +154,18 @@ async function handleBashResult(
 
 		if (isGitCommit(stdout) && !signal.aborted) {
 			// Living Spec auto-append: track new source files in design.md.
+			let appendedFiles = new Set<string>();
 			try {
 				const { handleLivingSpec } = await import("./living-spec.js");
-				handleLivingSpec(ev.cwd!);
+				appendedFiles = handleLivingSpec(ev.cwd!);
+			} catch {
+				/* fail-open */
+			}
+
+			// Drift detection: warn about source files not referenced in spec.
+			try {
+				const { detectDrift } = await import("./drift.js");
+				detectDrift(ev.cwd!, appendedFiles, items);
 			} catch {
 				/* fail-open */
 			}

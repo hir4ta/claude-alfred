@@ -386,7 +386,7 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
 	try {
 		const valSize = (task?.size ?? "L") as SpecSize;
 		const valSpecType = (task?.spec_type ?? "feature") as SpecType;
-		const valResult = validateSpec(projectPath, taskSlug, valSize, valSpecType);
+		const valResult = validateSpec(projectPath, taskSlug, valSize, valSpecType, { strict: true });
 		if (valResult.failed > 0) {
 			const errors = valResult.checks.filter((c) => c.status === "fail").map((c) => c.message);
 			return errorResult(

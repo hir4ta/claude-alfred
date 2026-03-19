@@ -75,11 +75,17 @@ function countPlaceholders(content: string): number {
 
 // --- Main validation ---
 
+export interface ValidateOptions {
+	/** When true, promote all "warn" results to "fail". Use at completion time. */
+	strict?: boolean;
+}
+
 export function validateSpec(
 	projectPath: string,
 	taskSlug: string,
 	size: SpecSize,
 	specType: SpecType,
+	opts?: ValidateOptions,
 ): ValidationResult {
 	const sd = new SpecDir(projectPath, taskSlug);
 	const expectedFiles = filesForSize(size, specType);
@@ -145,7 +151,7 @@ export function validateSpec(
 				: { name: "delta_before_after", status: "fail", message: "Missing Before/After blocks in delta.md" },
 		);
 
-		return buildResult(checks);
+		return buildResult(checks, opts);
 	}
 
 	// ---- Non-delta checks ----
@@ -394,10 +400,16 @@ export function validateSpec(
 		);
 	}
 
-	return buildResult(checks);
+	return buildResult(checks, opts);
 }
 
-function buildResult(checks: ValidationCheck[]): ValidationResult {
+function buildResult(checks: ValidationCheck[], opts?: ValidateOptions): ValidationResult {
+	// Strict mode: promote all warnings to failures (used at completion time).
+	if (opts?.strict) {
+		for (const c of checks) {
+			if (c.status === "warn") c.status = "fail";
+		}
+	}
 	const passed = checks.filter((c) => c.status === "pass").length;
 	const failed = checks.filter((c) => c.status === "fail").length;
 	const warned = checks.filter((c) => c.status === "warn").length;

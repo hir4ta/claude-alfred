@@ -72,13 +72,13 @@ export function handleLivingSpec(cwd: string): Set<string> {
 
 /**
  * Extract changed files from the last git commit.
- * 500ms timeout, fail-open.
+ * 2s timeout (within PostToolUse 4.5s budget), warns on timeout via stderr.
  */
 export function extractChangedFiles(cwd: string): string[] {
 	try {
 		const output = execSync("git diff --name-only HEAD~1", {
 			cwd,
-			timeout: 500,
+			timeout: 2000,
 			encoding: "utf-8",
 			stdio: ["ignore", "pipe", "ignore"],
 		});
@@ -86,7 +86,10 @@ export function extractChangedFiles(cwd: string): string[] {
 			.split("\n")
 			.map((f) => f.trim())
 			.filter(Boolean);
-	} catch {
+	} catch (err: unknown) {
+		if (err && typeof err === "object" && "killed" in err && (err as { killed: boolean }).killed) {
+			process.stderr.write("[alfred] git diff timed out — design.md not updated for this commit\n");
+		}
 		return [];
 	}
 }

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export interface SpecState {
@@ -15,41 +15,61 @@ export function tryReadActiveSpec(cwd: string | undefined): SpecState | null {
 	if (!cwd) return null;
 	try {
 		const content = readFileSync(join(cwd, ".alfred", "specs", "_active.md"), "utf-8");
-		// Parse YAML-like structure: primary + tasks array.
-		let primary = "";
-		const lines = content.split("\n");
-		for (const line of lines) {
-			if (line.startsWith("primary:")) {
-				primary = line.slice(8).trim();
-				break;
-			}
-		}
-		if (!primary) return null;
-
-		// Find the task entry for primary.
-		let inTask = false;
-		let slug = "",
-			size = "",
-			reviewStatus = "",
-			status = "";
-		for (const line of lines) {
-			if (line.trim().startsWith("- slug:")) {
-				const s = line.trim().slice(8).trim();
-				inTask = s === primary;
-				if (inTask) slug = s;
-			} else if (inTask) {
-				if (line.trim().startsWith("size:")) size = line.trim().slice(5).trim();
-				else if (line.trim().startsWith("review_status:"))
-					reviewStatus = line.trim().slice(14).trim();
-				else if (line.trim().startsWith("status:")) status = line.trim().slice(7).trim();
-				else if (line.trim().startsWith("- slug:")) break; // next task
-			}
-		}
-		if (!slug) return null;
-		return { slug, size, reviewStatus, status };
+		return parseActiveContent(content);
 	} catch {
 		return null; // NFR-2: fail-open
 	}
+}
+
+/**
+ * Check if _active.md exists but cannot be parsed (malformed state).
+ * Returns true if the file exists AND parsing fails — a sign of corruption.
+ * Used by PreToolUse to deny edits instead of silently allowing.
+ */
+export function isActiveSpecMalformed(cwd: string | undefined): boolean {
+	if (!cwd) return false;
+	const path = join(cwd, ".alfred", "specs", "_active.md");
+	if (!existsSync(path)) return false;
+	try {
+		const content = readFileSync(path, "utf-8");
+		return parseActiveContent(content) === null;
+	} catch {
+		return true; // file exists but can't be read → malformed
+	}
+}
+
+function parseActiveContent(content: string): SpecState | null {
+	let primary = "";
+	const lines = content.split("\n");
+	for (const line of lines) {
+		if (line.startsWith("primary:")) {
+			primary = line.slice(8).trim();
+			break;
+		}
+	}
+	if (!primary) return null;
+
+	// Find the task entry for primary.
+	let inTask = false;
+	let slug = "",
+		size = "",
+		reviewStatus = "",
+		status = "";
+	for (const line of lines) {
+		if (line.trim().startsWith("- slug:")) {
+			const s = line.trim().slice(8).trim();
+			inTask = s === primary;
+			if (inTask) slug = s;
+		} else if (inTask) {
+			if (line.trim().startsWith("size:")) size = line.trim().slice(5).trim();
+			else if (line.trim().startsWith("review_status:"))
+				reviewStatus = line.trim().slice(14).trim();
+			else if (line.trim().startsWith("status:")) status = line.trim().slice(7).trim();
+			else if (line.trim().startsWith("- slug:")) break; // next task
+		}
+	}
+	if (!slug) return null;
+	return { slug, size, reviewStatus, status };
 }
 
 /**

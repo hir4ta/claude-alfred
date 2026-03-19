@@ -199,7 +199,7 @@ describe("dossier complete", () => {
 			project_path: tmpDir,
 			task_slug: "deny-close",
 			file: "bugfix.md",
-			content: "# Bugfix\n\n## Bug Summary\nTest bugfix.\n\n## Severity & Impact\nP2\n\n## Root Cause Analysis\nTest.\n\n## Fix Strategy\nTest fix.",
+			content: "# Bugfix\n\n## Bug Summary\nTest bugfix that causes a crash when users attempt to save their work. The application throws an unhandled exception in the persistence layer.\n\n## Severity & Impact\nP2 — Users lose unsaved work.\n\n## Root Cause Analysis\nThe persistence layer does not validate input before writing to disk, causing a TypeError when null values are encountered.\n\n## Fix Strategy\nAdd null-check validation before the write call and return a descriptive error message to the caller.",
 			mode: "replace",
 		});
 		// Leave closing wave items unchecked

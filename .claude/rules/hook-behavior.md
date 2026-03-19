@@ -34,12 +34,9 @@ paths:
 - Exploration detection: consecutive Read/Grep calls tracked via .alfred/.state/explore-count; at 5+ calls without active spec → survey suggestion. Non-Read/Grep tool resets counter
 
 ## PostToolUse — Living Spec (src/hooks/living-spec.ts)
-- git commit → extractChangedFiles (git diff --name-only HEAD~1, 500ms timeout) → shouldAutoAppend filter (multi-lang: JS/TS/Python/Go/Ruby, excludes test/gen/mock/vendor/dist/plugin/.alfred) → matchComponent (directory prefix match against design.md component sections) → appendFileToComponent (design.md, `<!-- auto-added: ISO8601 -->` marker) → audit.jsonl (living-spec.update)
+- git commit → extractChangedFiles (git diff --name-only HEAD~1, 2s timeout) → shouldAutoAppend filter (multi-lang: JS/TS/Python/Go/Ruby/Rust/Java/C#/Swift/Kotlin, excludes test/gen/mock/vendor/dist/plugin/.alfred) → matchComponent (exact directory match against design.md component sections) → appendFileToComponent (design.md, `<!-- auto-added: ISO8601 -->` marker) → audit.jsonl (living-spec.update)
 - Language config: `src/hooks/lang-filter.ts` — per-language extension + exclusion patterns, shared DIR_EXCLUSIONS
-
-## PostToolUse — Drift Detection
-- extractChangedFiles (git diff --name-only HEAD~1, 500ms timeout, fail-open) → parseSpecFileRefs (design.md File: + tasks.md Files:) → matchComponentByPackage → reverseMapFileToFR → compare → additionalContext warning + audit.jsonl
-- Severity: info (test files), warning (source files not in spec), critical (component-level drift)
+- Timeout warning: stderr notification when git diff times out (design.md not updated for that commit)
 
 ## Dossier Hints
 - dossier status next_action: contextual hint based on spec state (review_status=pending → dashboard, all steps done → complete, 3+ active tasks without epic → roster init suggestion)

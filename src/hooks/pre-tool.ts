@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { effectiveStatus } from "../spec/types.js";
 import type { HookEvent } from "./dispatcher.js";
 import { isGateActive } from "./review-gate.js";
-import { denyTool, isSpecFilePath, tryReadActiveSpec } from "./spec-guard.js";
+import { denyTool, isActiveSpecMalformed, isSpecFilePath, tryReadActiveSpec } from "./spec-guard.js";
 import { IMPLEMENT_INTENTS, readLastIntent } from "./state.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
@@ -11,7 +11,8 @@ const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
 /**
  * PreToolUse handler: block Edit/Write on review-gate, intent guard, or unapproved spec.
  * Enforcement order: .alfred/ exempt → review-gate → intent guard → approval gate.
- * Fail-open: any error results in allowing the tool (NFR-2).
+ * Fail-closed on spec state read: if _active.md exists but can't be parsed, deny the tool
+ * rather than silently allowing edits without enforcement.
  */
 export async function preToolUse(ev: HookEvent): Promise<void> {
 	const toolName = ev.tool_name ?? "";
@@ -24,8 +25,17 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 	const filePath = typeof toolInput.file_path === "string" ? toolInput.file_path : "";
 	if (filePath && isSpecFilePath(ev.cwd, filePath)) return;
 
-	// FR-20: Exempt deferred/cancelled tasks from all gates.
+	// Fail-closed: if _active.md exists but can't be parsed, deny rather than silently allowing.
+	if (isActiveSpecMalformed(ev.cwd)) {
+		denyTool(
+			"Failed to read spec state (_active.md exists but could not be parsed). Fix or delete .alfred/specs/_active.md before editing source files.",
+		);
+		return;
+	}
+
 	const spec = tryReadActiveSpec(ev.cwd);
+
+	// FR-20: Exempt deferred/cancelled tasks from all gates.
 	if (spec) {
 		const status = effectiveStatus(spec.status);
 		if (status === "deferred" || status === "cancelled") return;
