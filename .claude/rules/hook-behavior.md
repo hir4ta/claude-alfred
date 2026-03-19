@@ -18,7 +18,7 @@ paths:
 - Structured chapter memory (JSON): goal, decisions, summary
 - Epic progress auto-sync
 - Knowledge detection: transcript research patterns (2+ hits from 13 keywords) → stderr reminder to save findings
-- Auto-completes task when session.md Status="completed"/"done" or all Next Steps are checked
+- Auto-completes task when tasks.md Status="completed"/"done" or all Next Steps are checked
 - Suggests updating steering docs when architecture-related decisions detected
 - Session continuity: writes .alfred/.pending-compact.json breadcrumb, SessionStart resolves → session_links table
 
@@ -31,7 +31,7 @@ paths:
 
 ## PostToolUse
 - Bash error detection → FTS5 knowledge search → additionalContext injection
-- Bash success → session.md Next Steps auto-check (command + action signals matching + file-based matching via git diff)
+- Bash success → tasks.md Next Steps auto-check (command + action signals matching + file-based matching via git diff)
 - Exploration detection: consecutive Read/Grep calls tracked via .alfred/.state/explore-count; at 5+ calls without active spec → survey suggestion. Non-Read/Grep tool resets counter
 
 ## PostToolUse — Living Spec (src/hooks/living-spec.ts)

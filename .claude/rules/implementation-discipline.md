@@ -35,7 +35,7 @@ After all spec documents are created:
 
 ### Per Task Completion
 - tasks.md checkbox auto-updated by PostToolUse hook (autoCheckTasks)
-- session.md Next Steps auto-updated by PostToolUse hook (autoCheckNextSteps)
+- tasks.md Next Steps auto-updated by PostToolUse hook (autoCheckNextSteps)
 
 ### Per Wave Completion
 1. **Commit** — Commit at Wave boundaries, include Wave number in message

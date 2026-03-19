@@ -3,7 +3,7 @@ name: survey
 description: >
   Reverse-engineer spec files from existing code. Analyzes code structure,
   dependencies, and business logic to generate requirements.md, design.md,
-  decisions.md, and session.md with confidence annotations. All analysis is
+  decisions.md, and tasks.md with confidence annotations. All analysis is
   inline (no sub-agents). Output feeds directly into the normal spec management
   flow (/alfred:attend, /alfred:inspect). Use when onboarding to an existing
   codebase, documenting undocumented code, or preparing specs before modifying
@@ -53,24 +53,24 @@ Analyze the code from 3 perspectives in a single structured pass:
 ## Phase 2: Write Spec Files (per-file with review)
 
 Write each file, review from 3 perspectives, then move to the next.
-**Update session.md after each file is completed.**
+**Update tasks.md after each file is completed.**
 
 ### 2a. requirements.md
 - Write with confidence annotations
 - Review: Are goals accurate? Are success criteria from actual tests?
-- **Update session.md**: mark requirements as done
+- **Update tasks.md**: mark requirements as done
 
 ### 2b. design.md
 - Write architecture, data flow, key interfaces
 - Review: Does architecture description match actual code structure?
-- **Update session.md**: mark design as done
+- **Update tasks.md**: mark design as done
 
 ### 2c. decisions.md
 - Write observed decisions with inferred reasoning
 - Review: Are inferences clearly labeled? Evidence cited?
-- **Update session.md**: mark decisions as done
+- **Update tasks.md**: mark decisions as done
 
-### 2d. session.md
+### 2d. tasks.md
 - Write summary with low-confidence items flagged
 - Status: reverse-complete
 
@@ -102,9 +102,9 @@ Reverse-engineered spec for {scope}
 - NEVER commit anything
 - NEVER spawn sub-agents — all analysis is inline (rate limit prevention)
 - ALWAYS annotate every section with confidence scores
-- ALWAYS flag items with confidence <= 5 in session.md
+- ALWAYS flag items with confidence <= 5 in tasks.md
 - ALWAYS include file:line references as evidence
-- ALWAYS update session.md after each file (dashboard UX)
+- ALWAYS update tasks.md after each file (dashboard UX)
 - Label inferred logic clearly as inference, not fact
 
 ## Troubleshooting

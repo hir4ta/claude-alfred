@@ -27,7 +27,7 @@ These thought patterns signal you are about to violate this skill's rules:
 - "I'll skip the spec review since it's simple" → Every spec gets 3-agent review. Complexity is misjudged most when it seems low.
 - "Let me just commit without the code reviewer" → Per-task review is mandatory. Skipping it means shipping unreviewed code.
 - "I can approve this myself instead of using the dashboard" → Text-based approval is explicitly rejected. Dashboard review exists for a reason.
-- "Session.md doesn't need updating after this small step" → Dashboard progress depends on session.md. Update after EVERY task, not in batch.
+- "Session.md doesn't need updating after this small step" → Dashboard progress depends on tasks.md. Update after EVERY task, not in batch.
 
 ## Phase 0: Initialize
 
@@ -47,12 +47,12 @@ These thought patterns signal you are about to violate this skill's rules:
    - If response contains `steering_context`, **read it carefully** — it contains all 3 steering docs (product, structure, tech). Use this as the primary project context for ALL spec files and implementation: architecture decisions, directory layout, tech stack, naming conventions
    - If response contains `steering_hint`, inform the user about `/alfred:init`
 6. Record `initial_commit` = output of `git rev-parse HEAD`
-7. Write initial Orchestrator State to session.md
+7. Write initial Orchestrator State to tasks.md
 
 ## Phase 1: Spec Creation (7 files with parallel agent review)
 
 Create each spec file, then spawn 3 review agents in parallel.
-**Update session.md after each file is completed.**
+**Update tasks.md after each file is completed.**
 File generation order: research → requirements → design → tasks → test-specs → decisions → session.
 
 ### 1a. research.md
@@ -60,7 +60,7 @@ File generation order: research → requirements → design → tasks → test-s
 - Read key source files relevant to the task
 - Write research.md: existing code analysis, gap analysis, implementation options, risks
 - **Review**: Spawn 3 agents → apply fixes → save
-- **Update session.md**: mark research as done
+- **Update tasks.md**: mark research as done
 
 ### 1b. requirements.md
 - Write requirements in **EARS notation** (FR-N IDs) with confidence + source scores
@@ -71,20 +71,20 @@ File generation order: research → requirements → design → tasks → test-s
   - Devil's Advocate: Scope too broad? Missing edge cases? Unrealistic?
   - Researcher: Prior art or codebase patterns?
 - Collect findings → apply fixes → save
-- **Update session.md**: mark requirements as done
+- **Update tasks.md**: mark requirements as done
 
 ### 1c. design.md
 - Write design with architecture, **interfaces**, **data models** (SQL), **API contracts**
 - Include **Requirements Traceability Matrix** (Req ID → Component → Task ID → Test ID)
 - **Review**: Spawn 3 agents → apply fixes → save
-- **Update session.md**: mark design as done
+- **Update tasks.md**: mark design as done
 
 ### 1d. tasks.md
 - Write task decomposition in **Waves** (Foundation → Core → Edge Cases → Polish)
 - Each task: T-N.N [S/M/L/XL] (P) description with `_Requirements: FR-N | Depends: T-N.N | Files: path_`
 - Include summary, size legend, dependency graph
 - **Review**: Spawn 3 agents → apply fixes → save
-- **Update session.md**: mark tasks as done
+- **Update tasks.md**: mark tasks as done
 
 ### 1e. test-specs.md
 - Write **Coverage Matrix** (Req → Test IDs → Type → Priority)
@@ -92,14 +92,14 @@ File generation order: research → requirements → design → tasks → test-s
 - Map EARS: WHILE→Given, WHEN→When, SHALL→Then
 - Include edge case matrix, boundary values, test data, security tests
 - **Review**: Spawn 3 agents → apply fixes → save
-- **Update session.md**: mark test-specs as done
+- **Update tasks.md**: mark test-specs as done
 
 ### 1f. Decisions → ledger
 - Save decisions directly via `ledger action=save sub_type=decision` (not as a spec file)
 - Include title, context, decision, reasoning, alternatives
 
-### 1g. session.md
-- Write final session.md with Next Steps derived from **tasks.md T-IDs**
+### 1g. tasks.md
+- Write final tasks.md with Next Steps derived from **tasks.md T-IDs**
 - Update state: `phase: approval-gate`
 
 ### 1h. Clear spec-review gate
@@ -129,16 +129,16 @@ This is MANDATORY — PreToolUse blocks source Edit/Write until gate is cleared.
 
 ## Phase 3: Implementation
 
-Read task breakdown from session.md Next Steps.
+Read task breakdown from tasks.md Next Steps.
 
 **Per implementation task:**
 1. Record: `phase_start_commit` = `git rev-parse HEAD`
 2. Read the task from Next Steps
 3. Implement using Edit/Write/Bash — work directly
-4. **Immediately update session.md**: mark this task as `[x]` done
+4. **Immediately update tasks.md**: mark this task as `[x]` done
 5. Proceed to Phase 4 (per-task review)
 
-**CRITICAL**: Update session.md after EACH task, not all at once.
+**CRITICAL**: Update tasks.md after EACH task, not all at once.
 This ensures the dashboard shows real-time progress.
 
 ## Phase 4: Per-Task Review (code-reviewer agent)
@@ -202,7 +202,7 @@ This is MANDATORY — PostToolUse auto-sets the wave-review gate when a Wave com
 ## State Persistence
 
 After EVERY phase transition and after EVERY task completion:
-- Update `## Orchestrator State` in session.md via `dossier` action=update
+- Update `## Orchestrator State` in tasks.md via `dossier` action=update
 - Include: phase, iteration, blocked status, awaiting_approval
 - Mark completed Next Steps as `[x]`
 
@@ -212,7 +212,7 @@ After EVERY phase transition and after EVERY task completion:
 - NEVER commit with unresolved Critical findings
 - ALWAYS spawn parallel agents for spec review and code-reviewer for implementation review
 - ALWAYS direct user to `alfred dashboard` for approval (not text-based)
-- ALWAYS update session.md after each individual task completion (not in batch)
+- ALWAYS update tasks.md after each individual task completion (not in batch)
 - Call `dossier action=complete` when all tasks are done (user can delay if adding more tasks)
 - ALWAYS record decisions and trade-offs via `ledger action=save sub_type=decision`
 - ALWAYS use EARS notation for requirements (WHEN/WHILE/WHERE/IF-THEN/SHALL keywords)
@@ -226,4 +226,4 @@ After EVERY phase transition and after EVERY task completion:
 
 - **Test gate failure (Phase 6 loops)**: Check if tests depend on external state or ordering. Run the failing test in isolation to confirm reproducibility before fixing.
 - **Approval timeout (user hasn't reviewed in dashboard)**: The orchestrator stops at Phase 2. Re-invoke `/alfred:attend` with the same task-slug to resume; it will check review status automatically.
-- **Rate limit during parallel agent review**: Reduce concurrency by retrying failed agents sequentially. If persistent, skip to self-review inline and note the degraded review in session.md.
+- **Rate limit during parallel agent review**: Reduce concurrency by retrying failed agents sequentially. If persistent, skip to self-review inline and note the degraded review in tasks.md.

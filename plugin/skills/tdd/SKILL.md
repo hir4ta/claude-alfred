@@ -63,7 +63,7 @@ These thought patterns signal you are about to violate this skill's rules:
    ## Past Patterns (from ledger)
    {relevant test patterns found, or "None found"}
    ```
-10. Write initial Orchestrator State to session.md:
+10. Write initial Orchestrator State to tasks.md:
     ```
     ## Orchestrator State
     - phase: red
@@ -160,7 +160,7 @@ Follow [cycle.md](cycle.md) § REFACTOR phase.
      Coverage Impact: +{delta}%
      ```
    - project: "{project name}"
-2. Update session.md TDD Progress:
+2. Update tasks.md TDD Progress:
    ```markdown
    ## TDD Progress
    - Cycle: {N}/{total}
@@ -196,7 +196,7 @@ Follow [cycle.md](cycle.md) § REFACTOR phase.
 8. Commit: `feat: {task-slug}: TDD implementation ({N} cycles, coverage +{delta}%)`
 9. Save completion memory via `ledger` action=save:
    - label: "tdd-complete: {task-slug}"
-   - content: full TDD Progress section from session.md
+   - content: full TDD Progress section from tasks.md
 10. Update state: `phase: done`
 11. Output completion summary:
     ```
@@ -224,7 +224,7 @@ Before any agent spawn:
 ## State Persistence
 
 After EVERY phase transition:
-- Update `## Orchestrator State` in session.md via `dossier` action=update (mode=replace)
+- Update `## Orchestrator State` in tasks.md via `dossier` action=update (mode=replace)
 - Write phase, cycle, total_cycles, iteration, agent_spawns_used, blocked status, coverage
 
 ## Guardrails

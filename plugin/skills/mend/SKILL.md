@@ -37,7 +37,7 @@ These thought patterns signal you are about to violate this skill's rules:
    - Call `ledger` action=search query="{symptom}" limit=5
    - Record `initial_commit` = `git rev-parse HEAD`
 5. Write requirements.md with symptom, reproduction steps, unchanged behavior, similar past bugs
-6. Write initial Orchestrator State to session.md
+6. Write initial Orchestrator State to tasks.md
 
 ## Phase 1: Reproduce
 
@@ -45,7 +45,7 @@ These thought patterns signal you are about to violate this skill's rules:
 2. Run the reproduction command
 3. **If reproduced** → record output, advance to Phase 2
 4. **If not reproduced** → try 1 alternative → still not → BLOCKED
-5. **Update session.md**: mark reproduce as done
+5. **Update tasks.md**: mark reproduce as done
 
 ## Phase 2: Root Cause Analysis (inline, 2 perspectives)
 
@@ -64,8 +64,8 @@ Analyze the bug from 2 perspectives in a single structured response:
 ### Synthesis
 - Synthesize root cause with file:line references
 - Choose fix strategy with rationale
-- Record in session.md and decisions.md if design choice involved
-- **Update session.md**: mark RCA as done
+- Record in tasks.md and decisions.md if design choice involved
+- **Update tasks.md**: mark RCA as done
 
 ## Phase 3: Fix + Verify
 
@@ -74,7 +74,7 @@ Analyze the bug from 2 perspectives in a single structured response:
 3. **Verify regressions**: `go test ./...` (timeout: 120s)
 4. **Verify Unchanged Behavior**: check each item from requirements.md
 5. If any verification fails: 1 fix iteration → still failing → BLOCKED
-6. **Update session.md**: mark fix as done, update Modified Files
+6. **Update tasks.md**: mark fix as done, update Modified Files
 
 ## Phase 4: Review + Commit
 
@@ -94,12 +94,12 @@ Analyze the bug from 2 perspectives in a single structured response:
 
 **Save bug memory:**
 9. Call `ledger` action=save with structured record (symptom, root cause, fix, regression risk)
-10. **Update session.md**: mark all steps as done
+10. **Update tasks.md**: mark all steps as done
 
 ## State Persistence
 
 After EVERY phase transition:
-- Update session.md via `dossier` action=update (mode=replace)
+- Update tasks.md via `dossier` action=update (mode=replace)
 - Mark completed Next Steps as `[x]` immediately (dashboard UX)
 
 ## Guardrails
@@ -111,7 +111,7 @@ After EVERY phase transition:
 - ALWAYS verify Unchanged Behavior before committing
 - ALWAYS save bug memory after successful fix
 - ALWAYS call `dossier action=complete` at the end
-- ALWAYS update session.md after each phase (not in batch)
+- ALWAYS update tasks.md after each phase (not in batch)
 
 ## Troubleshooting
 

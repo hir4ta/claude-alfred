@@ -41,6 +41,6 @@ These rules apply when executing /alfred:attend or any spec-driven workflow.
 
 ## Session Progress
 
-- Update session.md after EACH task completion (not in batch)
+- Update tasks.md after EACH task completion (not in batch)
 - Record all design decisions via `ledger action=save sub_type=decision` as they are made
 - Use `ledger action=save sub_type=pattern` for patterns worth remembering across sessions

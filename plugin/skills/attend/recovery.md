@@ -37,10 +37,10 @@ Phase: {last successful phase}, Commit: {phase_start_commit}
 - [{severity}] {file}:{line} — {description}
 ```
 
-Then update session.md Orchestrator State:
+Then update tasks.md Orchestrator State:
 - `blocked: true`
 - `blocked_reason: {reason}`
-- Write findings to session.md Blockers section
+- Write findings to tasks.md Blockers section
 
 ### Recovery on re-invocation
 
@@ -101,11 +101,11 @@ If a review agent returns non-JSON output:
 
 ### How state survives compaction
 
-1. `## Orchestrator State` in session.md is preserved by PreCompact hook
-2. CLAUDE.md Compact Instructions includes: `Preserve ## Orchestrator State block in session.md verbatim`
+1. `## Orchestrator State` in tasks.md is preserved by PreCompact hook
+2. CLAUDE.md Compact Instructions includes: `Preserve ## Orchestrator State block in tasks.md verbatim`
 3. On skill resume (Phase 0), always read state via `dossier` action=status
 4. If state block is missing/corrupted after compaction:
-   - Read session.md for any partial state
+   - Read tasks.md for any partial state
    - If phase can be determined → resume from that phase
    - If not → restart from spec-review (spec files should still exist)
 

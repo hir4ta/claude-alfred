@@ -206,7 +206,7 @@ Diff to review:
 
 Check for (LLM blind spots — check explicitly):
 IMPLEMENTATION DRIFT (check against spec):
-- V6: session.md "Next Steps" for the current phase align with actual changes
+- V6: tasks.md "Next Steps" for the current phase align with actual changes
   in the diff. If the diff modifies unrelated areas → severity "warning",
   category "architecture", description should note the drift
 - V7: modified files are mentioned in design.md task breakdown for this phase.

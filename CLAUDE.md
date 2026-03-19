@@ -45,7 +45,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
    - OK → Implementation phase
    - NG → Back to step 1
 4. **Implementation** (per Wave)
-   - a. Per Task completion: auto-update tasks.md + session.md progress (PostToolUse hook)
+   - a. Per Task completion: auto-update tasks.md progress (PostToolUse hook)
    - b. Per Wave completion:
      - Commit changes
      - Self-review (DENY gate: Edit/Write blocked until reviewed)
@@ -122,7 +122,7 @@ node dist/cli.mjs version     # Show version
 - Epic files: .alfred/epics/{slug}/epic.yaml (pure YAML, no Markdown)
 - Roster tool: MCP tool for epic CRUD (init/status/link/unlink/order/list/update/delete)
 - Epic→Task: link tasks with dependency ordering (topological sort)
-- Epic progress: auto-synced during PreCompact (session.md status → epic.yaml)
+- Epic progress: auto-synced during PreCompact (tasks.md status → epic.yaml)
 - spec delete: auto-cleans dangling epic references (UnlinkTaskFromAllEpics)
 - epic delete: tasks (specs) preserved as standalone (not deleted)
 - Epic status auto-transitions: all tasks completed → epic completed
@@ -168,8 +168,8 @@ node dist/cli.mjs version     # Show version
 
 ## Compact Instructions
 
-- Preserve active spec task slug and "Currently Working On" from session.md
-- Preserve `## Orchestrator State` block in session.md verbatim (phase, iteration, counters)
+- Preserve active spec task slug and current progress from tasks.md
+- Preserve Orchestrator State from `.alfred/.state/orchestrator-{slug}.json` (phase, iteration, counters)
 - Keep all CLAUDE.md rules intact (re-read from disk after compact)
 - Do NOT discard in-progress implementation context or recent decisions
 

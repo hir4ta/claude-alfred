@@ -171,7 +171,7 @@ Existing knowledge from recall:
 {recall_results or "None"}
 
 Your job:
-1. Synthesize into FOUR spec files (requirements.md, design.md, decisions.md, session.md)
+1. Synthesize into FOUR spec files (requirements.md, design.md, decisions.md, tasks.md)
 2. For EVERY section, assign a confidence score using <!-- confidence: N -->:
    - 9-10: Directly observed in code (types, functions, imports)
    - 7-8: Verified by tests (behavior confirmed by assertions)
@@ -190,7 +190,7 @@ Output FOUR clearly labeled sections:
 ### requirements.md content
 ### design.md content
 ### decisions.md content
-### session.md content
+### tasks.md content
 
 Every section must have confidence annotations. Flag items ≤5 prominently.
 ```

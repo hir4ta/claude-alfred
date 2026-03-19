@@ -33,7 +33,7 @@ These thought patterns signal you are about to violate this skill's rules:
 | tasks.md | Wave-based task decomposition + parallel markers | T-N.N |
 | test-specs.md | Gherkin test cases + edge cases + coverage matrix | TS-N.N |
 | research.md | Investigation + gap analysis + implementation options | — |
-| session.md | Status + next steps + orchestrator state | — |
+| tasks.md | Status + next steps + orchestrator state | — |
 
 ## Core Principle
 Each spec file is written, then reviewed by 3 parallel agents (Architect, Devil's
@@ -172,16 +172,16 @@ Save all decisions directly via `ledger action=save sub_type=decision`:
 
 **Fix**: Apply fixes, rewrite if needed.
 
-### 10. [SESSION] Write session.md
+### 10. [SESSION] Write tasks.md
 
-**Write**: Call `dossier` action=update, file=session.md with:
+**Write**: Call `dossier` action=update, file=tasks.md with:
 - Status: active
 - Currently Working On
 - Next Steps: derive from **tasks.md T-IDs** (as unchecked items referencing T-N.N)
 - Recent Decisions (last 3)
 - Blockers
 
-No review needed for session.md — it's a status file.
+No review needed for tasks.md — it's a status file.
 
 ### 10b. Clear spec-review gate
 After all spec files reviewed and fixed, clear the review gate:
@@ -201,7 +201,7 @@ Deliberation: 3 perspectives applied per file (Architect, Devil's Advocate, Rese
 - design.md ✓ (reviewed)
 - tasks.md ✓ (reviewed)
 - test-specs.md ✓ (reviewed)
-- session.md ✓
+- tasks.md ✓
 - decisions → ledger ✓
 
 Confidence: requirements avg X.X, design avg X.X
@@ -216,7 +216,7 @@ Please decide on these open questions:
 
 **S/D specs**: Skip this step — spec is ready for implementation after self-review.
 
-1. Add `## Review Status\npending` to session.md
+1. Add `## Review Status\npending` to tasks.md
 2. Tell the user:
    ```
    Spec ready for your review.
@@ -233,7 +233,7 @@ Please decide on these open questions:
 
 If an active spec already exists:
 1. Call `dossier` action=status to get current session state
-2. Read spec files in recovery order: session.md → requirements.md → design.md → tasks.md
+2. Read spec files in recovery order: tasks.md → requirements.md → design.md → tasks.md
 3. Present summary: "Resuming task '{slug}'. Last position: {current_position}."
 4. Ask: "Continue from here, or update the plan?"
 
@@ -247,7 +247,7 @@ If an active spec already exists:
 - ALWAYS include traceability matrix in design.md mapping Req→Component→Task→Test
 - ALWAYS include `<!-- source: FR-N -->` annotations in test-specs.md Gherkin cases
 - ALWAYS spawn review agents without model override (uses Claude Code's own model)
-- ALWAYS update session.md after each file is completed (dashboard UX)
+- ALWAYS update tasks.md after each file is completed (dashboard UX)
 - ALWAYS record alternatives considered with rationale
 - ALWAYS direct user to `alfred dashboard` for approval (not text-based approval)
 - Mark `<!-- optional -->` sections as skipped for S-sized tasks (don't force unnecessary detail)
