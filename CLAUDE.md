@@ -19,7 +19,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 | `src/embedder/` | Voyage AI (voyage-4-large, vector search + rerank-2.5) |
 | `src/spec/` | Spec management: .alfred/specs/ (8 file types) + Size-based scaling + Validate + Templates |
 | `src/epic/` | Epic management: .alfred/epics/ (YAML-based task grouping + dependencies) |
-| `src/hooks/` | Hook handlers (SessionStart / PreCompact / UserPromptSubmit / PostToolUse) |
+| `src/hooks/` | Hook handlers (SessionStart / PreCompact / UserPromptSubmit / PostToolUse / PreToolUse / Stop) |
 | `src/api/` | HTTP API server: Hono, REST handlers, SSE, SPA serving |
 | `src/cli.ts` | CLI entry point (citty dispatch) |
 | `web/` | React SPA: Vite 8, TanStack Router/Query, shadcn/ui, Tailwind CSS v4, Biome |
@@ -77,13 +77,13 @@ task test                     # vitest
 task clean                    # Clean build artifacts (dist/ + web/dist/)
 node dist/cli.mjs serve       # MCP server (stdio)
 node dist/cli.mjs dashboard   # Open browser dashboard (localhost:7575)
-node dist/cli.mjs hook <Event> # Hook handler (SessionStart/PreCompact/UserPromptSubmit/PostToolUse)
+node dist/cli.mjs hook <Event> # Hook handler (SessionStart/PreCompact/UserPromptSubmit/PostToolUse/PreToolUse/Stop)
 node dist/cli.mjs version     # Show version
 ```
 
 ## Release
 
-`/project:release` — version auto-detected or specified.
+`/release` — version auto-detected or specified.
 
 ## Rules
 
@@ -155,7 +155,7 @@ node dist/cli.mjs version     # Show version
 - **Code review**: attend spawns `alfred:code-reviewer` agent per implementation phase (3 parallel sub-reviewers: security, logic, design)
 - **Other skills**: inspect/salon/mend/survey use inline multi-perspective deliberation (no sub-agents)
 - **Approval gate**: user reviews in `alfred dashboard`, not text-based
-- Session.md updated after each task completion (dashboard real-time progress)
+- tasks.md updated after each task completion (dashboard real-time progress)
 - attend/mend: MUST call `dossier action=complete` at end to close spec
 
 ## Quality Gates
