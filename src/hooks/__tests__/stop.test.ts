@@ -9,12 +9,18 @@ import { stop } from "../stop.js";
 
 let tmpDir: string;
 let stdoutData: string[];
+let stderrData: string[];
 
 beforeEach(() => {
 	tmpDir = mkdtempSync(join(tmpdir(), "stop-"));
 	stdoutData = [];
+	stderrData = [];
 	vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
 		stdoutData.push(typeof chunk === "string" ? chunk : chunk.toString());
+		return true;
+	});
+	vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+		stderrData.push(typeof chunk === "string" ? chunk : chunk.toString());
 		return true;
 	});
 });
@@ -63,7 +69,7 @@ function getBlockOutput(): { decision?: string } | null {
 }
 
 function getContextOutput(): string {
-	return stdoutData.join("");
+	return stderrData.join("");
 }
 
 describe("stop", () => {
@@ -73,7 +79,7 @@ describe("stop", () => {
 		expect(stdoutData.length).toBe(0);
 	});
 
-	it("does NOT block on unchecked Next Steps (CONTEXT only)", async () => {
+	it("does NOT block on unchecked Next Steps (CONTEXT only, stderr)", async () => {
 		setupSpec({
 			size: "M",
 			sessionContent: "## Next Steps\n- [x] Done\n- [ ] Todo 1\n- [ ] Todo 2\n",
@@ -81,27 +87,30 @@ describe("stop", () => {
 		await stop(makeEvent());
 		const block = getBlockOutput();
 		expect(block).toBeNull(); // No block
+		expect(stdoutData.length).toBe(0); // No stdout (avoids JSON validation error)
 		const ctx = getContextOutput();
 		expect(ctx).toContain("unchecked Next Steps");
 	});
 
-	it("does NOT block on unchecked self-review (CONTEXT only)", async () => {
+	it("does NOT block on unchecked self-review (CONTEXT only, stderr)", async () => {
 		setupSpec({
 			size: "M",
 			sessionContent: "## Next Steps\n- [ ] セルフレビュー\n",
 		});
 		await stop(makeEvent());
 		expect(getBlockOutput()).toBeNull();
+		expect(stdoutData.length).toBe(0);
 		expect(getContextOutput()).toContain("Self-review");
 	});
 
-	it("emits dossier complete reminder as CONTEXT", async () => {
+	it("emits dossier complete reminder as CONTEXT via stderr", async () => {
 		setupSpec({
 			size: "M",
 			sessionContent: "## Next Steps\n- [x] All done\n",
 		});
 		await stop(makeEvent());
 		expect(getBlockOutput()).toBeNull();
+		expect(stdoutData.length).toBe(0);
 		expect(getContextOutput()).toContain("dossier action=complete");
 	});
 
@@ -154,6 +163,7 @@ describe("stop", () => {
 		resetWorkedSlugs(tmpDir);
 		addWorkedSlug(tmpDir, "test-task");
 		await stop(makeEvent());
+		expect(stdoutData.length).toBe(0);
 		const ctx = getContextOutput();
 		expect(ctx).toContain("unchecked Next Steps");
 	});
@@ -165,6 +175,7 @@ describe("stop", () => {
 		});
 		// No worked-slugs at all (empty array or file doesn't exist).
 		await stop(makeEvent());
+		expect(stdoutData.length).toBe(0);
 		const ctx = getContextOutput();
 		expect(ctx).toContain("unchecked Next Steps");
 	});

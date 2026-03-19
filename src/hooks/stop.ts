@@ -57,7 +57,8 @@ export async function stop(ev: HookEvent): Promise<void> {
 
 	reminders.push("When done, call `dossier action=complete` to close the spec");
 
-	// Emit as systemMessage (Stop hooks don't support hookSpecificOutput).
+	// Stop hooks only support: empty (allow), {"decision":"block","reason":"..."} (block).
+	// CONTEXT reminders use stderr (visible to user) instead of stdout (JSON-validated).
 	const msg = `[CONTEXT] Spec '${spec.slug}' reminders: ${reminders.join("; ")}`;
-	process.stdout.write(`${JSON.stringify({ systemMessage: msg })}\n`);
+	process.stderr.write(`[alfred] ${msg}\n`);
 }
