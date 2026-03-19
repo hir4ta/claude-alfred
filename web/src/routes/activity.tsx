@@ -33,7 +33,7 @@ function ActivityPage() {
 	const { data: epicsData } = useQuery(epicsQueryOptions());
 
 	const entries = activityData?.entries ?? [];
-	const epics = (epicsData?.epics ?? []).filter((e) => e.status !== "completed");
+	const epics = (epicsData?.epics ?? []).filter((e) => e.status !== "completed" && e.status !== "done");
 
 	return (
 		<div className="space-y-6">
@@ -166,10 +166,10 @@ function EpicSection({ epics }: { epics: EpicSummary[] }) {
 												className="text-[10px]"
 												style={{
 													borderColor:
-														t.status === "completed"
+														t.status === "completed" || t.status === "done"
 															? "rgba(45,139,122,0.3)"
 															: "rgba(107,114,128,0.3)",
-													color: t.status === "completed" ? "#2d8b7a" : "#6b7280",
+													color: t.status === "completed" || t.status === "done" ? "#2d8b7a" : "#6b7280",
 												}}
 											>
 												{t.slug}

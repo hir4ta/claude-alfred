@@ -193,6 +193,19 @@ export interface VersionResponse {
 	version: string;
 }
 
+// Task status color map (FR-18)
+export const TASK_STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+	pending: { bg: "#e5e7eb", text: "#374151", label: "Pending" },
+	"in-progress": { bg: "#dbeafe", text: "#1e40af", label: "In Progress" },
+	review: { bg: "#fef3c7", text: "#92400e", label: "Review" },
+	done: { bg: "#dcfce7", text: "#166534", label: "Done" },
+	deferred: { bg: "#ede9fe", text: "#5b21b6", label: "Deferred" },
+	cancelled: { bg: "#fecaca", text: "#991b1b", label: "Cancelled" },
+	// Legacy compatibility
+	active: { bg: "#dbeafe", text: "#1e40af", label: "Active" },
+	completed: { bg: "#dcfce7", text: "#166534", label: "Done" },
+} as const;
+
 // Brand color map for sub_type badges (DEC-15)
 export const SUB_TYPE_COLORS: Record<string, string> = {
 	session: "#40513b",

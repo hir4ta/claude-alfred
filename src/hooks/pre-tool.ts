@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { effectiveStatus } from "../spec/types.js";
 import type { HookEvent } from "./dispatcher.js";
 import { isGateActive } from "./review-gate.js";
 import { denyTool, isSpecFilePath, tryReadActiveSpec } from "./spec-guard.js";
@@ -23,6 +24,13 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 	const filePath = typeof toolInput.file_path === "string" ? toolInput.file_path : "";
 	if (filePath && isSpecFilePath(ev.cwd, filePath)) return;
 
+	// FR-20: Exempt deferred/cancelled tasks from all gates.
+	const spec = tryReadActiveSpec(ev.cwd);
+	if (spec) {
+		const status = effectiveStatus(spec.status);
+		if (status === "deferred" || status === "cancelled") return;
+	}
+
 	// Review gate: blocks source edits until spec/wave review is completed.
 	const gate = isGateActive(ev.cwd);
 	if (gate) {
@@ -38,8 +46,8 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 	}
 
 	// Intent guard: blocks source edits when implement intent detected but no active spec.
-	const spec = tryReadActiveSpec(ev.cwd);
-	if (!spec && ev.cwd && existsSync(join(ev.cwd, ".alfred"))) {
+	const activeSpec = spec ?? tryReadActiveSpec(ev.cwd);
+	if (!activeSpec && ev.cwd && existsSync(join(ev.cwd, ".alfred"))) {
 		const intent = readLastIntent(ev.cwd);
 		if (intent && IMPLEMENT_INTENTS.has(intent)) {
 			const reason = [
@@ -52,12 +60,12 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		}
 		return; // No spec, no implement intent → free coding
 	}
-	if (!spec) return;
+	if (!activeSpec) return;
 
 	// M/L/XL with unapproved review → deny.
-	if (["M", "L", "XL"].includes(spec.size) && spec.reviewStatus !== "approved") {
+	if (["M", "L", "XL"].includes(activeSpec.size) && activeSpec.reviewStatus !== "approved") {
 		const reason = [
-			`Spec '${spec.slug}' (size ${spec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,
+			`Spec '${activeSpec.slug}' (size ${activeSpec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,
 			'- "I\'ll get the review after implementation" → The Stop hook will block you from finishing anyway',
 			'- "This edit is trivial" → All M/L/XL edits are gated. Use dossier init size=S for trivial changes',
 		].join("\n");

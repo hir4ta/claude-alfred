@@ -71,7 +71,7 @@ function TaskDetailPage() {
 
 	const needsReview = ["M", "L", "XL"].includes(task?.size ?? "");
 	const isPending = needsReview && task?.review_status !== "approved";
-	const isActive = task?.status !== "completed";
+	const isActive = task?.status !== "completed" && task?.status !== "done" && task?.status !== "cancelled";
 	const canComplete =
 		isActive &&
 		(task?.review_status === "approved" || !["M", "L", "XL"].includes(task?.size ?? ""));
@@ -87,7 +87,7 @@ function TaskDetailPage() {
 				<TaskInfoCard task={task} validationData={validationData ?? undefined} />
 
 				{/* Next Steps (if active) */}
-				{task.status !== "completed" && task.next_steps && task.next_steps.length > 0 && (
+				{task.status !== "completed" && task.status !== "done" && task.status !== "cancelled" && task.next_steps && task.next_steps.length > 0 && (
 					<div className="rounded-lg border bg-card p-4 space-y-2">
 						<h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
 							{t("tasks.nextSteps")}
@@ -189,7 +189,7 @@ function TaskInfoCard({
 	validationData?: ValidationReport;
 }) {
 	const { t, locale } = useI18n();
-	const isCompleted = task.status === "completed";
+	const isCompleted = task.status === "completed" || task.status === "done" || task.status === "cancelled";
 
 	return (
 		<div className="rounded-lg border bg-card p-4 space-y-3">

@@ -1,6 +1,7 @@
 import { extractReviewFindings, saveKnowledgeEntries } from "../mcp/knowledge-extractor.js";
 import { truncate } from "../mcp/helpers.js";
-import { readActive, readActiveState, SpecDir } from "../spec/types.js";
+import { updateTaskStatus } from "../spec/status.js";
+import { effectiveStatus, readActive, readActiveState, SpecDir } from "../spec/types.js";
 import { detectKnowledgeConflicts, searchKnowledgeFTS } from "../store/fts.js";
 import { openDefaultCached } from "../store/index.js";
 import { getPromotionCandidates, promoteSubType, upsertKnowledge } from "../store/knowledge.js";
@@ -11,6 +12,7 @@ import { emitDirectives } from "./directives.js";
 import type { HookEvent } from "./dispatcher.js";
 import { extractSection, notifyUser } from "./dispatcher.js";
 
+import { isSpecFilePath } from "./spec-guard.js";
 import { addWorkedSlug, parseWaveProgress, readStateText, readWaveProgress, writeStateText, writeWaveProgress } from "./state.js";
 import { writeReviewGate } from "./review-gate.js";
 
@@ -88,6 +90,17 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 		try {
 			const slug = readActive(ev.cwd!);
 			addWorkedSlug(ev.cwd!, slug);
+
+			// FR-13: Auto-transition pending → in-progress on first source edit (.alfred/ excluded).
+			if (!isSpecFilePath(ev.cwd!, filePath)) {
+				const state = readActiveState(ev.cwd!);
+				const task = state.tasks.find((t) => t.slug === slug);
+				if (task && effectiveStatus(task.status) === "pending") {
+					try {
+						updateTaskStatus(ev.cwd!, slug, "in-progress", "auto:first-edit");
+					} catch { /* transition error — ignore */ }
+				}
+			}
 		} catch { /* no active spec */ }
 	}
 
@@ -272,6 +285,11 @@ export function detectWaveCompletion(
 				level: "DIRECTIVE",
 				message: `Wave ${key} complete (${state.checked}/${state.total} tasks). You MUST now: 1) Commit your changes, 2) Run self-review (delegate to alfred:code-reviewer or /alfred:inspect), 3) Save any learnings via \`ledger save\`. Then clear the gate with \`dossier action=gate sub_action=clear reason="..."\`.`,
 			});
+
+			// FR-14: Auto-transition in-progress → review on wave completion.
+			try {
+				updateTaskStatus(projectPath, taskSlug, "review", "auto:wave-complete");
+			} catch { /* transition error — may already be in review */ }
 
 			writeReviewGate(projectPath, {
 				gate: "wave-review",
@@ -486,7 +504,8 @@ function checkSpecCompletion(projectPath: string, items: DirectiveItem[]): void 
 		const slug = readActive(projectPath);
 		const state = readActiveState(projectPath);
 		const task = state.tasks.find((t) => t.slug === slug);
-		if (!task || task.status === "completed") return;
+		const status = effectiveStatus(task?.status);
+		if (!task || status === "done" || status === "cancelled") return;
 
 		const sd = new SpecDir(projectPath, slug);
 		const session = sd.readFile("session.md");

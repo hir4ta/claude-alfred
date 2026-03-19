@@ -65,13 +65,16 @@ function OverviewPage() {
 				/>
 				<StatCard
 					label={t("overview.active")}
-					value={tasks.filter((t) => t.status === "active").length}
+					value={tasks.filter((t) => {
+						const s = t.status;
+						return s !== "completed" && s !== "done" && s !== "cancelled";
+					}).length}
 					icon={<Clock className="size-4" style={{ color: "#40513b" }} />}
 					loading={tasksLoading}
 				/>
 				<StatCard
 					label={t("overview.completed")}
-					value={tasks.filter((t) => t.status === "completed").length}
+					value={tasks.filter((t) => t.status === "completed" || t.status === "done").length}
 					icon={<CheckCircle2 className="size-4" style={{ color: "#2d8b7a" }} />}
 					loading={tasksLoading}
 				/>
@@ -154,7 +157,7 @@ function TaskCard({
 }) {
 	const { t } = useI18n();
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
-	const isCompleted = task.status === "completed";
+	const isCompleted = task.status === "completed" || task.status === "done" || task.status === "cancelled";
 	const firstUnchecked = task.next_steps?.find((s) => !s.done);
 	const c = SHIMMER_COLORS[colorIndex % SHIMMER_COLORS.length]!;
 	const accentColor = `rgb(${c.r},${c.g},${c.b})`;

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useParams } from "@tanstack/react-router";
 import { ChevronDown, CircleCheck, CircleDot } from "lucide-react";
 import { useState } from "react";
+import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
@@ -29,8 +30,9 @@ function TasksLayout() {
 	const { slug: selectedSlug } = useParams({ strict: false }) as { slug?: string };
 	const [showCompleted, setShowCompleted] = useState(false);
 
-	const activeTasks = allTasks.filter((t) => t.status !== "completed");
-	const completedTasks = allTasks.filter((t) => t.status === "completed");
+	const terminalStatuses = new Set(["completed", "done", "cancelled"]);
+	const activeTasks = allTasks.filter((t) => !terminalStatuses.has(t.status));
+	const completedTasks = allTasks.filter((t) => terminalStatuses.has(t.status));
 	const tasks = showCompleted ? allTasks : activeTasks;
 
 	return (
@@ -84,7 +86,7 @@ function TaskAccordionCard({
 }) {
 	const [expanded, setExpanded] = useState(false);
 	const progress = task.total > 0 ? (task.completed / task.total) * 100 : 0;
-	const isCompleted = task.status === "completed";
+	const isCompleted = task.status === "completed" || task.status === "done" || task.status === "cancelled";
 	const firstUnchecked = task.next_steps?.find((s) => !s.done);
 	const c = SHIMMER_COLORS[colorIndex % SHIMMER_COLORS.length]!;
 	const accentColor = `rgb(${c.r},${c.g},${c.b})`;
@@ -110,9 +112,12 @@ function TaskAccordionCard({
 						)}
 						<span className="text-sm font-medium truncate">{task.slug}</span>
 					</div>
-					<Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">
-						{task.size ?? "?"}
-					</Badge>
+					<div className="flex items-center gap-1 shrink-0">
+						<StatusBadge status={task.status} />
+						<Badge variant="outline" className="text-[10px] px-1 py-0">
+							{task.size ?? "?"}
+						</Badge>
+					</div>
 				</div>
 			</Link>
 
