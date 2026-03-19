@@ -68,4 +68,4 @@ web/src/
 - Do NOT hardcode English strings — use i18n keys with both EN and JA translations
 - Route files should not exceed ~400 lines. Extract components when growing
 - Mutations must invalidate relevant queries via `queryClient.invalidateQueries()`
-- API types in `web/src/lib/types.ts` must stay in sync with `src/api/server.ts` responses
+- API types: `src/api/schemas.ts` (Zod) = single source of truth. `web/src/lib/types.ts` uses `import type` from `@api-types` alias. Zod runtime is NOT in frontend bundle. Frontend-only types (MemoryHealthStats, color constants) stay in types.ts
