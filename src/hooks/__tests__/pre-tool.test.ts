@@ -67,22 +67,22 @@ describe("preToolUse", () => {
 		expect(getDecision()).toBe("deny");
 	});
 
-	it("allows Edit on M approved spec", async () => {
+	it("passes through on M approved spec (prompt hook evaluates)", async () => {
 		setupSpec({ size: "M", reviewStatus: "approved" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(getDecision()).toBe("allow");
+		expect(stdoutData.length).toBe(0);
 	});
 
-	it("allows Edit on S spec regardless of review status", async () => {
+	it("passes through on S spec regardless of review status (prompt hook evaluates)", async () => {
 		setupSpec({ size: "S" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(getDecision()).toBe("allow");
+		expect(stdoutData.length).toBe(0);
 	});
 
-	it("allows Edit on D spec regardless of review status", async () => {
+	it("passes through on D spec regardless of review status (prompt hook evaluates)", async () => {
 		setupSpec({ size: "D" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(getDecision()).toBe("allow");
+		expect(stdoutData.length).toBe(0);
 	});
 
 	it("allows Edit to .alfred/ paths (spec exempt)", async () => {
@@ -140,7 +140,7 @@ describe("preToolUse — review gate", () => {
 		expect(getDecision()).toBe("deny");
 	});
 
-	it("allows Edit when gate slug does not match active spec (stale)", async () => {
+	it("passes through when gate slug does not match active spec (stale)", async () => {
 		setupSpec({ size: "L", reviewStatus: "approved" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
@@ -148,7 +148,7 @@ describe("preToolUse — review gate", () => {
 			reason: "Old spec.",
 		});
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(getDecision()).toBe("allow");
+		expect(stdoutData.length).toBe(0);
 	});
 
 	it("allows .alfred/ edits even when gate is active", async () => {

@@ -50,6 +50,7 @@ paths:
 - Gate clear: `dossier action=gate sub_action=clear reason="..."` (reason required, audit logged)
 - Spec-first guard: prompt-type hook handler (LLM judge). When command handler passes and no active spec, a prompt hook evaluates conversation context to determine if the change is trivial (typo, docs, config → allow) or substantial (new feature, refactoring → block with spec creation guidance). Replaces the previous intent-guard mechanism (last-intent.json based)
 - Active spec optimization: command handler outputs explicit `permissionDecision: "allow"` when spec exists and all gates pass, signaling prompt hook to skip evaluation
+  - **Restriction**: `allowTool()` only for definitively exempt edits (.alfred/ files, deferred/cancelled). "Spec exists + gates pass" returns silently — prompt hook still evaluates
 
 ## Stop (review gate + session scope)
 - Blocks stopping when review-gate is active (before existing Next Steps / self-review checks)
