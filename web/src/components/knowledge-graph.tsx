@@ -14,8 +14,6 @@ export interface GraphNode {
 interface KnowledgeGraphProps {
 	nodes: GraphNode[];
 	edges: GraphEdge[];
-	method: "vector" | "keyword";
-	truncated: boolean;
 	onNodeClick: (node: GraphNode) => void;
 	filterSubTypes?: Set<string>;
 }
@@ -38,8 +36,6 @@ interface ForceLink {
 export function KnowledgeGraph({
 	nodes,
 	edges,
-	method: _method,
-	truncated: _truncated,
 	onNodeClick,
 	filterSubTypes,
 }: KnowledgeGraphProps) {

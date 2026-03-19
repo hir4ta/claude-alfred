@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { KnowledgeRow } from "../../types.js";
 import { Store } from "../index.js";
 import { upsertKnowledge } from "../knowledge.js";
-import { insertEmbedding, serializeFloat32 } from "../vectors.js";
-import { computeGraphEdges, pairwiseSimilarity } from "../graph.js";
+import { insertEmbedding, pairwiseSimilarity } from "../vectors.js";
+import { computeGraphEdges } from "../graph.js";
 
 let store: Store;
 let tmpDir: string;
@@ -104,9 +104,9 @@ describe("pairwiseSimilarity", () => {
 		const allPairs = pairwiseSimilarity(store);
 		expect(allPairs).toHaveLength(1);
 
-		// With very high threshold, should filter out
-		const highPairs = pairwiseSimilarity(store, { minScore: 0.99 });
-		expect(highPairs.length).toBeLessThanOrEqual(allPairs.length);
+		// With very high threshold, should filter out (seeds 1 and 2 have ~0.998 sim, not >= 0.999)
+		const highPairs = pairwiseSimilarity(store, { minScore: 0.999 });
+		expect(highPairs).toHaveLength(0);
 	});
 
 	it("excludes disabled entries", () => {
@@ -235,30 +235,33 @@ describe("computeGraphEdges", () => {
 	});
 
 	it("keyword fallback generates edges from shared keywords", () => {
-		upsertKnowledge(store, makeRow({
-			filePath: "decisions/a.json",
+		const { id: idA } = upsertKnowledge(store, makeRow({
+			filePath: "decisions/auth-design.json",
 			title: "Authentication Design Pattern",
-			content: "authentication flow with JWT tokens",
+			content: "authentication flow with JWT tokens for secure access",
 		}));
-		upsertKnowledge(store, makeRow({
-			filePath: "decisions/b.json",
+		const { id: idB } = upsertKnowledge(store, makeRow({
+			filePath: "decisions/auth-test.json",
 			title: "Authentication Testing Strategy",
-			content: "testing authentication endpoints",
+			content: "testing authentication endpoints with integration tests",
 		}));
-		upsertKnowledge(store, makeRow({
-			filePath: "decisions/c.json",
+		const { id: idC } = upsertKnowledge(store, makeRow({
+			filePath: "decisions/db-migrate.json",
 			title: "Database Migration Plan",
-			content: "migrate schema from v7 to v8",
+			content: "migrate database schema from version seven to eight",
 		}));
 
 		const result = computeGraphEdges(store);
 		expect(result.method).toBe("keyword");
-		// A and B share "authentication" keywords, C is different
-		// Should have at least one edge between the auth entries
-		if (result.edges.length > 0) {
-			expect(result.edges.some((e) =>
-				(e.source !== result.edges[0]?.target) || e.score > 0,
-			)).toBe(true);
-		}
+		// A and B share "authentication" — should have an edge between them
+		const abEdge = result.edges.find((e) =>
+			(e.source === idA && e.target === idB) || (e.source === idB && e.target === idA),
+		);
+		expect(abEdge).toBeDefined();
+		// C has no shared keywords with A or B — should have no edges to them
+		const cEdges = result.edges.filter((e) =>
+			e.source === idC || e.target === idC,
+		);
+		expect(cEdges).toHaveLength(0);
 	});
 });

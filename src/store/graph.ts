@@ -1,6 +1,6 @@
 import type { Store } from "./index.js";
 import { expandAliases } from "./fts.js";
-import { cosineSimilarity, deserializeFloat32 } from "./vectors.js";
+import { pairwiseSimilarity } from "./vectors.js";
 
 export interface GraphEdge {
 	source: number;
@@ -12,57 +12,6 @@ export interface GraphEdgesResult {
 	edges: GraphEdge[];
 	method: "vector" | "keyword";
 	truncated: boolean;
-}
-
-interface VectorDoc {
-	id: number;
-	vec: number[];
-}
-
-interface SimilarityPair {
-	idA: number;
-	idB: number;
-	score: number;
-}
-
-/**
- * Compute pairwise cosine similarity between all stored embeddings.
- * Shared utility used by both graph edges and conflict detection.
- * @param minScore - minimum similarity to include (filters inside the loop to avoid huge arrays)
- */
-export function pairwiseSimilarity(
-	store: Store,
-	options?: { limit?: number; minScore?: number },
-): SimilarityPair[] {
-	const limit = options?.limit ?? 1000;
-	const minScore = options?.minScore ?? 0;
-
-	const rows = store.db
-		.prepare(`
-    SELECT e.source_id, e.vector FROM embeddings e
-    JOIN knowledge_index k ON k.id = e.source_id
-    WHERE e.source = 'knowledge' AND k.enabled = 1
-    LIMIT ?
-  `)
-		.all(limit) as Array<{ source_id: number; vector: Buffer }>;
-
-	const docs: VectorDoc[] = rows.map((r) => ({
-		id: r.source_id,
-		vec: deserializeFloat32(r.vector),
-	}));
-
-	const pairs: SimilarityPair[] = [];
-	for (let i = 0; i < docs.length; i++) {
-		for (let j = i + 1; j < docs.length; j++) {
-			if (docs[i]!.vec.length !== docs[j]!.vec.length) continue;
-			const sim = cosineSimilarity(docs[i]!.vec, docs[j]!.vec);
-			if (sim >= minScore) {
-				pairs.push({ idA: docs[i]!.id, idB: docs[j]!.id, score: sim });
-			}
-		}
-	}
-
-	return pairs;
 }
 
 /**
@@ -194,7 +143,7 @@ function extractKeywords(store: Store, title: string, content: string): Set<stri
 	// Take title + first 200 chars of content
 	const text = `${title} ${content.slice(0, 200)}`;
 
-	// Tokenize: split on whitespace, punctuation, CJK boundaries
+	// Tokenize: split on whitespace and punctuation
 	const tokens = text
 		.toLowerCase()
 		.split(/[\s,.;:!?()[\]{}"'`<>=/\\|@#$%^&*~+\-_]+/)

@@ -119,3 +119,50 @@ export function deserializeFloat32(blob: Buffer): number[] {
 	}
 	return vec;
 }
+
+export interface SimilarityPair {
+	idA: number;
+	idB: number;
+	score: number;
+}
+
+/**
+ * Compute pairwise cosine similarity between all stored embeddings.
+ * Shared utility used by both graph edges and conflict detection.
+ * @param minScore - minimum similarity to include (filters inside the loop to avoid huge arrays)
+ */
+export function pairwiseSimilarity(
+	store: Store,
+	options?: { limit?: number; minScore?: number },
+): SimilarityPair[] {
+	const limit = options?.limit ?? 1000;
+	const minScore = options?.minScore ?? 0;
+
+	const rows = store.db
+		.prepare(`
+    SELECT e.source_id, e.vector FROM embeddings e
+    JOIN knowledge_index k ON k.id = e.source_id
+    WHERE e.source = 'knowledge' AND k.enabled = 1
+    ORDER BY k.hit_count DESC
+    LIMIT ?
+  `)
+		.all(limit) as Array<{ source_id: number; vector: Buffer }>;
+
+	const docs = rows.map((r) => ({
+		id: r.source_id,
+		vec: deserializeFloat32(r.vector),
+	}));
+
+	const pairs: SimilarityPair[] = [];
+	for (let i = 0; i < docs.length; i++) {
+		for (let j = i + 1; j < docs.length; j++) {
+			if (docs[i]!.vec.length !== docs[j]!.vec.length) continue;
+			const sim = cosineSimilarity(docs[i]!.vec, docs[j]!.vec);
+			if (sim >= minScore) {
+				pairs.push({ idA: docs[i]!.id, idB: docs[j]!.id, score: sim });
+			}
+		}
+	}
+
+	return pairs;
+}

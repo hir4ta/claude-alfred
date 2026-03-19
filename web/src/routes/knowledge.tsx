@@ -121,8 +121,6 @@ function KnowledgePage() {
 									hit_count: e.hit_count,
 								}))}
 								edges={graphData.edges}
-								method={graphData.method}
-								truncated={graphData.truncated}
 								onNodeClick={(node) => {
 									const entry = entries.find((e) => e.id === node.id);
 									if (entry) setSelected(entry);
