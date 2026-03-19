@@ -25,7 +25,7 @@ export function createMCPServer(store: Store, emb: Embedder | null, version: str
 		"dossier",
 		`Unified spec management for development tasks. Persists context across compaction and sessions.
 
-Actions: status (read-only), init, update, switch, complete, delete (2-phase: preview then confirm=true), history, rollback, review, validate (read-only), gate (review gate management), check (mark task completed).
+Actions: status (read-only), init, update, switch, complete, delete (2-phase: preview then confirm=true), history, rollback, review, validate (read-only), gate (review gate management), check (mark task completed), defer (toggle deferred/resume), cancel.
 
 task_slug format: lowercase alphanumeric with hyphens (e.g. "my-feature", max 64 chars).
 Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix). S=3 files, M=4-5 files, L/XL=7 files.`,
@@ -44,6 +44,8 @@ Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix).
 					"validate",
 					"gate",
 					"check",
+					"defer",
+					"cancel",
 				])
 				.describe("Action to perform"),
 			project_path: z.string().optional().describe("Project root path (defaults to cwd)"),

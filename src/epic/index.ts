@@ -133,7 +133,7 @@ export class EpicDir {
 	progress(): { completed: number; total: number } {
 		const ep = this.read();
 		const tasks = ep.tasks ?? [];
-		const completed = tasks.filter((t) => t.status === STATUS_COMPLETED).length;
+		const completed = tasks.filter((t) => t.status === STATUS_COMPLETED || t.status === "done").length;
 		return { completed, total: tasks.length };
 	}
 }
@@ -208,7 +208,10 @@ export function nextActionable(tasks: EpicTask[]): string[] {
 		.filter(
 			(t) =>
 				t.status === STATUS_NOT_STARTED &&
-				(t.depends_on ?? []).every((d) => statusMap.get(d) === STATUS_COMPLETED),
+				(t.depends_on ?? []).every((d) => {
+					const s = statusMap.get(d);
+					return s === STATUS_COMPLETED || s === "done";
+				}),
 		)
 		.map((t) => t.slug);
 }
@@ -235,7 +238,7 @@ export function listAllEpics(projectPath: string): EpicSummary[] {
 		try {
 			const ep = ed.read();
 			const tasks = ep.tasks ?? [];
-			const completed = tasks.filter((t) => t.status === STATUS_COMPLETED).length;
+			const completed = tasks.filter((t) => t.status === STATUS_COMPLETED || t.status === "done").length;
 			summaries.push({
 				slug: entry,
 				name: ep.name,
@@ -293,8 +296,8 @@ export function syncTaskStatus(projectPath: string, taskSlug: string, newStatus:
 			if (target) target.status = newStatus;
 
 			// Auto-update epic status.
-			const allCompleted = tasks.length > 0 && tasks.every((t) => t.status === STATUS_COMPLETED);
-			const anyInProgress = tasks.some((t) => t.status === STATUS_IN_PROGRESS);
+			const allCompleted = tasks.length > 0 && tasks.every((t) => t.status === STATUS_COMPLETED || t.status === "done");
+			const anyInProgress = tasks.some((t) => t.status === STATUS_IN_PROGRESS || t.status === "in-progress");
 			if (allCompleted) ep.status = STATUS_COMPLETED;
 			else if (anyInProgress) ep.status = STATUS_IN_PROGRESS;
 

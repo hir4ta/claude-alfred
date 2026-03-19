@@ -6,10 +6,12 @@ import { clearReviewGate, readReviewGate, writeReviewGate } from "../hooks/revie
 import { readWaveProgress, writeWaveProgress } from "../hooks/state.js";
 import { appendAudit } from "../spec/audit.js";
 import { initSpec } from "../spec/init.js";
+import { updateTaskStatus } from "../spec/status.js";
 import type { SpecFile, SpecSize, SpecType } from "../spec/types.js";
 import { validateSpec } from "../spec/validate.js";
 import {
 	completeTask,
+	effectiveStatus,
 	filesForSize,
 	readActive,
 	readActiveState,
@@ -18,6 +20,7 @@ import {
 	SpecDir,
 	switchActive,
 	verifyReviewFile,
+	writeActiveState,
 } from "../spec/types.js";
 import { searchKnowledgeFTS, subTypeBoost } from "../store/fts.js";
 import type { Store } from "../store/index.js";
@@ -98,6 +101,10 @@ export async function handleDossier(store: Store, emb: Embedder | null, params: 
 			return dossierGate(projectPath, params);
 		case "check":
 			return dossierCheck(projectPath, params);
+		case "defer":
+			return dossierDefer(projectPath, params);
+		case "cancel":
+			return dossierCancel(projectPath, params);
 		default:
 			return errorResult(`unknown action: ${params.action}`);
 	}
@@ -294,7 +301,7 @@ function dossierStatus(projectPath: string) {
 		active: true,
 		task_slug: taskSlug,
 		spec_dir: sd.dir(),
-		lifecycle: task?.status ?? "active",
+		lifecycle: effectiveStatus(task?.status),
 		started_at: task?.started_at,
 		size: task?.size ?? "L",
 		spec_type: task?.spec_type ?? "feature",
@@ -400,7 +407,7 @@ function dossierComplete(projectPath: string, store: Store, params: DossierParam
 	try {
 		const newPrimary = completeTask(projectPath, taskSlug);
 		appendAudit(projectPath, { action: "spec.complete", target: taskSlug, user: "mcp" });
-		syncTaskStatus(projectPath, taskSlug, "completed");
+		syncTaskStatus(projectPath, taskSlug, "done");
 
 		// design.md pattern auto-extraction removed (FR-6).
 		// Knowledge accumulation happens intentionally at Wave boundaries via ledger.
@@ -687,6 +694,13 @@ function dossierGate(projectPath: string, params: DossierParams) {
 			const reason = truncate(params.reason, 500);
 			clearReviewGate(projectPath);
 
+			// FR-15: Auto-transition review → in-progress on gate clear.
+			if (gate.slug) {
+				try {
+					updateTaskStatus(projectPath, gate.slug, "in-progress", "auto:gate-clear");
+				} catch { /* ignore: task may not be in review state */ }
+			}
+
 			// FR-1: Update wave-progress reviewed flag on wave-review gate clear.
 			if (gate.gate === "wave-review" && gate.wave !== undefined) {
 				try {
@@ -789,6 +803,24 @@ function dossierCheck(projectPath: string, params: DossierParams) {
 	const updatedContent = lines.join("\n");
 	sd.writeFile("tasks.md", updatedContent);
 
+	// Sync session.md Next Steps: check matching task ID line.
+	try {
+		const session = sd.readFile("session.md");
+		const sessionLines = session.split("\n");
+		let modified = false;
+		for (let i = 0; i < sessionLines.length; i++) {
+			const sl = sessionLines[i]!;
+			if (sl.match(/^- \[ \] /) && sl.toLowerCase().includes(taskIdLower)) {
+				sessionLines[i] = sl.replace("- [ ]", "- [x]");
+				modified = true;
+				break;
+			}
+		}
+		if (modified) {
+			sd.writeFile("session.md", sessionLines.join("\n"));
+		}
+	} catch { /* session.md sync is best-effort */ }
+
 	// Detect wave completion (reuse logic from post-tool).
 	const waveMessages: string[] = [];
 	try {
@@ -807,6 +839,72 @@ function dossierCheck(projectPath: string, params: DossierParams) {
 		task_slug: taskSlug,
 		...(waveMessages.length > 0 ? { wave_completion: waveMessages } : {}),
 	});
+}
+
+// --- Defer / Cancel ---
+
+function dossierDefer(projectPath: string, params: DossierParams) {
+	let taskSlug = params.task_slug;
+	if (!taskSlug) {
+		try {
+			taskSlug = readActive(projectPath);
+		} catch (err) {
+			return errorResult(`no active spec: ${err}`);
+		}
+	}
+
+	const state = readActiveState(projectPath);
+	const task = state.tasks.find((t) => t.slug === taskSlug);
+	if (!task) return errorResult(`task "${taskSlug}" not found`);
+
+	const current = effectiveStatus(task.status);
+
+	// Toggle: deferred → in-progress, otherwise → deferred
+	if (current === "deferred") {
+		try {
+			updateTaskStatus(projectPath, taskSlug, "in-progress", "dossier:defer");
+		} catch (err) {
+			return errorResult(`${err}`);
+		}
+		return jsonResult({ task_slug: taskSlug, status: "in-progress", resumed: true });
+	}
+
+	try {
+		updateTaskStatus(projectPath, taskSlug, "deferred", "dossier:defer");
+	} catch (err) {
+		return errorResult(`${err}`);
+	}
+	return jsonResult({ task_slug: taskSlug, status: "deferred", deferred: true });
+}
+
+function dossierCancel(projectPath: string, params: DossierParams) {
+	let taskSlug = params.task_slug;
+	if (!taskSlug) {
+		try {
+			taskSlug = readActive(projectPath);
+		} catch (err) {
+			return errorResult(`no active spec: ${err}`);
+		}
+	}
+
+	try {
+		updateTaskStatus(projectPath, taskSlug, "cancelled", "dossier:cancel");
+	} catch (err) {
+		return errorResult(`${err}`);
+	}
+
+	// Move primary to next non-terminal task.
+	const state = readActiveState(projectPath);
+	if (state.primary === taskSlug) {
+		const { effectiveStatus } = require("../spec/types.js");
+		state.primary = state.tasks.find((t) => {
+			const s = effectiveStatus(t.status);
+			return s !== "done" && s !== "cancelled" && t.slug !== taskSlug;
+		})?.slug ?? "";
+		writeActiveState(projectPath, state);
+	}
+
+	return jsonResult({ task_slug: taskSlug, status: "cancelled", cancelled: true });
 }
 
 // Note: saveDecisionsAsKnowledge and savePatternsAsKnowledge extracted to knowledge-extractor.ts

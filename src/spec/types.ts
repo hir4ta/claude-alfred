@@ -24,6 +24,36 @@ export type SpecFile =
 export type SpecSize = "S" | "M" | "L" | "XL" | "D";
 export type SpecType = "feature" | "bugfix" | "delta";
 export type ReviewStatus = "pending" | "approved" | "changes_requested" | "";
+export type TaskStatus = "pending" | "in-progress" | "review" | "done" | "deferred" | "cancelled";
+
+const TASK_STATUSES = new Set<string>(["pending", "in-progress", "review", "done", "deferred", "cancelled"]);
+
+export const VALID_TRANSITIONS: ReadonlyMap<TaskStatus, ReadonlySet<TaskStatus>> = new Map([
+	["pending", new Set<TaskStatus>(["in-progress", "cancelled"])],
+	["in-progress", new Set<TaskStatus>(["review", "deferred", "cancelled"])],
+	["review", new Set<TaskStatus>(["in-progress", "done", "cancelled"])],
+	["deferred", new Set<TaskStatus>(["in-progress", "cancelled"])],
+]);
+
+export function isTaskStatus(s: string): s is TaskStatus {
+	return TASK_STATUSES.has(s);
+}
+
+export function transitionStatus(current: TaskStatus, next: TaskStatus): TaskStatus {
+	if (current === next) throw new Error(`InvalidTransition: ${current} → ${next} (same state)`);
+	const allowed = VALID_TRANSITIONS.get(current);
+	if (!allowed?.has(next)) {
+		throw new Error(`InvalidTransition: ${current} → ${next}`);
+	}
+	return next;
+}
+
+export function effectiveStatus(raw?: string): TaskStatus {
+	if (!raw || raw === "active") return "in-progress";
+	if (raw === "completed") return "done";
+	if (isTaskStatus(raw)) return raw;
+	return "in-progress";
+}
 
 export const VALID_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -258,7 +288,10 @@ export function switchActive(projectPath: string, taskSlug: string): void {
 	const state = readActiveState(projectPath);
 	const task = state.tasks.find((t) => t.slug === taskSlug);
 	if (!task) throw new Error(`task "${taskSlug}" not found in _active.md`);
-	if (task.status === "completed") throw new Error(`task "${taskSlug}" is completed`);
+	const status = effectiveStatus(task.status);
+	if (status === "done" || status === "cancelled") {
+		throw new Error(`task "${taskSlug}" is ${status}`);
+	}
 	state.primary = taskSlug;
 	writeActiveState(projectPath, state);
 }
@@ -267,13 +300,19 @@ export function completeTask(projectPath: string, taskSlug: string): string {
 	const state = readActiveState(projectPath);
 	const task = state.tasks.find((t) => t.slug === taskSlug);
 	if (!task) throw new Error(`task "${taskSlug}" not found in _active.md`);
-	if (task.status === "completed") throw new Error(`task "${taskSlug}" is already completed`);
-	task.status = "completed";
+	const current = effectiveStatus(task.status);
+	if (current === "done") throw new Error(`task "${taskSlug}" is already done`);
+	if (current === "cancelled") throw new Error(`task "${taskSlug}" is cancelled`);
+	// Allow completion from review (normal flow) or in-progress (forced complete)
+	task.status = "done";
 	task.completed_at = new Date().toISOString();
 
 	if (state.primary === taskSlug) {
 		state.primary =
-			state.tasks.find((t) => t.status !== "completed" && t.slug !== taskSlug)?.slug ?? "";
+			state.tasks.find((t) => {
+				const s = effectiveStatus(t.status);
+				return s !== "done" && s !== "cancelled" && t.slug !== taskSlug;
+			})?.slug ?? "";
 	}
 	writeActiveState(projectPath, state);
 	return state.primary;

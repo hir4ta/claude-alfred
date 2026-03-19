@@ -2,11 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ActiveState } from "../types.js";
+import type { ActiveState, TaskStatus } from "../types.js";
 import {
 	completeTask,
 	detectSize,
+	effectiveStatus,
 	filesForSize,
+	isTaskStatus,
 	parseSize,
 	parseSpecType,
 	readActiveState,
@@ -15,7 +17,9 @@ import {
 	SpecDir,
 	setReviewStatus,
 	switchActive,
+	transitionStatus,
 	VALID_SLUG,
+	VALID_TRANSITIONS,
 	writeActiveState,
 } from "../types.js";
 
@@ -133,7 +137,7 @@ describe("ActiveState management", () => {
 				{ slug: "task-b", started_at: "2026-01-02T00:00:00Z", status: "completed" },
 			],
 		});
-		expect(() => switchActive(tmpDir, "task-b")).toThrow("completed");
+		expect(() => switchActive(tmpDir, "task-b")).toThrow("done");
 	});
 
 	it("completes task and switches primary", () => {
@@ -147,7 +151,7 @@ describe("ActiveState management", () => {
 		const newPrimary = completeTask(tmpDir, "task-a");
 		expect(newPrimary).toBe("task-b");
 		const state = readActiveState(tmpDir);
-		expect(state.tasks.find((t) => t.slug === "task-a")?.status).toBe("completed");
+		expect(state.tasks.find((t) => t.slug === "task-a")?.status).toBe("done");
 	});
 
 	it("manages review status", () => {
@@ -177,5 +181,85 @@ describe("SpecDir", () => {
 	it("reports existence correctly", () => {
 		const sd = new SpecDir(tmpDir, "test-task");
 		expect(sd.exists()).toBe(false);
+	});
+});
+
+describe("TaskStatus", () => {
+	describe("transitionStatus", () => {
+		it("allows valid transitions", () => {
+			expect(transitionStatus("pending", "in-progress")).toBe("in-progress");
+			expect(transitionStatus("pending", "cancelled")).toBe("cancelled");
+			expect(transitionStatus("in-progress", "review")).toBe("review");
+			expect(transitionStatus("in-progress", "deferred")).toBe("deferred");
+			expect(transitionStatus("in-progress", "cancelled")).toBe("cancelled");
+			expect(transitionStatus("review", "in-progress")).toBe("in-progress");
+			expect(transitionStatus("review", "done")).toBe("done");
+			expect(transitionStatus("review", "cancelled")).toBe("cancelled");
+			expect(transitionStatus("deferred", "in-progress")).toBe("in-progress");
+			expect(transitionStatus("deferred", "cancelled")).toBe("cancelled");
+		});
+
+		it("rejects invalid transitions", () => {
+			expect(() => transitionStatus("done", "pending")).toThrow("InvalidTransition");
+			expect(() => transitionStatus("cancelled", "in-progress")).toThrow("InvalidTransition");
+			expect(() => transitionStatus("pending", "done")).toThrow("InvalidTransition");
+			expect(() => transitionStatus("pending", "review")).toThrow("InvalidTransition");
+		});
+
+		it("rejects same-state transitions", () => {
+			expect(() => transitionStatus("pending", "pending")).toThrow("same state");
+		});
+
+		it("rejects transitions from terminal states", () => {
+			for (const target of ["pending", "in-progress", "review", "deferred", "cancelled"] as TaskStatus[]) {
+				expect(() => transitionStatus("done", target)).toThrow("InvalidTransition");
+				expect(() => transitionStatus("cancelled", target)).toThrow("InvalidTransition");
+			}
+		});
+
+		it("covers all VALID_TRANSITIONS entries", () => {
+			for (const [from, toSet] of VALID_TRANSITIONS) {
+				for (const to of toSet) {
+					expect(transitionStatus(from, to)).toBe(to);
+				}
+			}
+		});
+	});
+
+	describe("effectiveStatus", () => {
+		it("maps undefined to in-progress", () => {
+			expect(effectiveStatus(undefined)).toBe("in-progress");
+		});
+		it("maps 'active' to in-progress", () => {
+			expect(effectiveStatus("active")).toBe("in-progress");
+		});
+		it("maps 'completed' to done", () => {
+			expect(effectiveStatus("completed")).toBe("done");
+		});
+		it("passes through valid statuses", () => {
+			expect(effectiveStatus("pending")).toBe("pending");
+			expect(effectiveStatus("review")).toBe("review");
+			expect(effectiveStatus("deferred")).toBe("deferred");
+			expect(effectiveStatus("cancelled")).toBe("cancelled");
+		});
+		it("maps unknown strings to in-progress", () => {
+			expect(effectiveStatus("invalid")).toBe("in-progress");
+		});
+	});
+
+	describe("isTaskStatus", () => {
+		it("returns true for valid statuses", () => {
+			expect(isTaskStatus("pending")).toBe(true);
+			expect(isTaskStatus("in-progress")).toBe(true);
+			expect(isTaskStatus("review")).toBe(true);
+			expect(isTaskStatus("done")).toBe(true);
+			expect(isTaskStatus("deferred")).toBe(true);
+			expect(isTaskStatus("cancelled")).toBe(true);
+		});
+		it("returns false for invalid strings", () => {
+			expect(isTaskStatus("active")).toBe(false);
+			expect(isTaskStatus("completed")).toBe(false);
+			expect(isTaskStatus("")).toBe(false);
+		});
 	});
 });

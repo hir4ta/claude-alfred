@@ -72,6 +72,7 @@ export function initSpec(
 		state.tasks.push({
 			slug: taskSlug,
 			started_at: now,
+			status: "pending",
 			size,
 			spec_type: specType,
 		});
