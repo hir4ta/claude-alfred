@@ -100,10 +100,11 @@ export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Prom
 		items.push(specDirective);
 		// FR-7: User-facing explanation when spec creation is first required.
 		if (specDirective.level === "DIRECTIVE") {
-			items.push({
-				level: "CONTEXT",
-				message: "alfred は仕様書 (spec) を使って開発を構造化します。specは自動で作成され、サイズも自動判定されます。実装の追跡・レビュー・ナレッジ蓄積を自動化し、品質を担保します。",
-			});
+			const lang = process.env.ALFRED_LANG || "en";
+			const msg = lang === "ja"
+				? "alfred は仕様書 (spec) を使って開発を構造化します。specは自動で作成され、サイズも自動判定されます。実装の追跡・レビュー・ナレッジ蓄積を自動化し、品質を担保します。"
+				: "alfred structures development with specs. Specs are created automatically with auto-detected sizing. Tracks implementation progress, enforces reviews, and accumulates knowledge.";
+			items.push({ level: "CONTEXT", message: msg });
 		}
 	}
 

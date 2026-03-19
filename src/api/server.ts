@@ -51,6 +51,10 @@ export function createApp(
 ): Hono {
 	const app = new Hono();
 	const proj = detectProject(projectPath);
+	const VALID_SPEC_FILES = new Set([
+		"requirements.md", "design.md", "tasks.md", "test-specs.md",
+		"decisions.md", "research.md", "session.md", "bugfix.md", "delta.md",
+	]);
 
 	function enrichTask(
 		task: { slug: string; status?: string; started_at?: string; completed_at?: string; size?: string; spec_type?: string; review_status?: string },
@@ -143,18 +147,6 @@ export function createApp(
 		const file = c.req.param("file");
 		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
 
-		// Validate file parameter against known spec files to prevent path traversal.
-		const VALID_SPEC_FILES = new Set([
-			"requirements.md",
-			"design.md",
-			"tasks.md",
-			"test-specs.md",
-			"decisions.md",
-			"research.md",
-			"session.md",
-			"bugfix.md",
-			"delta.md",
-		]);
 		if (!VALID_SPEC_FILES.has(file)) return c.json({ error: "invalid spec file" }, 400);
 
 		const sd = new SpecDir(projectPath, slug);
@@ -171,6 +163,7 @@ export function createApp(
 		const slug = c.req.param("slug");
 		const file = c.req.param("file");
 		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
+		if (!VALID_SPEC_FILES.has(file)) return c.json({ error: "invalid spec file" }, 400);
 
 		const sd = new SpecDir(projectPath, slug);
 		const histDir = join(sd.dir(), ".history");
@@ -196,6 +189,7 @@ export function createApp(
 		const file = c.req.param("file");
 		const version = c.req.param("version");
 		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
+		if (!VALID_SPEC_FILES.has(file)) return c.json({ error: "invalid spec file" }, 400);
 		if (!/^[0-9T]{15}$/.test(version)) return c.json({ error: "invalid version format" }, 400);
 
 		const sd = new SpecDir(projectPath, slug);
@@ -531,17 +525,6 @@ export function createApp(
 			return c.json({ error: "file (string) and approved (boolean) are required" }, 400);
 		}
 
-		const VALID_SPEC_FILES = new Set([
-			"requirements.md",
-			"design.md",
-			"tasks.md",
-			"test-specs.md",
-			"decisions.md",
-			"research.md",
-			"session.md",
-			"bugfix.md",
-			"delta.md",
-		]);
 		if (!VALID_SPEC_FILES.has(body.file)) return c.json({ error: "invalid spec file" }, 400);
 
 		// Read existing approvals.

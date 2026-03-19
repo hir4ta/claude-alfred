@@ -46,7 +46,7 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 	}
 
 	// Intent guard: blocks source edits when implement intent detected but no active spec.
-	const activeSpec = spec ?? tryReadActiveSpec(ev.cwd);
+	const activeSpec = spec;
 	if (!activeSpec && ev.cwd && existsSync(join(ev.cwd, ".alfred"))) {
 		const intent = readLastIntent(ev.cwd);
 		if (intent && IMPLEMENT_INTENTS.has(intent)) {
