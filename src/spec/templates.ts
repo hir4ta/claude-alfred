@@ -9,7 +9,6 @@ import enDesign from "./templates/en/design.tmpl";
 import enTasks from "./templates/en/tasks.tmpl";
 import enTestSpecs from "./templates/en/test-specs.tmpl";
 import enResearch from "./templates/en/research.tmpl";
-import enSession from "./templates/en/session.tmpl";
 
 // Japanese templates
 import jaRequirements from "./templates/ja/requirements.tmpl";
@@ -19,7 +18,6 @@ import jaDesign from "./templates/ja/design.tmpl";
 import jaTasks from "./templates/ja/tasks.tmpl";
 import jaTestSpecs from "./templates/ja/test-specs.tmpl";
 import jaResearch from "./templates/ja/research.tmpl";
-import jaSession from "./templates/ja/session.tmpl";
 
 export interface TemplateData {
 	taskSlug: string;
@@ -36,7 +34,6 @@ const EN_TEMPLATES: Record<string, string> = {
 	"tasks.md": enTasks,
 	"test-specs.md": enTestSpecs,
 	"research.md": enResearch,
-	"session.md": enSession,
 };
 
 const JA_TEMPLATES: Record<string, string> = {
@@ -47,7 +44,6 @@ const JA_TEMPLATES: Record<string, string> = {
 	"tasks.md": jaTasks,
 	"test-specs.md": jaTestSpecs,
 	"research.md": jaResearch,
-	"session.md": jaSession,
 };
 
 const DEFAULT_DESCRIPTIONS: Record<string, string> = {

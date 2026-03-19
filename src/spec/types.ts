@@ -107,24 +107,17 @@ export function detectSize(description: string): SpecSize {
 }
 
 export function filesForSize(size: SpecSize, specType: SpecType): SpecFile[] {
-	if (size === "D") return ["delta.md", "session.md"];
+	if (size === "D") return ["delta.md"];
 
 	const primary: SpecFile = specType === "bugfix" ? "bugfix.md" : "requirements.md";
 	switch (size) {
 		case "S":
-			return [primary, "tasks.md", "session.md"];
+			return [primary, "tasks.md"];
 		case "M":
-			if (specType === "bugfix") return [primary, "tasks.md", "test-specs.md", "session.md"];
-			return [primary, "design.md", "tasks.md", "test-specs.md", "session.md"];
+			if (specType === "bugfix") return [primary, "tasks.md", "test-specs.md"];
+			return [primary, "design.md", "tasks.md", "test-specs.md"];
 		default: // L, XL
-			return [
-				primary,
-				"design.md",
-				"tasks.md",
-				"test-specs.md",
-				"research.md",
-				"session.md",
-			];
+			return [primary, "design.md", "tasks.md", "test-specs.md", "research.md"];
 	}
 }
 
