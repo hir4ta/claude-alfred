@@ -57,7 +57,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 
 | Step | Mechanism | Level |
 |------|-----------|-------|
-| Spec required | UserPromptSubmit + PreToolUse | DENY |
+| Spec required | PreToolUse prompt hook (LLM judge) | CONTEXT/DENY |
 | Spec approval (M/L/XL) | PreToolUse + dossier complete | DENY |
 | Wave self-review | review-gate.json via PreToolUse | DENY |
 | Wave commit + knowledge | PostToolUse DIRECTIVE | DIRECTIVE |

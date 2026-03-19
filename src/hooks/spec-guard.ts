@@ -99,6 +99,22 @@ export function hasUncheckedSelfReview(cwd: string | undefined, slug: string): b
 }
 
 /**
+ * PreToolUse: explicitly allow tool via permissionDecision JSON (exit 0).
+ * Signals to Claude Code that this edit is permitted, so subsequent hooks
+ * (e.g. prompt-based spec-first judge) can be skipped.
+ */
+export function allowTool(reason: string): void {
+	const out = {
+		hookSpecificOutput: {
+			hookEventName: "PreToolUse",
+			permissionDecision: "allow",
+			permissionDecisionReason: reason,
+		},
+	};
+	process.stdout.write(`${JSON.stringify(out)}\n`);
+}
+
+/**
  * PreToolUse: deny tool via permissionDecision JSON (exit 0).
  */
 export function denyTool(reason: string): void {

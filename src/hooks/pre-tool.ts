@@ -1,18 +1,21 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { effectiveStatus } from "../spec/types.js";
 import type { HookEvent } from "./dispatcher.js";
 import { isGateActive } from "./review-gate.js";
-import { denyTool, isActiveSpecMalformed, isSpecFilePath, tryReadActiveSpec } from "./spec-guard.js";
-import { IMPLEMENT_INTENTS, readLastIntent } from "./state.js";
+import {
+	allowTool,
+	denyTool,
+	isActiveSpecMalformed,
+	isSpecFilePath,
+	tryReadActiveSpec,
+} from "./spec-guard.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
 
 /**
- * PreToolUse handler: block Edit/Write on review-gate, intent guard, or unapproved spec.
- * Enforcement order: .alfred/ exempt → review-gate → intent guard → approval gate.
- * Fail-closed on spec state read: if _active.md exists but can't be parsed, deny the tool
- * rather than silently allowing edits without enforcement.
+ * PreToolUse handler: block Edit/Write on review-gate or unapproved spec.
+ * Enforcement order: .alfred/ exempt → malformed check → review-gate → approval gate.
+ * Outputs explicit "allow" when spec exists and gates pass, so the subsequent
+ * prompt hook (spec-first LLM judge) is only evaluated when no spec is active.
  */
 export async function preToolUse(ev: HookEvent): Promise<void> {
 	const toolName = ev.tool_name ?? "";
@@ -23,7 +26,10 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 	// .alfred/ edits are always allowed (spec creation/update).
 	const toolInput = (ev.tool_input ?? {}) as Record<string, unknown>;
 	const filePath = typeof toolInput.file_path === "string" ? toolInput.file_path : "";
-	if (filePath && isSpecFilePath(ev.cwd, filePath)) return;
+	if (filePath && isSpecFilePath(ev.cwd, filePath)) {
+		allowTool("Spec file edit");
+		return;
+	}
 
 	// Fail-closed: if _active.md exists but can't be parsed, deny rather than silently allowing.
 	if (isActiveSpecMalformed(ev.cwd)) {
@@ -38,7 +44,10 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 	// FR-20: Exempt deferred/cancelled tasks from all gates.
 	if (spec) {
 		const status = effectiveStatus(spec.status);
-		if (status === "deferred" || status === "cancelled") return;
+		if (status === "deferred" || status === "cancelled") {
+			allowTool("Deferred/cancelled spec");
+			return;
+		}
 	}
 
 	// Review gate: blocks source edits until spec/wave review is completed.
@@ -55,30 +64,20 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// Intent guard: blocks source edits when implement intent detected but no active spec.
-	const activeSpec = spec;
-	if (!activeSpec && ev.cwd && existsSync(join(ev.cwd, ".alfred"))) {
-		const intent = readLastIntent(ev.cwd);
-		if (intent && IMPLEMENT_INTENTS.has(intent)) {
-			const reason = [
-				"No active spec. Create a spec before implementing: /alfred:brief or dossier action=init",
-				'- "This change is too small for a spec" → Use dossier init size=S (adds <2min)',
-				'- "I\'ll create the spec after" → The Stop hook will block you from finishing without a spec',
-			].join("\n");
-			denyTool(reason);
-			return;
-		}
-		return; // No spec, no implement intent → free coding
-	}
-	if (!activeSpec) return;
+	// No active spec → let the prompt hook (LLM judge) decide if a spec is needed.
+	if (!spec) return;
 
 	// M/L/XL with unapproved review → deny.
-	if (["M", "L", "XL"].includes(activeSpec.size) && activeSpec.reviewStatus !== "approved") {
+	if (["M", "L", "XL"].includes(spec.size) && spec.reviewStatus !== "approved") {
 		const reason = [
-			`Spec '${activeSpec.slug}' (size ${activeSpec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,
+			`Spec '${spec.slug}' (size ${spec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,
 			'- "I\'ll get the review after implementation" → The Stop hook will block you from finishing anyway',
 			'- "This edit is trivial" → All M/L/XL edits are gated. Use dossier init size=S for trivial changes',
 		].join("\n");
 		denyTool(reason);
+		return;
 	}
+
+	// Active spec + all gates passed → explicitly allow (skip prompt hook evaluation).
+	allowTool("Spec exists, all gates passed");
 }

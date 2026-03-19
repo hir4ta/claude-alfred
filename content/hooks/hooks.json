@@ -58,6 +58,11 @@
             "statusMessage": "alfred: checking spec approval...",
             "timeout": 5,
             "type": "command"
+          },
+          {
+            "type": "prompt",
+            "prompt": "You are a spec-driven development gatekeeper. An Edit/Write tool is being used WITHOUT an active spec. The command handler (alfred hook PreToolUse) already passed — meaning there is no review-gate or approval-gate blocking this edit. The only question is: does this change need a spec?\n\nEvaluate the conversation context and the file being edited. Respond with {\"ok\": true} if this is a TRIVIAL change that does NOT need a spec (examples: typo fix, documentation update, config tweak, comment edit, style fix, renaming, updating a version number). Respond with {\"ok\": false, \"reason\": \"This change requires a spec. Create one with: dossier action=init (use size=S for small changes, size=D for delta changes)\"} if this is SUBSTANTIAL work (new feature, bug fix requiring investigation, refactoring, architecture change, adding new functionality).\n\nWhen in doubt, allow it — false blocks are worse than missing specs.",
+            "timeout": 10
           }
         ]
       }
