@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HookEvent } from "../dispatcher.js";
 import { preToolUse } from "../pre-tool.js";
 import { writeReviewGate } from "../review-gate.js";
-import { writeLastIntent } from "../state.js";
 
 let tmpDir: string;
 let stdoutData: string[];
@@ -42,7 +41,7 @@ function makeEvent(toolName: string, filePath?: string): HookEvent {
 	};
 }
 
-function getDenyOutput(): { hookSpecificOutput?: { permissionDecision?: string } } | null {
+function getOutput(): { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } } | null {
 	for (const line of stdoutData) {
 		try {
 			return JSON.parse(line.trim());
@@ -51,47 +50,50 @@ function getDenyOutput(): { hookSpecificOutput?: { permissionDecision?: string }
 	return null;
 }
 
+function getDecision(): string | undefined {
+	return getOutput()?.hookSpecificOutput?.permissionDecision;
+}
+
 describe("preToolUse", () => {
 	it("denies Edit on M unapproved spec", async () => {
 		setupSpec({ size: "M", reviewStatus: "pending" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		const out = getDenyOutput();
-		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+		expect(getDecision()).toBe("deny");
 	});
 
 	it("denies Write on L unapproved spec", async () => {
 		setupSpec({ size: "L", reviewStatus: "pending" });
 		await preToolUse(makeEvent("Write", join(tmpDir, "src/new.ts")));
-		const out = getDenyOutput();
-		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+		expect(getDecision()).toBe("deny");
 	});
 
 	it("allows Edit on M approved spec", async () => {
 		setupSpec({ size: "M", reviewStatus: "approved" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
+		expect(getDecision()).toBe("allow");
 	});
 
 	it("allows Edit on S spec regardless of review status", async () => {
 		setupSpec({ size: "S" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
+		expect(getDecision()).toBe("allow");
 	});
 
 	it("allows Edit on D spec regardless of review status", async () => {
 		setupSpec({ size: "D" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
+		expect(getDecision()).toBe("allow");
 	});
 
 	it("allows Edit to .alfred/ paths (spec exempt)", async () => {
 		setupSpec({ size: "M", reviewStatus: "pending" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, ".alfred/specs/test-task/design.md")));
-		expect(stdoutData.length).toBe(0);
+		expect(getDecision()).toBe("allow");
 	});
 
-	it("allows Edit when no active spec exists", async () => {
+	it("passes through when no active spec (prompt hook evaluates)", async () => {
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		// No output — prompt hook will evaluate next
 		expect(stdoutData.length).toBe(0);
 	});
 
@@ -110,8 +112,7 @@ describe("preToolUse", () => {
 	it("denies XL unapproved spec", async () => {
 		setupSpec({ size: "XL", reviewStatus: "changes_requested" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		const out = getDenyOutput();
-		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+		expect(getDecision()).toBe("deny");
 	});
 });
 
@@ -124,8 +125,7 @@ describe("preToolUse — review gate", () => {
 			reason: "Spec created.",
 		});
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		const out = getDenyOutput();
-		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+		expect(getDecision()).toBe("deny");
 	});
 
 	it("denies Write when wave-review gate is active", async () => {
@@ -137,8 +137,7 @@ describe("preToolUse — review gate", () => {
 			reason: "Wave 1 review.",
 		});
 		await preToolUse(makeEvent("Write", join(tmpDir, "src/new.ts")));
-		const out = getDenyOutput();
-		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
+		expect(getDecision()).toBe("deny");
 	});
 
 	it("allows Edit when gate slug does not match active spec (stale)", async () => {
@@ -149,7 +148,7 @@ describe("preToolUse — review gate", () => {
 			reason: "Old spec.",
 		});
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
+		expect(getDecision()).toBe("allow");
 	});
 
 	it("allows .alfred/ edits even when gate is active", async () => {
@@ -160,7 +159,7 @@ describe("preToolUse — review gate", () => {
 			reason: "Spec created.",
 		});
 		await preToolUse(makeEvent("Edit", join(tmpDir, ".alfred/specs/test-task/design.md")));
-		expect(stdoutData.length).toBe(0);
+		expect(getDecision()).toBe("allow");
 	});
 
 	it("gate takes priority over approval gate", async () => {
@@ -171,52 +170,8 @@ describe("preToolUse — review gate", () => {
 			reason: "Spec created.",
 		});
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		const out = getDenyOutput();
-		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
-		// Verify it's the gate message, not the approval gate
-		const reason =
-			(out?.hookSpecificOutput as Record<string, unknown>)?.permissionDecisionReason ?? "";
-		expect(String(reason)).toContain("Spec self-review");
-	});
-});
-
-describe("preToolUse — intent guard", () => {
-	function setupAlfred(): void {
-		mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
-	}
-
-	it("denies Edit when implement intent + .alfred/ exists + no spec", async () => {
-		setupAlfred();
-		writeLastIntent(tmpDir, "implement");
-		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		const out = getDenyOutput();
-		expect(out?.hookSpecificOutput?.permissionDecision).toBe("deny");
-	});
-
-	it("allows Edit when research intent + .alfred/ exists + no spec", async () => {
-		setupAlfred();
-		writeLastIntent(tmpDir, "research");
-		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
-	});
-
-	it("allows Edit when no intent + .alfred/ exists + no spec", async () => {
-		setupAlfred();
-		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
-	});
-
-	it("allows Edit when no .alfred/ dir (even if state somehow exists)", async () => {
-		// In production, writeLastIntent is guarded by .alfred/ check in UserPromptSubmit.
-		// This test verifies PreToolUse also checks .alfred/ existence.
-		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
-	});
-
-	it("allows Edit when implement intent + active spec exists", async () => {
-		setupSpec({ size: "S" });
-		writeLastIntent(tmpDir, "implement");
-		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(stdoutData.length).toBe(0);
+		expect(getDecision()).toBe("deny");
+		const reason = getOutput()?.hookSpecificOutput?.permissionDecisionReason ?? "";
+		expect(reason).toContain("Spec self-review");
 	});
 });

@@ -76,7 +76,8 @@ describe("preToolUse — fail-closed on malformed _active.md", () => {
 
 		// .alfred/ exempt check happens BEFORE fail-closed check
 		await preToolUse(makeEvent("Edit", join(tmpDir, ".alfred/specs/test/design.md")));
-		expect(stdoutData.length).toBe(0);
+		const out = getDenyOutput();
+		expect(out?.hookSpecificOutput?.permissionDecision).toBe("allow");
 	});
 
 	it("allows Edit when _active.md has empty primary (all specs completed)", async () => {
