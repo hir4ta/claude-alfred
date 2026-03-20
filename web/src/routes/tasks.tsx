@@ -132,9 +132,9 @@ function TaskAccordionCard({
 
 			{/* Compact info — always visible */}
 			<div className="px-3 pb-2 space-y-1.5">
-				{task.project_name && (
+				{(task.project_name || task.started_at) && (
 					<p className="text-[10px] font-medium" style={{ color: "#40513b" }}>
-						{task.project_name}
+						{task.project_name}{task.project_name && task.started_at && " · "}{task.started_at && <span className="text-muted-foreground/70 font-normal">{formatDate(task.started_at)}</span>}
 					</p>
 				)}
 				{task.focus && (
@@ -146,9 +146,7 @@ function TaskAccordionCard({
 						{task.completed}/{task.total}
 					</span>
 				</div>
-				{task.started_at && (
-					<p className="text-[10px] text-muted-foreground/70">{formatDate(task.started_at)}</p>
-				)}
+
 			</div>
 
 			{/* Accordion toggle — Waves */}
