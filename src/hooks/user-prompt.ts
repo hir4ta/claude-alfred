@@ -186,7 +186,7 @@ async function classifyIntentSemantic(
 	}
 }
 
-function cosineSim(a: number[], b: number[]): number {
+export function cosineSim(a: number[], b: number[]): number {
 	let dot = 0,
 		na = 0,
 		nb = 0;
@@ -295,7 +295,7 @@ export function checkSpecRequired(cwd: string, intent: string | null): Directive
 	return null;
 }
 
-function intentDescription(intent: string): string {
+export function intentDescription(intent: string): string {
 	switch (intent) {
 		case "research":
 			return "Research and investigation structuring";
@@ -350,7 +350,7 @@ export function resetNudgeCount(cwd: string, intent: string): void {
 import type { ScoredDoc } from "../mcp/helpers.js";
 import { subTypeBoost } from "../store/fts.js";
 
-function buildRelevanceExplanation(sd: ScoredDoc): string {
+export function buildRelevanceExplanation(sd: ScoredDoc): string {
 	const parts: string[] = [];
 
 	// Search method explanation.
