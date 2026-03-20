@@ -41,7 +41,9 @@ export async function dossierInit(
 		user: "mcp",
 	});
 
-	// Clear polish mode — new spec starts, polish period ends
+	// Clear polish mode — new spec starts, polish period ends.
+	// Note: in parallel sessions on the same branch, this may clear another session's polish.
+	// This is acceptable — the other session can create a new S spec if blocked.
 	try {
 		unlinkSync(join(stateDir(projectPath), "polish.json"));
 	} catch {
