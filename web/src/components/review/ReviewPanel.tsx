@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, History, MessageSquare, XCircle } from "lucide-react";
+import { CheckCircle, CheckSquare, History, MessageSquare, Square, XCircle } from "lucide-react";
 import { useState } from "react";
 import { SpecHistory } from "./SpecHistory";
 import {
@@ -39,6 +39,22 @@ export function ReviewPanel({ slug, reviewStatus, specContent, currentFile }: Re
 	const [newComment, setNewComment] = useState("");
 	const [selectedLine, setSelectedLine] = useState<number | null>(null);
 	const [activeTab, setActiveTab] = useState<"review" | "history">("review");
+	const [resolvedOverrides, setResolvedOverrides] = useState<Map<string, boolean>>(new Map());
+
+	const togglePreviousResolved = (comment: ReviewComment) => {
+		const key = `${comment.file}:${comment.line}:${comment.body}`;
+		setResolvedOverrides((prev) => {
+			const next = new Map(prev);
+			const current = next.get(key) ?? comment.resolved ?? false;
+			next.set(key, !current);
+			return next;
+		});
+	};
+
+	const isResolved = (comment: ReviewComment) => {
+		const key = `${comment.file}:${comment.line}:${comment.body}`;
+		return resolvedOverrides.get(key) ?? comment.resolved ?? false;
+	};
 
 	const reviews = historyData?.reviews ?? [];
 	const latestReview = reviews[reviews.length - 1];
@@ -154,7 +170,7 @@ export function ReviewPanel({ slug, reviewStatus, specContent, currentFile }: Re
 									{unresolvedFromPrevious
 										.filter((c) => c.line === lineNum)
 										.map((c, ci) => (
-											<InlineComment key={`prev-${lineNum}-${ci}`} comment={c} isPrevious />
+											<InlineComment key={`prev-${lineNum}-${ci}`} comment={{ ...c, resolved: isResolved(c) }} isPrevious onToggleResolved={() => togglePreviousResolved(c)} />
 										))}
 									{comments
 										.filter((c) => c.line === lineNum)
@@ -231,35 +247,45 @@ function InlineComment({
 	comment,
 	isPrevious,
 	onRemove,
+	onToggleResolved,
 }: {
 	comment: ReviewComment;
 	isPrevious?: boolean;
 	onRemove?: () => void;
+	onToggleResolved?: () => void;
 }) {
 	return (
 		<div
 			className={cn(
 				"ml-10 my-0.5 rounded px-2 py-1 text-xs",
 				isPrevious ? "bg-brand-rule/[0.06] text-muted-foreground" : "bg-brand-decision/[0.08]",
+				comment.resolved && "opacity-50",
 			)}
 		>
 			<div className="flex items-start justify-between gap-2">
 				<p className="whitespace-pre-wrap">{comment.body}</p>
-				{onRemove && (
-					<button
-						type="button"
-						onClick={onRemove}
-						className="shrink-0 text-muted-foreground hover:text-foreground"
-					>
-						x
-					</button>
-				)}
+				<div className="flex items-center gap-1 shrink-0">
+					{isPrevious && onToggleResolved && (
+						<button
+							type="button"
+							onClick={onToggleResolved}
+							className="text-muted-foreground hover:text-foreground transition-colors"
+							title={comment.resolved ? "Mark unresolved" : "Mark resolved"}
+						>
+							{comment.resolved ? <CheckSquare className="size-3.5" /> : <Square className="size-3.5" />}
+						</button>
+					)}
+					{onRemove && (
+						<button
+							type="button"
+							onClick={onRemove}
+							className="text-muted-foreground hover:text-foreground"
+						>
+							x
+						</button>
+					)}
+				</div>
 			</div>
-			{isPrevious && comment.resolved && (
-				<Badge variant="outline" className="mt-1 text-[10px]">
-					resolved
-				</Badge>
-			)}
 		</div>
 	);
 }

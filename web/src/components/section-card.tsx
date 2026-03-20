@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, MessageSquareText, BookOpen } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, MessageSquareText, BookOpen, Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -73,6 +73,8 @@ export function SectionCard({
 }: SectionCardProps) {
 	const { t } = useI18n();
 	const [open, setOpen] = useState(defaultOpen);
+	const [showSearch, setShowSearch] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
 	const isDelta = title === "delta.md";
 	const deltaSections = useMemo(() => isDelta ? parseDeltaSections(content) : [], [isDelta, content]);
 
@@ -136,11 +138,46 @@ export function SectionCard({
 							{approved ? t("section.approved") : t("section.approve")}
 						</button>
 					)}
+					<button
+						type="button"
+						onClick={(e) => { e.stopPropagation(); setShowSearch(!showSearch); }}
+						className="flex items-center justify-center rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+						title="Search"
+					>
+						<Search className="size-3.5" />
+					</button>
+					<button
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							const blob = new Blob([content], { type: "text/markdown" });
+							const url = URL.createObjectURL(blob);
+							const a = document.createElement("a");
+							a.href = url; a.download = title; a.click();
+							URL.revokeObjectURL(url);
+						}}
+						className="flex items-center justify-center rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+						title="Download"
+					>
+						<Download className="size-3.5" />
+					</button>
 				</div>
 			</div>
 
 			{open && (
 				<div className="border-t px-4 py-3">
+					{showSearch && (
+						<div className="mb-3">
+							<input
+								type="text"
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+								placeholder="Search in spec..."
+								className="w-full rounded-lg border bg-card px-3 py-1.5 text-sm h-8"
+								autoFocus
+							/>
+						</div>
+					)}
 					{isReviewMode && reviewPanel ? (
 						reviewPanel
 					) : isDelta && deltaSections.length > 0 ? (
@@ -172,6 +209,10 @@ export function SectionCard({
 								components={{
 									h1({ children }) {
 										return <h1 className="!mt-0 !mb-1 !text-base">{children}</h1>;
+									},
+									text({ children }) {
+										if (!searchQuery || typeof children !== "string") return <>{children}</>;
+										return <HighlightText text={children} query={searchQuery} />;
 									},
 									code({ className, children, ...props }) {
 										const match = /language-(\w+)/.exec(className || "");
@@ -227,5 +268,22 @@ function CopyButton({ text }: { text: string }) {
 		>
 			{copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
 		</button>
+	);
+}
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+	if (!query) return <>{text}</>;
+	const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+	return (
+		<>
+			{parts.map((part, i) =>
+				part.toLowerCase() === query.toLowerCase() ? (
+					<mark key={i} style={{ background: "#e67e22", color: "white", borderRadius: "2px", padding: "0 2px" }}>{part}</mark>
+				) : (
+					<span key={i}>{part}</span>
+				),
+			)}
+		</>
 	);
 }
