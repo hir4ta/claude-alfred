@@ -11,7 +11,6 @@ import {
 	PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Card, CardContent } from "@/components/ui/card";
-import { WaveDivider } from "@/components/wave-divider";
 import { StaggerContainer } from "@/components/stagger-container";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -78,7 +77,6 @@ function OverviewPage() {
 				<HealthCard stats={healthData} />
 			</div>
 
-			<WaveDivider />
 			{/* Task cards */}
 			{tasks.length > 0 && (() => {
 				const totalPages = Math.ceil(tasks.length / ITEMS_PER_PAGE);
