@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Brain, CheckCircle2, Clock, Zap } from "lucide-react";
+import { Brain, CheckCircle2, Clock, Zap } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import {
 	Pagination,

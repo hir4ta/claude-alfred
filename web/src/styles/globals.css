@@ -51,7 +51,7 @@
 
 :root {
 	--radius: 0.625rem;
-	--background: oklch(0.975 0.003 75);
+	--background: oklch(0.98 0.005 75);
 	--foreground: oklch(0.22 0.01 56);
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.22 0.01 56);
@@ -79,7 +79,7 @@
 }
 
 .dark {
-	--background: oklch(0.145 0 0);
+	--background: oklch(0.15 0.005 50);
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.18 0.005 56);
 	--card-foreground: oklch(0.985 0 0);
@@ -127,4 +127,38 @@
 
 .animate-shimmer {
 	animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Butler Design: Grain texture overlay */
+.grain-overlay {
+	position: relative;
+}
+.grain-overlay::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	pointer-events: none;
+	opacity: 0.03;
+	mix-blend-mode: overlay;
+	background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+.dark .grain-overlay::before {
+	opacity: 0.04;
+	mix-blend-mode: soft-light;
+}
+
+/* Butler Design: Organic border radius */
+.rounded-organic {
+	border-radius: 12px 16px 14px 18px;
+}
+
+/* Butler Design: Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+	.grain-overlay::before {
+		animation: none;
+	}
+	.animate-shimmer {
+		animation: none;
+	}
 }

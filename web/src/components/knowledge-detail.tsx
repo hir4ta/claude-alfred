@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore } from "lucide-react";
+import { Archive, ArchiveRestore } from "@animated-color-icons/lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { SUB_TYPE_ICONS, SUB_TYPE_LABEL_KEYS } from "@/components/knowledge-card";

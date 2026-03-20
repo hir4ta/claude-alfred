@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
-import { Activity, BookOpen, Globe, LayoutDashboard, ListChecks } from "lucide-react";
+import { Activity, BookOpen, Globe, LayoutDashboard, ListChecks } from "@animated-color-icons/lucide-react";
 import { useMemo, useState } from "react";
 import { GlobalSearch } from "@/components/global-search";
 import { KeyboardHelpDialog } from "@/components/keyboard-help";
@@ -33,7 +33,7 @@ function LanguageToggle() {
 		<button
 			type="button"
 			onClick={() => setLocale(locale === "en" ? "ja" : "en")}
-			className="flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 h-8 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+			className="al-icon-wrapper flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 h-8 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 		>
 			<Globe className="size-4" />
 			<span>{locale === "en" ? "EN" : "JA"}</span>
@@ -74,7 +74,7 @@ function RootLayout() {
 										to={tab.to}
 										activeOptions={{ exact: tab.to === "/" }}
 										className={cn(
-											"flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+											"al-icon-wrapper flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all",
 											"text-muted-foreground hover:text-foreground hover:bg-accent/60",
 										)}
 										activeProps={{

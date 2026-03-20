@@ -1,4 +1,4 @@
-import { Check, Circle, CircleDot } from "lucide-react";
+import { Check, Circle, CircleDot } from "@animated-color-icons/lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { WaveInfo } from "@/lib/types";
 

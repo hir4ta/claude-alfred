@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CircleCheck, CircleDot } from "lucide-react";
+import { CircleCheck, CircleDot } from "@animated-color-icons/lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -61,7 +61,7 @@ export function TaskCard({
 		<Link to="/tasks/$slug" params={{ slug: task.slug }} className="block">
 			<Card
 				className={cn(
-					"h-[140px] !gap-0 !py-0 border-stone-200 transition-[border-color,transform] duration-200 hover:border-stone-300 hover:-translate-y-0.5 dark:border-stone-700 dark:hover:border-stone-600",
+					"al-icon-wrapper h-[140px] !gap-0 !py-0 border-stone-200 transition-[border-color,transform] duration-200 hover:border-stone-300 hover:-translate-y-0.5 dark:border-stone-700 dark:hover:border-stone-600",
 					isCompleted && "opacity-60",
 				)}
 			>

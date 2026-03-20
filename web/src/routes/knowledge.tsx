@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Grid3x3, Network, Search } from "lucide-react";
+import { Grid3X3, Network, Search } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { KnowledgeCard } from "@/components/knowledge-card";
 import { KnowledgeDialog } from "@/components/knowledge-detail";
@@ -115,7 +115,7 @@ function KnowledgePage() {
 						aria-label={t("knowledge.viewGrid")}
 						className="h-8 px-2.5 gap-1.5 text-xs"
 					>
-						<Grid3x3 className="size-3.5" />
+						<Grid3X3 className="size-3.5" />
 						{t("knowledge.viewGrid")}
 					</ToggleGroupItem>
 					<ToggleGroupItem

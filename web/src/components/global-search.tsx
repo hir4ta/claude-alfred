@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Brain, ListChecks, Search } from "lucide-react";
+import { Brain, ListChecks, Search } from "@animated-color-icons/lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { knowledgeQueryOptions, tasksQueryOptions } from "@/lib/api";
@@ -91,7 +91,7 @@ export function GlobalSearch() {
 							key={`${r.type}-${r.slug ?? r.id}-${i}`}
 							type="button"
 							onClick={() => handleSelect(r)}
-							className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left transition-colors hover:bg-accent"
+							className="al-icon-wrapper flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left transition-colors hover:bg-accent"
 						>
 							{r.type === "task" ? (
 								<ListChecks className="size-3.5 shrink-0 text-muted-foreground" />

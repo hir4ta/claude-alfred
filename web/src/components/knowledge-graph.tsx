@@ -1,5 +1,5 @@
 import ForceGraph2D from "react-force-graph-2d";
-import { Maximize2, Minus, Plus } from "lucide-react";
+import { Maximize2, Minus, Plus } from "@animated-color-icons/lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SUB_TYPE_COLORS } from "@/lib/types";

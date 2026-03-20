@@ -10,12 +10,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@animated-color-icons/lucide-react": "^1.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5",
     "@tanstack/react-router": "^1",
     "class-variance-authority": "^0.7",
     "clsx": "^2",
-    "lucide-react": "^0.500",
     "radix-ui": "^1.4.3",
     "react": "^19",
     "react-dom": "^19",

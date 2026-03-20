@@ -4,10 +4,10 @@ description: >
   Use when reviewing changes, before committing, after a milestone, wanting a
   second opinion, checking security posture, auditing configuration, or running
   a pre-release audit. Pass a profile name to focus (e.g., "review security"),
-  or --all for all 6 profiles. NOT for creating or modifying code (just ask
+  or --all for all 7 profiles. NOT for creating or modifying code (just ask
   directly).
 user-invocable: true
-argument-hint: "[code|config|security|docs|architecture|testing|--all]"
+argument-hint: "[code|config|security|docs|architecture|testing|design|--all]"
 allowed-tools: Read, Glob, Grep, Bash(git diff *, git log *, git show *, git status *, go vet *, go test -cover *), mcp__plugin_alfred_alfred__knowledge, mcp__plugin_alfred_alfred__dossier, mcp__plugin_alfred_alfred__config-review
 context: fork
 ---
@@ -26,6 +26,7 @@ perspectives. All review is done inline — no sub-agents are spawned.
 - **[docs.md](checklists/docs.md)** — Documentation checklist
 - **[architecture.md](checklists/architecture.md)** — Architecture checklist
 - **[testing.md](checklists/testing.md)** — Testing checklist
+- **[design.md](checklists/design.md)** — Butler Design System checklist
 
 ## Phase 0: Parse Arguments & Select Profiles
 
@@ -53,6 +54,7 @@ Analyze changed files to select relevant profiles:
 | `*.md`, `README*`, doc comment changes | docs |
 | New packages, API surface changes | architecture |
 | `*_test.go`, `*.test.ts`, `test/` | testing |
+| `web/src/**/*.tsx`, `web/src/**/*.css` | design |
 
 Default: `code` + `security` (most common need).
 

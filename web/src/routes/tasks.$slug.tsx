@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar, CheckCircle2, CircleCheck, CircleDot } from "lucide-react";
+import { Calendar, CheckCircle2, CircleCheck, CircleDot } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { CoverageHeatmap } from "@/components/coverage-heatmap";
 import { ReviewPanel } from "@/components/review/ReviewPanel";

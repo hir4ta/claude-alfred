@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, CheckSquare, History, MessageSquare, Square, XCircle } from "lucide-react";
+import { CheckCircle, CheckSquare, History, MessageSquare, Square, XCircle } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { SpecHistory } from "./SpecHistory";
 import {

@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, Download, MessageSquareText, BookOpen } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, MessageSquareText, BookOpen } from "@animated-color-icons/lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -84,7 +84,7 @@ export function SectionCard({
 			)}
 		>
 			<div
-				className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-accent/30 transition-colors"
+				className="al-icon-wrapper flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-accent/30 transition-colors"
 				onClick={() => setOpen(!open)}
 			>
 				<div className="flex items-center gap-2 flex-1 min-w-0">

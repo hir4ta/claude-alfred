@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useParams } from "@tanstack/react-router";
-import { ChevronDown, CircleCheck, CircleDashed, CirclePause, CircleX } from "lucide-react";
+import { ChevronDown, CircleCheck, CircleDashed, CirclePause, CircleX } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { History } from "lucide-react";
+import { History } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { DiffViewer } from "@/components/diff-viewer";
 import { specContentQueryOptions, specHistoryQueryOptions, specVersionQueryOptions } from "@/lib/api";

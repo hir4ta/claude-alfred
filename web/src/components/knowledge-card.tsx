@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, BookOpen, Gavel, Lightbulb, Shield } from "lucide-react";
+import { Archive, ArchiveRestore, BookOpen, Gavel, Lightbulb, Shield } from "@animated-color-icons/lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToggleEnabledMutation } from "@/lib/api";
@@ -41,7 +41,7 @@ export function KnowledgeCard({
 	return (
 		<Card
 			className={cn(
-				"cursor-pointer border-stone-200 transition-[border-color,transform] duration-200 hover:border-stone-300 hover:-translate-y-0.5 dark:border-stone-700 dark:hover:border-stone-600",
+				"al-icon-wrapper cursor-pointer border-stone-200 transition-[border-color,transform] duration-200 hover:border-stone-300 hover:-translate-y-0.5 dark:border-stone-700 dark:hover:border-stone-600",
 				!entry.enabled && "opacity-40",
 			)}
 			onClick={onSelect}

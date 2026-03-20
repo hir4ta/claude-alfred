@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check } from "@animated-color-icons/lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CheckboxProps {

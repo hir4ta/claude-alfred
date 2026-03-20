@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@animated-color-icons/lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { EpicSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";

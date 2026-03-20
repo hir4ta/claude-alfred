@@ -126,7 +126,8 @@ node dist/cli.mjs version     # Show version
 
 ### Web Dashboard
 
-- @.claude/rules/frontend.md (Nova style, design system, component patterns, i18n)
+- @.claude/rules/frontend.md (component patterns, i18n)
+- @.claude/rules/butler-design.md (Butler Design System: animated icons, grain texture, spring animation, empty states, organic radius, neo-brutalist accents, color storytelling)
 - `alfred dashboard`: HTTP server + browser open (localhost:7575)
 - React SPA: Vite 8 + TanStack Router (file-based) + TanStack Query + shadcn/ui + Tailwind CSS v4
 - Build: `task build` (npm run build:web → tsdown bundle)

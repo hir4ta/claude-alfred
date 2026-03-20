@@ -13,17 +13,15 @@ paths:
 - shadcn/ui (Radix UI primitives) + Tailwind CSS v4
 - Biome for linting/formatting (not ESLint/Prettier)
 
-## Design System — Nova Style
+## Design System — Butler Design
 
-Components follow shadcn Nova style (compact, flat, dashboard-optimized):
+@.claude/rules/butler-design.md に定義。"執事の書斎" テーマ。
 
-- **No shadows** on cards, buttons, inputs, toggles, tabs. Only floating elements (tooltip, dialog overlay) use `shadow-lg`
-- **`rounded-lg`** for primary interactive elements (buttons, inputs, toggles, tabs). Cards use `rounded-xl`
+コンパクトさは維持:
 - **Compact heights**: button default `h-8`, input `h-8`, tabs list `h-8` (not h-9)
 - **Compact padding**: card `py-4 px-4`, dialog `p-4` (not py-6/px-6/p-6)
-- **`transition-colors`** instead of `transition-all` or `transition-[color,box-shadow]`
-- **Hover**: use `hover:-translate-y-0.5` + border color change for cards, never `hover:shadow-*`
 - **Progress bar**: `h-1` (thin)
+- **Hover**: `hover:-translate-y-0.5` + border color change for cards
 
 ## Colors
 
@@ -62,8 +60,9 @@ web/src/
 
 ## Rules
 
-- Do NOT add `shadow-xs`, `shadow-sm`, or `shadow-md` to any component
-- Do NOT use `transition-all` for hover effects — specify exact properties
+- Do NOT add `shadow-xs`, `shadow-sm`, or `shadow-md` to any component (CTA flat offset shadow のみ例外)
+- Do NOT use `transition-all` — motion ライブラリまたは具体的 CSS property 指定
+- Do NOT import from `lucide-react` — use `@animated-color-icons/lucide-react`
 - Do NOT add new shadcn components without checking if an existing one covers the use case
 - Do NOT hardcode English strings — use i18n keys with both EN and JA translations
 - Route files should not exceed ~400 lines. Extract components when growing
