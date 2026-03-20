@@ -1,5 +1,5 @@
 import { Archive, ArchiveRestore } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { SUB_TYPE_ICONS, SUB_TYPE_LABEL_KEYS } from "@/components/knowledge-card";
 import { Badge } from "@/components/ui/badge";
@@ -368,10 +368,8 @@ function ScrollFadeArea({ children }: { children: React.ReactNode }) {
 				ref={ref}
 				onScroll={handleScroll}
 				className="h-full overflow-y-auto px-6"
-				// biome-ignore lint/correctness/useExhaustiveDependencies: measure on mount
-				onLoad={handleScroll}
-			>
-				<div ref={(el) => { if (el) { const parent = el.parentElement; if (parent) { setHasOverflow(parent.scrollHeight > parent.clientHeight + 8); } } }}>
+				>
+				<div ref={(el) => { if (el) { requestAnimationFrame(() => { const parent = el.parentElement; if (parent) { setHasOverflow(parent.scrollHeight > parent.clientHeight + 8); } }); } }}>
 					{children}
 				</div>
 			</div>
