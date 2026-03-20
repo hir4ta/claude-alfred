@@ -10,6 +10,7 @@ import { tasksQueryOptions } from "@/lib/api";
 import type { TaskDetail, WaveInfo } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/tasks")({
 	component: TasksLayout,
@@ -145,6 +146,9 @@ function TaskAccordionCard({
 						{task.completed}/{task.total}
 					</span>
 				</div>
+				{task.started_at && (
+					<p className="text-[10px] text-muted-foreground/70">{formatDate(task.started_at)}</p>
+				)}
 			</div>
 
 			{/* Accordion toggle — Waves */}
