@@ -1,6 +1,6 @@
 import { syncTaskStatus } from "../../epic/index.js";
 import { clearReviewGate, readReviewGate, writeReviewGate } from "../../hooks/review-gate.js";
-import { readWaveProgress, writeWaveProgress } from "../../hooks/state.js";
+import { ensureStateDir, readWaveProgress, writeStateJSON, writeWaveProgress } from "../../hooks/state.js";
 import { appendAudit } from "../../spec/audit.js";
 import { updateTaskStatus } from "../../spec/status.js";
 import type { SpecSize, SpecType } from "../../spec/types.js";
@@ -18,6 +18,14 @@ import { validateSpec } from "../../spec/validate.js";
 import type { Store } from "../../store/index.js";
 import { truncate } from "../helpers.js";
 import { type DossierParams, errorResult, jsonResult } from "./helpers.js";
+
+function ensurePolishState(projectPath: string, slug: string): void {
+	ensureStateDir(projectPath);
+	writeStateJSON(projectPath, "polish.json", {
+		slug,
+		completed_at: new Date().toISOString(),
+	});
+}
 
 export function dossierComplete(projectPath: string, store: Store, params: DossierParams) {
 	let taskSlug = params.task_slug;
@@ -89,6 +97,13 @@ export function dossierComplete(projectPath: string, store: Store, params: Dossi
 
 		// design.md pattern auto-extraction removed (FR-6).
 		// Knowledge accumulation happens intentionally at Wave boundaries via ledger.
+
+		// Enable polish mode — allows edits without a new spec
+		try {
+			ensurePolishState(projectPath, taskSlug);
+		} catch {
+			/* best-effort */
+		}
 
 		const result: Record<string, unknown> = {
 			task_slug: taskSlug,

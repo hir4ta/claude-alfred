@@ -8,6 +8,7 @@ import {
 	isSpecFilePath,
 	tryReadActiveSpec,
 } from "./spec-guard.js";
+import { readStateJSON } from "./state.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
 
@@ -64,8 +65,16 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// No active spec → let the prompt hook (LLM judge) decide if a spec is needed.
-	if (!spec) return;
+	// No active spec → check for polish mode (recently completed spec allows edits)
+	if (!spec) {
+		const polish = readStateJSON<{ slug?: string }>(ev.cwd, "polish.json", {});
+		if (polish.slug) {
+			allowTool(`Polish mode (post-complete '${polish.slug}')`);
+			return;
+		}
+		// No polish mode → let the prompt hook (LLM judge) decide if a spec is needed.
+		return;
+	}
 
 	// M/L/XL with unapproved review → deny.
 	if (["M", "L", "XL"].includes(spec.size) && spec.reviewStatus !== "approved") {

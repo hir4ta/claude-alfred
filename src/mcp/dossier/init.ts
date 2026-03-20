@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { Embedder } from "../../embedder/index.js";
 import { writeReviewGate } from "../../hooks/review-gate.js";
+import { stateDir } from "../../hooks/state.js";
 import { appendAudit } from "../../spec/audit.js";
 import { initSpec } from "../../spec/init.js";
 import type { SpecSize, SpecType } from "../../spec/types.js";
@@ -39,6 +40,13 @@ export async function dossierInit(
 		detail: params.description,
 		user: "mcp",
 	});
+
+	// Clear polish mode — new spec starts, polish period ends
+	try {
+		unlinkSync(join(stateDir(projectPath), "polish.json"));
+	} catch {
+		/* file may not exist */
+	}
 
 	const result: Record<string, unknown> = {
 		task_slug: params.task_slug,
