@@ -123,7 +123,7 @@ Output ONLY the JSON verdict format. No markdown wrapping.
 
 ---
 
-## Code Review (Phase 4)
+## Code Review (Phase 4 — Wave Boundary)
 
 ### Agent A: Correctness + Testability
 

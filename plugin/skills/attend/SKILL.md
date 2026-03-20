@@ -128,11 +128,10 @@ This is MANDATORY — PreToolUse blocks source Edit/Write until gate is cleared.
 Read task breakdown from tasks.md waves.
 
 **Per implementation task:**
-1. Record: `phase_start_commit` = `git rev-parse HEAD`
-2. Read the next unchecked task from tasks.md
-3. Implement using Edit/Write/Bash — work directly
-4. **Immediately update tasks.md**: mark this task as `[x]` done
-5. Proceed to Phase 4 (per-task review)
+1. Read the next unchecked task from tasks.md
+2. Implement using Edit/Write/Bash — work directly
+3. **Immediately update tasks.md**: mark this task as `[x]` done
+4. Continue to next task in the same Wave, or proceed to Phase 4 (Wave boundary) if all tasks in the Wave are done
 
 **CRITICAL**: Update tasks.md after EACH task, not all at once.
 This ensures the dashboard shows real-time progress.

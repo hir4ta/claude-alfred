@@ -153,7 +153,7 @@ node dist/cli.mjs version     # Show version
 ### Deliberation Style
 
 - **Spec review**: brief/attend spawn 3 parallel review agents per spec file (Architect, Devil's Advocate, Researcher)
-- **Code review**: attend spawns `alfred:code-reviewer` agent per implementation phase (3 parallel sub-reviewers: security, logic, design)
+- **Code review**: attend spawns `alfred:code-reviewer` agent per Wave boundary in foreground (3 parallel sub-reviewers: security, logic, design)
 - **Other skills**: inspect/salon/mend/survey use inline multi-perspective deliberation (no sub-agents)
 - **Approval gate**: user reviews in `alfred dashboard`, not text-based
 - tasks.md updated after each task completion (dashboard real-time progress)

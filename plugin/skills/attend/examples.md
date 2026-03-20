@@ -74,7 +74,7 @@ Output:
 ## BLOCKED example (security)
 
 ```
-Phase 4: Per-Phase Review (iteration 2)
+Phase 4: Wave Boundary Review (iteration 2)
   → Agent B: {"severity": "critical", "category": "security", "file": "cmd/alfred/config.go", "line": 42, "description": "API key stored in plain text"}
   → Security Critical → BLOCKED
 
