@@ -66,7 +66,7 @@ paths:
 - Shared spec-guard utilities: `src/hooks/spec-guard.ts` — tryReadActiveSpec, isSpecFilePath, countUncheckedNextSteps, hasUncheckedSelfReview, allowTool, denyTool, blockStop
 - Spec-first guard: delegated to prompt-type hook handler (see PreToolUse section). Previous intent-guard mechanism (last-intent.json) removed
 - Validation engine: `src/spec/validate.ts` — 21-check validation for all spec sizes
-- Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (7 spec files + 3 specialists per file + approval gate), attend (spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → knowledge)
+- Multi-agent skills: inspect (6 profiles), salon (3 specialists + synthesis), brief (requirements+design agent review loop + inline check for others + approval gate), attend (spec→approve→implement→review→commit orchestrator), tdd (red→green→refactor), mend (reproduce→analyze→fix→verify), survey (code→spec reverse engineering), harvest (PR comment → knowledge)
 - brief/attend spec generation order: research → requirements → design → tasks → test-specs → session (decisions saved via ledger directly, not as spec file)
 
 ## Misc

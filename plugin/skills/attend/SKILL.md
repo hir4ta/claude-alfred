@@ -59,31 +59,30 @@ File generation order: research → requirements → design → tasks → test-s
 - Call `knowledge` tool for relevant patterns and best practices
 - Read key source files relevant to the task
 - Write research.md: existing code analysis, gap analysis, implementation options, risks
-- **Review**: Spawn 3 agents → apply fixes → save
+- **Quick check** (inline): scan for critical gaps, placeholder content
 - **Update tasks.md**: mark research as done
 
 ### 1b. requirements.md
 - Write requirements in **EARS notation** (FR-N IDs) with confidence + source scores
 - Include acceptance criteria in Given/When/Then format (AC-N.N)
 - Include non-functional requirements (NFR-N) with measurable targets
-- **Review**: Spawn 3 agents:
-  - Architect: EARS patterns correct? Measurable criteria? Missing constraints?
-  - Devil's Advocate: Scope too broad? Missing edge cases? Unrealistic?
-  - Researcher: Prior art or codebase patterns?
-- Collect findings → apply fixes → save
+- **Review + fix loop** (key review target):
+  - S/D: self-review inline
+  - M: 1 agent (Architect) → fix Critical/High → re-review until clean (max 3 rounds)
+  - L/XL: 3 agents (Architect, Devil's Advocate, Researcher) → fix → re-review until clean
 - **Update tasks.md**: mark requirements as done
 
 ### 1c. design.md
 - Write design with architecture, **interfaces**, **data models** (SQL), **API contracts**
 - Include **Requirements Traceability Matrix** (Req ID → Component → Task ID → Test ID)
-- **Review**: Spawn 3 agents → apply fixes → save
+- **Review + fix loop** (key review target): same rules as requirements.md
 - **Update tasks.md**: mark design as done
 
 ### 1d. tasks.md
 - Write task decomposition in **Waves** (Foundation → Core → Edge Cases → Polish)
 - Each task: T-N.N [S/M/L/XL] (P) description with `_Requirements: FR-N | Depends: T-N.N | Files: path_`
 - Include summary, size legend, dependency graph
-- **Review**: Spawn 3 agents → apply fixes → save
+- **Quick check** (inline): verify dependencies, FR coverage, wave ordering
 - **Update tasks.md**: mark tasks as done
 
 ### 1e. test-specs.md
@@ -91,7 +90,7 @@ File generation order: research → requirements → design → tasks → test-s
 - Write test cases in **Gherkin** with `<!-- source: FR-N -->` annotations
 - Map EARS: WHILE→Given, WHEN→When, SHALL→Then
 - Include edge case matrix, boundary values, test data, security tests
-- **Review**: Spawn 3 agents → apply fixes → save
+- **Quick check** (inline): verify FR coverage, Gherkin syntax
 - **Update tasks.md**: mark test-specs as done
 
 ### 1f. Decisions → ledger
@@ -101,7 +100,7 @@ File generation order: research → requirements → design → tasks → test-s
 ### 1g. Clear spec-review gate
 After all spec files reviewed and fixed, clear the review gate:
 ```
-dossier action=gate sub_action=clear reason="3-agent review completed for all spec files. Findings: [summarize key findings and fixes]"
+dossier action=gate sub_action=clear reason="requirements + design review loop completed. Findings: [summarize]"
 ```
 This is MANDATORY — PreToolUse blocks source Edit/Write until gate is cleared.
 

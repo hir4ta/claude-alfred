@@ -19,7 +19,7 @@ parallel multi-agent review after each file.
 
 These thought patterns signal you are about to violate this skill's rules:
 
-- "This spec file doesn't need 3 reviewers" → All spec files get 3 parallel agents. Skipping reviewers leaves blind spots.
+- "This spec file doesn't need reviewers" → L/XL specs get 3 parallel agents, M gets 1. Only S/D may skip. Check the size before deciding.
 - "I'll skip research.md since the answer is obvious" → Obvious answers are often wrong. Research validates assumptions.
 - "Low confidence is fine, I'll verify later" → Ungrounded specs propagate errors downstream. Flag and resolve now.
 - "I can write all files at once then review" → File-by-file review catches cross-file inconsistencies early.
@@ -36,10 +36,33 @@ These thought patterns signal you are about to violate this skill's rules:
 | tasks.md | Wave-based task decomposition + parallel markers | T-N.N |
 
 ## Core Principle
-Each spec file is written, then reviewed by 3 parallel agents (Architect, Devil's
-Advocate, Researcher) before moving to the next. Self-review is mandatory for ALL
-sizes (including S/D). After all files are complete, M/L/XL specs require user
-approval via `alfred dashboard`. S/D specs proceed directly after self-review.
+
+### Review targets
+Only **requirements.md** and **design.md** get agent review. These two files
+define the contract — errors here propagate everywhere. Other files get a quick
+inline sanity check for critical issues only (no agents).
+
+### Review depth by size
+
+| Size | requirements.md + design.md | Other files |
+|------|---------------------------|-------------|
+| S/D | Inline self-review (no agents) | Inline self-review |
+| M | 1 agent (Architect) per file | Quick inline check |
+| L/XL | 3 parallel agents per file | Quick inline check |
+
+### Review loop (requirements.md + design.md only)
+Agent review follows a **fix-and-re-review loop**:
+1. Write file → agent review → collect findings
+2. Fix Critical/High findings → re-submit to agents
+3. Repeat until **0 Critical + 0 High** findings remain
+4. Low/Medium findings: note them but proceed
+
+Max 3 iterations to prevent infinite loops. If Critical/High persist after 3
+rounds, flag to user and proceed.
+
+### Approval
+After all files are complete, M/L/XL specs require user approval via
+`alfred dashboard`. S/D specs proceed directly after self-review.
 
 This skill implements the spec creation phase of the **invariant Spec-Driven
 Development Flow** (see CLAUDE.md): Spec > Wave > Task hierarchy.
@@ -75,13 +98,7 @@ Development Flow** (see CLAUDE.md): Spec > Wave > Task hierarchy.
 - Risks & unknowns
 - Confidence scores via `<!-- confidence: N | source: TYPE -->`
 
-**Review** (3 parallel agents):
-Spawn 3 agents simultaneously via Agent tool. Each reads research.md and returns findings.
-- **Agent 1 — Architect**: Is the existing code analysis complete? Missing integration points?
-- **Agent 2 — Devil's Advocate**: Are risks understated? Hidden unknowns? Bias toward one option?
-- **Agent 3 — Researcher**: Existing patterns in codebase to reuse? Libraries available?
-
-**Fix**: Collect findings from all 3 agents. Apply fixes, rewrite research.md if needed.
+**Quick check** (inline, no agents): Scan for critical gaps — missing code analysis, overlooked risks, placeholder content. Fix and move on.
 
 ### 5. [REQUIREMENTS] Write and review requirements.md
 
@@ -98,10 +115,13 @@ Spawn 3 agents simultaneously via Agent tool. Each reads research.md and returns
 - Non-functional requirements (NFR-N) with measurable targets
 - Confidence scores with source: `<!-- confidence: N | source: user/code/inference/assumption -->`
 
-**Review** (3 parallel agents):
-- **Agent 1 — Architect**: Are EARS patterns correct? Measurable success criteria? Missing constraints?
-- **Agent 2 — Devil's Advocate**: Scope too broad? Missing edge cases? Unrealistic criteria?
-- **Agent 3 — Researcher**: Prior art? Existing patterns that inform requirements?
+**Review + fix loop** (see Core Principle — this is a key review target):
+- **S/D**: Self-review inline
+- **M**: Spawn 1 agent (Architect): EARS patterns correct? Measurable criteria? Missing constraints? → fix Critical/High → re-review until clean
+- **L/XL**: Spawn 3 agents → fix Critical/High → re-review until clean:
+  - **Architect**: EARS patterns correct? Measurable criteria? Missing constraints?
+  - **Devil's Advocate**: Scope too broad? Missing edge cases? Unrealistic criteria?
+  - **Researcher**: Prior art? Existing patterns that inform requirements?
 
 **Fix**: Apply fixes, rewrite if needed.
 
@@ -115,12 +135,13 @@ Spawn 3 agents simultaneously via Agent tool. Each reads research.md and returns
 - Migration strategy (if applicable)
 - Tech decisions quick reference (save via `ledger action=save sub_type=decision`)
 
-**Review** (3 parallel agents):
-- **Agent 1 — Architect**: Sound architecture? Clear interfaces? Missing components?
-- **Agent 2 — Devil's Advocate**: What could go wrong? Hidden complexity? Underestimated effort?
-- **Agent 3 — Researcher**: Codebase patterns to reuse? Consistency with existing design?
-
-**Fix**: Apply fixes, rewrite if needed.
+**Review + fix loop** (see Core Principle — this is a key review target):
+- **S/D**: Self-review inline
+- **M**: Spawn 1 agent (Architect): Sound architecture? Clear interfaces? → fix Critical/High → re-review until clean
+- **L/XL**: Spawn 3 agents → fix Critical/High → re-review until clean:
+  - **Architect**: Sound architecture? Clear interfaces? Missing components?
+  - **Devil's Advocate**: What could go wrong? Hidden complexity? Underestimated effort?
+  - **Researcher**: Codebase patterns to reuse? Consistency with existing design?
 
 ### 7. [TASKS] Write and review tasks.md
 
@@ -132,12 +153,7 @@ Spawn 3 agents simultaneously via Agent tool. Each reads research.md and returns
 - Size legend (S/M/L/XL definitions)
 - Dependency graph (ASCII)
 
-**Review** (3 parallel agents):
-- **Agent 1 — Architect**: Is wave ordering correct? Dependencies valid? Effort estimates reasonable?
-- **Agent 2 — Devil's Advocate**: Missing tasks? Underestimated complexity? Parallelism conflicts?
-- **Agent 3 — Researcher**: Similar tasks done before? Patterns to reuse?
-
-**Fix**: Apply fixes, rewrite if needed.
+**Quick check** (inline, no agents): Verify wave ordering, dependency graph validity, all FRs covered. Fix critical issues only.
 
 ### 8. [TEST-SPECS] Write and review test-specs.md
 
@@ -150,12 +166,7 @@ Spawn 3 agents simultaneously via Agent tool. Each reads research.md and returns
 - **Test data & fixtures** (if applicable)
 - **Security test cases** (if applicable)
 
-**Review** (3 parallel agents):
-- **Agent 1 — Architect**: Coverage complete? All FRs have tests? Happy + error paths?
-- **Agent 2 — Devil's Advocate**: Missing edge cases? Boundary values? Security scenarios?
-- **Agent 3 — Researcher**: Existing test patterns in codebase? Test utilities available?
-
-**Fix**: Apply fixes, rewrite if needed.
+**Quick check** (inline, no agents): Verify all FRs have test coverage, Gherkin syntax valid, no orphan tests. Fix critical issues only.
 
 ### 9. [DECISIONS] Save decisions to knowledge
 
@@ -165,12 +176,7 @@ Save all decisions directly via `ledger action=save sub_type=decision`:
 - Include decisions from research.md option selection
 - Unresolved conflicts flagged for user decision
 
-**Review** (3 parallel agents):
-- **Agent 1 — Architect**: Consistent with design? Missing decisions?
-- **Agent 2 — Devil's Advocate**: Faulty assumptions? Reversibility correctly assessed?
-- **Agent 3 — Researcher**: Aligned with established patterns? Historical precedent?
-
-**Fix**: Apply fixes, rewrite if needed.
+**Quick check** (inline, no agents): Verify decisions are consistent with design, alternatives recorded.
 
 ### 10. Clear spec-review gate
 After all spec files reviewed and fixed, clear the review gate:
@@ -184,7 +190,7 @@ This is MANDATORY — PreToolUse blocks source Edit/Write until gate is cleared.
 ```
 Spec created for '{task-slug}'.
 
-Deliberation: 3 perspectives applied per file (Architect, Devil's Advocate, Researcher)
+Review: requirements.md + design.md (agent loop until 0 Critical/High)
 - research.md ✓ (reviewed)
 - requirements.md ✓ (reviewed)
 - design.md ✓ (reviewed)
@@ -227,7 +233,7 @@ If an active spec already exists:
 
 ## Guardrails
 
-- Do NOT skip per-file review — each file MUST be reviewed by parallel agents before moving to the next
+- Do NOT skip requirements.md + design.md review — these get agent review + fix loop (Critical/High must be 0 before proceeding)
 - Do NOT skip decision recording — save ALL deliberation outcomes via `ledger save sub_type=decision`
 - Do NOT create tasks without success criteria
 - ALWAYS use EARS notation for requirements (WHEN/WHILE/WHERE/IF-THEN/SHALL keywords)
