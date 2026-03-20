@@ -1,5 +1,5 @@
-import { Check, ChevronDown, MessageSquareText, BookOpen } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, ChevronDown, Copy, MessageSquareText, BookOpen } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -178,15 +178,18 @@ export function SectionCard({
 										const codeStr = String(children).replace(/\n$/, "");
 										if (match) {
 											return (
-												<SyntaxHighlighter
-													style={oneDark}
-													language={match[1]}
-													PreTag="div"
-													customStyle={{ fontSize: "0.75rem", borderRadius: "0.375rem", margin: 0 }}
-													wrapLongLines
-												>
-													{codeStr}
-												</SyntaxHighlighter>
+												<div className="relative group">
+													<CopyButton text={codeStr} />
+													<SyntaxHighlighter
+														style={oneDark}
+														language={match[1]}
+														PreTag="div"
+														customStyle={{ fontSize: "0.75rem", borderRadius: "0.375rem", margin: 0 }}
+														wrapLongLines
+													>
+														{codeStr}
+													</SyntaxHighlighter>
+												</div>
 											);
 										}
 										return (
@@ -204,5 +207,25 @@ export function SectionCard({
 				</div>
 			)}
 		</div>
+	);
+}
+
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+	const handleCopy = useCallback(() => {
+		navigator.clipboard.writeText(text).then(() => {
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		}).catch(() => {});
+	}, [text]);
+
+	return (
+		<button
+			type="button"
+			onClick={handleCopy}
+			className="absolute top-2 right-2 z-10 rounded-md p-1 opacity-0 group-hover:opacity-100 transition-opacity bg-muted/80 hover:bg-muted text-muted-foreground"
+		>
+			{copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+		</button>
 	);
 }

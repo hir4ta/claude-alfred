@@ -142,6 +142,24 @@ export const translations = {
 	"action.changesRequested": { en: "Changes requested", ja: "変更依頼あり" },
 	"action.implementing": { en: "Implementing", ja: "実装中" },
 	"action.specCreation": { en: "Creating spec", ja: "スペック作成中" },
+
+	// Search
+	"search.placeholder": { en: "Search...", ja: "検索..." },
+	"search.noResults": { en: "No results found", ja: "結果が見つかりません" },
+
+	// Filters
+	"filter.all": { en: "All", ja: "全て" },
+	"filter.active": { en: "Active", ja: "アクティブ" },
+	"filter.review": { en: "Review", ja: "レビュー" },
+	"filter.done": { en: "Done", ja: "完了" },
+
+	// Knowledge tags & promotion
+	"knowledge.tags": { en: "Tags", ja: "タグ" },
+	"knowledge.promote": { en: "Promote to Rule", ja: "ルールに昇格" },
+	"knowledge.promoteTitle": { en: "Promote to Rule?", ja: "ルールに昇格しますか？" },
+	"knowledge.promoteDescription": { en: "This pattern will be promoted to a rule.", ja: "このパターンをルールに昇格します。" },
+	"knowledge.promoted": { en: "Promoted", ja: "昇格済" },
+	"knowledge.candidates": { en: "Promotion Candidates", ja: "昇格候補" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

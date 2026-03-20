@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
 import { Activity, BookOpen, Globe, LayoutDashboard, ListChecks } from "lucide-react";
+import { GlobalSearch } from "@/components/global-search";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
@@ -81,6 +82,7 @@ function RootLayout() {
 							})}
 						</nav>
 						<div className="ml-auto flex items-center gap-3">
+							<GlobalSearch />
 							<LanguageToggle />
 							<VersionBadge />
 						</div>

@@ -28,15 +28,43 @@ function TasksLayout() {
 	const allTasks = data?.tasks ?? [];
 	const { slug: selectedSlug } = useParams({ strict: false }) as { slug?: string };
 	const [showCompleted, setShowCompleted] = useState(false);
-
+	const [statusFilter, setStatusFilter] = useState<string>("all");
+	const [sizeFilter, setSizeFilter] = useState<Set<string>>(new Set());
 	const terminalStatuses = new Set(["completed", "done", "cancelled"]);
 	const activeTasks = allTasks.filter((t) => !terminalStatuses.has(t.status ?? ""));
 	const completedTasks = allTasks.filter((t) => terminalStatuses.has(t.status ?? ""));
-	const tasks = showCompleted ? allTasks : activeTasks;
+	const baseTasks = showCompleted ? allTasks : activeTasks;
+	const tasks = baseTasks.filter((task) => {
+		if (statusFilter === "active" && terminalStatuses.has(task.status ?? "")) return false;
+		if (statusFilter === "review" && task.review_status !== "pending") return false;
+		if (statusFilter === "done" && !terminalStatuses.has(task.status ?? "")) return false;
+		if (sizeFilter.size > 0 && !sizeFilter.has(task.size ?? "")) return false;
+		return true;
+	});
+	const toggleSize = (size: string) => setSizeFilter((prev) => { const n = new Set(prev); if (n.has(size)) n.delete(size); else n.add(size); return n; });
 
 	return (
 		<div className="flex gap-6">
 			<div className="w-72 shrink-0 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)] px-1 pt-1">
+				{/* Status + size filter */}
+				<div className="flex flex-wrap gap-1 pb-1">
+					{(["all", "active", "review", "done"] as const).map((s) => (
+						<button key={s} type="button" onClick={() => setStatusFilter(s)}
+							className={cn("rounded-lg px-2 py-0.5 text-[10px] font-medium transition-colors border",
+								statusFilter === s ? "bg-accent text-foreground border-border" : "text-muted-foreground border-transparent hover:bg-accent/50"
+							)}
+						>{t(`filter.${s}` as never)}</button>
+					))}
+				</div>
+				<div className="flex flex-wrap gap-1 pb-1">
+					{["S", "M", "L", "XL", "D"].map((s) => (
+						<button key={s} type="button" onClick={() => toggleSize(s)}
+							className={cn("rounded-full px-1.5 py-0 text-[10px] font-medium transition-colors border",
+								sizeFilter.has(s) ? "bg-accent text-foreground border-border" : "text-muted-foreground border-transparent hover:bg-accent/50"
+							)}
+						>{s}</button>
+					))}
+				</div>
 				{tasks.map((task, i) => (
 					<TaskAccordionCard
 						key={task.slug}
