@@ -14,8 +14,8 @@ const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
 /**
  * PreToolUse handler: block Edit/Write on review-gate or unapproved spec.
  * Enforcement order: .alfred/ exempt → malformed check → review-gate → approval gate.
- * Only uses allowTool() for definitively exempt edits (.alfred/ files, deferred/cancelled).
- * For all other cases, returns silently so the prompt hook (LLM judge) can evaluate.
+ * Uses allowTool() for: .alfred/ files, deferred/cancelled specs, and active specs with cleared gates.
+ * Only falls through to prompt hook (LLM judge) when NO active spec exists.
  */
 export async function preToolUse(ev: HookEvent): Promise<void> {
 	const toolName = ev.tool_name ?? "";
@@ -78,6 +78,6 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// Active spec + all gates passed → silent return.
-	// The prompt hook (LLM judge) will see the spec context and allow quickly.
+	// Active spec + all gates passed → allow explicitly to skip prompt hook.
+	allowTool(`Active spec '${spec.slug}' (${spec.size}), gates clear`);
 }
