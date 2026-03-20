@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, MessageSquare, XCircle } from "lucide-react";
+import { CheckCircle, History, MessageSquare, XCircle } from "lucide-react";
 import { useState } from "react";
+import { SpecHistory } from "./SpecHistory";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -37,6 +38,7 @@ export function ReviewPanel({ slug, reviewStatus, specContent, currentFile }: Re
 	const [comments, setComments] = useState<ReviewComment[]>([]);
 	const [newComment, setNewComment] = useState("");
 	const [selectedLine, setSelectedLine] = useState<number | null>(null);
+	const [activeTab, setActiveTab] = useState<"review" | "history">("review");
 
 	const reviews = historyData?.reviews ?? [];
 	const latestReview = reviews[reviews.length - 1];
@@ -72,7 +74,12 @@ export function ReviewPanel({ slug, reviewStatus, specContent, currentFile }: Re
 		<div className="space-y-4">
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-2">
-					<h3 className="text-sm font-medium">Review</h3>
+					<button type="button" onClick={() => setActiveTab("review")}
+						className={cn("text-sm font-medium px-2 py-0.5 rounded-lg transition-colors", activeTab === "review" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+					>Review</button>
+					<button type="button" onClick={() => setActiveTab("history")}
+						className={cn("text-sm font-medium px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1", activeTab === "history" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+					><History className="size-3.5" />{t("review.history")}</button>
 					<ReviewStatusBadge status={reviewStatus} />
 				</div>
 				{reviewStatus === "pending" && (
@@ -113,6 +120,11 @@ export function ReviewPanel({ slug, reviewStatus, specContent, currentFile }: Re
 				)}
 			</div>
 
+			{activeTab === "history" && (
+				<SpecHistory slug={slug} file={currentFile} />
+			)}
+
+			{activeTab === "review" && <>
 			{/* Line-numbered spec content */}
 			<Card>
 				<ScrollArea className="h-[400px]">
@@ -193,6 +205,7 @@ export function ReviewPanel({ slug, reviewStatus, specContent, currentFile }: Re
 
 			{/* Review history */}
 			{reviews.length > 0 && <ReviewHistory reviews={reviews} />}
+			</>}
 		</div>
 	);
 }

@@ -160,6 +160,18 @@ export const translations = {
 	"knowledge.promoteDescription": { en: "This pattern will be promoted to a rule.", ja: "このパターンをルールに昇格します。" },
 	"knowledge.promoted": { en: "Promoted", ja: "昇格済" },
 	"knowledge.candidates": { en: "Promotion Candidates", ja: "昇格候補" },
+
+	// Spec history
+	"review.noHistory": { en: "No version history", ja: "バージョン履歴なし" },
+	"review.oldVersion": { en: "Old", ja: "旧" },
+	"review.newVersion": { en: "New", ja: "新" },
+	"review.currentVersion": { en: "Current", ja: "現在" },
+	"review.loadingVersions": { en: "Loading versions...", ja: "バージョン読み込み中..." },
+
+	// Graph controls
+	"knowledge.zoomIn": { en: "Zoom in", ja: "拡大" },
+	"knowledge.zoomOut": { en: "Zoom out", ja: "縮小" },
+	"knowledge.zoomReset": { en: "Fit all", ja: "全体表示" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

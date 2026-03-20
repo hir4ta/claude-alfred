@@ -151,8 +151,8 @@ function TaskDetailPage() {
 				{specs.map((spec, i) => {
 					const content = specContents[i]?.data?.content ?? "";
 					if (!content) return null;
-					const showApprove = isActive && isPending && spec.file !== "session.md";
-					const canReview = isActive && isPending && spec.file !== "session.md";
+					const showApprove = isActive && needsReview && spec.file !== "session.md";
+					const canReview = isActive && needsReview && spec.file !== "session.md";
 					const isReviewMode = canReview && reviewModeFiles.has(spec.file);
 					return (
 						<SectionCard

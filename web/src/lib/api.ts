@@ -58,6 +58,26 @@ export const specContentQueryOptions = (slug: string, file: string) =>
 		enabled: !!slug && !!file,
 	});
 
+export const specHistoryQueryOptions = (slug: string, file: string) =>
+	queryOptions({
+		queryKey: ["spec-history", slug, file],
+		queryFn: () => fetchJSON<{ versions: { timestamp: string; size: number }[]; count: number }>(
+			taskURL(slug, "specs", file, "history"),
+		),
+		staleTime: REF_STALE,
+		enabled: !!slug && !!file,
+	});
+
+export const specVersionQueryOptions = (slug: string, file: string, version: string) =>
+	queryOptions({
+		queryKey: ["spec-version", slug, file, version],
+		queryFn: () => fetchJSON<{ content: string; version: string }>(
+			taskURL(slug, "specs", file, "versions", version),
+		),
+		staleTime: REF_STALE,
+		enabled: !!slug && !!file && !!version,
+	});
+
 export const knowledgeQueryOptions = (limit = 50) =>
 	queryOptions({
 		queryKey: ["knowledge", limit],
