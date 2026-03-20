@@ -38,7 +38,7 @@ const SIZE_LABEL_KEYS: Record<string, TranslationKey> = {
 };
 
 function TaskDetailPage() {
-	const { t } = useI18n();
+	const { t, locale } = useI18n();
 	const { slug } = Route.useParams();
 	const queryClient = useQueryClient();
 	const { data: tasksData } = useQuery(tasksQueryOptions());
