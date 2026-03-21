@@ -488,27 +488,38 @@ export function createApp(
 
 	// --- Activity API (T-2.3: cross-project) ---
 
-	app.get("/api/activity", (c) => {
+	app.get("/api/activity", async (c) => {
+		const { queryAuditLog } = await import("../store/audit.js");
 		const filterProjectId = getProjectFilter(c.req.query("project"));
-		const entries: Array<unknown & { _project_name?: string }> = [];
+		const actor = c.req.query("actor") || undefined;
+		const since = c.req.query("since") || undefined;
+		const limit = Math.min(parseInt(c.req.query("limit") ?? "100", 10) || 100, 500);
+		const offset = parseInt(c.req.query("offset") ?? "0", 10) || 0;
 
-		if (filterProjectId) {
-			const filterProj = getProject(store, filterProjectId);
-			if (filterProj && existsSync(filterProj.path)) {
-				readAuditEntries(join(filterProj.path, ".alfred", "audit.jsonl"), entries, filterProj.name);
-			}
-		} else {
-			// Cross-project: read from all active projects
-			const activeProjects = listActiveProjects(store);
-			for (const p of activeProjects) {
-				if (!existsSync(p.path)) continue;
-				readAuditEntries(join(p.path, ".alfred", "audit.jsonl"), entries, p.name);
-			}
-		}
+		const result = queryAuditLog(store, {
+			projectId: filterProjectId || undefined,
+			actor,
+			since,
+			limit,
+			offset,
+		});
 
-		// Sort by timestamp descending, limit 100
-		entries.sort((a: any, b: any) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
-		return c.json({ entries: entries.slice(0, 100) });
+		const entries = result.entries.map((e) => {
+			const proj = getProject(store, e.projectId);
+			return { ...e, project_name: proj?.name ?? "" };
+		});
+
+		return c.json({ entries, total: result.total });
+	});
+
+	app.get("/api/activity/analytics", async (c) => {
+		const { getKnowledgeHitRanking, getSpecCompletionStats } = await import("../store/audit.js");
+		const filterProjectId = getProjectFilter(c.req.query("project")) || undefined;
+
+		const hitRanking = getKnowledgeHitRanking(store, { projectId: filterProjectId });
+		const completionStats = getSpecCompletionStats(store, { projectId: filterProjectId });
+
+		return c.json({ hitRanking, completionStats });
 	});
 
 	app.get("/api/epics", (c) => {

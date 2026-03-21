@@ -121,6 +121,37 @@ export const ActivityResponseSchema = z.object({
 	entries: z.array(ActivityEntrySchema),
 });
 
+export const AuditLogEntrySchema = z.object({
+	id: z.number(),
+	projectId: z.string(),
+	project_name: z.string().optional(),
+	timestamp: z.string(),
+	event: z.string(),
+	actor: z.string(),
+	slug: z.string(),
+	action: z.string(),
+	detail: z.string(),
+});
+
+export const AuditLogResponseSchema = z.object({
+	entries: z.array(AuditLogEntrySchema),
+	total: z.number(),
+});
+
+export const AnalyticsResponseSchema = z.object({
+	hitRanking: z.array(z.object({
+		id: z.number(),
+		title: z.string(),
+		hitCount: z.number(),
+		projectName: z.string(),
+	})),
+	completionStats: z.array(z.object({
+		size: z.string(),
+		avgDays: z.number(),
+		count: z.number(),
+	})),
+});
+
 // --- Epics ---
 
 export const EpicTaskSummarySchema = z.object({
