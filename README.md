@@ -140,7 +140,7 @@ Knowledge lives as JSON files you can commit, review in PRs, and share with your
   rules/        # "Always do X. Priority: P0. Because: Y."
 ```
 
-Strict schemas ([mneme](https://github.com/hir4ta/mneme)-compatible). Patterns auto-promote to rules after 15+ search hits. Contradictions detected automatically.
+Patterns auto-promote to rules after 15+ search hits. Contradictions detected automatically.
 
 Search pipeline: Voyage AI vectors with reranking > FTS5 with fuzzy matching > keyword fallback. "auth" finds "authentication", "login", and more.
 
