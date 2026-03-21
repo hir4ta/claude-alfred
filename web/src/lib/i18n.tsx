@@ -220,6 +220,24 @@ export const translations = {
 	"empty.noResults": { en: "I've searched thoroughly, sir. Nothing matches your inquiry.", ja: "くまなく探しましたが、該当するものが見つかりません。" },
 	"empty.noActivity": { en: "All quiet on the front, sir. No recent activity to report.", ja: "静かな時でございます。直近の活動はございません。" },
 	"empty.error": { en: "My apologies, sir. Something has gone awry.", ja: "申し訳ございません。不具合が生じております。" },
+
+	// Team sharing (v0.5)
+	"team.author": { en: "Author", ja: "作成者" },
+	"team.owner": { en: "Owner", ja: "担当者" },
+	"team.reviewer": { en: "Reviewer", ja: "レビュアー" },
+	"team.allOwners": { en: "All Owners", ja: "全担当者" },
+	"team.allActors": { en: "All Members", ja: "全メンバー" },
+	"team.filterByOwner": { en: "Filter by owner", ja: "担当者で絞り込み" },
+	"team.filterByActor": { en: "Filter by member", ja: "メンバーで絞り込み" },
+	"team.conflictAlerts": { en: "Conflict Alerts", ja: "矛盾アラート" },
+	"team.noConflicts": { en: "No contradictions detected at this time, sir.", ja: "現在、矛盾は検出されておりません。" },
+	"team.similarSpecs": { en: "Similar Specs", ja: "類似スペック" },
+	"team.noSimilarSpecs": { en: "No similar specifications found, sir.", ja: "類似する仕様は見つかりませんでした。" },
+	"team.activityAnalytics": { en: "Analytics", ja: "分析" },
+	"team.hitRanking": { en: "Most Accessed Knowledge", ja: "アクセス上位ナレッジ" },
+	"team.completionTime": { en: "Completion Time by Size", ja: "サイズ別完了時間" },
+	"team.knowledgeExport": { en: "Export", ja: "エクスポート" },
+	"team.knowledgeImport": { en: "Import", ja: "インポート" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;
