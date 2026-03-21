@@ -129,12 +129,12 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// M/L/XL with unapproved review → deny.
+	// M/L with unapproved review → deny.
 	if (["M", "L"].includes(spec.size) && spec.reviewStatus !== "approved") {
 		const reason = [
 			`Spec '${spec.slug}' (size ${spec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,
 			'- "I\'ll get the review after implementation" → The Stop hook will block you from finishing anyway',
-			'- "This edit is trivial" → All M/L/XL edits are gated. Use dossier init size=S for trivial changes',
+			'- "This edit is trivial" → All M/L edits are gated. Use dossier init size=S for trivial changes',
 		].join("\n");
 		denyTool(reason);
 		return;

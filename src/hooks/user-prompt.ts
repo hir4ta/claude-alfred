@@ -231,7 +231,7 @@ export function classifyIntent(prompt: string): string | null {
  * FR-5/FR-7: Check if spec is required or unapproved before implementation.
  * Stage 1: No spec exists → DIRECTIVE to create one.
  * Stage 1.5: Spec exists + implement intent → WARNING to confirm or create new spec.
- * Stage 2: Spec exists but not approved (M/L/XL) → DIRECTIVE to get review.
+ * Stage 2: Spec exists but not approved (M/L) → DIRECTIVE to get review.
  */
 export function checkSpecRequired(cwd: string, intent: string | null): DirectiveItem | null {
 	if (!intent || !["implement", "bugfix", "tdd"].includes(intent)) return null;
@@ -264,7 +264,7 @@ export function checkSpecRequired(cwd: string, intent: string | null): Directive
 		};
 	}
 
-	// Stage 2 (FR-7): Spec exists but not approved (M/L/XL only).
+	// Stage 2 (FR-7): Spec exists but not approved (M/L only).
 	try {
 		const taskSlug = state.primary;
 		const task = taskSlug ? state.tasks.find((t) => t.slug === taskSlug) : undefined;
