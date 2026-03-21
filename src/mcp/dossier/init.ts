@@ -95,7 +95,7 @@ export async function dossierInit(
 	}
 
 	// FR-8: Onboarding hint for first-time users.
-	result.onboarding_hint = `Spec '${params.task_slug}' created (size: ${initResult.size}). Next: write spec files → self-review → ${["M", "L", "XL"].includes(initResult.size) ? "dashboard approval → " : ""}implement per wave.`;
+	result.onboarding_hint = `Spec '${params.task_slug}' created (size: ${initResult.size}). Next: write spec files → self-review → ${["M", "L"].includes(initResult.size) ? "dashboard approval → " : ""}implement per wave.`;
 
 	// Auto-set spec-review gate (FR-2/FR-6: all sizes, including S/D).
 	try {

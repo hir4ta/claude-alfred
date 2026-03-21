@@ -392,11 +392,11 @@ describe("dossier init sizes", () => {
 		const result = await handleDossier(store, null, {
 			action: "init",
 			project_path: tmpDir,
-			task_slug: "size-xl",
-			size: "XL",
+			task_slug: "size-l",
+			size: "L",
 			description: "test",
 		});
-		expect(parseResult(result).size).toBe("XL");
+		expect(parseResult(result).size).toBe("L");
 	});
 
 	it("creates bugfix spec type", async () => {

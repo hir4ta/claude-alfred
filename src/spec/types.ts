@@ -19,10 +19,12 @@ export type SpecFile =
 	| "decisions.md"
 	| "research.md"
 	| "session.md"
-	| "bugfix.md"
-	| "delta.md";
-export type SpecSize = "S" | "M" | "L" | "XL" | "D";
-export type SpecType = "feature" | "bugfix" | "delta";
+	| "bugfix.md";
+export type SpecSize = "S" | "M" | "L";
+export type SpecType = "feature" | "bugfix";
+
+/** Sizes that require dashboard approval before implementation. */
+export const APPROVAL_REQUIRED_SIZES: ReadonlySet<string> = new Set(["M", "L"]);
 export type ReviewStatus = "pending" | "approved" | "changes_requested" | "";
 export type TaskStatus = "pending" | "in-progress" | "review" | "done" | "deferred" | "cancelled";
 
@@ -87,16 +89,15 @@ export interface InitResult {
 
 export function parseSize(s: string): SpecSize {
 	const upper = s.toUpperCase();
-	if (["S", "M", "L", "XL", "D"].includes(upper)) return upper as SpecSize;
-	throw new Error(`invalid spec size "${s}" (valid: S, M, L, XL, D)`);
+	if (["S", "M", "L"].includes(upper)) return upper as SpecSize;
+	throw new Error(`invalid spec size "${s}" (valid: S, M, L)`);
 }
 
 export function parseSpecType(s: string): SpecType {
 	const lower = s.toLowerCase();
 	if (lower === "" || lower === "feature") return "feature";
 	if (lower === "bugfix") return "bugfix";
-	if (lower === "delta") return "delta";
-	throw new Error(`invalid spec type "${s}" (valid: feature, bugfix, delta)`);
+	throw new Error(`invalid spec type "${s}" (valid: feature, bugfix)`);
 }
 
 export function detectSize(description: string): SpecSize {
@@ -107,16 +108,13 @@ export function detectSize(description: string): SpecSize {
 }
 
 export function filesForSize(size: SpecSize, specType: SpecType): SpecFile[] {
-	if (size === "D") return ["delta.md"];
-
 	const primary: SpecFile = specType === "bugfix" ? "bugfix.md" : "requirements.md";
 	switch (size) {
 		case "S":
-			return [primary, "tasks.md"];
+			return [primary, "design.md", "tasks.md"];
 		case "M":
-			if (specType === "bugfix") return [primary, "tasks.md", "test-specs.md"];
 			return [primary, "design.md", "tasks.md", "test-specs.md"];
-		default: // L, XL
+		case "L":
 			return [primary, "design.md", "tasks.md", "test-specs.md", "research.md"];
 	}
 }
@@ -219,7 +217,6 @@ export class SpecDir {
 			"research.md",
 			"session.md",
 			"bugfix.md",
-			"delta.md",
 		];
 		const sections: Section[] = [];
 		for (const f of allFiles) {

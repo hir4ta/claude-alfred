@@ -109,9 +109,10 @@ describe("preToolUse", () => {
 		expect(stdoutData.length).toBe(0);
 	});
 
-	it("denies XL unapproved spec", async () => {
+	it("denies Edit when legacy XL spec exists (XL removed, treated as malformed)", async () => {
 		setupSpec({ size: "XL", reviewStatus: "changes_requested" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
+		// XL is no longer in VALID_SIZES → parseSpecState returns null → isActiveSpecMalformed = true → deny
 		expect(getDecision()).toBe("deny");
 	});
 });

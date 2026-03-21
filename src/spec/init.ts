@@ -29,8 +29,7 @@ export function initSpec(
 	}
 
 	const size = opts?.size ?? detectSize(description);
-	let specType: SpecType = opts?.specType ?? "feature";
-	if (size === "D") specType = "delta";
+	const specType: SpecType = opts?.specType ?? "feature";
 
 	const sd = new SpecDir(projectPath, taskSlug);
 	if (sd.exists()) {

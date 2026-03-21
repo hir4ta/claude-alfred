@@ -91,13 +91,6 @@ describe("validateSpec — template defaults", () => {
 		expect(fails).toEqual([]);
 	});
 
-	it("D spec defaults have no fail checks (NFR-3)", () => {
-		initSpec("test-d", "D", "delta");
-		const result = validateSpec(tmpDir, "test-d", "D", "delta");
-		const fails = result.checks.filter((c) => c.status === "fail");
-		expect(fails).toEqual([]);
-	});
-
 	it("bugfix spec defaults have no fail checks (NFR-3)", () => {
 		initSpec("test-bug", "M", "bugfix");
 		const result = validateSpec(tmpDir, "test-bug", "M", "bugfix");
@@ -130,15 +123,7 @@ describe("validateSpec — traceability", () => {
 });
 
 describe("validateSpec — size-conditional checks", () => {
-	it("XL includes xl_wave_count and xl_nfr_required", () => {
-		initSpec("test-xl", "XL", "feature");
-		const result = validateSpec(tmpDir, "test-xl", "XL", "feature");
-		const checkNames = result.checks.map((c) => c.name);
-		expect(checkNames).toContain("xl_wave_count");
-		expect(checkNames).toContain("xl_nfr_required");
-	});
-
-	it("S does not include XL or L/XL checks", () => {
+	it("S does not include L-only checks", () => {
 		initSpec("test-s2", "S", "feature");
 		const result = validateSpec(tmpDir, "test-s2", "S", "feature");
 		const checkNames = result.checks.map((c) => c.name);
@@ -171,12 +156,6 @@ describe("validateSpec — JA template defaults (NFR-3)", () => {
 		expect(fails).toEqual([]);
 	});
 
-	it("D spec JA defaults have no fail checks", () => {
-		initSpec("test-d-ja", "D", "delta");
-		const result = validateSpec(tmpDir, "test-d-ja", "D", "delta");
-		const fails = result.checks.filter((c) => c.status === "fail");
-		expect(fails).toEqual([]);
-	});
 });
 
 describe("validateSpec — performance (NFR-1)", () => {

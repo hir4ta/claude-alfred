@@ -111,50 +111,12 @@ export function validateSpec(
 	}
 
 	// Read primary file content
-	const primaryFile: SpecFile = specType === "bugfix" ? "bugfix.md" : specType === "delta" ? "delta.md" : "requirements.md";
+	const primaryFile: SpecFile = specType === "bugfix" ? "bugfix.md" : "requirements.md";
 	const primaryContent = readFile(primaryFile) ?? "";
 	const tasksContent = readFile("tasks.md") ?? "";
 	const designContent = readFile("design.md") ?? "";
 	const testSpecsContent = readFile("test-specs.md") ?? "";
 	const researchContent = readFile("research.md") ?? "";
-
-	// ---- Delta-specific checks (D only) ----
-	if (size === "D") {
-		const deltaContent = readFile("delta.md") ?? "";
-
-		// 19. delta_sections_present
-		// Check for required sections in both EN and JA templates.
-		const requiredSectionsEN = ["Change Summary", "Files Affected", "Rationale", "Impact Scope", "Test Plan", "Rollback Strategy"];
-		const requiredSectionsJA = ["変更概要", "影響ファイル", "変更理由", "影響範囲", "テスト計画", "ロールバック手順"];
-		const enCount = requiredSectionsEN.filter((s) => deltaContent.includes(`## ${s}`)).length;
-		const jaCount = requiredSectionsJA.filter((s) => deltaContent.includes(`## ${s}`)).length;
-		const bestCount = Math.max(enCount, jaCount);
-		checks.push(
-			bestCount >= 6
-				? { name: "delta_sections_present", status: "pass", message: "All delta sections present" }
-				: { name: "delta_sections_present", status: "fail", message: `Only ${bestCount}/6 delta sections found` },
-		);
-
-		// 20. delta_change_ids
-		const chgIDs = extractIDs(deltaContent, ID.CHG);
-		checks.push(
-			chgIDs.length > 0
-				? { name: "delta_change_ids", status: "pass", message: `${chgIDs.length} CHG-N IDs found` }
-				: { name: "delta_change_ids", status: "fail", message: "No CHG-N IDs found in delta.md" },
-		);
-
-		// 21. delta_before_after
-		const hasBeforeAfter = /\bBefore:\s*/i.test(deltaContent) && /\bAfter:\s*/i.test(deltaContent);
-		checks.push(
-			hasBeforeAfter
-				? { name: "delta_before_after", status: "pass", message: "Before/After blocks found" }
-				: { name: "delta_before_after", status: "fail", message: "Missing Before/After blocks in delta.md" },
-		);
-
-		return buildResult(checks, opts);
-	}
-
-	// ---- Non-delta checks ----
 
 	// ---- 2. min_fr_count ----
 	if (specType === "bugfix") {
@@ -166,7 +128,7 @@ export function validateSpec(
 		);
 	} else {
 		const frIDs = extractIDs(primaryContent, ID.FR);
-		const minCount = size === "S" ? 1 : size === "M" ? 3 : size === "XL" ? 8 : 5; // L default 5
+		const minCount = size === "S" ? 1 : size === "M" ? 3 : 5; // L default 5
 		// Template defaults start with 1 FR — warn instead of fail to allow incremental authoring (DEC-4/NFR-3).
 		const status = frIDs.length >= minCount ? "pass" : frIDs.length > 0 ? "warn" : "fail";
 		checks.push({
@@ -343,8 +305,8 @@ export function validateSpec(
 		);
 	}
 
-	// ---- L/XL only checks ----
-	if (size === "L" || size === "XL") {
+	// ---- L only checks ----
+	if (size === "L") {
 		// 13. nfr_traceability
 		const nfrIDs = extractIDs(primaryContent, ID.NFR);
 		const taskNFRs = extractIDs(tasksContent, ID.NFR);
@@ -366,37 +328,8 @@ export function validateSpec(
 		);
 	}
 
-	// ---- XL only checks ----
-	if (size === "XL") {
-		// 16. confidence_coverage
-		const frIDs = extractIDs(primaryContent, ID.FR);
-		const confidenceCount = (primaryContent.match(/<!--\s*confidence:/g) ?? []).length;
-		const coverage = frIDs.length > 0 ? confidenceCount / frIDs.length : 1;
-		checks.push(
-			coverage >= 0.8
-				? { name: "confidence_coverage", status: "pass", message: `${Math.round(coverage * 100)}% confidence coverage` }
-				: { name: "confidence_coverage", status: "fail", message: `${Math.round(coverage * 100)}% confidence coverage (required: ≥80%)` },
-		);
-
-		// 17. xl_wave_count
-		const waveHeaders = tasksContent.match(/## Wave\s+\d+/g) ?? [];
-		checks.push(
-			waveHeaders.length >= 4
-				? { name: "xl_wave_count", status: "pass", message: `${waveHeaders.length} waves found` }
-				: { name: "xl_wave_count", status: "fail", message: `${waveHeaders.length} waves found (required: ≥4 for XL)` },
-		);
-
-		// 18. xl_nfr_required
-		const nfrIDs = extractIDs(primaryContent, ID.NFR);
-		checks.push(
-			nfrIDs.length > 0
-				? { name: "xl_nfr_required", status: "pass", message: `${nfrIDs.length} NFR-N found` }
-				: { name: "xl_nfr_required", status: "fail", message: "No NFR-N found (required for XL)" },
-		);
-	}
-
-	// ---- 22. grounding_coverage (L/XL opt-in) ----
-	if ((size === "L" || size === "XL") && primaryContent.includes("grounding:")) {
+	// ---- 22. grounding_coverage (L opt-in) ----
+	if (size === "L" && primaryContent.includes("grounding:")) {
 		const groundingMatches = primaryContent.match(/grounding:\s*(\w+)/g) ?? [];
 		const speculative = groundingMatches.filter((g) => /speculative/i.test(g)).length;
 		const ratio = groundingMatches.length > 0 ? speculative / groundingMatches.length : 0;

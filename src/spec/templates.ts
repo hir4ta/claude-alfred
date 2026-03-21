@@ -4,7 +4,6 @@ import { filesForSize } from "./types.js";
 // English templates
 import enRequirements from "./templates/en/requirements.tmpl";
 import enBugfix from "./templates/en/bugfix.tmpl";
-import enDelta from "./templates/en/delta.tmpl";
 import enDesign from "./templates/en/design.tmpl";
 import enTasks from "./templates/en/tasks.tmpl";
 import enTestSpecs from "./templates/en/test-specs.tmpl";
@@ -13,7 +12,6 @@ import enResearch from "./templates/en/research.tmpl";
 // Japanese templates
 import jaRequirements from "./templates/ja/requirements.tmpl";
 import jaBugfix from "./templates/ja/bugfix.tmpl";
-import jaDelta from "./templates/ja/delta.tmpl";
 import jaDesign from "./templates/ja/design.tmpl";
 import jaTasks from "./templates/ja/tasks.tmpl";
 import jaTestSpecs from "./templates/ja/test-specs.tmpl";
@@ -29,7 +27,6 @@ export interface TemplateData {
 const EN_TEMPLATES: Record<string, string> = {
 	"requirements.md": enRequirements,
 	"bugfix.md": enBugfix,
-	"delta.md": enDelta,
 	"design.md": enDesign,
 	"tasks.md": enTasks,
 	"test-specs.md": enTestSpecs,
@@ -39,7 +36,6 @@ const EN_TEMPLATES: Record<string, string> = {
 const JA_TEMPLATES: Record<string, string> = {
 	"requirements.md": jaRequirements,
 	"bugfix.md": jaBugfix,
-	"delta.md": jaDelta,
 	"design.md": jaDesign,
 	"tasks.md": jaTasks,
 	"test-specs.md": jaTestSpecs,

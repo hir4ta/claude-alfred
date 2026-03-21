@@ -37,8 +37,14 @@ describe("parseSize", () => {
 	it("parses valid sizes", () => {
 		expect(parseSize("S")).toBe("S");
 		expect(parseSize("m")).toBe("M");
-		expect(parseSize("xl")).toBe("XL");
-		expect(parseSize("D")).toBe("D");
+		expect(parseSize("l")).toBe("L");
+	});
+	it("rejects XL (removed)", () => {
+		expect(() => parseSize("XL")).toThrow("invalid spec size");
+		expect(() => parseSize("xl")).toThrow("invalid spec size");
+	});
+	it("rejects D (removed)", () => {
+		expect(() => parseSize("D")).toThrow("invalid spec size");
 	});
 	it("throws on invalid size", () => {
 		expect(() => parseSize("Z")).toThrow("invalid spec size");
@@ -50,6 +56,9 @@ describe("parseSpecType", () => {
 		expect(parseSpecType("feature")).toBe("feature");
 		expect(parseSpecType("bugfix")).toBe("bugfix");
 		expect(parseSpecType("")).toBe("feature");
+	});
+	it("rejects delta (removed)", () => {
+		expect(() => parseSpecType("delta")).toThrow("invalid spec type");
 	});
 	it("throws on invalid type", () => {
 		expect(() => parseSpecType("unknown")).toThrow("invalid spec type");
@@ -69,22 +78,30 @@ describe("detectSize", () => {
 });
 
 describe("filesForSize", () => {
-	it("S feature has 2 files", () => {
-		expect(filesForSize("S", "feature")).toHaveLength(2);
-		expect(filesForSize("S", "feature")).toContain("requirements.md");
-		expect(filesForSize("S", "feature")).not.toContain("session.md");
+	it("S feature has 3 files (requirements + design + tasks)", () => {
+		const files = filesForSize("S", "feature");
+		expect(files).toHaveLength(3);
+		expect(files).toEqual(["requirements.md", "design.md", "tasks.md"]);
+	});
+	it("S bugfix has 3 files (bugfix + design + tasks)", () => {
+		const files = filesForSize("S", "bugfix");
+		expect(files).toHaveLength(3);
+		expect(files).toEqual(["bugfix.md", "design.md", "tasks.md"]);
 	});
 	it("M feature has 4 files", () => {
-		expect(filesForSize("M", "feature")).toHaveLength(4);
-		expect(filesForSize("M", "feature")).not.toContain("session.md");
+		const files = filesForSize("M", "feature");
+		expect(files).toHaveLength(4);
+		expect(files).toEqual(["requirements.md", "design.md", "tasks.md", "test-specs.md"]);
 	});
-	it("L feature has 5 files (session.md + decisions.md removed)", () => {
-		expect(filesForSize("L", "feature")).toHaveLength(5);
-		expect(filesForSize("L", "feature")).not.toContain("session.md");
-		expect(filesForSize("L", "feature")).not.toContain("decisions.md");
+	it("M bugfix has 4 files (design.md included)", () => {
+		const files = filesForSize("M", "bugfix");
+		expect(files).toHaveLength(4);
+		expect(files).toEqual(["bugfix.md", "design.md", "tasks.md", "test-specs.md"]);
 	});
-	it("D has 1 file", () => {
-		expect(filesForSize("D", "delta")).toEqual(["delta.md"]);
+	it("L feature has 5 files", () => {
+		const files = filesForSize("L", "feature");
+		expect(files).toHaveLength(5);
+		expect(files).toEqual(["requirements.md", "design.md", "tasks.md", "test-specs.md", "research.md"]);
 	});
 	it("bugfix uses bugfix.md as primary", () => {
 		expect(filesForSize("S", "bugfix")[0]).toBe("bugfix.md");
