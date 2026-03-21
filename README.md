@@ -54,7 +54,11 @@ Most spec tools give you slash commands that say "you should write a spec first.
 
 **Skills that show up on their own.** Researching? alfred suggests `/brief`. Fixing a bug? `/mend`. Merged a PR? `/harvest`. No memorization needed — it classifies your intent (semantic or keyword, bilingual) and nudges the right skill.
 
-**A dashboard that's actually useful.** `alfred dashboard` opens `localhost:7575` with live task progress, spec review with line-level comments, file-by-file approval, knowledge health, and activity timeline. English/Japanese toggle.
+**A dashboard that's actually useful.** `alfred dashboard` opens `localhost:7575` with live task progress, spec review with line-level comments, file-by-file approval, knowledge health, and activity timeline. Cross-project view with `Cmd+K` global search. English/Japanese toggle.
+
+**Cross-project intelligence.** alfred sees across all your projects. Contradictory design decisions between projects? Flagged automatically. Starting a new auth feature? Past decisions from your other projects surface before you ask. Common patterns across 3+ projects get detected and promoted.
+
+**Team sharing via git.** Knowledge files are structured JSON — commit, review in PRs, share with your team. `alfred team init` sets up a custom merge driver for conflict-free knowledge merging. `team.yaml` configures multi-reviewer approval, spec tracking, and cross-project search. No server needed — git is the transport.
 
 ## Why alfred in 2026
 
@@ -118,7 +122,8 @@ Storage
   |-- .alfred/specs/       -> spec files + version history + reviews
   |-- .alfred/epics/       -> epic YAML + task dependencies
   |-- .alfred/steering/    -> project context (product, structure, tech)
-  +-- ~/.claude-alfred/    -> SQLite search index (rebuildable)
+  |-- .alfred/team.yaml    -> team config (review count, spec tracking, cross-project)
+  +-- ~/.claude-alfred/    -> SQLite search index + audit log (rebuildable)
 ```
 
 ## MCP tools
@@ -143,6 +148,8 @@ Knowledge lives as JSON files you can commit, review in PRs, and share with your
 Patterns auto-promote to rules after 15+ search hits. Contradictions detected automatically.
 
 Search pipeline: Voyage AI vectors with reranking > FTS5 with fuzzy matching > keyword fallback. "auth" finds "authentication", "login", and more.
+
+Each entry tracks its author (via `git user.name`). Export/import knowledge between projects with `alfred knowledge export/import`.
 
 ## Adaptive specs
 
@@ -171,7 +178,8 @@ npm install -g claude-alfred        # CLI, hooks, MCP server, dashboard
 | No memory results | Set `VOYAGE_API_KEY`, or verify FTS5 fallback works |
 | Wrong language | `export ALFRED_LANG=ja` in `~/.zshrc` |
 | Hook not firing | `/plugin install alfred` + restart Claude Code |
-| Dashboard empty | Run from a directory with `.alfred/specs/` |
+| Dashboard empty | Run from a directory with `.alfred/specs/`, or any directory for cross-project view |
+| Merge conflicts in knowledge | Run `alfred team init` to set up the merge driver |
 
 ## Uninstalling
 
