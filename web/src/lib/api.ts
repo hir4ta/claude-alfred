@@ -36,6 +36,11 @@ function taskURL(slug: string, ...segments: string[]): string {
 	return parts.join("/");
 }
 
+function taskURLWithProject(slug: string, projectId: string | undefined, ...segments: string[]): string {
+	const base = taskURL(slug, ...segments);
+	return projectId ? `${base}?project=${projectId}` : base;
+}
+
 // --- Query options (composable) ---
 
 export const tasksQueryOptions = (projectId?: string) =>
@@ -48,18 +53,18 @@ export const tasksQueryOptions = (projectId?: string) =>
 		staleTime: LIVE_STALE,
 	});
 
-export const specsQueryOptions = (slug: string) =>
+export const specsQueryOptions = (slug: string, projectId?: string) =>
 	queryOptions({
-		queryKey: ["specs", slug],
-		queryFn: () => fetchJSON<SpecsResponse>(taskURL(slug, "specs")),
+		queryKey: ["specs", slug, projectId],
+		queryFn: () => fetchJSON<SpecsResponse>(taskURLWithProject(slug, projectId, "specs")),
 		staleTime: REF_STALE,
 		enabled: !!slug,
 	});
 
-export const specContentQueryOptions = (slug: string, file: string) =>
+export const specContentQueryOptions = (slug: string, file: string, projectId?: string) =>
 	queryOptions({
-		queryKey: ["spec-content", slug, file],
-		queryFn: () => fetchJSON<SpecContentResponse>(taskURL(slug, "specs", file)),
+		queryKey: ["spec-content", slug, file, projectId],
+		queryFn: () => fetchJSON<SpecContentResponse>(taskURLWithProject(slug, projectId, "specs", file)),
 		staleTime: REF_STALE,
 		enabled: !!slug && !!file,
 	});
@@ -162,10 +167,10 @@ export const healthQueryOptions = () =>
 		staleTime: REF_STALE,
 	});
 
-export const validationQueryOptions = (slug: string) =>
+export const validationQueryOptions = (slug: string, projectId?: string) =>
 	queryOptions({
-		queryKey: ["validation", slug],
-		queryFn: () => fetchJSON<ValidationReport>(taskURL(slug, "validation")),
+		queryKey: ["validation", slug, projectId],
+		queryFn: () => fetchJSON<ValidationReport>(taskURLWithProject(slug, projectId, "validation")),
 		staleTime: REF_STALE,
 		enabled: !!slug,
 	});
@@ -244,17 +249,17 @@ export async function completeTask(slug: string) {
 	return res.json();
 }
 
-export const fileApprovalsQueryOptions = (slug: string) =>
+export const fileApprovalsQueryOptions = (slug: string, projectId?: string) =>
 	queryOptions({
-		queryKey: ["file-approvals", slug],
+		queryKey: ["file-approvals", slug, projectId],
 		queryFn: () =>
-			fetchJSON<{ approvals: Record<string, boolean> }>(taskURL(slug, "file-approvals")),
+			fetchJSON<{ approvals: Record<string, boolean> }>(taskURLWithProject(slug, projectId, "file-approvals")),
 		staleTime: LIVE_STALE,
 		enabled: !!slug,
 	});
 
-export async function setFileApproval(slug: string, file: string, approved: boolean) {
-	const res = await fetch(taskURL(slug, "file-approvals"), {
+export async function setFileApproval(slug: string, file: string, approved: boolean, projectId?: string) {
+	const res = await fetch(taskURLWithProject(slug, projectId, "file-approvals"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ file, approved }),

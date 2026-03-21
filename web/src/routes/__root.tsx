@@ -9,7 +9,6 @@ import { useI18n } from "@/lib/i18n";
 import { useKeyboardShortcuts } from "@/lib/keyboard";
 import type { TranslationKey } from "@/lib/i18n";
 import { versionQueryOptions } from "@/lib/api";
-import { GlobalSearch } from "@/components/global-search";
 import { cn } from "@/lib/utils";
 
 interface RouterContext {
@@ -104,7 +103,6 @@ function RootLayout() {
 							})}
 						</nav>
 
-						<GlobalSearch />
 						<LanguageToggle />
 
 						{/* Version — standalone */}

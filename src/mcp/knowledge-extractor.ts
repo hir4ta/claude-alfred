@@ -112,11 +112,26 @@ export function extractReviewFindings(
 function stringifyResponse(response: unknown): string {
 	if (typeof response === "string") return response;
 	if (response == null) return "";
-	try {
-		return JSON.stringify(response);
-	} catch {
-		return "";
+	// Extract meaningful text from structured agent responses.
+	// Agent tool responses come as objects with prompt/status/content fields —
+	// we want only human-readable review text, not the raw JSON.
+	if (typeof response === "object") {
+		const obj = response as Record<string, unknown>;
+		// Try common text fields first (content, result, output, message)
+		for (const key of ["content", "result", "output", "message"]) {
+			if (typeof obj[key] === "string" && obj[key].length > 50) {
+				return obj[key];
+			}
+		}
+		// If the object has a "prompt" field, it's an agent invocation — skip it
+		if ("prompt" in obj && typeof obj.prompt === "string") return "";
+		try {
+			return JSON.stringify(response);
+		} catch {
+			return "";
+		}
 	}
+	return "";
 }
 
 // --- Shared save function ---

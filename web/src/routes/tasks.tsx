@@ -38,7 +38,8 @@ function TasksLayout() {
 	// Auto-navigate to active spec if no slug selected
 	const activeTask = allTasks.find((t) => !terminalStatuses.has(t.status ?? ""));
 	if (!selectedSlug && activeTask) {
-		navigate({ to: "/tasks/$slug", params: { slug: activeTask.slug } });
+		const activeProjectId = (activeTask as Record<string, unknown>).project_id as string | undefined;
+		navigate({ to: "/tasks/$slug", params: { slug: activeTask.slug }, search: activeProjectId ? { project: activeProjectId } : {} });
 	}
 
 	const tasks = allTasks
@@ -117,6 +118,7 @@ function TaskAccordionCard({
 	isSelected: boolean;
 	colorIndex: number;
 }) {
+	const projectId = (task as Record<string, unknown>).project_id as string | undefined;
 	const [expanded, setExpanded] = useState(false);
 	const progress = (task.total ?? 0) > 0 ? ((task.completed ?? 0) / (task.total ?? 1)) * 100 : 0;
 	const isCompleted = task.status === "completed" || task.status === "done" || task.status === "cancelled";
@@ -132,7 +134,7 @@ function TaskAccordionCard({
 			style={isSelected ? { borderColor: "var(--color-brand-dark)" } : undefined}
 		>
 			{/* Card header — always visible, clickable to navigate */}
-			<Link to="/tasks/$slug" params={{ slug: task.slug }} className="block p-3 pb-2">
+			<Link to="/tasks/$slug" params={{ slug: task.slug }} search={projectId ? { project: projectId } : {}} className="block p-3 pb-2">
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-2 min-w-0">
 						<TaskStatusIcon status={task.status ?? "pending"} />

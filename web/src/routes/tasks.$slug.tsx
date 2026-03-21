@@ -36,11 +36,13 @@ const SIZE_LABEL_KEYS: Record<string, TranslationKey> = {
 function TaskDetailPage() {
 	const { t, locale } = useI18n();
 	const { slug } = Route.useParams();
+	const search = Route.useSearch() as { project?: string };
+	const projectId = search.project;
 	const queryClient = useQueryClient();
-	const { data: tasksData } = useQuery(tasksQueryOptions());
-	const { data: specsData } = useQuery(specsQueryOptions(slug));
-	const { data: validationData } = useQuery(validationQueryOptions(slug));
-	const { data: approvalsData } = useQuery(fileApprovalsQueryOptions(slug));
+	const { data: tasksData } = useQuery(tasksQueryOptions(projectId));
+	const { data: specsData } = useQuery(specsQueryOptions(slug, projectId));
+	const { data: validationData } = useQuery(validationQueryOptions(slug, projectId));
+	const { data: approvalsData } = useQuery(fileApprovalsQueryOptions(slug, projectId));
 	const [reviewModeFiles, setReviewModeFiles] = useState<Set<string>>(new Set());
 
 	const task = tasksData?.tasks.find((t) => t.slug === slug);
@@ -49,13 +51,13 @@ function TaskDetailPage() {
 
 	// Fetch all spec contents in parallel
 	const specContents = useQueries({
-		queries: specs.map((spec) => specContentQueryOptions(slug, spec.file)),
+		queries: specs.map((spec) => specContentQueryOptions(slug, spec.file, projectId)),
 	});
 
 
 	const approveMutation = useMutation({
 		mutationFn: ({ file, approved }: { file: string; approved: boolean }) =>
-			setFileApproval(slug, file, approved),
+			setFileApproval(slug, file, approved, projectId),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["file-approvals", slug] });
 			queryClient.invalidateQueries({ queryKey: ["tasks"] });

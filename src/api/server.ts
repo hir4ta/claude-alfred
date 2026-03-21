@@ -509,7 +509,17 @@ export function createApp(
 
 		const entries = result.entries.map((e) => {
 			const proj = getProject(store, e.projectId);
-			return { ...e, project_name: proj?.name ?? "" };
+			const detailParts = [e.action, e.detail]
+				.filter((v) => v && v !== "{}" && v !== "[]")
+				.join(" — ");
+			return {
+				timestamp: e.timestamp,
+				action: e.event,
+				target: e.slug,
+				detail: detailParts,
+				actor: e.actor,
+				project_name: proj?.name ?? "",
+			};
 		});
 
 		return c.json({ entries, total: result.total });
