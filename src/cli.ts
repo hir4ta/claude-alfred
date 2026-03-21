@@ -25,16 +25,21 @@ const main = defineCommand({
 			},
 		}),
 		dashboard: defineCommand({
-			meta: { description: "Open browser dashboard" },
+			meta: { description: "Open browser dashboard (cross-project)" },
 			args: {
 				port: { type: "string", default: "7575", description: "Port number" },
 				"url-only": { type: "boolean", default: false, description: "Print URL only" },
 			},
 			async run({ args }) {
+				const { existsSync } = await import("node:fs");
+				const { join } = await import("node:path");
 				const { Store } = await import("./store/index.js");
 				const { Embedder } = await import("./embedder/index.js");
 				const { startDashboard } = await import("./api/server.js");
-				const projectPath = process.cwd();
+				const { resolveOrRegisterProject } = await import("./store/project.js");
+				const { syncAllProjectSpecs } = await import("./store/spec-sync.js");
+
+				const cwd = process.cwd();
 				const store = Store.openDefault();
 				let emb = null;
 				try {
@@ -43,8 +48,17 @@ const main = defineCommand({
 					/* no Voyage key */
 				}
 				if (emb) store.expectedDims = emb.dims;
+
+				// Register cwd project if it has .alfred/
+				if (existsSync(join(cwd, ".alfred"))) {
+					resolveOrRegisterProject(store, cwd);
+				}
+
+				// Sync specs from all registered projects
+				await syncAllProjectSpecs(store, emb);
+
 				const version = await resolveVersion();
-				await startDashboard(projectPath, store, emb, {
+				await startDashboard(cwd, store, emb, {
 					port: parseInt(args.port, 10),
 					urlOnly: args["url-only"],
 					version,
