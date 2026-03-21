@@ -5,10 +5,13 @@ import type {
 	EpicsResponse,
 	GraphEdgesResponse,
 	HealthResponse,
+	KnowledgeEntry,
 	KnowledgeResponse,
 	KnowledgeStats,
+	ProjectRecord,
 	ReviewHistoryResponse,
 	ReviewStatusResponse,
+	SearchResponse,
 	SpecContentResponse,
 	SpecsResponse,
 	TasksResponse,
@@ -35,10 +38,13 @@ function taskURL(slug: string, ...segments: string[]): string {
 
 // --- Query options (composable) ---
 
-export const tasksQueryOptions = () =>
+export const tasksQueryOptions = (projectId?: string) =>
 	queryOptions({
-		queryKey: ["tasks"],
-		queryFn: () => fetchJSON<TasksResponse>("/api/tasks"),
+		queryKey: ["tasks", projectId],
+		queryFn: () => {
+			const url = projectId ? `/api/tasks?project=${projectId}` : "/api/tasks";
+			return fetchJSON<TasksResponse>(url);
+		},
 		staleTime: LIVE_STALE,
 	});
 
@@ -78,17 +84,24 @@ export const specVersionQueryOptions = (slug: string, file: string, version: str
 		enabled: !!slug && !!file && !!version,
 	});
 
-export const knowledgeQueryOptions = (limit = 50) =>
+export const knowledgeQueryOptions = (limit = 50, projectId?: string) =>
 	queryOptions({
-		queryKey: ["knowledge", limit],
-		queryFn: () => fetchJSON<KnowledgeResponse>(`/api/knowledge?limit=${limit}`),
+		queryKey: ["knowledge", limit, projectId],
+		queryFn: () => {
+			const params = new URLSearchParams({ limit: String(limit) });
+			if (projectId) params.set("project", projectId);
+			return fetchJSON<KnowledgeResponse>(`/api/knowledge?${params}`);
+		},
 		staleTime: LIVE_STALE,
 	});
 
-export const knowledgeStatsQueryOptions = () =>
+export const knowledgeStatsQueryOptions = (projectId?: string) =>
 	queryOptions({
-		queryKey: ["knowledge-stats"],
-		queryFn: () => fetchJSON<KnowledgeStats>("/api/knowledge/stats"),
+		queryKey: ["knowledge-stats", projectId],
+		queryFn: () => {
+			const url = projectId ? `/api/knowledge/stats?project=${projectId}` : "/api/knowledge/stats";
+			return fetchJSON<KnowledgeStats>(url);
+		},
 		staleTime: REF_STALE,
 	});
 
@@ -105,12 +118,13 @@ export async function promoteKnowledge(id: number): Promise<{ promoted: boolean;
 	return res.json();
 }
 
-export const activityQueryOptions = (limit = 50, filter?: string) =>
+export const activityQueryOptions = (limit = 50, filter?: string, projectId?: string) =>
 	queryOptions({
-		queryKey: ["activity", limit, filter],
+		queryKey: ["activity", limit, filter, projectId],
 		queryFn: () => {
 			const params = new URLSearchParams({ limit: String(limit) });
 			if (filter) params.set("filter", filter);
+			if (projectId) params.set("project", projectId);
 			return fetchJSON<ActivityResponse>(`/api/activity?${params}`);
 		},
 		staleTime: LIVE_STALE,
@@ -130,10 +144,14 @@ export const graphEdgesQueryOptions = () =>
 		staleTime: REF_STALE,
 	});
 
-export const decisionsQueryOptions = (limit = 20) =>
+export const decisionsQueryOptions = (limit = 20, projectId?: string) =>
 	queryOptions({
-		queryKey: ["decisions", limit],
-		queryFn: () => fetchJSON<DecisionsResponse>(`/api/decisions?limit=${limit}`),
+		queryKey: ["decisions", limit, projectId],
+		queryFn: () => {
+			const params = new URLSearchParams({ limit: String(limit) });
+			if (projectId) params.set("project", projectId);
+			return fetchJSON<DecisionsResponse>(`/api/decisions?${params}`);
+		},
 		staleTime: LIVE_STALE,
 	});
 
@@ -166,6 +184,26 @@ export const reviewHistoryQueryOptions = (slug: string) =>
 		queryFn: () => fetchJSON<ReviewHistoryResponse>(`${taskURL(slug, "review")}/history`),
 		staleTime: REF_STALE,
 		enabled: !!slug,
+	});
+
+export const projectsQueryOptions = () =>
+	queryOptions({
+		queryKey: ["projects"],
+		queryFn: () => fetchJSON<{ projects: ProjectRecord[] }>("/api/projects"),
+		staleTime: REF_STALE,
+	});
+
+export const searchQueryOptions = (query: string, opts?: { scope?: string; projectId?: string }) =>
+	queryOptions({
+		queryKey: ["search", query, opts?.scope, opts?.projectId],
+		queryFn: () => {
+			const params = new URLSearchParams({ q: query });
+			if (opts?.scope) params.set("scope", opts.scope);
+			if (opts?.projectId) params.set("project", opts.projectId);
+			return fetchJSON<SearchResponse>(`/api/search?${params}`);
+		},
+		staleTime: LIVE_STALE,
+		enabled: !!query,
 	});
 
 export const versionQueryOptions = () =>

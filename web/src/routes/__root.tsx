@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createRootRouteWithContext, Link, Outlet, useLocation } from "@tanstack/react-router";
-import { Activity, BookOpen, Globe, LayoutDashboard, ListChecks } from "@animated-color-icons/lucide-react";
+import { Activity, BookOpen, FolderOpen, Globe, LayoutDashboard, ListChecks } from "@animated-color-icons/lucide-react";
 import { useMemo, useState } from "react";
 import { KeyboardHelpDialog } from "@/components/keyboard-help";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +9,8 @@ import { useI18n } from "@/lib/i18n";
 import { useKeyboardShortcuts } from "@/lib/keyboard";
 import type { TranslationKey } from "@/lib/i18n";
 import { versionQueryOptions } from "@/lib/api";
+import { ProjectSelector } from "@/components/project-selector";
+import { GlobalSearch } from "@/components/global-search";
 import { cn } from "@/lib/utils";
 
 interface RouterContext {
@@ -24,6 +26,7 @@ const tabs = [
 	{ to: "/tasks", labelKey: "nav.tasks" as TranslationKey, icon: ListChecks, color: "#628141" },
 	{ to: "/knowledge", labelKey: "nav.knowledge" as TranslationKey, icon: BookOpen, color: "#2d8b7a" },
 	{ to: "/activity", labelKey: "nav.activity" as TranslationKey, icon: Activity, color: "#7b6b8d" },
+	{ to: "/projects", labelKey: "nav.projects" as TranslationKey, icon: FolderOpen, color: "#e67e22" },
 ] as const;
 
 function LanguageToggle() {
@@ -103,6 +106,8 @@ function RootLayout() {
 							})}
 						</nav>
 
+						<ProjectSelector />
+						<GlobalSearch />
 						<LanguageToggle />
 
 						{/* Version — standalone */}

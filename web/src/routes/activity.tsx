@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { EpicDependencies } from "@/components/epic-deps";
 import { ButlerEmpty } from "@/components/butler-empty";
@@ -33,8 +33,9 @@ function ActivityPage() {
 	const [showAll, setShowAll] = useState(false);
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
+	const search = useSearch({ strict: false }) as { project?: string };
 	const { data: activityData, isLoading } = useQuery(
-		activityQueryOptions(100),
+		activityQueryOptions(100, undefined, search.project),
 	);
 	const { data: epicsData } = useQuery(epicsQueryOptions());
 

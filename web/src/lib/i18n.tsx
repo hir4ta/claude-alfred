@@ -142,8 +142,22 @@ export const translations = {
 	"action.specCreation": { en: "Creating spec", ja: "スペック作成中" },
 
 	// Search
-	"search.placeholder": { en: "Search...", ja: "検索..." },
+	"search.placeholder": { en: "Search knowledge & specs...", ja: "ナレッジ＆スペックを検索..." },
 	"search.noResults": { en: "No results found", ja: "結果が見つかりません" },
+	"search.knowledge": { en: "Knowledge", ja: "ナレッジ" },
+	"search.spec": { en: "Spec", ja: "スペック" },
+
+	// Projects
+	"projects.title": { en: "Projects", ja: "プロジェクト" },
+	"projects.allProjects": { en: "All Projects", ja: "すべてのプロジェクト" },
+	"projects.archive": { en: "Archive", ja: "アーカイブ" },
+	"projects.unarchive": { en: "Unarchive", ja: "アーカイブ解除" },
+	"projects.rename": { en: "Rename", ja: "名前変更" },
+	"projects.lastSeen": { en: "Last seen", ja: "最終アクセス" },
+	"projects.missing": { en: "Missing", ja: "不明" },
+	"projects.archived": { en: "Archived", ja: "アーカイブ済み" },
+	"projects.noProjects": { en: "No projects registered yet. Use alfred in a project directory to register it.", ja: "まだプロジェクトが登録されていません。プロジェクトディレクトリで alfred を使用すると自動登録されます。" },
+	"nav.projects": { en: "Projects", ja: "プロジェクト" },
 
 	// Filters
 	"filter.all": { en: "All", ja: "全て" },

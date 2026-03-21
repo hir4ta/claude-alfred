@@ -32,6 +32,40 @@ export type {
 	WaveInfo,
 } from "@api-types";
 
+// --- Cross-project types ---
+
+export interface ProjectRecord {
+	id: string;
+	name: string;
+	remote: string;
+	path: string;
+	branch: string;
+	registeredAt: string;
+	lastSeenAt: string;
+	status: string;
+}
+
+export interface UnifiedSearchResult {
+	id: number;
+	source: "knowledge" | "spec";
+	title: string;
+	content: string;
+	projectId: string;
+	projectName: string;
+	score: number;
+	subType?: string;
+	hitCount?: number;
+	slug?: string;
+	fileName?: string;
+	specStatus?: string;
+}
+
+export interface SearchResponse {
+	results: UnifiedSearchResult[];
+	method: string;
+	count: number;
+}
+
 // --- Frontend-only types (not in API responses) ---
 
 export interface MemoryHealthStats {

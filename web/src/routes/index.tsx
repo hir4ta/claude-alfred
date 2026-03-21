@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { Brain, CheckCircle2, Clock, Zap } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import {
@@ -33,7 +33,9 @@ const ITEMS_PER_PAGE = 9;
 function OverviewPage() {
 	const { t } = useI18n();
 	const [taskPage, setTaskPage] = useState(1);
-	const { data: tasksData, isLoading: tasksLoading } = useQuery(tasksQueryOptions());
+	const search = useSearch({ strict: false }) as { project?: string };
+	const projectId = search.project;
+	const { data: tasksData, isLoading: tasksLoading } = useQuery(tasksQueryOptions(projectId));
 	const { data: healthData } = useQuery(healthQueryOptions());
 	const { data: epicsData } = useQuery(epicsQueryOptions());
 	// decisionsData removed — recent decisions section removed per user request

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, Outlet, useParams } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useParams, useSearch } from "@tanstack/react-router";
 import { ChevronDown, CircleCheck, CircleDashed, CirclePause, CircleX } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
@@ -26,7 +26,8 @@ const SHIMMER_COLORS = [
 
 function TasksLayout() {
 	const { t } = useI18n();
-	const { data } = useQuery(tasksQueryOptions());
+	const search = useSearch({ strict: false }) as { project?: string };
+	const { data } = useQuery(tasksQueryOptions(search.project));
 	const allTasks = data?.tasks ?? [];
 	const { slug: selectedSlug } = useParams({ strict: false }) as { slug?: string };
 	const [statusFilter, setStatusFilter] = useState<string>("all");

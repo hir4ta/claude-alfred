@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { Grid3X3, Network, Search } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { KnowledgeCard } from "@/components/knowledge-card";
@@ -41,8 +41,10 @@ function KnowledgePage() {
 	const [page, setPage] = useState(1);
 	const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
 
-	const { data: browseData, isLoading } = useQuery(knowledgeQueryOptions());
-	const { data: statsData } = useQuery(knowledgeStatsQueryOptions());
+	const search = useSearch({ strict: false }) as { project?: string };
+	const projectId = search.project;
+	const { data: browseData, isLoading } = useQuery(knowledgeQueryOptions(undefined, projectId));
+	const { data: statsData } = useQuery(knowledgeStatsQueryOptions(projectId));
 	const {
 		data: graphData,
 		isLoading: graphLoading,
