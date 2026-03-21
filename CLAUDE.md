@@ -15,7 +15,9 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 | Package | Role |
 |---|---|
 | `src/mcp/` | MCP server (3 tools: dossier, roster, ledger) — @modelcontextprotocol/sdk + Zod. dossier split into `src/mcp/dossier/{index,helpers,init,lifecycle,crud}.ts` |
-| `src/store/` | SQLite persistence (projects + knowledge_index + spec_index + embeddings + FTS5), project registry, spec sync |
+| `src/store/` | SQLite persistence (projects + knowledge_index + spec_index + audit_log + embeddings + FTS5), project registry, spec sync, audit sync, conflict detection, pattern mining |
+| `src/git/` | Git integration: knowledge merge driver, export/import/diff |
+| `src/team/` | Team config (team.yaml), git user.name cache, team init/join |
 | `src/embedder/` | Voyage AI (voyage-4-large, vector search + rerank-2.5) |
 | `src/spec/` | Spec management: .alfred/specs/ (8 file types) + Size-based scaling + Validate + Templates |
 | `src/epic/` | Epic management: .alfred/epics/ (YAML-based task grouping + dependencies) |
@@ -108,7 +110,9 @@ node dist/cli.mjs version     # Show version
 - @.claude/rules/implementation-discipline.md (spec-first rule, wave self-review, commit discipline)
 
 ### Database & Schema
-- @.claude/rules/store-internals.md (schema V8, vector search, SQL safety, knowledge architecture)
+- @.claude/rules/store-internals.md (schema V10, vector search, SQL safety, knowledge architecture)
+- Schema V10: knowledge_index.author, audit_log table (UNIQUE dedup), idx_ki_author, idx_audit_project_time, idx_audit_actor
+- rebuildFromScratch migration pattern (V9→V10)
 
 
 ### Spec Management & Review
