@@ -9,7 +9,7 @@ export interface SpecState {
 	status: string;
 }
 
-const VALID_SIZES = new Set(["S", "M", "L", "XL", "D", ""]);
+const VALID_SIZES = new Set(["S", "M", "L", ""]);
 const VALID_REVIEW_STATUSES = new Set(["pending", "approved", "changes_requested", ""]);
 
 /**

@@ -108,17 +108,20 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// No active spec → check for polish mode (recently completed spec allows edits)
+	// No active spec → check for polish mode or spec-prompt (already asked)
 	if (!spec) {
 		const polish = readStateJSON<{ slug?: string }>(ev.cwd, "polish.json", {});
 		if (polish.slug) {
 			allowTool(`Polish mode (post-complete '${polish.slug}')`);
 			return;
 		}
-		// No active spec, no polish mode → allow but warn via stderr.
-		// Spec-first enforcement is handled by UserPromptSubmit DIRECTIVE (Stage 1).
-		// PreToolUse no longer uses a prompt-type LLM judge (removed: parallel hook
-		// execution causes allow/deny conflicts, see #19).
+		// spec-prompt: already asked user about spec creation this session → suppress advisory
+		const prompted = readStateJSON<{ prompted?: boolean }>(ev.cwd, "spec-prompt.json", {});
+		if (prompted.prompted) {
+			allowTool("Spec prompt already issued (implicit skip)");
+			return;
+		}
+		// No active spec, no polish, not yet prompted → allow with advisory.
 		process.stderr.write(
 			"[alfred] No active spec. Consider creating one: dossier action=init\n",
 		);
@@ -127,7 +130,7 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 	}
 
 	// M/L/XL with unapproved review → deny.
-	if (["M", "L", "XL"].includes(spec.size) && spec.reviewStatus !== "approved") {
+	if (["M", "L"].includes(spec.size) && spec.reviewStatus !== "approved") {
 		const reason = [
 			`Spec '${spec.slug}' (size ${spec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,
 			'- "I\'ll get the review after implementation" → The Stop hook will block you from finishing anyway',

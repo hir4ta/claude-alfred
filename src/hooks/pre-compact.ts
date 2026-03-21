@@ -119,7 +119,7 @@ export async function preCompact(ev: HookEvent, _signal: AbortSignal): Promise<v
 			const state2 = readActiveState(projectPath);
 			const task2 = state2.tasks.find((t) => t.slug === taskSlug);
 			const size = task2?.size ?? "L";
-			if (["M", "L", "XL"].includes(size)) {
+			if (["M", "L"].includes(size)) {
 				const reviewStatus = reviewStatusFor(projectPath, taskSlug);
 				const verification = verifyReviewFile(projectPath, taskSlug);
 				if (reviewStatus !== "approved" || !verification.valid) {

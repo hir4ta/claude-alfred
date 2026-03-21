@@ -225,13 +225,13 @@ describe("userPromptSubmit pipeline", () => {
 		expect(emittedItems).toEqual([]);
 	});
 
-	it("emits DIRECTIVE when .alfred exists but no spec", async () => {
+	it("emits AskUserQuestion DIRECTIVE when .alfred exists but no spec", async () => {
 		mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
 		const ac = new AbortController();
 		await userPromptSubmit({ prompt: "implement login", cwd: tmpDir }, ac.signal);
 		const directive = emittedItems.find((i) => i.level === "DIRECTIVE");
 		expect(directive).toBeDefined();
-		expect(directive!.message).toContain("MUST create a spec");
+		expect(directive!.message).toContain("AskUserQuestion");
 	});
 
 	it("emits skill nudge CONTEXT for implement intent without spec", async () => {

@@ -244,15 +244,21 @@ export function checkSpecRequired(cwd: string, intent: string | null): Directive
 	try {
 		state = readActiveState(cwd);
 	} catch {
-		// Stage 1: No active spec (_active.md missing or unparseable).
+		// Stage 1: No active spec → ask user whether to create one (1-shot DIRECTIVE).
+		// spec-prompt.json tracks whether we already asked this session.
+		const prompted = readStateJSON<{ prompted?: boolean }>(cwd, "spec-prompt.json", {});
+		if (prompted.prompted) return null; // Already asked this session → implicit skip
+
+		const lang = (process.env.ALFRED_LANG || "en").toLowerCase();
+		writeStateJSON(cwd, "spec-prompt.json", { prompted: true, at: new Date().toISOString() });
 		return {
 			level: "DIRECTIVE",
-			message:
-				"MUST create a spec first via /alfred:brief or dossier action=init before implementing. No active spec found.",
+			message: lang.startsWith("ja")
+				? "新しい実装タスクです。AskUserQuestion で「spec を作成しますか？ (S/M/L/スキップ)」とユーザーに確認してください。ユーザーが「スキップ」を選んだ場合、そのまま実装に進んでください。"
+				: "New implementation task. Use AskUserQuestion to ask the user: 'Create a spec? (S/M/L/Skip)'. If the user selects Skip, proceed without a spec.",
 			rationalizations: [
-				"\"I already have enough context to proceed\" → Specs catch assumptions you don't know you're making",
-				'"The spec would just restate the request" → Specs add structure, traceability, and test criteria',
-				'"Creating a spec would slow things down" → S-size adds <2min. Bugs from no spec cost hours',
+				'"I already know what to build" → A quick S-size spec takes <2min and catches assumptions',
+				'"The user just wants me to code" → Ask first. If they say Skip, proceed freely',
 			],
 			spiritVsLetter: true,
 		};
@@ -262,7 +268,7 @@ export function checkSpecRequired(cwd: string, intent: string | null): Directive
 	try {
 		const taskSlug = state.primary;
 		const task = taskSlug ? state.tasks.find((t) => t.slug === taskSlug) : undefined;
-		if (task && ["M", "L", "XL"].includes(task.size ?? "") && task.review_status !== "approved") {
+		if (task && ["M", "L"].includes(task.size ?? "") && task.review_status !== "approved") {
 			return {
 				level: "DIRECTIVE",
 				message: `Spec '${taskSlug}' (size ${task.size}) requires review approval before implementation. Submit review via \`alfred dashboard\` or run spec self-review first.`,

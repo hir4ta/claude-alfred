@@ -79,11 +79,11 @@ describe("preToolUse", () => {
 		expect(getDecision()).toBe("allow");
 	});
 
-	it("allows Edit on legacy D spec (VALID_SIZES updated in Wave 2)", async () => {
+	it("denies Edit when legacy D spec exists (D removed, treated as malformed)", async () => {
 		setupSpec({ size: "D" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		// D still in spec-guard VALID_SIZES until Wave 2 (T-2.1) updates it
-		expect(getDecision()).toBe("allow");
+		// D no longer in VALID_SIZES → parseSpecState returns null → isActiveSpecMalformed = true → deny
+		expect(getDecision()).toBe("deny");
 	});
 
 	it("allows Edit to .alfred/ paths (spec exempt)", async () => {

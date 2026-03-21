@@ -554,8 +554,8 @@ export function createApp(
 		if (!task) return c.json({ error: "task not found" }, 404);
 		if (task.status === "completed") return c.json({ error: "task already completed" }, 400);
 
-		// Approval gate: M/L/XL require approved review.
-		if (["M", "L", "XL"].includes(task.size ?? "")) {
+		// Approval gate: M/L require approved review.
+		if (["M", "L"].includes(task.size ?? "")) {
 			if (task.review_status !== "approved") {
 				return c.json({ error: `${task.size} spec requires approval before completion` }, 400);
 			}

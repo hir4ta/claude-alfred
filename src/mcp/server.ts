@@ -66,7 +66,7 @@ Size-based scaling: init accepts size (S/M/L/XL) and spec_type (feature/bugfix).
 				.describe("Spec file (for update/history/rollback)"),
 			content: z.string().optional().describe("Content to write (for update)"),
 			mode: z.enum(["append", "replace"]).optional().describe("Write mode (for update)"),
-			size: z.enum(["S", "M", "L", "XL"]).optional().describe("Spec size for init"),
+			size: z.enum(["S", "M", "L"]).optional().describe("Spec size for init"),
 			spec_type: z.enum(["feature", "bugfix"]).optional().describe("Spec type for init"),
 			version: z.string().optional().describe("Version timestamp for rollback"),
 			confirm: z

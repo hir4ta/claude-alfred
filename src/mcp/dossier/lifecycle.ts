@@ -42,7 +42,7 @@ export function dossierComplete(projectPath: string, store: Store, params: Dossi
 	const task = state.tasks.find((t) => t.slug === taskSlug);
 	if (task) {
 		const size = task.size ?? "L";
-		if (["M", "L", "XL"].includes(size)) {
+		if (["M", "L"].includes(size)) {
 			const reviewStatus = reviewStatusFor(projectPath, taskSlug);
 			if (reviewStatus !== "approved") {
 				return errorResult(
