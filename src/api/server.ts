@@ -58,7 +58,7 @@ export function createApp(
 	const proj = detectProject(projectPath);
 	const VALID_SPEC_FILES = new Set([
 		"requirements.md", "design.md", "tasks.md", "test-specs.md",
-		"decisions.md", "research.md", "session.md", "bugfix.md", "delta.md",
+		"decisions.md", "research.md", "session.md", "bugfix.md",
 	]);
 
 	function enrichTask(

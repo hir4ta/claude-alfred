@@ -9,17 +9,17 @@ paths:
 ## Slug & Lifecycle
 - task_slug: `^[a-z0-9][a-z0-9\-]{0,63}$`; spec.ValidSlug exported regex
 - Task lifecycle: active → complete (preserves spec files, sets completed_at) or delete (removes files)
-- ActiveTask fields: slug, started_at, status (active/completed), completed_at, review_status (pending/approved/changes_requested), size (S/M/L/XL), spec_type (feature/bugfix)
+- ActiveTask fields: slug, started_at, status (active/completed), completed_at, review_status (pending/approved/changes_requested), size (S/M/L), spec_type (feature/bugfix)
 - Spec file locking: advisory flock on `.lock` file (exponential backoff 100/200/400/800ms ~1.5s total, context-aware cancellation, graceful fallback + stderr warning)
 - Spec version history: `.history/` dir with max 20 versions per file; rollback saves current first
 
 ## Size & Type System
-- SpecSize: S (2 files), M (3-4 files), L/XL (5 files), D (1 file: delta.md)
-- Auto-detected from description length (< 100 → S, < 300 → M, else L); D and XL are manual-only
-- SpecType: feature (default, uses requirements.md), bugfix (uses bugfix.md), delta (uses delta.md) — orthogonal to size; delta auto-set when size=D
+- SpecSize: S (3 files), M (4 files), L (5 files). XL and D are removed.
+- Auto-detected from description length (< 100 → S, < 300 → M, else L)
+- SpecType: feature (default, uses requirements.md), bugfix (uses bugfix.md)
 - FilesForSize(size, specType): returns file list for any (size, type) combination
 - Init functional options: WithSize(SpecSize), WithSpecType(SpecType); InitWithResult returns SpecDir + Size + SpecType + Files
-- Backward compat: legacy _active.md without size/spec_type defaults to L/feature; EffectiveSize()/EffectiveSpecType() helpers
+- Backward compat: legacy _active.md without size/spec_type defaults to L/feature; legacy XL/D sizes are treated as malformed (hard error)
 
 ## Spec Files
 - Spec v4: 5 files (requirements, design, tasks, test-specs, research); session.md removed — progress tracked via tasks.md; decisions saved via `ledger save sub_type=decision` directly
@@ -47,10 +47,10 @@ paths:
 - Grounding levels: verified (code/test proven) > reviewed (design-reviewed/user-confirmed) > inferred (reasoned from evidence) > speculative (hypothesis)
 
 ## Validation (dossier validate)
-- 21 checks: required_sections, min_fr_count (S:1+, M:3+, L:5+, XL:8+; bugfix uses substantive content check), traceability (fr_to_task, task_to_fr — supports both `### T-N.N` header and `- [ ] T-N.N` checkbox formats), confidence_annotations, closing_wave, design_fr_references, testspec_fr_references, nfr_traceability (L/XL only), gherkin_syntax, orphan_tests, orphan_tasks, content_placeholder, research_completeness (L/XL only), confidence_coverage (XL only), xl_wave_count (>=4, XL only), xl_nfr_required (XL only), delta_sections_present (D only), grounding_coverage (opt-in: L/XL or D, >30% speculative fails), delta_change_ids (D only), delta_before_after (D only). decisions_completeness removed (decisions saved via ledger directly)
+- 15 checks: required_sections, min_fr_count (S:1+, M:3+, L:5+; bugfix uses substantive content check), traceability (fr_to_task, task_to_fr — supports both `### T-N.N` header and `- [ ] T-N.N` checkbox formats), confidence_annotations, closing_wave, design_fr_references, testspec_fr_references, nfr_traceability (L only), gherkin_syntax, orphan_tests, orphan_tasks, content_placeholder, research_completeness (L only), grounding_coverage (opt-in: L, >30% speculative fails). XL-only checks (xl_wave_count, xl_nfr_required, confidence_coverage) and delta checks removed.
 
 ## Approval Gate
-- complete action: M/L/XL specs require review_status="approved" AND approved review JSON file in reviews/ directory (S/D exempt)
+- complete action: M/L specs require review_status="approved" AND approved review JSON file in reviews/ directory (S exempt)
 - Fail-closed: YAML parse errors reject completion. Manual _active.md editing cannot bypass the gate
 - Review data: .alfred/specs/{slug}/reviews/review-{timestamp}.json
 - ReviewComment: file, line (1-based), body, resolved

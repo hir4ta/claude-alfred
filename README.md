@@ -44,7 +44,7 @@ Optional: add `export VOYAGE_API_KEY=your-key` to `~/.zshrc` for semantic search
 
 Most spec tools give you slash commands that say "you should write a spec first." alfred uses Claude Code's hook system to **physically block** Edit and Write until you do. That's the core difference — enforcement happens at the tool level, not the prompt level.
 
-**Enforcement, not suggestions.** Three layers gate your code edits. An intent guard blocks implementation without a spec. A review gate blocks the next wave until you've reviewed the last one. An approval gate blocks M/L/XL specs until a human signs off in the dashboard. You can't YAML-edit your way past it — the signed review file gets checked too.
+**Enforcement, not suggestions.** Three layers gate your code edits. An intent guard blocks implementation without a spec. A review gate blocks the next wave until you've reviewed the last one. An approval gate blocks M/L specs until a human signs off in the dashboard. You can't YAML-edit your way past it — the signed review file gets checked too.
 
 **Knowledge that grows up.** Every decision, pattern, and hard-won lesson goes to `.alfred/knowledge/` as structured JSON. Patterns auto-promote to rules after 15+ search hits. Each knowledge type has its own half-life — rules stay relevant for 120 days, assumptions fade after 30. Contradictions are detected automatically. Git-friendly, team-shareable, and alfred surfaces relevant experience before you ask.
 
@@ -70,7 +70,7 @@ Claude Code is powerful, but unstructured AI coding has well-documented failure 
 
 The industry is converging on two complementary paradigms: **Spec-Driven Development** (structured specs as source of truth) and **Intent-Driven Development** (capture *why* and *what*, let AI handle *how*). alfred bridges both:
 
-- **Full SDD** for M/L/XL features — requirements, design, tasks, tests, with traceability and review gates
+- **Full SDD** for M/L features — requirements, design, tasks, tests, with traceability and review gates
 - **Lightweight IDD** for S/D changes — just requirements + decisions, no design overhead
 - **Immutable decisions** via `ledger save` — like ADRs, but semantically searchable across projects and sessions
 
@@ -148,10 +148,9 @@ Search pipeline: Voyage AI vectors with reranking > FTS5 with fuzzy matching > k
 
 | Size | Files | Good for |
 |------|-------|----------|
-| **S** | 2 | Bug fix, config tweak |
-| **M** | 3-4 | New endpoint, moderate refactor |
-| **L/XL** | 5 | Architecture change, new subsystem |
-| **D** | 1 | Brownfield delta change |
+| **S** | 3 | Bug fix, small feature |
+| **M** | 4 | New endpoint, moderate refactor |
+| **L** | 5 | Architecture change, new subsystem |
 
 ## Updating
 

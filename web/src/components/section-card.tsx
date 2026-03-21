@@ -1,10 +1,9 @@
 import { Check, ChevronDown, Copy, Download, MessageSquareText, BookOpen } from "@animated-color-icons/lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
-import { DiffViewer } from "@/components/diff-viewer";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -17,34 +16,8 @@ function specFileColor(filename: string): string {
 		"test-specs.md": "#7b6b8d",    // purple
 		"research.md": "#2d8b7a",      // pattern teal
 		"bugfix.md": "#c0392b",        // error red
-		"delta.md": "#44403c",         // dark
 	};
 	return colors[filename] ?? "#6b7280";
-}
-
-/** Parse delta.md CHG-N Before/After sections for diff display. */
-function parseDeltaSections(content: string): { id: string; before: string; after: string }[] {
-	const results: { id: string; before: string; after: string }[] = [];
-	const chgPattern = /###\s+(CHG-\d+)[:\s]*/g;
-	const matches = [...content.matchAll(chgPattern)];
-	for (const match of matches) {
-		const id = match[1]!;
-		const startIdx = match.index! + match[0].length;
-		const nextMatch = matches[matches.indexOf(match) + 1];
-		const section = content.slice(startIdx, nextMatch?.index ?? content.length);
-
-		const beforeMatch = section.match(/####?\s*Before\s*\n([\s\S]*?)(?=####?\s*After|$)/i);
-		const afterMatch = section.match(/####?\s*After\s*\n([\s\S]*?)(?=####?\s*(?:CHG-|Before)|$)/i);
-
-		if (beforeMatch && afterMatch) {
-			results.push({
-				id,
-				before: beforeMatch[1]!.trim(),
-				after: afterMatch[1]!.trim(),
-			});
-		}
-	}
-	return results;
 }
 
 /** Spec file → brand color mapping */
@@ -57,7 +30,6 @@ export const SPEC_FILE_COLORS: Record<string, string> = {
 	"research.md": "#628141",
 	"session.md": "#40513b",
 	"bugfix.md": "#c0392b",
-	"delta.md": "#44403c",
 };
 
 interface SectionCardProps {
@@ -87,8 +59,6 @@ export function SectionCard({
 }: SectionCardProps) {
 	const { t } = useI18n();
 	const [open, setOpen] = useState(defaultOpen);
-	const isDelta = title === "delta.md";
-	const deltaSections = useMemo(() => isDelta ? parseDeltaSections(content) : [], [isDelta, content]);
 
 	return (
 		<div
@@ -173,15 +143,6 @@ export function SectionCard({
 				<div className="border-t px-4 py-3">
 					{isReviewMode && reviewPanel ? (
 						reviewPanel
-					) : isDelta && deltaSections.length > 0 ? (
-						<div className="space-y-4">
-							{deltaSections.map((sec) => (
-								<div key={sec.id}>
-									<p className="text-xs font-semibold text-muted-foreground mb-2">{sec.id}</p>
-									<DiffViewer oldText={sec.before} newText={sec.after} oldLabel="Before" newLabel="After" />
-								</div>
-							))}
-						</div>
 					) : (
 						<div
 							className="prose prose-sm prose-stone dark:prose-invert max-w-none

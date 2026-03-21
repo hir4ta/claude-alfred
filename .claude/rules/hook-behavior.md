@@ -26,7 +26,7 @@ paths:
 - File context boost from git diff
 - Skill nudge: classifyIntent (7 intents: research/plan/implement/bugfix/review/tdd/save-knowledge, JP+EN bilingual phrase keywords) → buildSkillNudge (intent→skill routing with active spec suppression for plan/implement) → additionalContext injection
 - save-knowledge suppresses research when both match. No API calls (pure keyword matching, <1ms)
-- Parallel dev guard (Stage 1.5): active spec exists + implement/bugfix/tdd intent + slug NOT in worked-slugs → WARNING prompting AskUserQuestion to confirm same task or new task. Suppressed once user edits files for the spec (slug added to worked-slugs via PostToolUse). Fires after Stage 1 (no spec → DIRECTIVE) and after Stage 2 (M/L/XL unapproved → DIRECTIVE)
+- Parallel dev guard (Stage 1.5): active spec exists + implement/bugfix/tdd intent + slug NOT in worked-slugs → WARNING prompting AskUserQuestion to confirm same task or new task. Suppressed once user edits files for the spec (slug added to worked-slugs via PostToolUse). Fires after Stage 1 (no spec → DIRECTIVE) and after Stage 2 (M/L unapproved → DIRECTIVE)
 
 ## PostToolUse
 - Bash error detection → FTS5 knowledge search → additionalContext injection
@@ -46,7 +46,7 @@ paths:
 ## PreToolUse
 - Review gate enforcement: reads `.alfred/.state/review-gate.json`, blocks Edit/Write when gate active + slug matches active spec
 - Gate types: `spec-review` (auto-set on dossier init), `wave-review` (set per wave via `dossier action=gate`)
-- Enforcement order: .alfred/ exempt → gate-exempt paths (docs/, .md, .claude/, project-external) → malformed check (empty primary = valid state, not malformed) → review-gate → approval gate (M/L/XL unapproved)
+- Enforcement order: .alfred/ exempt → gate-exempt paths (docs/, .md, .claude/, project-external) → malformed check (empty primary = valid state, not malformed) → review-gate → approval gate (M/L unapproved)
 - Gate clear: `dossier action=gate sub_action=clear reason="..."` (reason required, audit logged)
 - Gate fix mode: `dossier action=gate sub_action=fix reason="..."` — switches gate to `fix_mode: true`, allowing Edit/Write for applying fixes while keeping gate logically active. After fixes, re-run review then `gate clear` to fully remove. Enables review→fix→re-review loop (#15/#20)
 - Spec-first guard: command handler only (prompt-type LLM judge removed in #19). When no active spec and no polish mode, emits stderr advisory warning + `allowTool()`. Enforcement of spec-first rule is via UserPromptSubmit DIRECTIVE (Stage 1), not PreToolUse

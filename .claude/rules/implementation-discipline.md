@@ -23,12 +23,12 @@ Before writing ANY implementation code (new features, bug fixes, refactors):
 After all spec documents are created:
 1. MUST run self-review (delegate to `alfred:code-reviewer` agent or `/alfred:inspect`)
 2. Fix all Critical and Warning findings
-3. This applies to ALL sizes including S and D
+3. This applies to ALL sizes including S
 
-## Step 3: User Approval (M/L/XL Only)
+## Step 3: User Approval (M/L Only)
 
-- M/L/XL specs require user approval via `alfred dashboard` before implementation
-- S/D specs are exempt from user approval
+- M/L specs require user approval via `alfred dashboard` before implementation
+- S specs are exempt from user approval
 - Enforced: PreToolUse DENY + dossier complete validation
 
 ## Step 4: Implementation (Per Wave)

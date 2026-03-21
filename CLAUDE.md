@@ -38,10 +38,10 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 ### Development Flow
 
 1. **Spec Creation** — Create spec documents via `/alfred:brief` or `dossier action=init`
-2. **Self-Review** (all sizes including S/D)
-   - OK → User approval request (M/L/XL only; S/D exempt)
+2. **Self-Review** (all sizes including S)
+   - OK → User approval request (M/L only; S exempt)
    - NG → Fix → Self-review (loop until OK)
-3. **User Spec Review** (M/L/XL only, via `alfred dashboard`)
+3. **User Spec Review** (M/L only, via `alfred dashboard`)
    - OK → Implementation phase
    - NG → Back to step 1
 4. **Implementation** (per Wave, Wave-centric enforcement)
@@ -58,7 +58,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 | Step | Mechanism | Level |
 |------|-----------|-------|
 | Spec required | UserPromptSubmit DIRECTIVE + PreToolUse advisory | DIRECTIVE/CONTEXT |
-| Spec approval (M/L/XL) | PreToolUse + dossier complete | DENY |
+| Spec approval (M/L) | PreToolUse + dossier complete | DENY |
 | Wave self-review | review-gate.json via PreToolUse (fix_mode for review→fix→re-review loop) | DENY (fix_mode: ALLOW) |
 | Wave commit + knowledge | PostToolUse DIRECTIVE | DIRECTIVE |
 | Task progress update | Explicit `dossier action=check` | Manual |
