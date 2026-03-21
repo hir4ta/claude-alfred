@@ -147,27 +147,30 @@ export function createApp(
 		active: string;
 		tasks: Record<string, unknown>[];
 	} {
+		let state: { primary: string; tasks: Array<{ slug: string; status?: string; started_at?: string; completed_at?: string; size?: string; spec_type?: string; review_status?: string; owner?: string }> };
 		try {
-			const state = readActiveState(projPath);
-			const enriched = state.tasks.map((task) => enrichTask(task, projPath, projName, projId));
-
-			const specsDir = join(projPath, ".alfred", "specs");
-			const activeSlugs = new Set(state.tasks.map((t) => t.slug));
-			let archived: Record<string, unknown>[] = [];
-			try {
-				const dirs = readdirSync(specsDir).filter((d) => {
-					if (d.startsWith("_") || !VALID_SLUG.test(d) || activeSlugs.has(d)) return false;
-					try { return statSync(join(specsDir, d)).isDirectory(); } catch { return false; }
-				});
-				archived = dirs.map((slug) =>
-					enrichTask({ slug, status: "completed", started_at: "" }, projPath, projName, projId),
-				);
-			} catch { /* no specs dir */ }
-
-			return { active: state.primary, tasks: [...enriched, ...archived] };
+			state = readActiveState(projPath);
 		} catch {
-			return { active: "", tasks: [] };
+			state = { primary: "", tasks: [] };
 		}
+
+		const enriched = state.tasks.map((task) => enrichTask(task, projPath, projName, projId));
+		const activeSlugs = new Set(state.tasks.map((t) => t.slug));
+
+		// Collect completed specs (directories in specs/ not in _active.md)
+		let archived: Record<string, unknown>[] = [];
+		const specsDir = join(projPath, ".alfred", "specs");
+		try {
+			const dirs = readdirSync(specsDir).filter((d) => {
+				if (d.startsWith("_") || !VALID_SLUG.test(d) || activeSlugs.has(d)) return false;
+				try { return statSync(join(specsDir, d)).isDirectory(); } catch { return false; }
+			});
+			archived = dirs.map((slug) =>
+				enrichTask({ slug, status: "completed", started_at: "" }, projPath, projName, projId),
+			);
+		} catch { /* no specs dir */ }
+
+		return { active: state.primary, tasks: [...enriched, ...archived] };
 	}
 
 	// --- API Routes ---
