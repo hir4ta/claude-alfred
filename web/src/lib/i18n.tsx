@@ -190,6 +190,8 @@ export const translations = {
 
 	// Traceability & coverage
 	"task.traceability": { en: "Traceability", ja: "トレーサビリティ" },
+	"task.traceabilityHint1": { en: "Maps each requirement (FR) to its implementation task (T-N.N) and test case (TS-N.N).", ja: "各要件(FR)を実装タスク(T-N.N)とテストケース(TS-N.N)に紐づけます。" },
+	"task.traceabilityHint2": { en: "Gaps indicate untested or unimplemented requirements.", ja: "空欄は未実装・未テストの要件を示します。" },
 	"task.coverage": { en: "Coverage", ja: "カバレッジ" },
 	"task.requirement": { en: "Requirement", ja: "要件" },
 	"task.taskId": { en: "Task", ja: "タスク" },
@@ -198,7 +200,7 @@ export const translations = {
 	// Butler empty states
 	"empty.noTasks": { en: "Nothing requiring your attention at the moment, sir.", ja: "ただいま、ご用件はございません。" },
 	"empty.noSpecs": { en: "No specifications on file, sir. Shall I prepare one?", ja: "仕様書はございません。ご用意いたしましょうか？" },
-	"empty.noMemories": { en: "The archives are empty, sir. Knowledge awaits discovery.", ja: "記録はございません。知見の蓄積をお待ちしております。" },
+	"empty.noMemories": { en: "The archives are empty, sir.\nKnowledge awaits discovery.", ja: "記録はございません。\n知見の蓄積をお待ちしております。" },
 	"empty.noResults": { en: "I've searched thoroughly, sir. Nothing matches your inquiry.", ja: "くまなく探しましたが、該当するものが見つかりません。" },
 	"empty.noActivity": { en: "All quiet on the front, sir. No recent activity to report.", ja: "静かな時でございます。直近の活動はございません。" },
 	"empty.error": { en: "My apologies, sir. Something has gone awry.", ja: "申し訳ございません。不具合が生じております。" },

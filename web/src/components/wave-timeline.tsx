@@ -17,32 +17,33 @@ export function WaveTimeline({ waves }: WaveTimelineProps) {
 				const prevComplete = i > 0 && (waves[i - 1]?.checked ?? 0) >= (waves[i - 1]?.total ?? 1) && (waves[i - 1]?.total ?? 0) > 0;
 				const label = wave.key === "closing" ? "Closing" : `Wave ${wave.key}`;
 
+				// Connector type: flowing dots when connecting complete→current
+				const showFlowingDots = isCurrent && prevComplete;
+
 				return (
 					<div key={wave.key} className="flex items-start">
-						{/* Connector — aligned to circle center (size-7 = 28px, center = 14px) */}
+						{/* Connector */}
 						{i > 0 && (
 							<div className="flex items-center shrink-0" style={{ height: "28px" }}>
-								<div
-									className="w-6 overflow-hidden"
-									style={{ height: "2px" }}
-								>
-									{isCurrent ? (
-										<div
-											className="h-full w-full animate-shimmer"
-											style={{
-												background: "linear-gradient(90deg, #2d8b7a, #e67e22, #2d8b7a)",
-												backgroundSize: "200% 100%",
-											}}
-										/>
-									) : (
+								{showFlowingDots ? (
+									<div className="w-8 flex items-center justify-between px-0.5">
+										<div className="size-1 rounded-full animate-flow-dot-1" style={{ backgroundColor: "#2d8b7a" }} />
+										<div className="size-1 rounded-full animate-flow-dot-2" style={{ backgroundColor: "#2d8b7a" }} />
+										<div className="size-1 rounded-full animate-flow-dot-3" style={{ backgroundColor: "#2d8b7a" }} />
+									</div>
+								) : (
+									<div
+										className="w-6 overflow-hidden"
+										style={{ height: "2px" }}
+									>
 										<div
 											className="h-full w-full"
 											style={{
 												backgroundColor: isComplete || prevComplete ? "#2d8b7a" : "var(--color-border)",
 											}}
 										/>
-									)}
-								</div>
+									</div>
+								)}
 							</div>
 						)}
 
@@ -85,7 +86,7 @@ export function WaveTimeline({ waves }: WaveTimelineProps) {
 							</TooltipTrigger>
 							<TooltipContent>
 								<p className="text-xs font-medium">{wave.title || label}</p>
-								<p className="text-[10px] text-white/60 tabular-nums">
+								<p className="text-[10px] text-white/70 tabular-nums">
 									{wave.checked}/{wave.total} tasks
 								</p>
 							</TooltipContent>

@@ -16,7 +16,6 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { activityQueryOptions, epicsQueryOptions } from "@/lib/api";
@@ -27,17 +26,15 @@ export const Route = createFileRoute("/activity")({
 	component: ActivityPage,
 });
 
-const FILTERS = ["all", "spec.init", "spec.complete", "review.submit"] as const;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function ActivityPage() {
 	const { t } = useI18n();
-	const [filter, setFilter] = useState<string>("all");
 	const [showAll, setShowAll] = useState(false);
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
 	const { data: activityData, isLoading } = useQuery(
-		activityQueryOptions(100, filter === "all" ? undefined : filter),
+		activityQueryOptions(100),
 	);
 	const { data: epicsData } = useQuery(epicsQueryOptions());
 
@@ -57,47 +54,28 @@ function ActivityPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="sticky top-14 z-10 pt-6 pb-3 -mt-6 flex items-center gap-4 backdrop-blur-sm">
-				<Tabs value={filter} onValueChange={setFilter}>
-					<TabsList>
-						{FILTERS.map((f) => (
-							<TabsTrigger key={f} value={f} className="text-xs">
-								{f === "all" ? t("activity.all") : f}
-							</TabsTrigger>
-						))}
-					</TabsList>
-				</Tabs>
-				<div className="flex items-center gap-2 text-xs ml-auto">
-					<Popover>
-						<PopoverTrigger asChild>
-							<Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-								{dateFrom || t("activity.fromDate")}
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="start">
-							<Calendar mode="single" selected={dateFrom ? new Date(dateFrom) : undefined} onSelect={(d) => setDateFrom(d ? d.toISOString().slice(0, 10) : "")} />
-						</PopoverContent>
-					</Popover>
-					<span className="text-muted-foreground">—</span>
-					<Popover>
-						<PopoverTrigger asChild>
-							<Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-								{dateTo || t("activity.toDate")}
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="end">
-							<Calendar mode="single" selected={dateTo ? new Date(dateTo) : undefined} onSelect={(d) => setDateTo(d ? d.toISOString().slice(0, 10) : "")} />
-						</PopoverContent>
-					</Popover>
-					<Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => {
-						const header = "timestamp,action,target,detail\n";
-						const rows = entries.map((e) => `${e.timestamp},${e.action},${e.target},"${(e.detail ?? "").replace(/"/g, '""')}"`).join("\n");
-						const blob = new Blob([header + rows], { type: "text/csv" });
-						const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "activity.csv"; a.click(); URL.revokeObjectURL(url);
-					}}>
-						{t("activity.exportCsv")}
-					</Button>
-				</div>
+			<div className="flex items-center gap-2 text-xs">
+				<Popover>
+					<PopoverTrigger asChild>
+						<Button size="sm" variant="outline" className="h-7 text-xs gap-1 rounded-full bg-card">
+							{dateFrom || t("activity.fromDate")}
+						</Button>
+					</PopoverTrigger>
+					<PopoverContent className="w-auto p-0" align="start">
+						<Calendar mode="single" selected={dateFrom ? new Date(dateFrom) : undefined} onSelect={(d) => setDateFrom(d ? d.toISOString().slice(0, 10) : "")} />
+					</PopoverContent>
+				</Popover>
+				<span className="text-muted-foreground">—</span>
+				<Popover>
+					<PopoverTrigger asChild>
+						<Button size="sm" variant="outline" className="h-7 text-xs gap-1 rounded-full bg-card">
+							{dateTo || t("activity.toDate")}
+						</Button>
+					</PopoverTrigger>
+					<PopoverContent className="w-auto p-0" align="start">
+						<Calendar mode="single" selected={dateTo ? new Date(dateTo) : undefined} onSelect={(d) => setDateTo(d ? d.toISOString().slice(0, 10) : "")} />
+					</PopoverContent>
+				</Popover>
 			</div>
 
 			{isLoading ? (

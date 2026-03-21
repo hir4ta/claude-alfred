@@ -82,22 +82,24 @@ function TaskDetailPage() {
 	return (
 		<div className="flex flex-col h-[calc(100vh-120px)]">
 			{/* Header — sticky, no scroll */}
-			<div className="flex items-center gap-2.5 flex-wrap shrink-0 pb-3">
-				{(task.status === "completed" || task.status === "done") ? (
-					<CircleCheck className="size-4 shrink-0" style={{ color: "#2d8b7a" }} />
-				) : (
-					<CircleDot className="size-4 shrink-0" style={{ color: "#40513b" }} />
-				)}
-				<h2 className="text-lg font-semibold font-mono">{task.slug}</h2>
-				{task.size && <Badge variant="outline" style={{ borderColor: "rgba(123,107,141,0.4)", color: "#7b6b8d" }}>{task.size}</Badge>}
-				{task.spec_type && <Badge variant="outline" style={{ borderColor: "rgba(98,129,65,0.4)", color: "#628141" }}>{task.spec_type}</Badge>}
-				{task.review_status && <Badge variant="outline" style={{ borderColor: task.review_status === "approved" ? "rgba(45,139,122,0.4)" : task.review_status === "changes_requested" ? "rgba(230,126,34,0.4)" : "rgba(107,114,128,0.3)", color: task.review_status === "approved" ? "#2d8b7a" : task.review_status === "changes_requested" ? "#e67e22" : "#6b7280" }}>{task.review_status}</Badge>}
-				{validationData && <ValidationBadge report={validationData} />}
-				{task.waves && task.waves.length > 0 && <div className="ml-auto"><WaveTimeline waves={task.waves} /></div>}
+			<div className="shrink-0 pb-5 space-y-4">
+				<div className="flex items-center gap-2.5 flex-wrap">
+					{(task.status === "completed" || task.status === "done") ? (
+						<CircleCheck className="size-4 shrink-0" style={{ color: "#2d8b7a" }} />
+					) : (
+						<CircleDot className="size-4 shrink-0" style={{ color: "#40513b" }} />
+					)}
+					<h2 className="text-lg font-semibold font-mono truncate">{task.slug}</h2>
+					{task.size && <Badge variant="outline" style={{ borderColor: "rgba(123,107,141,0.4)", color: "#7b6b8d" }}>{task.size}</Badge>}
+					{task.spec_type && <Badge variant="outline" style={{ borderColor: "rgba(98,129,65,0.4)", color: "#628141" }}>{task.spec_type}</Badge>}
+					{task.review_status && <Badge variant="outline" style={{ borderColor: task.review_status === "approved" ? "rgba(45,139,122,0.4)" : task.review_status === "changes_requested" ? "rgba(230,126,34,0.4)" : "rgba(107,114,128,0.3)", color: task.review_status === "approved" ? "#2d8b7a" : task.review_status === "changes_requested" ? "#e67e22" : "#6b7280" }}>{task.review_status}</Badge>}
+					{validationData && <ValidationBadge report={validationData} />}
+				</div>
+				{task.waves && task.waves.length > 0 && <div className="pt-1"><WaveTimeline waves={task.waves} /></div>}
 			</div>
 
 				{/* Scrollable content */}
-			<div className="flex-1 overflow-y-auto space-y-3 pb-8">
+			<div className="flex-1 overflow-y-auto space-y-4 pb-8">
 			{/* Spec documents */}
 				{specs.map((spec, i) => {
 					const content = specContents[i]?.data?.content ?? "";

@@ -98,7 +98,7 @@ function KnowledgePage() {
 								setLocalFilter(e.target.value);
 								setPage(1);
 							}}
-							className="pl-9"
+							className="pl-9 bg-card rounded-full"
 						/>
 					</div>
 				)}
@@ -141,8 +141,8 @@ function KnowledgePage() {
 							onClick={() => toggleTag(tag)}
 							className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
 								selectedTags.has(tag)
-									? "bg-accent text-foreground border-border"
-									: "text-muted-foreground border-transparent hover:bg-accent/50"
+									? "bg-card text-foreground border-border"
+									: "bg-card text-muted-foreground border-border/40 hover:text-foreground"
 							}`}
 						>
 							{tag}

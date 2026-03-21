@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 
 interface TraceRow {
@@ -52,9 +53,17 @@ export function TraceabilityMatrix({ specContents }: { specContents: Record<stri
 	return (
 		<div className="rounded-xl border border-border bg-card">
 			<div className="px-4 py-2.5">
-				<h3 className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>
-					{t("task.traceability")}
-				</h3>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<h3 className="text-sm font-semibold cursor-help" style={{ fontFamily: "var(--font-display)" }}>
+							{t("task.traceability")}
+						</h3>
+					</TooltipTrigger>
+					<TooltipContent className="max-w-xs">
+						<p className="text-xs">{t("task.traceabilityHint1")}</p>
+						<p className="text-xs text-white/70 mt-1">{t("task.traceabilityHint2")}</p>
+					</TooltipContent>
+				</Tooltip>
 			</div>
 			<div className="border-t overflow-auto">
 				<table className="w-full text-xs">

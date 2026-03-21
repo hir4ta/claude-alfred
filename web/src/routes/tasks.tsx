@@ -32,13 +32,29 @@ function TasksLayout() {
 	const [statusFilter, setStatusFilter] = useState<string>("all");
 	const [sizeFilter, setSizeFilter] = useState<Set<string>>(new Set());
 	const terminalStatuses = new Set(["completed", "done", "cancelled"]);
-	const tasks = allTasks.filter((task) => {
-		if (statusFilter === "active" && terminalStatuses.has(task.status ?? "")) return false;
-		if (statusFilter === "review" && task.review_status !== "pending") return false;
-		if (statusFilter === "done" && !terminalStatuses.has(task.status ?? "")) return false;
-		if (sizeFilter.size > 0 && !sizeFilter.has(task.size ?? "")) return false;
-		return true;
-	});
+	const navigate = Route.useNavigate();
+
+	// Auto-navigate to active spec if no slug selected
+	const activeTask = allTasks.find((t) => !terminalStatuses.has(t.status ?? ""));
+	if (!selectedSlug && activeTask) {
+		navigate({ to: "/tasks/$slug", params: { slug: activeTask.slug } });
+	}
+
+	const tasks = allTasks
+		.filter((task) => {
+			if (statusFilter === "active" && terminalStatuses.has(task.status ?? "")) return false;
+			if (statusFilter === "review" && task.review_status !== "pending") return false;
+			if (statusFilter === "done" && !terminalStatuses.has(task.status ?? "")) return false;
+			if (sizeFilter.size > 0 && !sizeFilter.has(task.size ?? "")) return false;
+			return true;
+		})
+		.sort((a, b) => {
+			// Active tasks first, then by started_at descending (newest first)
+			const aTerminal = terminalStatuses.has(a.status ?? "") ? 1 : 0;
+			const bTerminal = terminalStatuses.has(b.status ?? "") ? 1 : 0;
+			if (aTerminal !== bTerminal) return aTerminal - bTerminal;
+			return (b.started_at ?? "").localeCompare(a.started_at ?? "");
+		});
 	const toggleSize = (size: string) => setSizeFilter((prev) => { const n = new Set(prev); if (n.has(size)) n.delete(size); else n.add(size); return n; });
 
 	return (
@@ -46,10 +62,10 @@ function TasksLayout() {
 			<div className="w-72 shrink-0 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)] px-1 pt-1">
 				{/* Status + size filter */}
 				<div className="flex flex-wrap gap-1 pb-1">
-					{(["all", "active", "review", "done"] as const).map((s) => (
+					{(["all", "active", "done"] as const).map((s) => (
 						<button key={s} type="button" onClick={() => setStatusFilter(s)}
 							className={cn("rounded-lg px-2 py-0.5 text-[10px] font-medium transition-colors border",
-								statusFilter === s ? "bg-accent text-foreground border-border" : "text-muted-foreground border-transparent hover:bg-accent/50"
+								statusFilter === s ? "bg-card text-foreground border-border" : "bg-card text-muted-foreground border-border/40 hover:text-foreground"
 							)}
 						>{t(`filter.${s}` as never)}</button>
 					))}
@@ -58,7 +74,7 @@ function TasksLayout() {
 					{["S", "M", "L"].map((s) => (
 						<button key={s} type="button" onClick={() => toggleSize(s)}
 							className={cn("rounded-full px-1.5 py-0 text-[10px] font-medium transition-colors border",
-								sizeFilter.has(s) ? "bg-accent text-foreground border-border" : "text-muted-foreground border-transparent hover:bg-accent/50"
+								sizeFilter.has(s) ? "bg-card text-foreground border-border" : "bg-card text-muted-foreground border-border/40 hover:text-foreground"
 							)}
 						>{s}</button>
 					))}
@@ -108,11 +124,11 @@ function TaskAccordionCard({
 	return (
 		<div
 			className={cn(
-				"rounded-xl border bg-card text-card-foreground transition-colors overflow-hidden",
-				isSelected && "ring-1",
+				"rounded-lg border bg-card text-card-foreground transition-colors overflow-hidden",
+				isSelected && "border-2",
 				isCompleted && "opacity-60",
 			)}
-			style={isSelected ? { borderColor: `rgba(${c.r},${c.g},${c.b},0.35)` } : undefined}
+			style={isSelected ? { borderColor: "var(--color-brand-dark)" } : undefined}
 		>
 			{/* Card header — always visible, clickable to navigate */}
 			<Link to="/tasks/$slug" params={{ slug: task.slug }} className="block p-3 pb-2">
@@ -131,7 +147,7 @@ function TaskAccordionCard({
 			</Link>
 
 			{/* Compact info — always visible */}
-			<div className="px-3 pb-4 space-y-1.5">
+			<div className="px-3 pb-3 space-y-1.5">
 				{(task.project_name || task.started_at) && (
 					<p className="text-[10px] font-medium" style={{ color: "#40513b" }}>
 						{task.project_name}{task.project_name && task.started_at && " · "}{task.started_at && <span className="text-muted-foreground/70 font-normal">{formatDate(task.started_at)}</span>}

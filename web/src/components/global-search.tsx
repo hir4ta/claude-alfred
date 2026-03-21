@@ -82,7 +82,7 @@ export function GlobalSearch() {
 					onFocus={() => query.length >= 2 && setOpen(true)}
 					onKeyDown={handleKeyDown}
 					placeholder={t("search.placeholder")}
-					className="h-8 w-52 pl-8 text-sm rounded-lg"
+					className="h-8 w-52 pl-8 text-sm rounded-lg bg-card"
 				/>
 			</div>
 			{open && results.length > 0 && (
