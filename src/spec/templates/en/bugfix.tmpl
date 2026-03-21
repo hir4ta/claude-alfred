@@ -4,26 +4,22 @@
 
 ## Bug Summary
 
-<!-- 1-2 sentences describing the problem. What happens vs. what should happen. -->
+<!-- 1-2 sentences. What happens vs. what should happen. -->
 
 ## Severity & Impact
 
-<!--
 | Field | Value |
 |-------|-------|
 | Severity | P0 (service down) / P1 (major feature broken) / P2 (workaround exists) / P3 (minor) |
-| Impact | Affected users / features / components |
+| Impact | |
 | Frequency | Always / under specific conditions / rare |
 | Workaround | Yes (describe) / None |
--->
 
 ## Reproduction Steps
 
 1.
 2.
 3.
-
-<!-- If not reproducible, record environment info (OS, Node version, alfred version) -->
 
 ## Root Cause Analysis
 
@@ -37,40 +33,33 @@
 
 ### Code Trace
 
-<!--
+<!-- Exact paths and line numbers so implementor can locate the cause immediately. -->
+
 - **Symptom location**: `src/path/to/file.ts:line` — what happens
 - **Root cause location**: `src/path/to/file.ts:line` — why it happens
 - **Data flow**: input → processing → point of failure
--->
 
 ## Fix Strategy
 
-<!--
-- **Files to change**: paths and change summary
-- **Chosen approach**: what and how
-- **Rejected alternatives**: other approaches and why they were dismissed
-- **Risk**: potential side effects of the fix
--->
+- **Target file**: `src/path/to/file.ts` — concrete change description
+- **Rejected alternatives**: other approaches and why dismissed
+- **Side-effect risk**: potential impact on other functionality
 
 ## Unchanged Behavior
 
-<!--
-What MUST NOT break:
-- All existing tests pass
-- Backward compatibility of affected APIs/UI
-- Related features continue to work
--->
+<!-- What MUST NOT break. Implementor checks these BEFORE applying fix. -->
 
-## Regression Prevention
+- [ ] All existing tests pass
+- [ ]
 
-<!--
-- Test to add: TS-N.N (also document in test-specs.md in Gherkin format)
-- What the test prevents: directly tests the bug's recurrence condition
+## Regression Prevention Test
+
+<!-- Test to detect recurrence. Also add to test-specs.md.
+     Test MUST describe external-observable behavior only (no internal implementation references). -->
 
 ```gherkin
-Scenario: [Bug condition is fixed]
+Scenario: [Bug does not recur]
   Given [precondition that triggered the bug]
   When [action that caused the bug]
-  Then [correct behavior is observed]
+  Then [correct behavior]
 ```
--->

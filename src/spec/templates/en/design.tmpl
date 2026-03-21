@@ -2,67 +2,76 @@
 
 ## Architecture Overview
 
-<!--
-Show the overall structure using ASCII or code block.
-Clarify component dependencies, data flow, and external system boundaries.
--->
+<!-- ASCII diagram showing component structure and data flow.
+     Implementor MUST create/modify files according to this diagram. -->
 
 ## Component Design
 
-<!--
-For each component:
-- **File path**: `src/path/to/file.ts`
-- **Responsibility**: What this component does (1 sentence)
-- **Interface**: Function signatures, type definitions (TypeScript)
-- **Dependencies**: Relationships with other components
+<!-- For each component: write Why and What. Minimize How — implementor decides. -->
 
-IDD principle: Document Why (rationale) and What (external contracts).
-Minimize How (internal implementation details) — AI decides during implementation.
--->
+### [Component Name] (`src/path/to/file.ts`)
+
+- **Responsibility**: One sentence.
+- **Interface**:
+```typescript
+// Public function signatures and types. Implementor MUST follow this contract.
+```
+- **Dependencies**: Existing modules used
+- **Error handling**: Errors this component throws/returns
 
 ## Data Models
 
-<!--
-If new tables, columns, or types are introduced:
-- SQL DDL (table definitions, indexes, constraints)
-- TypeScript interfaces
-- Migration strategy (impact on existing data)
--->
+<!-- New/changed tables, type definitions. Write both SQL DDL and TypeScript types.
+     Implementor uses these definitions directly in code. -->
 
 ## API Contracts
 
-<!--
-If new/changed endpoints:
-- HTTP method + path + parameters
-- Request/response types
-- Error cases
-- Zod schema names (if added to schemas.ts)
--->
+<!-- New/changed endpoints.
+     Implementor MUST follow this contract exactly. No ad-hoc field additions. -->
+
+| Method | Path | Request | Response | Error |
+|--------|------|---------|----------|-------|
+|        |      |         |          |       |
+
+## Error Scenarios
+
+<!-- List errors that CAN happen and HOW to handle them.
+     AI tends to implement happy-path only. Errors not listed here will NOT be handled. -->
+
+| Scenario | Input/State | Expected Handling | HTTP/Exit |
+|----------|------------|-------------------|-----------|
+|          |            |                   |           |
+
+## Boundary Conditions
+
+<!-- Typical edge cases AI misses. Implementation MUST cover these. -->
+
+- [ ] Empty input (null, undefined, "", [], {})
+- [ ] Maximum values (MAX_INT, very long strings, 1000+ records)
+- [ ] Concurrent access (simultaneous writes, race conditions)
+- [ ] Unicode / CJK / special characters
+- [ ] Unauthorized / expired auth
+- [ ] Network error / timeout
+- [ ] Remove non-applicable items
 
 ## Design Decisions
 
-<!--
+<!-- Important decisions MUST be persisted via `ledger save sub_type=decision`. -->
+
 | Decision | Choice | Rationale | Alternatives |
 |----------|--------|-----------|--------------|
+|          |        |           |              |
 
-Important decisions should be persisted via `ledger save sub_type=decision`.
-Design decisions are the only context that survives compaction.
--->
+## Non-Goals
 
-## Constraints & Non-Goals
+<!-- Align with Out of Scope in requirements.md.
+     If implementor starts building out-of-scope features, refer here to stop. -->
 
-<!--
-What this design intentionally does NOT address:
-- Explicit "won't build" prevents AI scope creep
-- Align with Out of Scope in requirements.md
--->
+-
 
 ## Traceability Matrix
 
-<!--
-Verify every FR maps to a design component → task → test.
-No orphan FRs (without tests) or orphan tasks (without FRs).
--->
+<!-- Every FR must map to component → task → test. No orphans allowed. -->
 
 | Req ID | Component | Task ID | Test ID |
 |--------|-----------|---------|---------|

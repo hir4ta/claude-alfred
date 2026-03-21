@@ -2,57 +2,64 @@
 
 ## Existing Code Analysis
 
-<!--
-Read relevant code and document the current state:
-- Record file paths and line numbers
-- Note existing patterns, types, APIs
-- Identify reusable components
--->
+<!-- List files that MUST be read before implementation. Exact paths and line numbers.
+     Patterns found here MUST be reused during implementation. -->
+
+| File | Line | What's There | Reusable? |
+|------|------|-------------|-----------|
+|      |      |             |           |
+
+## Patterns to Follow
+
+<!-- Patterns already established in this codebase.
+     Implementation MUST follow these. Do NOT invent new patterns. -->
+
+- **Naming**:
+- **Error handling**:
+- **Testing**:
+- **Type definitions**:
 
 ## Gap Analysis
 
-<!--
-| Current State | Required | Gap | Difficulty |
-|---------------|----------|-----|-----------|
-| ... | ... | ... | S/M/L |
-
-Map: current → desired → delta
--->
+| Current State | Required | Gap | Target File | Difficulty |
+|---------------|----------|-----|-------------|-----------|
+|               |          |     |             | S/M/L     |
 
 ## Implementation Options
 
-<!--
-For each option, document:
-- **Pros / Cons**
-- **Effort estimate** (S/M/L)
-- **Risks**
-- **Recommendation rationale**
-
-Minimum 2 options. "Do nothing" is a valid option.
--->
-
 ### Option A: [Recommended]
+
+- **Concrete changes**: which file, which function, how
+- **Pros**:
+- **Cons**:
+- **Risk**:
 
 ### Option B: [Alternative]
 
+- **Concrete changes**:
+- **Pros**:
+- **Cons**:
+- **Rejection reason**:
+
+## Dependency Verification
+
+<!-- Verify all libraries/APIs actually exist. AI hallucinates versions and APIs.
+     Confirm via grep/Read, not assumption. -->
+
+| Dependency | Verification Method | Confirmed |
+|-----------|-------------------|-----------|
+|           |                   | ✓ / ✗     |
+
 ## Risks & Unknowns
 
-<!--
-Each risk should have a confidence score:
-  <!-- confidence: N | source: code/inference/assumption -->
+<!-- confidence: N | source: code/inference/assumption -->
 
-1M context considerations:
-- This research may be lost during compaction → persist key findings via ledger save
-- For cross-session work, this file is the sole context source → write self-contained
--->
+1.
+2.
 
 ## Done Criteria
 
-<!--
-Conditions for research to be considered "complete":
-- [ ] All relevant code has been read
-- [ ] Gaps are clearly identified
-- [ ] At least 2 options compared
-- [ ] Risks enumerated
-- [ ] Recommended option selected with rationale
--->
+- [ ] All relevant code read, paths and line numbers recorded
+- [ ] Reusable patterns identified
+- [ ] Dependency existence confirmed (no hallucinations)
+- [ ] At least 2 options compared, recommendation selected
