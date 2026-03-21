@@ -15,7 +15,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 | Package | Role |
 |---|---|
 | `src/mcp/` | MCP server (3 tools: dossier, roster, ledger) — @modelcontextprotocol/sdk + Zod. dossier split into `src/mcp/dossier/{index,helpers,init,lifecycle,crud}.ts` |
-| `src/store/` | SQLite persistence (knowledge_index + embeddings + FTS5), project detection |
+| `src/store/` | SQLite persistence (projects + knowledge_index + spec_index + embeddings + FTS5), project registry, spec sync |
 | `src/embedder/` | Voyage AI (voyage-4-large, vector search + rerank-2.5) |
 | `src/spec/` | Spec management: .alfred/specs/ (8 file types) + Size-based scaling + Validate + Templates |
 | `src/epic/` | Epic management: .alfred/epics/ (YAML-based task grouping + dependencies) |
@@ -132,7 +132,8 @@ node dist/cli.mjs version     # Show version
 - React SPA: Vite 8 + TanStack Router (file-based) + TanStack Query + shadcn/ui + Tailwind CSS v4
 - Build: `task build` (npm run build:web → tsdown bundle)
 - Dev mode: `ALFRED_DEV=1 alfred dashboard` + `task dev` (Vite HMR proxy)
-- 4 tabs: Overview (/) / Tasks (/tasks) / Knowledge (/knowledge) / Activity (/activity)
+- 5 tabs: Overview (/) / Tasks (/tasks) / Knowledge (/knowledge) / Activity (/activity) / Projects (/projects)
+- Cross-project: ProjectSelector filters all tabs via `?project=<uuid>`. GlobalSearch (Cmd+K) for unified knowledge+spec search
 - Review mode: line-numbered spec viewer, inline comments, Approve/Request Changes with confirmation dialog
 - Review API: POST/GET /api/tasks/:slug/review (submit review + get status + history). Creates review JSON in .alfred/specs/{slug}/reviews/
 - Markdown rendering: react-markdown + react-syntax-highlighter for rich spec display
