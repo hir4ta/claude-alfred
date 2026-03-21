@@ -38,11 +38,9 @@ export const translations = {
 	"overview.recentDecisions": { en: "Recent Decisions", ja: "最近の意思決定" },
 
 	// Size labels
-	"size.S": { en: "Small — 2 spec files", ja: "Small — スペック2ファイル" },
-	"size.M": { en: "Medium — 3-4 spec files", ja: "Medium — スペック3-4ファイル" },
+	"size.S": { en: "Small — 3 spec files", ja: "Small — スペック3ファイル" },
+	"size.M": { en: "Medium — 4 spec files", ja: "Medium — スペック4ファイル" },
 	"size.L": { en: "Large — 5 spec files", ja: "Large — スペック5ファイル" },
-	"size.XL": { en: "Extra Large — 5 spec files", ja: "Extra Large — スペック5ファイル" },
-	"size.D": { en: "Delta — 1 spec file", ja: "Delta — スペック1ファイル" },
 
 	// Tasks sidebar
 	"tasks.hideCompleted": { en: "Hide completed", ja: "完了を非表示" },

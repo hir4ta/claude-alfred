@@ -55,7 +55,7 @@ function TasksLayout() {
 					))}
 				</div>
 				<div className="flex flex-wrap gap-1 pb-1">
-					{["S", "M", "L", "XL", "D"].map((s) => (
+					{["S", "M", "L"].map((s) => (
 						<button key={s} type="button" onClick={() => toggleSize(s)}
 							className={cn("rounded-full px-1.5 py-0 text-[10px] font-medium transition-colors border",
 								sizeFilter.has(s) ? "bg-accent text-foreground border-border" : "text-muted-foreground border-transparent hover:bg-accent/50"

@@ -33,8 +33,6 @@ const SIZE_LABEL_KEYS: Record<string, TranslationKey> = {
 	S: "size.S",
 	M: "size.M",
 	L: "size.L",
-	XL: "size.XL",
-	D: "size.D",
 };
 
 function TaskDetailPage() {
@@ -74,12 +72,12 @@ function TaskDetailPage() {
 		},
 	});
 
-	const needsReview = ["M", "L", "XL"].includes(task?.size ?? "");
+	const needsReview = ["M", "L"].includes(task?.size ?? "");
 	const isPending = needsReview && task?.review_status !== "approved";
 	const isActive = task?.status !== "completed" && task?.status !== "done" && task?.status !== "cancelled";
 	const canComplete =
 		isActive &&
-		(task?.review_status === "approved" || !["M", "L", "XL"].includes(task?.size ?? ""));
+		(task?.review_status === "approved" || !["M", "L"].includes(task?.size ?? ""));
 
 	const toggleReviewMode = (file: string) => {
 		setReviewModeFiles((prev) => {

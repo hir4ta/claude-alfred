@@ -36,7 +36,7 @@ function deriveNextAction(task: TaskDetail, t: (key: TranslationKey) => string):
 	const isCompleted = task.status === "completed" || task.status === "done" || task.status === "cancelled";
 	if (isCompleted) return null;
 	if (task.review_status === "changes_requested") return t("action.changesRequested");
-	if (task.review_status === "pending" && ["M", "L", "XL"].includes(task.size ?? ""))
+	if (task.review_status === "pending" && ["M", "L"].includes(task.size ?? ""))
 		return t("action.awaitingReview");
 	if (task.focus) return t("action.implementing");
 	return t("action.specCreation");
