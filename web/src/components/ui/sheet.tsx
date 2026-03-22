@@ -1,5 +1,5 @@
 import * as React from "react"
-import { XIcon } from "@animated-color-icons/lucide-react"
+import { X as XIcon } from "@animated-color-icons/lucide-react"
 import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
