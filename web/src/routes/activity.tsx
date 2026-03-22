@@ -62,7 +62,7 @@ function ActivityPage() {
 			<DetailDrawer
 				open={!!selectedEntry}
 				onClose={() => setSelectedEntry(null)}
-				title={selectedEntry ? `${selectedEntry.action} — ${selectedEntry.target}` : ""}
+				title={selectedEntry ? (selectedEntry.target ? `${selectedEntry.action} — ${selectedEntry.target}` : selectedEntry.action) : ""}
 			>
 				{selectedEntry && (
 					<div className="space-y-3 text-sm">
