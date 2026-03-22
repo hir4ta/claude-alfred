@@ -123,6 +123,27 @@ export const AuditLogResponseSchema = z.object({
 	total: z.number(),
 });
 
+export const ReworkRateSchema = z.object({
+	slug: z.string(),
+	size: z.string(),
+	completedAt: z.string(),
+	reworkRate: z.number(),
+	reworkedCount: z.number(),
+	totalCount: z.number(),
+	pending: z.boolean(),
+});
+
+export const CycleTimeSchema = z.object({
+	slug: z.string(),
+	size: z.string(),
+	phases: z.object({
+		planning: z.number().nullable(),
+		approvalWait: z.number().nullable(),
+		implementation: z.number().nullable(),
+		total: z.number(),
+	}),
+});
+
 export const AnalyticsResponseSchema = z.object({
 	hitRanking: z.array(z.object({
 		id: z.number(),
@@ -135,6 +156,8 @@ export const AnalyticsResponseSchema = z.object({
 		avgDays: z.number(),
 		count: z.number(),
 	})),
+	reworkRates: z.array(ReworkRateSchema),
+	cycleTimeBreakdown: z.array(CycleTimeSchema),
 });
 
 // --- Decisions ---

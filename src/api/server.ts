@@ -524,13 +524,15 @@ export function createApp(
 	});
 
 	app.get("/api/activity/analytics", async (c) => {
-		const { getKnowledgeHitRanking, getSpecCompletionStats } = await import("../store/audit.js");
+		const { getKnowledgeHitRanking, getSpecCompletionStats, getReworkRates, getCycleTimeBreakdown } = await import("../store/audit.js");
 		const filterProjectId = getProjectFilter(c.req.query("project")) || undefined;
 
 		const hitRanking = getKnowledgeHitRanking(store, { projectId: filterProjectId });
 		const completionStats = getSpecCompletionStats(store, { projectId: filterProjectId });
+		const reworkRates = getReworkRates(store, { projectId: filterProjectId });
+		const cycleTimeBreakdown = getCycleTimeBreakdown(store, { projectId: filterProjectId });
 
-		return c.json({ hitRanking, completionStats });
+		return c.json({ hitRanking, completionStats, reworkRates, cycleTimeBreakdown });
 	});
 
 	app.get("/api/specs/:slug/similar", async (c) => {

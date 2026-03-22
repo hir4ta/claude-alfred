@@ -1,5 +1,6 @@
 import { extractReviewFindings, saveKnowledgeEntries } from "../mcp/knowledge-extractor.js";
 import { truncate } from "../mcp/helpers.js";
+import { appendAudit } from "../spec/audit.js";
 import { updateTaskStatus } from "../spec/status.js";
 import { effectiveStatus, readActive, readActiveState, SpecDir } from "../spec/types.js";
 import { searchKnowledgeFTS } from "../store/fts.js";
@@ -11,7 +12,7 @@ import type { HookEvent } from "./dispatcher.js";
 import { notifyUser } from "./dispatcher.js";
 
 import { isSpecFilePath } from "./spec-guard.js";
-import { addWorkedSlug, parseWaveProgress, readStateText, readWaveProgress, writeStateText, writeWaveProgress } from "./state.js";
+import { addWorkedSlug, parseWaveProgress, readStateJSON, readStateText, readWaveProgress, writeStateJSON, writeStateText, writeWaveProgress } from "./state.js";
 import { writeReviewGate } from "./review-gate.js";
 
 function readExploreCount(cwd: string): number {
@@ -150,6 +151,9 @@ async function handleBashResult(
 		const stdout = response.stdout ?? "";
 
 		if (isGitCommit(stdout) && !signal.aborted) {
+			// FR-2 (feedback-metrics): Track first commit for cycle time breakdown.
+			trackFirstCommit(ev.cwd!, stdout);
+
 			// Living Spec auto-append: track new source files in design.md.
 			let appendedFiles = new Set<string>();
 			try {
@@ -365,6 +369,32 @@ function extractReviewKnowledge(projectPath: string, toolResponse: unknown): voi
 		}
 	} catch {
 		/* fail-open: review extraction errors don't affect PostToolUse */
+	}
+}
+
+/**
+ * FR-2 (feedback-metrics): Track first commit for active spec.
+ * Idempotent — only records once per spec via state file.
+ */
+function trackFirstCommit(projectPath: string, stdout: string): void {
+	try {
+		const slug = readActive(projectPath);
+		const stateFile = `first-commit-${slug}.json`;
+		const existing = readStateJSON<{ slug?: string } | null>(projectPath, stateFile, null);
+		if (existing?.slug) return; // Already tracked
+
+		// Parse commit hash from git output: [branch hash]
+		const hashMatch = stdout.match(/\[[\w./-]+ ([0-9a-f]+)\]/);
+		const commit = hashMatch?.[1] ?? "unknown";
+
+		writeStateJSON(projectPath, stateFile, {
+			slug,
+			commit,
+			timestamp: new Date().toISOString(),
+		});
+		appendAudit(projectPath, { action: "first_commit", target: slug });
+	} catch {
+		/* no active spec — skip */
 	}
 }
 

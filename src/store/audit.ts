@@ -192,6 +192,194 @@ export async function syncAuditJsonl(
 	return { imported, skipped };
 }
 
+// ── Rework Rate (FR-3) ──
+
+export interface ReworkRateEntry {
+	slug: string;
+	size: string;
+	completedAt: string;
+	reworkRate: number;
+	reworkedCount: number;
+	totalCount: number;
+	pending: boolean;
+}
+
+/**
+ * Read rework rates from audit_log (SQL only, no git).
+ * - Confirmed: rework.checked events (21+ days past completion)
+ * - Pending: spec.complete with changed_files but no rework.checked yet
+ */
+export function getReworkRates(
+	store: Store,
+	opts?: { projectId?: string },
+): ReworkRateEntry[] {
+	const results: ReworkRateEntry[] = [];
+	const projectFilter = opts?.projectId ? "AND project_id = ?" : "";
+	const params: unknown[] = opts?.projectId ? [opts.projectId] : [];
+
+	// 1. Confirmed rework rates from rework.checked events
+	const checkedRows = store.db
+		.prepare(`
+			SELECT slug, detail FROM audit_log
+			WHERE event = 'rework.checked' ${projectFilter}
+		`)
+		.all(...params) as Array<{ slug: string; detail: string }>;
+
+	const checkedSlugs = new Set<string>();
+	for (const r of checkedRows) {
+		try {
+			const d = JSON.parse(r.detail) as {
+				rework_rate?: number;
+				reworked_count?: number;
+				total_count?: number;
+				completed_at?: string;
+				size?: string;
+			};
+			checkedSlugs.add(r.slug);
+			results.push({
+				slug: r.slug,
+				size: d.size ?? "M",
+				completedAt: d.completed_at ?? "",
+				reworkRate: d.rework_rate ?? 0,
+				reworkedCount: d.reworked_count ?? 0,
+				totalCount: d.total_count ?? 0,
+				pending: false,
+			});
+		} catch { /* skip malformed */ }
+	}
+
+	// 2. Pending: completed specs with changed_files but no rework.checked
+	const completedRows = store.db
+		.prepare(`
+			SELECT slug, timestamp, detail FROM audit_log
+			WHERE event = 'spec.complete' ${projectFilter}
+			ORDER BY timestamp DESC
+		`)
+		.all(...params) as Array<{ slug: string; timestamp: string; detail: string }>;
+
+	const now = Date.now();
+	const TWENTY_ONE_DAYS = 21 * 24 * 60 * 60 * 1000;
+
+	for (const r of completedRows) {
+		if (checkedSlugs.has(r.slug)) continue;
+		try {
+			const d = JSON.parse(r.detail) as { changed_files?: string[]; size?: string };
+			if (!d.changed_files || d.changed_files.length === 0) continue;
+
+			const completedAt = new Date(r.timestamp).getTime();
+			const isPending = now - completedAt < TWENTY_ONE_DAYS;
+
+			// Only include pending entries (< 21 days). Entries past 21 days
+			// without rework.checked need computation first — skip them.
+			if (!isPending) continue;
+
+			results.push({
+				slug: r.slug,
+				size: d.size ?? "M",
+				completedAt: r.timestamp,
+				reworkRate: 0,
+				reworkedCount: 0,
+				totalCount: d.changed_files.length,
+				pending: true,
+			});
+		} catch { /* skip malformed */ }
+	}
+
+	return results;
+}
+
+// ── Cycle Time (FR-4) ──
+
+export interface CycleTimeEntry {
+	slug: string;
+	size: string;
+	phases: {
+		planning: number | null;
+		approvalWait: number | null;
+		implementation: number | null;
+		total: number;
+	};
+}
+
+/**
+ * Compute cycle time breakdown from audit_log (SQL only).
+ * Phases: init → approved → first_commit → complete
+ */
+export function getCycleTimeBreakdown(
+	store: Store,
+	opts?: { projectId?: string },
+): CycleTimeEntry[] {
+	const projectFilter = opts?.projectId ? "AND project_id = ?" : "";
+	const params: unknown[] = opts?.projectId ? [opts.projectId] : [];
+
+	// Get all completed specs with their phase timestamps
+	const rows = store.db
+		.prepare(`
+			SELECT
+				slug,
+				MIN(CASE WHEN event = 'spec.init' THEN timestamp END) as init_ts,
+				MIN(CASE WHEN event = 'spec.complete' THEN timestamp END) as complete_ts,
+				MIN(CASE WHEN event = 'spec.complete' THEN detail END) as complete_detail,
+				MIN(CASE WHEN event = 'first_commit' THEN timestamp END) as first_commit_ts,
+				MIN(CASE WHEN event = 'review.submit' AND detail LIKE '%"approved"%' THEN timestamp END) as approved_ts
+			FROM audit_log
+			WHERE event IN ('spec.init', 'spec.complete', 'first_commit', 'review.submit')
+			${projectFilter}
+			GROUP BY slug
+			HAVING init_ts IS NOT NULL AND complete_ts IS NOT NULL
+		`)
+		.all(...params) as Array<{
+		slug: string;
+		init_ts: string;
+		complete_ts: string;
+		complete_detail: string | null;
+		first_commit_ts: string | null;
+		approved_ts: string | null;
+	}>;
+
+	return rows.map((r) => {
+		const initMs = new Date(r.init_ts).getTime();
+		const completeMs = new Date(r.complete_ts).getTime();
+		const firstCommitMs = r.first_commit_ts ? new Date(r.first_commit_ts).getTime() : null;
+		const approvedMs = r.approved_ts ? new Date(r.approved_ts).getTime() : null;
+
+		const daysDiff = (a: number, b: number) => Math.round(((b - a) / (1000 * 60 * 60 * 24)) * 10) / 10;
+
+		let size = "M";
+		try {
+			const d = JSON.parse(r.complete_detail ?? "{}");
+			if (d.size) size = d.size;
+		} catch { /* default */ }
+
+		let planning: number | null = null;
+		let approvalWait: number | null = null;
+		let implementation: number | null = null;
+
+		if (approvedMs && firstCommitMs) {
+			// Full M/L flow: init → approved → first_commit → complete
+			planning = daysDiff(initMs, approvedMs);
+			approvalWait = daysDiff(approvedMs, firstCommitMs);
+			implementation = daysDiff(firstCommitMs, completeMs);
+		} else if (firstCommitMs) {
+			// S spec (no approval): init → first_commit → complete
+			planning = daysDiff(initMs, firstCommitMs);
+			implementation = daysDiff(firstCommitMs, completeMs);
+		}
+		// else: only total available
+
+		return {
+			slug: r.slug,
+			size,
+			phases: {
+				planning,
+				approvalWait,
+				implementation,
+				total: daysDiff(initMs, completeMs),
+			},
+		};
+	});
+}
+
 // ── Analytics ──
 
 export function getKnowledgeHitRanking(

@@ -183,6 +183,50 @@ export const versionQueryOptions = () =>
 		staleTime: REF_STALE,
 	});
 
+// --- Activity / Analytics ---
+
+export interface AnalyticsResponse {
+	hitRanking: Array<{ id: number; title: string; hitCount: number; projectName: string }>;
+	completionStats: Array<{ size: string; avgDays: number; count: number }>;
+	reworkRates: Array<{
+		slug: string; size: string; completedAt: string;
+		reworkRate: number; reworkedCount: number; totalCount: number; pending: boolean;
+	}>;
+	cycleTimeBreakdown: Array<{
+		slug: string; size: string;
+		phases: { planning: number | null; approvalWait: number | null; implementation: number | null; total: number };
+	}>;
+}
+
+export interface ActivityLogEntry {
+	timestamp: string;
+	event: string;
+	slug: string;
+	actor: string;
+	detail: string;
+}
+
+export const analyticsQueryOptions = (projectId?: string) =>
+	queryOptions({
+		queryKey: ["analytics", projectId],
+		queryFn: () => {
+			const url = projectId ? `/api/activity/analytics?project=${projectId}` : "/api/activity/analytics";
+			return fetchJSON<AnalyticsResponse>(url);
+		},
+		staleTime: REF_STALE,
+	});
+
+export const activityQueryOptions = (page = 0, projectId?: string) =>
+	queryOptions({
+		queryKey: ["activity", page, projectId],
+		queryFn: () => {
+			const params = new URLSearchParams({ limit: "50", offset: String(page * 50) });
+			if (projectId) params.set("project", projectId);
+			return fetchJSON<{ entries: ActivityLogEntry[]; total: number }>(`/api/activity?${params}`);
+		},
+		staleTime: LIVE_STALE,
+	});
+
 // --- Mutations ---
 
 export async function submitReview(

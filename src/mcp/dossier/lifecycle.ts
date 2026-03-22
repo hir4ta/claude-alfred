@@ -1,4 +1,6 @@
+import { execFile } from "node:child_process";
 import { clearReviewGate, readReviewGate, writeReviewGate } from "../../hooks/review-gate.js";
+import { shouldAutoAppend } from "../../hooks/lang-filter.js";
 import { ensureStateDir, readWaveProgress, writeStateJSON, writeWaveProgress } from "../../hooks/state.js";
 import { appendAudit } from "../../spec/audit.js";
 import { updateTaskStatus } from "../../spec/status.js";
@@ -18,6 +20,34 @@ import type { Store } from "../../store/index.js";
 import { truncate } from "../helpers.js";
 import { type DossierParams, errorResult, jsonResult } from "./helpers.js";
 
+/**
+ * FR-1: Collect source files changed during spec lifetime via git log.
+ * Uses started_at from _active.md as the time boundary.
+ * Timeout: 3s, returns empty array on failure.
+ */
+function getChangedFilesForSpec(projectPath: string, startedAt: string): Promise<string[]> {
+	return new Promise((resolve) => {
+		execFile(
+			"git",
+			["log", "--diff-filter=ACMR", "--name-only", `--since=${startedAt}`, "--pretty=format:"],
+			{ cwd: projectPath, timeout: 3000 },
+			(err, stdout) => {
+				if (err) {
+					if (err.killed) {
+						process.stderr.write("[alfred] git log timed out collecting changed files\n");
+					}
+					resolve([]);
+					return;
+				}
+				const files = [...new Set(
+					stdout.split("\n").map((l) => l.trim()).filter((l) => l.length > 0 && shouldAutoAppend(l)),
+				)];
+				resolve(files);
+			},
+		);
+	});
+}
+
 function ensurePolishState(projectPath: string, slug: string): void {
 	ensureStateDir(projectPath);
 	writeStateJSON(projectPath, "polish.json", {
@@ -26,7 +56,7 @@ function ensurePolishState(projectPath: string, slug: string): void {
 	});
 }
 
-export function dossierComplete(projectPath: string, store: Store, params: DossierParams) {
+export async function dossierComplete(projectPath: string, store: Store, params: DossierParams) {
 	let taskSlug = params.task_slug;
 	if (!taskSlug) {
 		try {
@@ -84,9 +114,20 @@ export function dossierComplete(projectPath: string, store: Store, params: Dossi
 	}
 
 	try {
+		// FR-1: Collect changed files for rework rate tracking.
+		let changedFiles: string[] = [];
+		if (task?.started_at) {
+			changedFiles = await getChangedFilesForSpec(projectPath, task.started_at);
+		}
+
 		const currentStatus = effectiveStatus(task?.status);
 		const newPrimary = completeTask(projectPath, taskSlug);
-		appendAudit(projectPath, { action: "spec.complete", target: taskSlug, user: "mcp" });
+		appendAudit(projectPath, {
+			action: "spec.complete",
+			target: taskSlug,
+			user: "mcp",
+			detail: JSON.stringify({ changed_files: changedFiles, size: task?.size ?? "M" }),
+		});
 		appendAudit(projectPath, {
 			action: "task.status_change",
 			target: taskSlug,
