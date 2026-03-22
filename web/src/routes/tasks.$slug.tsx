@@ -3,11 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle, CircleCheck, CircleDot, XCircle } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import {
-	AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-	AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { ReviewPanel } from "@/components/review/ReviewPanel";
 import { SectionCard } from "@/components/section-card";
 import { TraceabilityMatrix } from "@/components/traceability";
@@ -118,21 +113,16 @@ function TaskDetailPage() {
 										<span className="text-[10px] ml-0.5">({allComments.length})</span>
 									</button>
 								)}
-								<ConfirmAction
-									title={t("review.approveTitle")}
-									description={t("review.approveDescription")}
-									action={() => reviewMutation.mutate("approved")}
+								<button
+									type="button"
+									onClick={() => reviewMutation.mutate("approved")}
 									disabled={reviewMutation.isPending}
+									className="al-icon-wrapper flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white cursor-pointer hover:opacity-90"
+									style={{ backgroundColor: "#628141" }}
 								>
-									<button
-										type="button"
-										className="al-icon-wrapper flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white cursor-pointer hover:opacity-90"
-										style={{ backgroundColor: "#628141" }}
-									>
-										<CheckCircle className="size-4" />
-										{t("review.approve")}
-									</button>
-								</ConfirmAction>
+									<CheckCircle className="size-4" />
+									{t("review.approve")}
+								</button>
 							</div>
 						)}
 					</div>
@@ -194,29 +184,6 @@ function TaskDetailPage() {
 }
 
 
-
-function ConfirmAction({
-	title, description, action, disabled, children,
-}: {
-	title: string; description: string; action: () => void; disabled?: boolean; children: React.ReactNode;
-}) {
-	const { t } = useI18n();
-	return (
-		<AlertDialog>
-			<AlertDialogTrigger asChild disabled={disabled}>{children}</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle>{title}</AlertDialogTitle>
-					<AlertDialogDescription>{description}</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>{t("review.cancel")}</AlertDialogCancel>
-					<AlertDialogAction onClick={action}>{t("review.confirm")}</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-}
 
 function ValidationBadge({ report }: { report: ValidationReport }) {
 	const { t } = useI18n();
