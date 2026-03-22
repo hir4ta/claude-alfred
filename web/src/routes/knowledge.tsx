@@ -21,7 +21,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
 	knowledgeQueryOptions,
 	knowledgeStatsQueryOptions,
-	knowledgeGapsQueryOptions,
 } from "@/lib/api";
 import { formatLabel } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
@@ -45,8 +44,6 @@ function KnowledgePage() {
 	const { data: statsData } = useQuery(knowledgeStatsQueryOptions(projectId));
 
 	const entries = browseData?.entries ?? [];
-
-	const { data: gapsData } = useQuery(knowledgeGapsQueryOptions(projectId));
 
 	return (
 		<div className="space-y-5">
@@ -130,11 +127,6 @@ function KnowledgePage() {
 					);
 				})()}
 
-			{/* Gaps section */}
-			{(gapsData?.entries?.length ?? 0) > 0 && (
-				<GapsSection entries={gapsData!.entries} />
-			)}
-
 			{/* Detail drawer */}
 			<DetailDrawer
 				open={!!selected}
@@ -177,38 +169,5 @@ function StatDot({ count, color, label }: { count: number; color: string; label:
 			<span>{count}</span>
 			<span className="text-muted-foreground/60">{label}</span>
 		</span>
-	);
-}
-
-// --- Knowledge Gaps Section ---
-
-import type { KnowledgeGapEntry } from "@/lib/api";
-
-function GapsSection({ entries }: { entries: KnowledgeGapEntry[] }) {
-	const { t } = useI18n();
-	const [open, setOpen] = useState(false);
-
-	return (
-		<div className="rounded-organic border border-border/60 bg-card py-3 px-4">
-			<button
-				type="button"
-				onClick={() => setOpen(!open)}
-				className="flex w-full items-center justify-between text-sm font-semibold"
-			>
-				<span>{t("knowledge.gaps.title")} ({entries.length})</span>
-				<span className="text-muted-foreground text-xs">{open ? "▲" : "▼"}</span>
-			</button>
-			{open && (
-				<div className="mt-3 space-y-1.5">
-					{entries.slice(0, 20).map((g, i) => (
-						<div key={i} className="flex items-center gap-3 text-[11px] border-b border-border/20 last:border-0 py-1">
-							<span className="text-muted-foreground font-mono w-10 shrink-0">{g.best_score.toFixed(2)}</span>
-							<span className="truncate flex-1">{g.query}</span>
-							<span className="text-muted-foreground/60 shrink-0">{new Date(g.timestamp).toLocaleDateString()}</span>
-						</div>
-					))}
-				</div>
-			)}
-		</div>
 	);
 }
