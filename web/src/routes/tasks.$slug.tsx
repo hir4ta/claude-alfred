@@ -35,7 +35,7 @@ function TaskDetailPage() {
 	const { data: specsData } = useQuery(specsQueryOptions(slug, projectId));
 	const { data: validationData } = useQuery(validationQueryOptions(slug, projectId));
 	const [reviewModeFiles, setReviewModeFiles] = useState<Set<string>>(new Set());
-	const [allComments, setAllComments] = useState<Array<{ file: string; line: number; body: string }>>([]);
+	const [allComments, setAllComments] = useState<Array<{ file: string; line: number; body: string; endLine?: number }>>([]);
 	const queryClient = useQueryClient();
 
 	const task = tasksData?.tasks.find((t) => t.slug === slug);

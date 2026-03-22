@@ -635,7 +635,7 @@ export function createApp(
 		const sd = new SpecDir(projectPath, slug);
 		if (!sd.exists()) return c.json({ error: "spec not found" }, 404);
 
-		let body: { status: string; comments?: Array<{ file: string; line: number; body: string }> };
+		let body: { status: string; comments?: Array<{ file: string; line: number; endLine?: number; body: string }> };
 		try { body = await c.req.json(); } catch { return c.json({ error: "invalid JSON body" }, 400); }
 
 		const reviewStatus = body.status;
@@ -651,9 +651,10 @@ export function createApp(
 			timestamp: ts,
 			status: reviewStatus,
 			reviewer,
-			comments: rawComments.map((comment) => ({
+			comments: rawComments.map((comment: Record<string, unknown>) => ({
 				file: String(comment.file ?? "").slice(0, 500),
 				line: Math.max(0, Number(comment.line) || 0),
+				...(comment.endLine ? { endLine: Math.max(0, Number(comment.endLine) || 0) } : {}),
 				body: String(comment.body ?? "").slice(0, 10000),
 				resolved: false,
 			})),
