@@ -11,16 +11,18 @@ const PAD = 16;
 // Height variation by type — creates visual rhythm on the shelf
 const HEIGHTS: Record<string, number> = { rule: 240, decision: 270, pattern: 220, snapshot: 200 };
 
-// Brand color palette — assigned by entry id hash for variety
-const BRAND_COLORS = [
-	"#40513b", // session (dark green)
-	"#628141", // decision (mid green)
-	"#2d8b7a", // pattern (teal)
-	"#e67e22", // rule (orange)
-	"#7b6b8d", // purple
-	"#44403c", // dark stone
-	"#532300", // deep brown
-	"#1b247f", // deep blue
+// Soft pastel palette — light enough to feel like cloth/linen book covers
+const SPINE_COLORS = [
+	"#8fbc8f", // sage green
+	"#b0c4de", // light steel blue
+	"#deb887", // burlywood
+	"#d4a574", // warm tan
+	"#a0b89e", // muted olive
+	"#c4a882", // sand
+	"#b8a9c9", // soft lavender
+	"#d4927a", // terracotta rose
+	"#9cb4b0", // dusty teal
+	"#c9b99a", // parchment
 ];
 
 // Darken a hex color for the spine edge
@@ -38,7 +40,7 @@ function splitShelves(entries: KnowledgeEntry[], perShelf: number): KnowledgeEnt
 }
 
 function BookSpine({ entry, onClick }: { entry: KnowledgeEntry; onClick: () => void }) {
-	const color = BRAND_COLORS[entry.id % BRAND_COLORS.length]!;
+	const color = SPINE_COLORS[entry.id % SPINE_COLORS.length]!;
 	const edge = darken(color);
 	const h = HEIGHTS[entry.sub_type] ?? 210;
 	const { title } = formatLabel(entry.label);
@@ -76,31 +78,20 @@ function BookSpine({ entry, onClick }: { entry: KnowledgeEntry; onClick: () => v
 				{entry.verification_due ? (
 					<VerificationBadge entry={entry} />
 				) : (
-					<div className="w-5 h-[2px] bg-white/15 rounded-full mx-auto" />
+					<div className="w-5 h-[2px] bg-black/10 rounded-full mx-auto" />
 				)}
 			</div>
 
-			{/* Title — rotated horizontal text (consistent for all languages) */}
-			<div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 w-full">
-				<span
-					className="text-[10px] font-semibold text-white/85 leading-tight whitespace-nowrap origin-center"
-					style={{
-						fontFamily: "var(--font-display)",
-						transform: "rotate(180deg)",
-						writingMode: "vertical-lr",
-					}}
-				>
-					{label}
-				</span>
-			</div>
+			{/* Title hidden — shown on hover via native tooltip */}
+			<div className="flex-1" />
 
 			{/* Bottom — type initial or hit count */}
 			<div className="pb-2.5 px-1.5 shrink-0">
 				{(entry.hit_count ?? 0) > 0 ? (
-					<span className="text-[9px] text-white/40 font-mono tabular-nums">{entry.hit_count}</span>
+					<span className="text-[9px] text-black/30 font-mono tabular-nums">{entry.hit_count}</span>
 				) : (
-					<div className="w-4 h-4 rounded-full border border-white/15 flex items-center justify-center">
-						<span className="text-[7px] text-white/50 font-bold uppercase">{entry.sub_type.charAt(0)}</span>
+					<div className="w-4 h-4 rounded-full border border-black/10 flex items-center justify-center">
+						<span className="text-[7px] text-black/30 font-bold uppercase">{entry.sub_type.charAt(0)}</span>
 					</div>
 				)}
 			</div>
