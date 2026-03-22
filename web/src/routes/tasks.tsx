@@ -6,9 +6,12 @@ import { StatusBadge } from "@/components/status-badge";
 import { ButlerEmpty } from "@/components/butler-empty";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ViewSwitcher } from "@/components/view-switcher";
+import { TaskListView } from "@/components/task-list-view";
 import { tasksQueryOptions } from "@/lib/api";
 import type { TaskDetail, WaveInfo } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
+import { useViewMode } from "@/lib/use-view-mode";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 
@@ -30,6 +33,7 @@ function TasksLayout() {
 	const { data } = useQuery(tasksQueryOptions(search.project));
 	const allTasks = data?.tasks ?? [];
 	const { slug: selectedSlug } = useParams({ strict: false }) as { slug?: string };
+	const [viewMode, setViewMode] = useViewMode("tasks", "list");
 	const [statusFilter, setStatusFilter] = useState<string>("all");
 	const [sizeFilter, setSizeFilter] = useState<Set<string>>(new Set());
 	const terminalStatuses = new Set(["completed", "done", "cancelled"]);
@@ -62,15 +66,18 @@ function TasksLayout() {
 	return (
 		<div className="flex gap-6 items-start">
 			<div className="w-72 shrink-0 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)] px-1 pt-1">
-				{/* Status + size filter */}
-				<div className="flex flex-wrap gap-1 pb-1">
-					{(["all", "active", "done"] as const).map((s) => (
-						<button key={s} type="button" onClick={() => setStatusFilter(s)}
-							className={cn("rounded-lg px-2 py-0.5 text-[10px] font-medium transition-colors border",
-								statusFilter === s ? "bg-card text-foreground border-border" : "bg-card text-muted-foreground border-border/40 hover:text-foreground"
-							)}
-						>{t(`filter.${s}` as never)}</button>
-					))}
+				{/* Filters + View Switcher */}
+				<div className="flex items-center justify-between pb-1">
+					<div className="flex flex-wrap gap-1">
+						{(["all", "active", "done"] as const).map((s) => (
+							<button key={s} type="button" onClick={() => setStatusFilter(s)}
+								className={cn("rounded-lg px-2 py-0.5 text-[10px] font-medium transition-colors border",
+									statusFilter === s ? "bg-card text-foreground border-border" : "bg-card text-muted-foreground border-border/40 hover:text-foreground"
+								)}
+							>{t(`filter.${s}` as never)}</button>
+						))}
+					</div>
+					<ViewSwitcher current={viewMode} onChange={setViewMode} />
 				</div>
 				<div className="flex flex-wrap gap-1 pb-1">
 					{["S", "M", "L"].map((s) => (
@@ -81,14 +88,19 @@ function TasksLayout() {
 						>{s}</button>
 					))}
 				</div>
-				{tasks.map((task, i) => (
-					<TaskAccordionCard
-						key={task.slug}
-						task={task}
-						isSelected={task.slug === selectedSlug}
-						colorIndex={i}
-					/>
-				))}
+
+				{viewMode === "list" ? (
+					<TaskListView tasks={tasks} selectedSlug={selectedSlug} />
+				) : (
+					tasks.map((task, i) => (
+						<TaskAccordionCard
+							key={task.slug}
+							task={task}
+							isSelected={task.slug === selectedSlug}
+							colorIndex={i}
+						/>
+					))
+				)}
 
 				{tasks.length === 0 && allTasks.length === 0 && <ButlerEmpty scene="empty-tray" messageKey="empty.noTasks" />}
 			</div>

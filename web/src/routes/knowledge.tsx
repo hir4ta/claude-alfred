@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { KnowledgeCard } from "@/components/knowledge-card";
+import { KnowledgeListView } from "@/components/knowledge-list-view";
 import { KnowledgeDialog } from "@/components/knowledge-detail";
 import { ButlerEmpty } from "@/components/butler-empty";
+import { ViewSwitcher } from "@/components/view-switcher";
 import { StaggerContainer } from "@/components/stagger-container";
 import {
 	Pagination,
@@ -21,6 +23,7 @@ import {
 	knowledgeGapsQueryOptions,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useViewMode } from "@/lib/use-view-mode";
 import type { KnowledgeEntry, KnowledgeStats } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
 
@@ -31,6 +34,7 @@ export const Route = createFileRoute("/knowledge")({
 function KnowledgePage() {
 	const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
 	const [page, setPage] = useState(1);
+	const [viewMode, setViewMode] = useViewMode("knowledge", "card");
 
 	const search = useSearch({ strict: false }) as { project?: string };
 	const projectId = search.project;
@@ -48,12 +52,13 @@ function KnowledgePage() {
 				<GapsSection entries={gapsData!.entries} />
 			)}
 
-			{/* Stats */}
-			<div className="flex items-center justify-end">
+			{/* Stats + View Switcher */}
+			<div className="flex items-center justify-between">
+				<ViewSwitcher current={viewMode} onChange={setViewMode} />
 				{statsData && <StatsBar stats={statsData} />}
 			</div>
 
-			{/* Grid view */}
+			{/* Content */}
 			{(() => {
 					const perPage = 9;
 					const totalPages = Math.ceil(entries.length / perPage);
@@ -69,15 +74,19 @@ function KnowledgePage() {
 								</div>
 							) : paged.length > 0 ? (
 								<>
-									<StaggerContainer className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-										{paged.map((entry) => (
-											<KnowledgeCard
-												key={entry.id}
-												entry={entry}
-												onSelect={() => setSelected(entry)}
-											/>
-										))}
-									</StaggerContainer>
+									{viewMode === "list" ? (
+										<KnowledgeListView entries={paged} onSelect={(entry) => setSelected(entry)} />
+									) : (
+										<StaggerContainer className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+											{paged.map((entry) => (
+												<KnowledgeCard
+													key={entry.id}
+													entry={entry}
+													onSelect={() => setSelected(entry)}
+												/>
+											))}
+										</StaggerContainer>
+									)}
 									{totalPages > 1 && (
 										<Pagination>
 											<PaginationContent>
