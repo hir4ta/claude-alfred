@@ -1,17 +1,8 @@
 import { Archive, ArchiveRestore } from "@animated-color-icons/lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { SUB_TYPE_ICONS, SUB_TYPE_LABEL_KEYS } from "@/components/knowledge-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { promoteKnowledge, useToggleEnabledMutation } from "@/lib/api";
@@ -32,11 +23,12 @@ import { useI18n } from "@/lib/i18n";
 import type { KnowledgeEntry } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
 
-export function KnowledgeDialog({
+/** Drawer content for Knowledge detail (used inside DetailDrawer). */
+export function KnowledgeDrawerContent({
 	entry,
 	onClose,
 }: {
-	entry: KnowledgeEntry | null;
+	entry: KnowledgeEntry;
 	onClose: () => void;
 }) {
 	const { t, locale } = useI18n();
@@ -51,115 +43,108 @@ export function KnowledgeDialog({
 			onClose();
 		},
 	});
-	const canPromote = entry?.sub_type === "pattern" && (entry?.hit_count ?? 0) >= 15;
-	if (!entry) return null;
+	const canPromote = entry.sub_type === "pattern" && (entry.hit_count ?? 0) >= 15;
 
-	const { title, source } = formatLabel(entry.label);
+	const { source } = formatLabel(entry.label);
 	const color = SUB_TYPE_COLORS[entry.sub_type] ?? SUB_TYPE_COLORS.snapshot!;
 	const icon = SUB_TYPE_ICONS[entry.sub_type] ?? SUB_TYPE_ICONS.snapshot;
 
 	return (
-		<Dialog open={!!entry} onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-				<DialogHeader>
-					<div className="flex items-center gap-3 mb-2">
-						<div
-							className="flex size-8 items-center justify-center rounded-lg"
-							style={{ backgroundColor: `${color}18`, color }}
-						>
-							{icon}
-						</div>
-						<div className="flex items-center gap-2">
-							<span className="text-xs font-semibold" style={{ color }}>
-								{SUB_TYPE_LABEL_KEYS[entry.sub_type]
-									? t(SUB_TYPE_LABEL_KEYS[entry.sub_type]!)
-									: entry.sub_type}
-							</span>
-							{source && <span className="text-xs text-muted-foreground">· {source}</span>}
-						</div>
-					</div>
-					<DialogTitle
-						className="text-lg leading-snug"
-						style={{ fontFamily: "var(--font-display)" }}
-					>
-						{title}
-					</DialogTitle>
-					<DialogDescription asChild>
-						<div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
-							<span>
-								{t("knowledge.saved")} {formatDate(entry.saved_at ?? "", locale)}
-							</span>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<span className="cursor-help tabular-nums">
-										{entry.hit_count} {t("knowledge.hits")}
-									</span>
-								</TooltipTrigger>
-								<TooltipContent className="text-left">
-									<p>{t("knowledge.searchAppearances")}</p>
-									<p className="opacity-75">{t("knowledge.patternCandidate")}</p>
-									<p className="opacity-75">{t("knowledge.ruleCandidate")}</p>
-								</TooltipContent>
-							</Tooltip>
-							<Badge
-								variant="outline"
-								className="text-[10px] px-1.5 py-0 rounded-full"
-								style={{
-									borderColor: entry.enabled ? "rgba(45,139,122,0.3)" : "rgba(107,114,128,0.3)",
-									color: entry.enabled ? "#2d8b7a" : "#6b7280",
-								}}
-							>
-								{entry.enabled ? t("knowledge.active") : t("knowledge.archived")}
-							</Badge>
-							{canPromote && (
-								<AlertDialog>
-									<AlertDialogTrigger asChild>
-										<Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" style={{ color: "#e67e22", borderColor: "rgba(230,126,34,0.3)" }}>
-											{t("knowledge.promote")}
-										</Button>
-									</AlertDialogTrigger>
-									<AlertDialogContent>
-										<AlertDialogHeader>
-											<AlertDialogTitle className="text-base">{t("knowledge.promoteTitle")}</AlertDialogTitle>
-											<AlertDialogDescription>{t("knowledge.promoteDescription")}</AlertDialogDescription>
-										</AlertDialogHeader>
-										<AlertDialogFooter>
-											<AlertDialogCancel>{t("task.cancel")}</AlertDialogCancel>
-											<AlertDialogAction onClick={() => promoteMutation.mutate(entry.id)}>
-												{t("knowledge.promote")}
-											</AlertDialogAction>
-										</AlertDialogFooter>
-									</AlertDialogContent>
-								</AlertDialog>
-							)}
-							<Button
-								size="sm"
-								variant="ghost"
-								className="ml-auto h-7 gap-1.5 text-xs"
-								style={{ color: "#7b6b8d" }}
-								onClick={() => toggleMutation.mutate({ id: entry.id, enabled: !entry.enabled })}
-							>
-								{entry.enabled ? (
-									<>
-										<Archive className="size-3.5" /> {t("knowledge.archive")}
-									</>
-								) : (
-									<>
-										<ArchiveRestore className="size-3.5" /> {t("knowledge.restore")}
-									</>
-								)}
+		<>
+			{/* Header metadata */}
+			<div className="flex items-center gap-3">
+				<div
+					className="flex size-8 items-center justify-center rounded-lg"
+					style={{ backgroundColor: `${color}18`, color }}
+				>
+					{icon}
+				</div>
+				<div className="flex items-center gap-2">
+					<span className="text-xs font-semibold" style={{ color }}>
+						{SUB_TYPE_LABEL_KEYS[entry.sub_type]
+							? t(SUB_TYPE_LABEL_KEYS[entry.sub_type]!)
+							: entry.sub_type}
+					</span>
+					{source && <span className="text-xs text-muted-foreground">· {source}</span>}
+				</div>
+			</div>
+
+			{/* Metadata row */}
+			<div className="flex items-center flex-wrap gap-3 text-xs text-muted-foreground">
+				<span>
+					{t("knowledge.saved")} {formatDate(entry.saved_at ?? "", locale)}
+				</span>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<span className="cursor-help tabular-nums">
+							{entry.hit_count} {t("knowledge.hits")}
+						</span>
+					</TooltipTrigger>
+					<TooltipContent className="text-left">
+						<p>{t("knowledge.searchAppearances")}</p>
+						<p className="opacity-75">{t("knowledge.patternCandidate")}</p>
+						<p className="opacity-75">{t("knowledge.ruleCandidate")}</p>
+					</TooltipContent>
+				</Tooltip>
+				<Badge
+					variant="outline"
+					className="text-[10px] px-1.5 py-0 rounded-full"
+					style={{
+						borderColor: entry.enabled ? "rgba(45,139,122,0.3)" : "rgba(107,114,128,0.3)",
+						color: entry.enabled ? "#2d8b7a" : "#6b7280",
+					}}
+				>
+					{entry.enabled ? t("knowledge.active") : t("knowledge.archived")}
+				</Badge>
+			</div>
+
+			{/* Actions */}
+			<div className="flex items-center gap-2">
+				{canPromote && (
+					<AlertDialog>
+						<AlertDialogTrigger asChild>
+							<Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" style={{ color: "#e67e22", borderColor: "rgba(230,126,34,0.3)" }}>
+								{t("knowledge.promote")}
 							</Button>
-						</div>
-					</DialogDescription>
-				</DialogHeader>
+						</AlertDialogTrigger>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle className="text-base">{t("knowledge.promoteTitle")}</AlertDialogTitle>
+								<AlertDialogDescription>{t("knowledge.promoteDescription")}</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>{t("task.cancel")}</AlertDialogCancel>
+								<AlertDialogAction onClick={() => promoteMutation.mutate(entry.id)}>
+									{t("knowledge.promote")}
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
+				)}
+				<Button
+					size="sm"
+					variant="ghost"
+					className="h-7 gap-1.5 text-xs"
+					style={{ color: "#7b6b8d" }}
+					onClick={() => toggleMutation.mutate({ id: entry.id, enabled: !entry.enabled })}
+				>
+					{entry.enabled ? (
+						<>
+							<Archive className="size-3.5" /> {t("knowledge.archive")}
+						</>
+					) : (
+						<>
+							<ArchiveRestore className="size-3.5" /> {t("knowledge.restore")}
+						</>
+					)}
+				</Button>
+			</div>
 
-				<Separator />
+			<Separator />
 
-				<ScrollFadeArea>
-					<KnowledgeBody content={entry.content} subType={entry.sub_type} />
-				</ScrollFadeArea>
-			</DialogContent>
-		</Dialog>
+			{/* Body */}
+			<KnowledgeBody content={entry.content} subType={entry.sub_type} />
+		</>
 	);
 }
 
@@ -392,34 +377,3 @@ function cleanContent(content: string): string {
 	return cleaned;
 }
 
-/** ScrollArea with bottom gradient fade when content overflows. */
-function ScrollFadeArea({ children }: { children: React.ReactNode }) {
-	const [atBottom, setAtBottom] = useState(false);
-	const [hasOverflow, setHasOverflow] = useState(false);
-	const ref = useRef<HTMLDivElement>(null);
-
-	const handleScroll = useCallback(() => {
-		const el = ref.current;
-		if (!el) return;
-		const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
-		setAtBottom(isAtBottom);
-		setHasOverflow(el.scrollHeight > el.clientHeight + 8);
-	}, []);
-
-	return (
-		<div className="relative flex-1 -mx-6 min-h-0">
-			<div
-				ref={ref}
-				onScroll={handleScroll}
-				className="h-full overflow-y-auto px-6"
-				>
-				<div ref={(el) => { if (el) { requestAnimationFrame(() => { const parent = el.parentElement; if (parent) { setHasOverflow(parent.scrollHeight > parent.clientHeight + 8); } }); } }}>
-					{children}
-				</div>
-			</div>
-			{hasOverflow && !atBottom && (
-				<div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent" />
-			)}
-		</div>
-	);
-}

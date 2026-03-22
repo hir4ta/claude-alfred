@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { activityQueryOptions, analyticsQueryOptions } from "@/lib/api";
 import type { AnalyticsResponse } from "@/lib/api";
+import { DetailDrawer } from "@/components/detail-drawer";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/activity")({
@@ -14,6 +15,7 @@ function ActivityPage() {
 	const { data: analytics } = useQuery(analyticsQueryOptions());
 	const [page, setPage] = useState(0);
 	const { data: activity } = useQuery(activityQueryOptions(page));
+	const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null);
 
 	const hasMetrics = analytics && (
 		(analytics.reworkRates?.length ?? 0) > 0 ||
@@ -53,7 +55,47 @@ function ActivityPage() {
 				total={activity?.total ?? 0}
 				page={page}
 				onPageChange={setPage}
+				onSelect={setSelectedEntry}
 			/>
+
+			{/* Activity detail drawer */}
+			<DetailDrawer
+				open={!!selectedEntry}
+				onClose={() => setSelectedEntry(null)}
+				title={selectedEntry ? `${selectedEntry.action} — ${selectedEntry.target}` : ""}
+			>
+				{selectedEntry && (
+					<div className="space-y-3 text-sm">
+						<div className="flex items-center gap-2">
+							<EventBadge event={selectedEntry.action} />
+						</div>
+						<div className="space-y-2">
+							<div>
+								<p className="text-[11px] text-muted-foreground uppercase tracking-wide">{t("activity.log.slug")}</p>
+								{selectedEntry.target ? (
+									<Link to="/tasks/$slug" params={{ slug: selectedEntry.target }} className="font-mono text-sm hover:underline" style={{ color: "#40513b" }}>
+										{selectedEntry.target}
+									</Link>
+								) : (
+									<p className="text-muted-foreground">—</p>
+								)}
+							</div>
+							<div>
+								<p className="text-[11px] text-muted-foreground uppercase tracking-wide">{t("activity.log.actor")}</p>
+								<p>{selectedEntry.actor || "—"}</p>
+							</div>
+							<div>
+								<p className="text-[11px] text-muted-foreground uppercase tracking-wide">{t("activity.log.time")}</p>
+								<p className="font-mono text-[11px]">{new Date(selectedEntry.timestamp).toLocaleString()}</p>
+							</div>
+							<div>
+								<p className="text-[11px] text-muted-foreground uppercase tracking-wide">{t("activity.log.detail")}</p>
+								<p className="whitespace-pre-wrap break-all text-[12px] leading-relaxed">{selectedEntry.detail || "—"}</p>
+							</div>
+						</div>
+					</div>
+				)}
+			</DetailDrawer>
 		</div>
 	);
 }
@@ -212,11 +254,13 @@ function AuditLogTable({
 	total,
 	page,
 	onPageChange,
+	onSelect,
 }: {
 	entries: AuditEntry[];
 	total: number;
 	page: number;
 	onPageChange: (p: number) => void;
+	onSelect: (entry: AuditEntry) => void;
 }) {
 	const { t } = useI18n();
 	const totalPages = Math.ceil(total / 50);
@@ -264,7 +308,7 @@ function AuditLogTable({
 						</thead>
 						<tbody>
 							{entries.map((e, i) => (
-								<AuditRow key={i} entry={e} />
+								<AuditRow key={i} entry={e} onSelect={() => onSelect(e)} />
 							))}
 						</tbody>
 					</table>
@@ -301,15 +345,12 @@ function EventBadge({ event }: { event: string }) {
 	);
 }
 
-function AuditRow({ entry: e }: { entry: AuditEntry }) {
-	const [expanded, setExpanded] = useState(false);
-	const isLong = e.detail.length > 50;
-
+function AuditRow({ entry: e, onSelect }: { entry: AuditEntry; onSelect: () => void }) {
 	return (
 		<>
 			<tr
-				className={`border-b border-border/10 last:border-0 hover:bg-muted/20 ${isLong ? "cursor-pointer" : ""}`}
-				onClick={() => isLong && setExpanded(!expanded)}
+				className="border-b border-border/10 last:border-0 hover:bg-muted/20 cursor-pointer"
+				onClick={onSelect}
 			>
 				<td className="py-1.5 px-4 text-[11px] text-muted-foreground font-mono whitespace-nowrap">
 					{formatTimestamp(e.timestamp)}
@@ -320,23 +361,9 @@ function AuditRow({ entry: e }: { entry: AuditEntry }) {
 				<td className="py-1.5 pr-3 font-mono text-[11px]">{e.target}</td>
 				<td className="py-1.5 pr-3 text-[11px] text-muted-foreground">{e.actor}</td>
 				<td className="py-1.5 pr-4 text-[11px] text-muted-foreground">
-					{expanded ? (
-						<span className="whitespace-pre-wrap break-all">{e.detail}</span>
-					) : (
-						<span className="flex items-center gap-1">
-							<span className="truncate max-w-[300px] inline-block align-bottom">{e.detail}</span>
-							{isLong && <span className="text-muted-foreground/50 shrink-0">▸</span>}
-						</span>
-					)}
+					<span className="truncate max-w-[300px] inline-block align-bottom">{e.detail}</span>
 				</td>
 			</tr>
-			{expanded && (
-				<tr className="bg-muted/10">
-					<td colSpan={5} className="px-4 py-2 text-[11px] text-muted-foreground whitespace-pre-wrap break-all">
-						{e.detail}
-					</td>
-				</tr>
-			)}
 		</>
 	);
 }

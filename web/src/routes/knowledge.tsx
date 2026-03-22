@@ -3,7 +3,8 @@ import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { KnowledgeCard } from "@/components/knowledge-card";
 import { KnowledgeListView } from "@/components/knowledge-list-view";
-import { KnowledgeDialog } from "@/components/knowledge-detail";
+import { KnowledgeDrawerContent } from "@/components/knowledge-detail";
+import { DetailDrawer } from "@/components/detail-drawer";
 import { ButlerEmpty } from "@/components/butler-empty";
 import { ViewSwitcher } from "@/components/view-switcher";
 import { StaggerContainer } from "@/components/stagger-container";
@@ -22,6 +23,7 @@ import {
 	knowledgeStatsQueryOptions,
 	knowledgeGapsQueryOptions,
 } from "@/lib/api";
+import { formatLabel } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useViewMode } from "@/lib/use-view-mode";
 import type { KnowledgeEntry, KnowledgeStats } from "@/lib/types";
@@ -133,8 +135,14 @@ function KnowledgePage() {
 					);
 				})()}
 
-			{/* Detail dialog */}
-			<KnowledgeDialog entry={selected} onClose={() => setSelected(null)} />
+			{/* Detail drawer */}
+			<DetailDrawer
+				open={!!selected}
+				onClose={() => setSelected(null)}
+				title={selected ? formatLabel(selected.label).title : ""}
+			>
+				{selected && <KnowledgeDrawerContent entry={selected} onClose={() => setSelected(null)} />}
+			</DetailDrawer>
 		</div>
 	);
 }
