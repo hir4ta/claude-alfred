@@ -14,15 +14,12 @@ export function HeroTile({ task }: { task: TaskDetail }) {
 
 	return (
 		<Link to="/tasks/$slug" params={{ slug: task.slug }} className="block">
-			<Card className="al-icon-wrapper border-stone-200 transition-[border-color,transform] duration-200 hover:border-stone-300 hover:-translate-y-0.5 dark:border-stone-700 dark:hover:border-stone-600">
+			<Card className="al-icon-wrapper rounded-organic border-stone-200 transition-[border-color,transform] duration-200 hover:border-stone-300 hover:-translate-y-0.5 dark:border-stone-700 dark:hover:border-stone-600">
 				<CardContent className="py-4 space-y-3">
 					{/* Header */}
 					<div className="flex items-center gap-2 min-w-0">
 						<CircleDot className="size-5 shrink-0" style={{ color: "#40513b" }} />
-						<span
-							className="text-lg font-bold font-mono truncate"
-							style={{ fontFamily: "var(--font-display)" }}
-						>
+						<span className="text-lg font-bold font-mono truncate">
 							{task.slug}
 						</span>
 						<div className="flex items-center gap-1.5 ml-auto shrink-0">

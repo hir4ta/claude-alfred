@@ -299,7 +299,8 @@ export function createApp(
 					// Active spec
 					if (waves && waves.length > 0) {
 						const nonClosing = waves.filter((w) => w.key !== "closing");
-						const currentWave = nonClosing.findIndex((w) => w.isCurrent) + 1 || 1;
+						const currentIdx = nonClosing.findIndex((w) => w.isCurrent);
+						const currentWave = currentIdx >= 0 ? currentIdx + 1 : nonClosing.length;
 						const totalWaves = nonClosing.length;
 						const totalAll = waves.reduce((s, w) => s + w.total, 0);
 						const totalChecked = waves.reduce((s, w) => s + w.checked, 0);

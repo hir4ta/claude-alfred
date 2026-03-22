@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n";
-import type { BriefingResponse } from "@/lib/api";
+import type { BriefingResponse } from "@/lib/types";
 
 export function ButlerBriefing({
 	data,
@@ -68,7 +68,7 @@ export function ButlerBriefing({
 	}
 
 	return (
-		<Card className="border-stone-200 dark:border-stone-700">
+		<Card className="rounded-organic border-stone-200 dark:border-stone-700">
 			<CardContent className="py-4">
 				<p
 					className="text-base leading-relaxed text-foreground"

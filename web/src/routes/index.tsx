@@ -43,8 +43,8 @@ function OverviewPage() {
 		return bTime.localeCompare(aTime);
 	});
 
-	const activeTasks = tasks.filter((t) => {
-		const s = t.status;
+	const activeTasks = tasks.filter((task) => {
+		const s = task.status;
 		return s !== "completed" && s !== "done" && s !== "cancelled";
 	});
 	const heroTask = activeTasks[0];
