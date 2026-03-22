@@ -53,74 +53,71 @@ function KnowledgePage() {
 			</div>
 
 			{/* Content */}
-			{(() => {
-					const perPage = 9;
-					const totalPages = Math.ceil(entries.length / perPage);
-					const safePage = Math.min(page, Math.max(1, totalPages));
-					const paged = entries.slice((safePage - 1) * perPage, safePage * perPage);
-					return (
-						<>
-							{isLoading ? (
-								<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-									{Array.from({ length: 9 }).map((_, i) => (
-										<Skeleton key={i} className="h-28 rounded-xl" />
-									))}
-								</div>
-							) : paged.length > 0 ? (
-								<>
-									{viewMode === "list" ? (
-										<KnowledgeListView entries={paged} onSelect={(entry) => setSelected(entry)} />
-									) : (
-										<BookshelfView entries={paged} onSelect={(entry) => setSelected(entry)} />
-									)}
-									{totalPages > 1 && (
-										<Pagination>
-											<PaginationContent>
-												<PaginationItem>
-													<PaginationPrevious
-														onClick={() => setPage(Math.max(1, safePage - 1))}
-														aria-disabled={safePage <= 1}
-														className={
-															safePage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"
-														}
-													/>
-												</PaginationItem>
-												{Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-													<PaginationItem key={p}>
-														<PaginationLink
-															isActive={p === safePage}
-															onClick={() => setPage(p)}
-															className="cursor-pointer"
-														>
-															{p}
-														</PaginationLink>
-													</PaginationItem>
-												))}
-												<PaginationItem>
-													<PaginationNext
-														onClick={() => setPage(Math.min(totalPages, safePage + 1))}
-														aria-disabled={safePage >= totalPages}
-														className={
-															safePage >= totalPages
-																? "pointer-events-none opacity-50"
-																: "cursor-pointer"
-														}
-													/>
-												</PaginationItem>
-											</PaginationContent>
-										</Pagination>
-									)}
-								</>
-							) : (
-								<ButlerEmpty scene="bookshelf" messageKey="empty.noMemories" />
-							)}
-						</>
-					);
-				})()}
+			{isLoading ? (
+				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+					{Array.from({ length: 9 }).map((_, i) => (
+						<Skeleton key={i} className="h-28 rounded-xl" />
+					))}
+				</div>
+			) : entries.length > 0 ? (
+				viewMode === "list" ? (
+					<ListWithPagination entries={entries} onSelect={setSelected} page={page} setPage={setPage} />
+				) : (
+					/* Bookshelf handles its own pagination dynamically based on window size */
+					<BookshelfView entries={entries} onSelect={(entry) => setSelected(entry)} />
+				)
+			) : (
+				<ButlerEmpty scene="bookshelf" messageKey="empty.noMemories" />
+			)}
 
 			{/* Knowledge detail dialog */}
 			<KnowledgeDialog entry={selected} onClose={() => setSelected(null)} />
 		</div>
+	);
+}
+
+function ListWithPagination({ entries, onSelect, page, setPage }: {
+	entries: KnowledgeEntry[];
+	onSelect: (e: KnowledgeEntry) => void;
+	page: number;
+	setPage: (p: number) => void;
+}) {
+	const perPage = 15;
+	const totalPages = Math.ceil(entries.length / perPage);
+	const safePage = Math.min(page, Math.max(1, totalPages));
+	const paged = entries.slice((safePage - 1) * perPage, safePage * perPage);
+
+	return (
+		<>
+			<KnowledgeListView entries={paged} onSelect={onSelect} />
+			{totalPages > 1 && (
+				<Pagination>
+					<PaginationContent>
+						<PaginationItem>
+							<PaginationPrevious
+								onClick={() => setPage(Math.max(1, safePage - 1))}
+								aria-disabled={safePage <= 1}
+								className={safePage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+							/>
+						</PaginationItem>
+						{Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+							<PaginationItem key={p}>
+								<PaginationLink isActive={p === safePage} onClick={() => setPage(p)} className="cursor-pointer">
+									{p}
+								</PaginationLink>
+							</PaginationItem>
+						))}
+						<PaginationItem>
+							<PaginationNext
+								onClick={() => setPage(Math.min(totalPages, safePage + 1))}
+								aria-disabled={safePage >= totalPages}
+								className={safePage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+							/>
+						</PaginationItem>
+					</PaginationContent>
+				</Pagination>
+			)}
+		</>
 	);
 }
 

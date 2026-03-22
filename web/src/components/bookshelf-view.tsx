@@ -7,25 +7,16 @@ import { formatLabel } from "@/lib/format";
 const SPINE_W = 56;
 const GAP = 4;
 const PAD = 16;
+const SHELF_H = 310; // approx height per shelf row (max spine + plank + padding + gap)
 
-// Height variation by type — creates visual rhythm on the shelf
 const HEIGHTS: Record<string, number> = { rule: 240, decision: 270, pattern: 220, snapshot: 200 };
 
-// Soft pastel palette — light enough to feel like cloth/linen book covers
+// Soft pastel palette
 const SPINE_COLORS = [
-	"#8fbc8f", // sage green
-	"#b0c4de", // light steel blue
-	"#deb887", // burlywood
-	"#d4a574", // warm tan
-	"#a0b89e", // muted olive
-	"#c4a882", // sand
-	"#b8a9c9", // soft lavender
-	"#d4927a", // terracotta rose
-	"#9cb4b0", // dusty teal
-	"#c9b99a", // parchment
+	"#8fbc8f", "#b0c4de", "#deb887", "#d4a574", "#a0b89e",
+	"#c4a882", "#b8a9c9", "#d4927a", "#9cb4b0", "#c9b99a",
 ];
 
-// Darken a hex color for the spine edge
 function darken(hex: string): string {
 	const r = Math.max(0, parseInt(hex.slice(1, 3), 16) - 30);
 	const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - 30);
@@ -45,7 +36,6 @@ function BookSpine({ entry, onClick }: { entry: KnowledgeEntry; onClick: () => v
 	const h = HEIGHTS[entry.sub_type] ?? 210;
 	const { title } = formatLabel(entry.label);
 	const w = entry.content.length > 300 ? 64 : entry.content.length > 100 ? 56 : 48;
-	const label = title.length > 16 ? `${title.slice(0, 16)}…` : title;
 
 	return (
 		<button
@@ -70,10 +60,7 @@ function BookSpine({ entry, onClick }: { entry: KnowledgeEntry; onClick: () => v
 				e.currentTarget.style.boxShadow = "3px 1px 8px rgba(0,0,0,0.12), inset 1px 0 0 rgba(255,255,255,0.08)";
 			}}
 		>
-			{/* Spine edge — depth illusion */}
 			<div className="absolute inset-y-0 left-0 w-[3px] rounded-l-[2px]" style={{ backgroundColor: edge }} />
-
-			{/* Top ornament */}
 			<div className="pt-3 px-1.5 shrink-0">
 				{entry.verification_due ? (
 					<VerificationBadge entry={entry} />
@@ -81,11 +68,7 @@ function BookSpine({ entry, onClick }: { entry: KnowledgeEntry; onClick: () => v
 					<div className="w-5 h-[2px] bg-black/10 rounded-full mx-auto" />
 				)}
 			</div>
-
-			{/* Title hidden — shown on hover via native tooltip */}
 			<div className="flex-1" />
-
-			{/* Bottom — type initial or hit count */}
 			<div className="pb-2.5 px-1.5 shrink-0">
 				{(entry.hit_count ?? 0) > 0 ? (
 					<span className="text-[9px] text-black/30 font-mono tabular-nums">{entry.hit_count}</span>
@@ -102,17 +85,14 @@ function BookSpine({ entry, onClick }: { entry: KnowledgeEntry; onClick: () => v
 function Shelf({ entries, onSelect }: { entries: KnowledgeEntry[]; onSelect: (e: KnowledgeEntry) => void }) {
 	return (
 		<div className="relative">
-			{/* Books — bottom-aligned, top padding so hover doesn't clip */}
 			<div
-				className="flex items-end gap-[3px] overflow-x-auto px-3 pt-8 pb-0"
+				className="flex items-end gap-[3px] px-3 pt-8 pb-0"
 				style={{ scrollbarWidth: "none" }}
 			>
 				{entries.map((e) => (
 					<BookSpine key={e.id} entry={e} onClick={() => onSelect(e)} />
 				))}
 			</div>
-
-			{/* Shelf plank */}
 			<div
 				className="h-3 relative z-10"
 				style={{
@@ -121,9 +101,6 @@ function Shelf({ entries, onSelect }: { entries: KnowledgeEntry[]; onSelect: (e:
 				}}
 			/>
 			<div className="h-2 bg-gradient-to-b from-black/[0.04] to-transparent" />
-
-			{/* Mobile scroll fade */}
-			<div className="absolute top-0 right-0 bottom-5 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none sm:hidden" />
 		</div>
 	);
 }
@@ -131,30 +108,71 @@ function Shelf({ entries, onSelect }: { entries: KnowledgeEntry[]; onSelect: (e:
 export function BookshelfView({ entries, onSelect }: { entries: KnowledgeEntry[]; onSelect: (e: KnowledgeEntry) => void }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [perShelf, setPerShelf] = useState(8);
+	const [maxShelves, setMaxShelves] = useState(3);
+	const [page, setPage] = useState(0);
 
 	const calc = useCallback(() => {
 		if (!ref.current) return;
-		setPerShelf(Math.max(3, Math.floor((ref.current.clientWidth - PAD * 2) / (SPINE_W + GAP))));
+		const w = ref.current.clientWidth;
+		const h = window.innerHeight - ref.current.getBoundingClientRect().top - 80; // leave room for pagination
+		setPerShelf(Math.max(3, Math.floor((w - PAD * 2) / (SPINE_W + GAP))));
+		setMaxShelves(Math.max(1, Math.floor(h / SHELF_H)));
 	}, []);
 
 	useEffect(() => {
 		calc();
 		const obs = new ResizeObserver(calc);
 		if (ref.current) obs.observe(ref.current);
-		return () => obs.disconnect();
+		window.addEventListener("resize", calc);
+		return () => { obs.disconnect(); window.removeEventListener("resize", calc); };
 	}, [calc]);
+
+	// Reset page when entries change
+	useEffect(() => setPage(0), [entries.length]);
 
 	if (entries.length === 0) return <ButlerEmpty scene="bookshelf" messageKey="empty.noMemories" />;
 
-	const shelves = splitShelves(entries, perShelf);
+	const perPage = perShelf * maxShelves;
+	const totalPages = Math.ceil(entries.length / perPage);
+	const safePage = Math.min(page, totalPages - 1);
+	const paged = entries.slice(safePage * perPage, (safePage + 1) * perPage);
+	const shelves = splitShelves(paged, perShelf);
 
 	return (
-		<div ref={ref} className="flex flex-col items-center justify-center min-h-[50vh]">
-			<div className="w-full space-y-4">
-				{shelves.map((shelf, i) => (
-					<Shelf key={i} entries={shelf} onSelect={onSelect} />
-				))}
+		<div ref={ref} className="flex flex-col min-h-[50vh]">
+			{/* Shelves — centered */}
+			<div className="flex-1 flex items-center justify-center">
+				<div className="w-full space-y-2">
+					{shelves.map((shelf, i) => (
+						<Shelf key={i} entries={shelf} onSelect={onSelect} />
+					))}
+				</div>
 			</div>
+
+			{/* Pagination */}
+			{totalPages > 1 && (
+				<div className="flex items-center justify-center gap-3 pt-4">
+					<button
+						type="button"
+						onClick={() => setPage(Math.max(0, safePage - 1))}
+						disabled={safePage <= 0}
+						className="px-3 py-1 text-xs rounded-full border border-border/40 disabled:opacity-30 hover:bg-muted/50 transition-colors"
+					>
+						&larr;
+					</button>
+					<span className="text-xs text-muted-foreground tabular-nums">
+						{safePage + 1} / {totalPages}
+					</span>
+					<button
+						type="button"
+						onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
+						disabled={safePage >= totalPages - 1}
+						className="px-3 py-1 text-xs rounded-full border border-border/40 disabled:opacity-30 hover:bg-muted/50 transition-colors"
+					>
+						&rarr;
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }
