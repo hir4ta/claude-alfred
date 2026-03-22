@@ -1,11 +1,12 @@
 import { useState } from "react";
 
-export type ViewMode = "list" | "card";
+export type ViewMode = "list" | "bookshelf";
 
 function getStoredViewMode(tab: string, defaultMode: ViewMode): ViewMode {
 	try {
 		const stored = localStorage.getItem(`alfred-view-${tab}`);
-		if (stored === "list" || stored === "card") return stored;
+		if (stored === "card") return "bookshelf"; // migrate old value
+		if (stored === "list" || stored === "bookshelf") return stored;
 	} catch {
 		// localStorage unavailable
 	}

@@ -1,4 +1,5 @@
-import { List, Grid2X2 } from "@animated-color-icons/lucide-react";
+// @ts-expect-error — List exported but missing from type declarations
+import { List, BookOpen } from "@animated-color-icons/lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
@@ -30,8 +31,8 @@ export function ViewSwitcher({
 			</Tooltip>
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<ToggleGroupItem value="card" aria-label={t("view.card")}>
-						<Grid2X2 className="size-4" />
+					<ToggleGroupItem value="bookshelf" aria-label={t("view.card")}>
+						<BookOpen className="size-4" />
 					</ToggleGroupItem>
 				</TooltipTrigger>
 				<TooltipContent>{t("view.card")}</TooltipContent>

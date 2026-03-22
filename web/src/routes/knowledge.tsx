@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
-import { KnowledgeCard } from "@/components/knowledge-card";
 import { KnowledgeListView } from "@/components/knowledge-list-view";
+import { BookshelfView } from "@/components/bookshelf-view";
 import { KnowledgeDrawerContent } from "@/components/knowledge-detail";
 import { DetailDrawer } from "@/components/detail-drawer";
 import { ButlerEmpty } from "@/components/butler-empty";
@@ -35,8 +35,8 @@ export const Route = createFileRoute("/knowledge")({
 function KnowledgePage() {
 	const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
 	const [page, setPage] = useState(1);
-	const [viewMode, setViewModeRaw] = useViewMode("knowledge", "card");
-	const setViewMode = (mode: "list" | "card") => { setViewModeRaw(mode); setPage(1); };
+	const [viewMode, setViewModeRaw] = useViewMode("knowledge", "bookshelf");
+	const setViewMode = (mode: "list" | "bookshelf") => { setViewModeRaw(mode); setPage(1); };
 
 	const search = useSearch({ strict: false }) as { project?: string };
 	const projectId = search.project;
@@ -72,15 +72,7 @@ function KnowledgePage() {
 									{viewMode === "list" ? (
 										<KnowledgeListView entries={paged} onSelect={(entry) => setSelected(entry)} />
 									) : (
-										<StaggerContainer className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-											{paged.map((entry) => (
-												<KnowledgeCard
-													key={entry.id}
-													entry={entry}
-													onSelect={() => setSelected(entry)}
-												/>
-											))}
-										</StaggerContainer>
+										<BookshelfView entries={paged} onSelect={(entry) => setSelected(entry)} />
 									)}
 									{totalPages > 1 && (
 										<Pagination>
@@ -132,6 +124,7 @@ function KnowledgePage() {
 				open={!!selected}
 				onClose={() => setSelected(null)}
 				title={selected ? formatLabel(selected.label).title : ""}
+				bookLayout
 			>
 				{selected && <KnowledgeDrawerContent entry={selected} onClose={() => setSelected(null)} />}
 			</DetailDrawer>
