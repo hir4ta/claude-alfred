@@ -7,7 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import type { KnowledgeEntry } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { VerificationBadge } from "@/routes/knowledge";
+import { VerificationBadge } from "@/components/verification-badge";
 
 export const SUB_TYPE_ICONS: Record<string, React.ReactNode> = {
 	rule: <Shield className="size-3.5" />,

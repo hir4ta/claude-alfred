@@ -162,41 +162,6 @@ function StatDot({ count, color, label }: { count: number; color: string; label:
 	);
 }
 
-// --- Verification Badge ---
-
-export function VerificationBadge({ entry }: { entry: KnowledgeEntry }) {
-	const { t } = useI18n();
-	const due = entry.verification_due;
-	const verified = entry.last_verified;
-
-	if (!due) return null;
-
-	const now = new Date();
-	const dueDate = new Date(due);
-	const isOverdue = dueDate < now;
-	const isVerified = verified && new Date(verified) > new Date(now.getTime() - 120 * 86400000); // within ~120 days
-
-	if (isOverdue) {
-		return (
-			<span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium" style={{ backgroundColor: "#c0392b20", color: "#c0392b" }}>
-				{t("knowledge.verification.overdue")}
-			</span>
-		);
-	}
-	if (isVerified) {
-		return (
-			<span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium" style={{ backgroundColor: "#62814120", color: "#628141" }}>
-				{t("knowledge.verification.verified")}
-			</span>
-		);
-	}
-	return (
-		<span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground bg-muted/50">
-			{t("knowledge.verification.pending")}
-		</span>
-	);
-}
-
 // --- Knowledge Gaps Section ---
 
 import type { KnowledgeGapEntry } from "@/lib/api";

@@ -136,6 +136,9 @@ node dist/cli.mjs version     # Show version
 - Activity tab: Rework Rate (bar chart, pending=half-opacity) + Cycle Time breakdown (stacked bar: planning/approval/implementation) + Audit log table (server-side pagination 50/page)
 - Feedback metrics: spec.complete records changed_files in audit detail, PostToolUse tracks first_commit per spec, getReworkRates() + getCycleTimeBreakdown() in src/store/audit.ts
 - recharts: devDependency, Vite frontend bundle only (not in tsdown backend)
+- Knowledge lifecycle: verification badges (verified/overdue/pending), Knowledge Gaps collapsible section, `GET /api/knowledge/gaps`
+- Verification: knowledge_index に verification_due/last_verified/verification_count カラム (ALTER TABLE, V10 維持). `ledger action=verify` で Leitner 方式検証. SessionStart で期限切れ通知
+- Gap detection: UserPromptSubmit で bestScore < 0.3 + implement intent → `.alfred/.state/knowledge-gaps.jsonl` に記録
 
 ### Knowledge & Search
 
