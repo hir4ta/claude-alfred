@@ -80,14 +80,15 @@ function BookSpine({ entry, onClick }: { entry: KnowledgeEntry; onClick: () => v
 				)}
 			</div>
 
-			{/* Title — vertical */}
-			<div
-				className="flex-1 flex items-center justify-center px-0.5 overflow-hidden min-h-0"
-				style={{ writingMode: "vertical-rl" }}
-			>
+			{/* Title — rotated horizontal text (consistent for all languages) */}
+			<div className="flex-1 flex items-center justify-center overflow-hidden min-h-0 w-full">
 				<span
-					className="text-[11px] font-semibold text-white/85 leading-tight tracking-wide"
-					style={{ fontFamily: "var(--font-display)" }}
+					className="text-[10px] font-semibold text-white/85 leading-tight whitespace-nowrap origin-center"
+					style={{
+						fontFamily: "var(--font-display)",
+						transform: "rotate(180deg)",
+						writingMode: "vertical-lr",
+					}}
 				>
 					{label}
 				</span>
