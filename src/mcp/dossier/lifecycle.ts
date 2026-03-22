@@ -175,7 +175,7 @@ function checkAllWaveTasks(tasksContent: string): string | undefined {
 
 	for (const line of lines) {
 		// Detect wave headers: "## Wave 1: ...", "## Wave 2", etc.
-		const waveMatch = line.match(/^## (?:Wave[:\s]*)?(\d+[\w\s:：—-]*)/i);
+		const waveMatch = line.match(/^## Wave[:\s]*(\d+[\w\s:：—-]*)/i);
 		if (waveMatch) {
 			currentWave = waveMatch[1]!.trim();
 			isClosing = false;

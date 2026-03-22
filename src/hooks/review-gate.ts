@@ -47,10 +47,10 @@ export function isGateActive(cwd: string): ReviewGate | null {
 	// Fix mode timeout: auto-expire after 60 minutes.
 	if (gate.fix_mode && gate.fix_mode_at) {
 		const elapsed = Date.now() - Date.parse(gate.fix_mode_at);
-		if (elapsed > 60 * 60 * 1000) {
+		if (Number.isNaN(elapsed) || elapsed > 60 * 60 * 1000) {
 			gate.fix_mode = false;
 			gate.fix_mode_at = undefined;
-			writeStateJSON(cwd, GATE_FILE, { ...gate, set_at: gate.set_at });
+			writeStateJSON(cwd, GATE_FILE, gate);
 			process.stderr.write("[alfred] fix_mode expired (60 min timeout). Gate re-activated — run review before clearing.\n");
 		}
 	}
