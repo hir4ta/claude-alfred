@@ -216,6 +216,25 @@ export const analyticsQueryOptions = (projectId?: string) =>
 		staleTime: REF_STALE,
 	});
 
+export interface KnowledgeGapEntry {
+	query: string;
+	intent: string;
+	best_score: number;
+	result_count: number;
+	timestamp: string;
+	spec_slug?: string;
+}
+
+export const knowledgeGapsQueryOptions = (projectId?: string) =>
+	queryOptions({
+		queryKey: ["knowledge-gaps", projectId],
+		queryFn: () => {
+			const url = projectId ? `/api/knowledge/gaps?project=${projectId}` : "/api/knowledge/gaps";
+			return fetchJSON<{ entries: KnowledgeGapEntry[]; total: number }>(url);
+		},
+		staleTime: REF_STALE,
+	});
+
 export const activityQueryOptions = (page = 0, projectId?: string) =>
 	queryOptions({
 		queryKey: ["activity", page, projectId],

@@ -13,6 +13,9 @@ export interface KnowledgeRow {
 	hitCount: number;
 	lastAccessed: string;
 	enabled: boolean;
+	verificationDue?: string | null;
+	lastVerified?: string | null;
+	verificationCount?: number;
 }
 
 export interface ProjectRecord {

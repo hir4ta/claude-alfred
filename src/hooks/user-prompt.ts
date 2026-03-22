@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Embedder } from "../embedder/index.js";
 import { searchPipeline, trackHitCounts, truncate } from "../mcp/helpers.js";
@@ -132,6 +132,9 @@ export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Prom
 	// Knowledge search — reuse promptVec to avoid double Voyage API call (DEC-2).
 	const limit = 5;
 	const result = await searchPipeline(store, emb, prompt, limit, limit * 3, promptVec ?? undefined);
+
+	// FR-2 (knowledge-lifecycle): Gap detection — low score + implement intent.
+	recordKnowledgeGap(ev.cwd, prompt, intent, result.scoredDocs);
 
 	// FR-2: Knowledge results with natural language relevance explanation.
 	if (result.scoredDocs.length > 0) {
@@ -322,7 +325,7 @@ export function intentDescription(intent: string): string {
 
 // --- FR-1: Nudge dismissal tracking via .alfred/.state/ (survives across short-lived hook processes) ---
 
-import { readStateJSON, readWorkedSlugs, writeStateJSON } from "./state.js";
+import { ensureStateDir, readStateJSON, readWorkedSlugs, writeStateJSON } from "./state.js";
 
 interface NudgeCounts {
 	[intent: string]: { count: number; lastNudged: string };
@@ -385,4 +388,65 @@ export function buildRelevanceExplanation(sd: ScoredDoc): string {
 	}
 
 	return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
+// --- FR-2 (knowledge-lifecycle): Knowledge Gap Detection ---
+
+const GAP_INTENTS = new Set(["implement", "bugfix", "tdd"]);
+const GAP_SCORE_THRESHOLD = 0.3;
+const GAP_MAX_ENTRIES = 250;
+const GAP_PRUNE_AGE_MS = 30 * 86400000; // 30 days
+
+/**
+ * Record a knowledge gap when search results are poor for actionable intents.
+ */
+function recordKnowledgeGap(
+	projectPath: string,
+	prompt: string,
+	intent: string | null,
+	scoredDocs: ScoredDoc[],
+): void {
+	if (!intent || !GAP_INTENTS.has(intent)) return;
+
+	const bestScore = scoredDocs.length > 0 ? scoredDocs[0]!.score : 0;
+	if (bestScore >= GAP_SCORE_THRESHOLD) return;
+
+	const gapsPath = join(projectPath, ".alfred", ".state", "knowledge-gaps.jsonl");
+
+	// Record the gap.
+	let activeSlug: string | undefined;
+	try {
+		const state = readActiveState(projectPath);
+		activeSlug = state.primary || undefined;
+	} catch { /* no active spec */ }
+
+	const entry = {
+		query: prompt.slice(0, 200),
+		intent,
+		best_score: Math.round(bestScore * 100) / 100,
+		result_count: scoredDocs.length,
+		timestamp: new Date().toISOString(),
+		...(activeSlug ? { spec_slug: activeSlug } : {}),
+	};
+
+	try {
+		ensureStateDir(projectPath);
+		appendFileSync(gapsPath, `${JSON.stringify(entry)}\n`);
+	} catch { return; }
+
+	// Pruning: only when > GAP_MAX_ENTRIES.
+	try {
+		const raw = readFileSync(gapsPath, "utf-8");
+		const lines = raw.split("\n").filter((l) => l.trim());
+		if (lines.length <= GAP_MAX_ENTRIES) return;
+
+		const cutoff = new Date(Date.now() - GAP_PRUNE_AGE_MS).toISOString();
+		const kept = lines.filter((l) => {
+			try {
+				const e = JSON.parse(l) as { timestamp?: string };
+				return (e.timestamp ?? "") >= cutoff;
+			} catch { return true; }
+		});
+		writeFileSync(gapsPath, `${kept.join("\n")}\n`);
+	} catch { /* pruning is best-effort */ }
 }

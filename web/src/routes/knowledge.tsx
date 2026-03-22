@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
 	knowledgeQueryOptions,
 	knowledgeStatsQueryOptions,
+	knowledgeGapsQueryOptions,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { KnowledgeEntry, KnowledgeStats } from "@/lib/types";
@@ -38,8 +39,15 @@ function KnowledgePage() {
 
 	const entries = browseData?.entries ?? [];
 
+	const { data: gapsData } = useQuery(knowledgeGapsQueryOptions(projectId));
+
 	return (
 		<div className="space-y-5">
+			{/* Gaps section */}
+			{(gapsData?.entries?.length ?? 0) > 0 && (
+				<GapsSection entries={gapsData!.entries} />
+			)}
+
 			{/* Stats */}
 			<div className="flex items-center justify-end">
 				{statsData && <StatsBar stats={statsData} />}
@@ -151,5 +159,73 @@ function StatDot({ count, color, label }: { count: number; color: string; label:
 			<span>{count}</span>
 			<span className="text-muted-foreground/60">{label}</span>
 		</span>
+	);
+}
+
+// --- Verification Badge ---
+
+export function VerificationBadge({ entry }: { entry: KnowledgeEntry }) {
+	const { t } = useI18n();
+	const due = entry.verification_due;
+	const verified = entry.last_verified;
+
+	if (!due) return null;
+
+	const now = new Date();
+	const dueDate = new Date(due);
+	const isOverdue = dueDate < now;
+	const isVerified = verified && new Date(verified) > new Date(now.getTime() - 120 * 86400000); // within ~120 days
+
+	if (isOverdue) {
+		return (
+			<span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium" style={{ backgroundColor: "#c0392b20", color: "#c0392b" }}>
+				{t("knowledge.verification.overdue")}
+			</span>
+		);
+	}
+	if (isVerified) {
+		return (
+			<span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium" style={{ backgroundColor: "#62814120", color: "#628141" }}>
+				{t("knowledge.verification.verified")}
+			</span>
+		);
+	}
+	return (
+		<span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground bg-muted/50">
+			{t("knowledge.verification.pending")}
+		</span>
+	);
+}
+
+// --- Knowledge Gaps Section ---
+
+import type { KnowledgeGapEntry } from "@/lib/api";
+
+function GapsSection({ entries }: { entries: KnowledgeGapEntry[] }) {
+	const { t } = useI18n();
+	const [open, setOpen] = useState(false);
+
+	return (
+		<div className="rounded-organic border border-border/60 bg-card py-3 px-4">
+			<button
+				type="button"
+				onClick={() => setOpen(!open)}
+				className="flex w-full items-center justify-between text-sm font-semibold"
+			>
+				<span>{t("knowledge.gaps.title")} ({entries.length})</span>
+				<span className="text-muted-foreground text-xs">{open ? "▲" : "▼"}</span>
+			</button>
+			{open && (
+				<div className="mt-3 space-y-1.5">
+					{entries.slice(0, 20).map((g, i) => (
+						<div key={i} className="flex items-center gap-3 text-[11px] border-b border-border/20 last:border-0 py-1">
+							<span className="text-muted-foreground font-mono w-10 shrink-0">{g.best_score.toFixed(2)}</span>
+							<span className="truncate flex-1">{g.query}</span>
+							<span className="text-muted-foreground/60 shrink-0">{new Date(g.timestamp).toLocaleDateString()}</span>
+						</div>
+					))}
+				</div>
+			)}
+		</div>
 	);
 }

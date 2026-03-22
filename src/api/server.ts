@@ -45,6 +45,9 @@ function toKnowledgeEntry(r: KnowledgeRow, projectName?: string) {
 		author: r.author ?? "",
 		project_name: projectName ?? "",
 		tags,
+		verification_due: r.verificationDue ?? null,
+		last_verified: r.lastVerified ?? null,
+		verification_count: r.verificationCount ?? 0,
 	};
 }
 
@@ -469,6 +472,21 @@ export function createApp(
 		const body = await c.req.json<{ enabled: boolean }>();
 		setKnowledgeEnabled(store, id, body.enabled);
 		return c.json({ ok: true });
+	});
+
+	app.get("/api/knowledge/gaps", (c) => {
+		const gapsPath = join(projectPath, ".alfred", ".state", "knowledge-gaps.jsonl");
+		try {
+			const raw = readFileSync(gapsPath, "utf-8");
+			const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+			const entries = raw.split("\n")
+				.filter((l) => l.trim())
+				.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+				.filter((e: Record<string, unknown> | null): e is Record<string, unknown> => e != null && ((e.timestamp as string) ?? "") >= thirtyDaysAgo);
+			return c.json({ entries, total: entries.length });
+		} catch {
+			return c.json({ entries: [], total: 0 });
+		}
 	});
 
 	app.get("/api/knowledge/candidates", (c) => {

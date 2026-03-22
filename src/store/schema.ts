@@ -325,11 +325,33 @@ export function migrate(db: Database.Database): void {
 	} catch {
 		// Table doesn't exist yet.
 	}
-	if (current === SCHEMA_VERSION) return;
+	if (current !== SCHEMA_VERSION) {
+		const txn = db.transaction(() => {
+			rebuildFromScratch(db);
+			setSchemaVersion(db, SCHEMA_VERSION);
+		});
+		txn();
+	}
 
-	const txn = db.transaction(() => {
-		rebuildFromScratch(db);
-		setSchemaVersion(db, SCHEMA_VERSION);
-	});
-	txn();
+	// Post-migration: add verification columns (idempotent ALTER TABLE).
+	addVerificationColumns(db);
+}
+
+/**
+ * FR-1a (knowledge-lifecycle): Add verification columns to knowledge_index.
+ * Uses ALTER TABLE ADD COLUMN (idempotent via try-catch) to avoid rebuildFromScratch.
+ */
+function addVerificationColumns(db: Database.Database): void {
+	const columns = [
+		"ALTER TABLE knowledge_index ADD COLUMN verification_due TEXT",
+		"ALTER TABLE knowledge_index ADD COLUMN last_verified TEXT",
+		"ALTER TABLE knowledge_index ADD COLUMN verification_count INTEGER DEFAULT 0",
+	];
+	for (const sql of columns) {
+		try {
+			db.exec(sql);
+		} catch {
+			// Column already exists — expected on subsequent runs.
+		}
+	}
 }

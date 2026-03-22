@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import type { KnowledgeEntry } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { VerificationBadge } from "@/routes/knowledge";
 
 export const SUB_TYPE_ICONS: Record<string, React.ReactNode> = {
 	rule: <Shield className="size-3.5" />,
@@ -61,7 +62,8 @@ export function KnowledgeCard({
 								: entry.sub_type}
 						</span>
 					</div>
-					<div className="flex items-center gap-3">
+					<div className="flex items-center gap-2">
+						<VerificationBadge entry={entry} />
 						{entry.hit_count > 0 && (
 							<span className="text-[10px] tabular-nums text-muted-foreground">
 								{entry.hit_count} {t("knowledge.hits")}

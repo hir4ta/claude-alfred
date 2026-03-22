@@ -248,6 +248,15 @@ export const translations = {
 	"activity.log.prev": { en: "Prev", ja: "前へ" },
 	"activity.log.next": { en: "Next", ja: "次へ" },
 	"activity.log.entries": { en: "entries", ja: "件" },
+	// Knowledge lifecycle
+	"knowledge.verification.verified": { en: "Verified", ja: "検証済" },
+	"knowledge.verification.overdue": { en: "Overdue", ja: "期限切れ" },
+	"knowledge.verification.pending": { en: "Pending", ja: "未検証" },
+	"knowledge.gaps.title": { en: "Knowledge Gaps", ja: "ナレッジギャップ" },
+	"knowledge.gaps.empty": { en: "No knowledge gaps detected, sir.", ja: "ナレッジギャップは検出されておりません。" },
+	"knowledge.gaps.query": { en: "Query", ja: "クエリ" },
+	"knowledge.gaps.score": { en: "Score", ja: "スコア" },
+	"knowledge.sort.verificationDue": { en: "Verification Due", ja: "検証期限順" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

@@ -310,6 +310,9 @@ export interface RawKnowledgeRow {
 	hit_count: number;
 	last_accessed: string;
 	enabled: number;
+	verification_due?: string | null;
+	last_verified?: string | null;
+	verification_count?: number;
 }
 
 export function mapRow(r: RawKnowledgeRow): KnowledgeRow {
@@ -328,5 +331,8 @@ export function mapRow(r: RawKnowledgeRow): KnowledgeRow {
 		hitCount: r.hit_count,
 		lastAccessed: r.last_accessed,
 		enabled: r.enabled === 1,
+		verificationDue: r.verification_due ?? null,
+		lastVerified: r.last_verified ?? null,
+		verificationCount: r.verification_count ?? 0,
 	};
 }

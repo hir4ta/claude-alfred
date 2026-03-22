@@ -52,6 +52,9 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
 	// Suggest ledger reflect when knowledge base has grown.
 	suggestLedgerReflect(store);
 
+	// FR-1b: Check overdue knowledge verifications (SQL only, <200ms).
+	checkOverdueVerifications(store, ev.cwd);
+
 	// Collect all directive items for single emit (NFR-4).
 	const items: DirectiveItem[] = [];
 
@@ -204,6 +207,35 @@ function suggestLedgerReflect(store: ReturnType<typeof openDefaultCached>): void
 		);
 	} catch {
 		/* ignore */
+	}
+}
+
+/**
+ * FR-1b: Check for overdue knowledge verifications and notify via stderr.
+ */
+function checkOverdueVerifications(
+	store: ReturnType<typeof openDefaultCached>,
+	projectPath: string,
+): void {
+	try {
+		const rows = store.db
+			.prepare(`SELECT id, title, sub_type, verification_due FROM knowledge_index
+				WHERE enabled = 1 AND verification_due IS NOT NULL AND verification_due < datetime('now')
+				ORDER BY verification_due ASC LIMIT 10`)
+			.all() as Array<{ id: number; title: string; sub_type: string; verification_due: string }>;
+
+		if (rows.length > 0) {
+			const titles = rows.slice(0, 3).map((r) => r.title).join(", ");
+			const suffix = rows.length > 3 ? ` (+${rows.length - 3} more)` : "";
+			notifyUser(
+				"knowledge verification: %d entries overdue (%s%s). Use `ledger action=verify id=<id>` to confirm.",
+				rows.length,
+				titles,
+				suffix,
+			);
+		}
+	} catch {
+		/* verification columns may not exist yet — fail silently */
 	}
 }
 

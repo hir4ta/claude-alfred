@@ -76,6 +76,9 @@ export const KnowledgeEntrySchema = z.object({
 	author: z.string().optional(),
 	project_name: z.string().optional(),
 	tags: z.array(z.string()).default([]),
+	verification_due: z.string().nullable().optional(),
+	last_verified: z.string().nullable().optional(),
+	verification_count: z.number().optional(),
 });
 
 export const KnowledgeResponseSchema = z.object({
@@ -158,6 +161,15 @@ export const AnalyticsResponseSchema = z.object({
 	})),
 	reworkRates: z.array(ReworkRateSchema),
 	cycleTimeBreakdown: z.array(CycleTimeSchema),
+});
+
+export const KnowledgeGapSchema = z.object({
+	query: z.string(),
+	intent: z.string(),
+	best_score: z.number(),
+	result_count: z.number(),
+	timestamp: z.string(),
+	spec_slug: z.string().optional(),
 });
 
 // --- Decisions ---

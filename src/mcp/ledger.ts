@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Embedder } from "../embedder/index.js";
 import type { Store } from "../store/index.js";
+import { subTypeHalfLife } from "../store/fts.js";
 import {
 	getKnowledgeByID,
 	getKnowledgeStats,
@@ -70,6 +71,8 @@ export async function handleLedger(store: Store, emb: Embedder | null, params: L
 			return ledgerCandidates(store);
 		case "reflect":
 			return ledgerReflect(store, emb, params);
+		case "verify":
+			return ledgerVerify(store, params);
 		case "stale":
 			return jsonResult({ message: "feature removed in schema V8" });
 		case "audit-conventions":
@@ -228,6 +231,13 @@ export function writeKnowledgeFile(
 		`${JSON.stringify(entry, null, 2)}\n`,
 	);
 	return filePath;
+}
+
+/**
+ * FR-1a: Compute verification_due date from a base date and half-life in days.
+ */
+export function computeVerificationDue(baseDate: Date, halfLifeDays: number): string {
+	return new Date(baseDate.getTime() + (halfLifeDays / 2) * 86400000).toISOString();
 }
 
 const MAX_EMBEDDING_LENGTH = 1500;
@@ -413,6 +423,13 @@ async function ledgerSave(store: Store, emb: Embedder | null, params: LedgerPara
 			return errorResult("sub_type must be decision, pattern, or rule");
 	}
 
+	// FR-1a: Add verification fields to entry before writing.
+	const halfLife = subTypeHalfLife(subType);
+	const verificationDue = computeVerificationDue(new Date(now), halfLife);
+	(entry as unknown as Record<string, unknown>).verification_due = verificationDue;
+	(entry as unknown as Record<string, unknown>).verification_count = 0;
+	(entry as unknown as Record<string, unknown>).last_verified = null;
+
 	// Write JSON file to .alfred/knowledge/{type}/{id}.json (atomic).
 	const filePath = writeKnowledgeFile(projectPath, subType, id, entry);
 
@@ -435,6 +452,13 @@ async function ledgerSave(store: Store, emb: Embedder | null, params: LedgerPara
 		enabled: true,
 	};
 	const { id: dbId, changed } = upsertKnowledge(store, row);
+
+	// FR-1a: Update verification columns in DB.
+	try {
+		store.db
+			.prepare(`UPDATE knowledge_index SET verification_due = ?, verification_count = 0, last_verified = NULL WHERE id = ?`)
+			.run(verificationDue, dbId);
+	} catch { /* columns may not exist yet */ }
 
 	// Async embedding.
 	let embeddingStatus = "none";
@@ -504,6 +528,59 @@ async function ledgerCandidates(store: Store) {
 	return jsonResult({ candidates: results, count: results.length });
 }
 
+// --- Verify (FR-4) ---
+
+async function ledgerVerify(store: Store, params: LedgerParams) {
+	if (!params.id) return errorResult("id is required for verify");
+
+	const doc = getKnowledgeByID(store, params.id);
+	if (!doc) return errorResult(`knowledge ${params.id} not found`);
+
+	const halfLife = subTypeHalfLife(doc.subType);
+	const now = new Date();
+	const verificationDue = new Date(now.getTime() + halfLife * 86400000).toISOString();
+	const lastVerified = now.toISOString();
+
+	// Get current verification_count from DB.
+	let currentCount = 0;
+	try {
+		const row = store.db
+			.prepare("SELECT verification_count FROM knowledge_index WHERE id = ?")
+			.get(params.id) as { verification_count: number | null } | undefined;
+		currentCount = row?.verification_count ?? 0;
+	} catch { /* column may not exist */ }
+	const newCount = currentCount + 1;
+
+	// JSON update (source of truth — write first).
+	const projectPath = params.project_path ?? process.cwd();
+	const jsonPath = join(projectPath, ".alfred", "knowledge", doc.filePath);
+	try {
+		const raw = readFileSync(jsonPath, "utf-8");
+		const parsed = JSON.parse(raw);
+		parsed.verification_due = verificationDue;
+		parsed.last_verified = lastVerified;
+		parsed.verification_count = newCount;
+		atomicWriteSync(jsonPath, `${JSON.stringify(parsed, null, 2)}\n`);
+	} catch (err) {
+		return errorResult(`failed to update JSON: ${err}`);
+	}
+
+	// DB update (after JSON success).
+	try {
+		store.db
+			.prepare("UPDATE knowledge_index SET verification_due = ?, last_verified = ?, verification_count = ? WHERE id = ?")
+			.run(verificationDue, lastVerified, newCount, params.id);
+	} catch { /* columns may not exist */ }
+
+	return jsonResult({
+		status: "verified",
+		id: params.id,
+		title: doc.title,
+		verification_due: verificationDue,
+		verification_count: newCount,
+	});
+}
+
 // --- Reflect ---
 
 async function ledgerReflect(store: Store, emb: Embedder | null, _params: LedgerParams) {
@@ -519,6 +596,33 @@ async function ledgerReflect(store: Store, emb: Embedder | null, _params: Ledger
 		suggested: "rule",
 	}));
 
+	// FR-3: Overdue verifications.
+	let overdueVerifications: Array<{ id: number; title: string; sub_type: string; overdue_days: number }> = [];
+	let verificationRate = 0;
+	try {
+		const overdueRows = store.db
+			.prepare(`SELECT id, title, sub_type, verification_due FROM knowledge_index
+				WHERE enabled = 1 AND verification_due IS NOT NULL AND verification_due < datetime('now')
+				ORDER BY verification_due ASC LIMIT 10`)
+			.all() as Array<{ id: number; title: string; sub_type: string; verification_due: string }>;
+		overdueVerifications = overdueRows.map((r) => ({
+			id: r.id,
+			title: r.title,
+			sub_type: r.sub_type,
+			overdue_days: Math.floor((Date.now() - Date.parse(r.verification_due)) / 86400000),
+		}));
+
+		const rateRow = store.db
+			.prepare(`SELECT
+				COUNT(CASE WHEN last_verified IS NOT NULL THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) as rate
+				FROM knowledge_index WHERE enabled = 1`)
+			.get() as { rate: number | null } | undefined;
+		verificationRate = Math.round((rateRow?.rate ?? 0) * 100) / 100;
+	} catch { /* verification columns may not exist */ }
+
+	// FR-3: Gap summary.
+	const gapSummary = readGapSummary(_params.project_path ?? process.cwd());
+
 	return jsonResult({
 		summary: {
 			total_memories: stats.total,
@@ -531,6 +635,46 @@ async function ledgerReflect(store: Store, emb: Embedder | null, _params: Ledger
 			})),
 		},
 		promotion_candidates: promotionCandidates,
+		overdue_verifications: overdueVerifications,
+		verification_rate: verificationRate,
+		gap_summary: gapSummary,
 		lang,
 	});
+}
+
+/**
+ * FR-3: Read knowledge-gaps.jsonl and produce a summary.
+ */
+function readGapSummary(projectPath: string): { total: number; top_groups: Array<{ topic: string; count: number; last_seen: string }> } {
+	const gapsPath = join(projectPath, ".alfred", ".state", "knowledge-gaps.jsonl");
+	try {
+		const raw = readFileSync(gapsPath, "utf-8");
+		const lines = raw.split("\n").filter((l) => l.trim());
+		const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+		const recent = lines
+			.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+			.filter((e): e is { query: string; timestamp: string } => e?.timestamp > thirtyDaysAgo);
+
+		// Group by first 30 chars of query.
+		const groups = new Map<string, { count: number; last_seen: string }>();
+		for (const e of recent) {
+			const topic = e.query.slice(0, 30);
+			const existing = groups.get(topic);
+			if (existing) {
+				existing.count++;
+				if (e.timestamp > existing.last_seen) existing.last_seen = e.timestamp;
+			} else {
+				groups.set(topic, { count: 1, last_seen: e.timestamp });
+			}
+		}
+
+		const topGroups = [...groups.entries()]
+			.sort((a, b) => b[1].count - a[1].count)
+			.slice(0, 5)
+			.map(([topic, v]) => ({ topic, count: v.count, last_seen: v.last_seen }));
+
+		return { total: recent.length, top_groups: topGroups };
+	} catch {
+		return { total: 0, top_groups: [] };
+	}
 }
