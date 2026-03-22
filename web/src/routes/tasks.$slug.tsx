@@ -1,7 +1,13 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { CircleCheck, CircleDot } from "@animated-color-icons/lucide-react";
+import { CheckCircle, CircleCheck, CircleDot, XCircle } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import {
+	AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+	AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { ReviewPanel } from "@/components/review/ReviewPanel";
 import { SectionCard } from "@/components/section-card";
 import { TraceabilityMatrix } from "@/components/traceability";
@@ -14,6 +20,8 @@ import {
 	specsQueryOptions,
 	tasksQueryOptions,
 	validationQueryOptions,
+	reviewQueryOptions,
+	submitReview,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { ValidationReport } from "@/lib/types";
@@ -31,6 +39,8 @@ function TaskDetailPage() {
 	const { data: specsData } = useQuery(specsQueryOptions(slug, projectId));
 	const { data: validationData } = useQuery(validationQueryOptions(slug, projectId));
 	const [reviewModeFiles, setReviewModeFiles] = useState<Set<string>>(new Set());
+	const [allComments, setAllComments] = useState<Array<{ file: string; line: number; body: string }>>([]);
+	const queryClient = useQueryClient();
 
 	const task = tasksData?.tasks.find((t) => t.slug === slug);
 	const specs = specsData?.specs ?? [];
@@ -42,6 +52,24 @@ function TaskDetailPage() {
 
 	const needsReview = ["M", "L"].includes(task?.size ?? "");
 	const isActive = task?.status !== "completed" && task?.status !== "done" && task?.status !== "cancelled";
+	const showApproval = isActive && needsReview && task?.review_status === "pending";
+
+	const reviewMutation = useMutation({
+		mutationFn: (status: "approved" | "changes_requested") => submitReview(slug, status, allComments),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["review", slug] });
+			queryClient.invalidateQueries({ queryKey: ["review-history", slug] });
+			queryClient.invalidateQueries({ queryKey: ["tasks"] });
+			setAllComments([]);
+		},
+	});
+
+	const addComment = (file: string, line: number, body: string) => {
+		setAllComments((prev) => [...prev, { file, line, body }]);
+	};
+	const removeComment = (index: number) => {
+		setAllComments((prev) => prev.filter((_, i) => i !== index));
+	};
 
 	const toggleReviewMode = (file: string) => {
 		setReviewModeFiles((prev) => {
@@ -72,7 +100,39 @@ function TaskDetailPage() {
 					{task.review_status && <Badge variant="outline" style={{ borderColor: task.review_status === "approved" ? "rgba(45,139,122,0.4)" : task.review_status === "changes_requested" ? "rgba(230,126,34,0.4)" : "rgba(107,114,128,0.3)", color: task.review_status === "approved" ? "#2d8b7a" : task.review_status === "changes_requested" ? "#e67e22" : "#6b7280" }}>{task.review_status}</Badge>}
 					{validationData && <ValidationBadge report={validationData} />}
 				</div>
-				{task.waves && task.waves.length > 0 && <div className="pt-1"><WaveTimeline waves={task.waves} /></div>}
+				{task.waves && task.waves.length > 0 && (
+					<div className="pt-1 flex items-center gap-4">
+						<div className="flex-1"><WaveTimeline waves={task.waves} /></div>
+						{showApproval && (
+							<div className="flex gap-2 shrink-0">
+								<ConfirmAction
+									title={t("review.approveTitle")}
+									description={t("review.approveDescription")}
+									action={() => reviewMutation.mutate("approved")}
+									disabled={reviewMutation.isPending}
+								>
+									<Button size="sm" variant="brutalist" className="gap-1 text-xs">
+										<CheckCircle className="h-3.5 w-3.5" />
+										{t("review.approve")}
+									</Button>
+								</ConfirmAction>
+								<ConfirmAction
+									title={t("review.requestChangesTitle")}
+									description={t("review.requestChangesDescription")}
+									action={() => reviewMutation.mutate("changes_requested")}
+									disabled={reviewMutation.isPending || allComments.length === 0}
+								>
+									<Button size="sm" variant="outline" className="gap-1 text-xs"
+										style={{ borderColor: "rgba(230,126,34,0.4)", color: "#e67e22" }}>
+										<XCircle className="h-3.5 w-3.5" />
+										{t("review.requestChanges")}
+										{allComments.length > 0 && <span className="ml-1 text-[10px]">({allComments.length})</span>}
+									</Button>
+								</ConfirmAction>
+							</div>
+						)}
+					</div>
+				)}
 			</div>
 
 				{/* Scrollable content */}
@@ -99,6 +159,12 @@ function TaskDetailPage() {
 									reviewStatus={task?.review_status ?? "pending"}
 									specContent={content}
 									currentFile={spec.file}
+									comments={allComments.filter((c) => c.file === spec.file)}
+									onAddComment={(line, body) => addComment(spec.file, line, body)}
+									onRemoveComment={(line, body) => {
+										const idx = allComments.findIndex((c) => c.file === spec.file && c.line === line && c.body === body);
+										if (idx >= 0) removeComment(idx);
+									}}
 								/>
 							) : undefined}
 						/>
@@ -124,6 +190,29 @@ function TaskDetailPage() {
 }
 
 
+
+function ConfirmAction({
+	title, description, action, disabled, children,
+}: {
+	title: string; description: string; action: () => void; disabled?: boolean; children: React.ReactNode;
+}) {
+	const { t } = useI18n();
+	return (
+		<AlertDialog>
+			<AlertDialogTrigger asChild disabled={disabled}>{children}</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle>{title}</AlertDialogTitle>
+					<AlertDialogDescription>{description}</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>{t("review.cancel")}</AlertDialogCancel>
+					<AlertDialogAction onClick={action}>{t("review.confirm")}</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+}
 
 function ValidationBadge({ report }: { report: ValidationReport }) {
 	const { t } = useI18n();
