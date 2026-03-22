@@ -2,6 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle, CircleCheck, CircleDot, XCircle } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ReviewPanel } from "@/components/review/ReviewPanel";
 import { SectionCard } from "@/components/section-card";
@@ -51,11 +52,20 @@ function TaskDetailPage() {
 
 	const reviewMutation = useMutation({
 		mutationFn: (status: "approved" | "changes_requested") => submitReview(slug, status, allComments),
-		onSuccess: () => {
+		onSuccess: (_data, status) => {
 			queryClient.invalidateQueries({ queryKey: ["review", slug] });
 			queryClient.invalidateQueries({ queryKey: ["review-history", slug] });
 			queryClient.invalidateQueries({ queryKey: ["tasks"] });
 			setAllComments([]);
+			if (status === "approved") {
+				toast.success("承認しました", {
+					description: "Claude Code に戻って実装を開始してください。",
+				});
+			} else {
+				toast("修正を依頼しました", {
+					description: `${allComments.length} 件のコメントを送信しました。Claude Code で「レビューコメントに対応して」と伝えてください。`,
+				});
+			}
 		},
 	});
 
