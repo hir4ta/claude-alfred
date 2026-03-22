@@ -109,14 +109,17 @@ function ReworkChart({ analytics }: { analytics: AnalyticsResponse }) {
 	return (
 		<div className="rounded-organic border border-border/60 bg-card py-4 px-4">
 			<h3 className="text-sm font-semibold mb-3">{t("activity.rework.title")}</h3>
-			<div className="space-y-2">
+			<div className="space-y-3">
 				{analytics.reworkRates.map((r) => {
 					const pct = Math.round(r.reworkRate * 100);
 					const width = Math.max((r.reworkRate / maxRate) * 100, 2);
 					return (
-						<div key={r.slug} className="flex items-center gap-3">
-							<span className="text-[10px] font-mono text-muted-foreground w-44 shrink-0 truncate" title={r.slug}>{r.slug}</span>
-							<div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden">
+						<div key={r.slug}>
+							<div className="flex items-baseline justify-between mb-1">
+								<span className="text-[11px] font-mono text-foreground/80">{r.slug}</span>
+								<span className="text-[11px] font-mono text-muted-foreground">{pct}%</span>
+							</div>
+							<div className="h-4 bg-muted/30 rounded overflow-hidden">
 								<div
 									className="h-full rounded"
 									style={{
@@ -126,7 +129,6 @@ function ReworkChart({ analytics }: { analytics: AnalyticsResponse }) {
 									}}
 								/>
 							</div>
-							<span className="text-[10px] font-mono w-8 text-right shrink-0">{pct}%</span>
 						</div>
 					);
 				})}
@@ -155,16 +157,19 @@ function CycleTimeChart({ analytics }: { analytics: AnalyticsResponse }) {
 	return (
 		<div className="rounded-organic border border-border/60 bg-card py-4 px-4">
 			<h3 className="text-sm font-semibold mb-3">{t("activity.cycleTime.title")}</h3>
-			<div className="space-y-2">
+			<div className="space-y-3">
 				{analytics.cycleTimeBreakdown.map((r) => {
 					const p = r.phases;
 					const planW = ((p.planning ?? 0) / maxTotal) * 100;
 					const apprW = ((p.approvalWait ?? 0) / maxTotal) * 100;
 					const implW = ((p.implementation ?? 0) / maxTotal) * 100;
 					return (
-						<div key={r.slug} className="flex items-center gap-3">
-							<span className="text-[10px] font-mono text-muted-foreground w-44 shrink-0 truncate" title={r.slug}>{r.slug}</span>
-							<div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden flex">
+						<div key={r.slug}>
+							<div className="flex items-baseline justify-between mb-1">
+								<span className="text-[11px] font-mono text-foreground/80">{r.slug}</span>
+								<span className="text-[11px] font-mono text-muted-foreground">{p.total.toFixed(1)}d</span>
+							</div>
+							<div className="h-4 bg-muted/30 rounded overflow-hidden flex">
 								{planW > 0 && (
 									<div className="h-full" style={{ width: `${planW}%`, backgroundColor: PHASE_COLORS.planning }} title={`${t("activity.cycleTime.planning")}: ${p.planning?.toFixed(1)}d`} />
 								)}
@@ -175,7 +180,6 @@ function CycleTimeChart({ analytics }: { analytics: AnalyticsResponse }) {
 									<div className="h-full" style={{ width: `${implW}%`, backgroundColor: PHASE_COLORS.implementation }} title={`${t("activity.cycleTime.implementation")}: ${p.implementation?.toFixed(1)}d`} />
 								)}
 							</div>
-							<span className="text-[10px] font-mono w-12 text-right shrink-0">{p.total.toFixed(1)}d</span>
 						</div>
 					);
 				})}
