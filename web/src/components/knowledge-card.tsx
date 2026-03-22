@@ -53,7 +53,7 @@ export function KnowledgeCard({
 			onMouseEnter={() => setIsRevealed(true)}
 			onMouseLeave={() => setIsRevealed(false)}
 			onFocus={() => setIsRevealed(true)}
-			onBlur={() => setIsRevealed(false)}
+			onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsRevealed(false); }}
 		>
 			<CardContent className="p-4 h-[72px] overflow-hidden relative">
 				{/* Row 1: Sub-type icon + label + actions */}
@@ -135,6 +135,7 @@ export function KnowledgeCard({
 					initial={{ opacity: 1 }}
 					animate={{ opacity: isRevealed ? 0 : 1 }}
 					transition={{ type: "spring", damping: 25, stiffness: 200 }}
+					aria-hidden={isRevealed}
 				>
 					<div className="flex items-center gap-2 text-[10px] text-muted-foreground">
 						{entry.project_name && (

@@ -40,7 +40,6 @@ export function TaskCard({
 					"al-icon-wrapper h-[80px] !gap-0 !py-0 rounded-organic border-stone-200 transition-[border-color,transform] duration-200 hover:border-stone-300 hover:-translate-y-0.5 dark:border-stone-700 dark:hover:border-stone-600",
 					isCompleted && "opacity-60",
 				)}
-				tabIndex={0}
 				onMouseEnter={() => setIsRevealed(true)}
 				onMouseLeave={() => setIsRevealed(false)}
 				onFocus={() => setIsRevealed(true)}
