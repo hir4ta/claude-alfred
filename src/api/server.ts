@@ -642,6 +642,24 @@ export function createApp(
 		return c.json({ hitRanking, completionStats, reworkRates, cycleTimeBreakdown });
 	});
 
+	app.get("/api/analytics/heatmap", (c) => {
+		const filterProjectId = getProjectFilter(c.req.query("project")) || undefined;
+		const weeks = Math.min(Number(c.req.query("weeks") || 16), 52);
+		const since = new Date();
+		since.setDate(since.getDate() - weeks * 7);
+		const sinceStr = since.toISOString();
+
+		const projectFilter = filterProjectId ? "AND project_id = ?" : "";
+		const params: unknown[] = [sinceStr];
+		if (filterProjectId) params.push(filterProjectId);
+
+		const rows = store.db.prepare(
+			`SELECT date(timestamp) as date, COUNT(*) as count FROM audit_log WHERE timestamp >= ? ${projectFilter} GROUP BY date(timestamp) ORDER BY date ASC`,
+		).all(...params) as Array<{ date: string; count: number }>;
+
+		return c.json({ data: rows, weeks });
+	});
+
 	app.get("/api/specs/:slug/similar", async (c) => {
 		const { findSimilarSpecs } = await import("../store/vectors.js");
 		const slug = c.req.param("slug");

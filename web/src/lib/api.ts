@@ -196,6 +196,23 @@ export const briefingQueryOptions = (projectId?: string) =>
 		staleTime: LIVE_STALE,
 	});
 
+// --- Heatmap ---
+
+export interface HeatmapResponse {
+	data: Array<{ date: string; count: number }>;
+	weeks: number;
+}
+
+export const heatmapQueryOptions = (projectId?: string) =>
+	queryOptions({
+		queryKey: ["heatmap", projectId],
+		queryFn: () => {
+			const url = projectId ? `/api/analytics/heatmap?project=${projectId}` : "/api/analytics/heatmap";
+			return fetchJSON<HeatmapResponse>(url);
+		},
+		staleTime: REF_STALE,
+	});
+
 // --- Activity / Analytics ---
 
 export interface AnalyticsResponse {
