@@ -112,7 +112,7 @@ function TaskDetailPage() {
 							>
 								<button
 									type="button"
-									className="al-icon-wrapper flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white"
+									className="al-icon-wrapper flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white cursor-pointer hover:opacity-90"
 									style={{ backgroundColor: "#628141" }}
 								>
 									<CheckCircle className="size-4" />
