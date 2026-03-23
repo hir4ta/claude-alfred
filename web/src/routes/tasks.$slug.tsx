@@ -30,6 +30,7 @@ function TaskDetailPage() {
 	const { data: validationData } = useQuery(validationQueryOptions(slug, projectId));
 
 	const task = tasksData?.tasks.find((t) => t.slug === slug);
+	const projectName = (task as Record<string, unknown> | undefined)?.project_name as string | undefined;
 	const specs = specsData?.specs ?? [];
 
 	const specContents = useQueries({
@@ -54,6 +55,7 @@ function TaskDetailPage() {
 					{task.size && <Badge variant="outline" style={{ borderColor: "rgba(123,107,141,0.4)", color: "#7b6b8d" }}>{task.size}</Badge>}
 					{task.spec_type && <Badge variant="outline" style={{ borderColor: "rgba(98,129,65,0.4)", color: "#628141" }}>{task.spec_type}</Badge>}
 					{validationData && <ValidationBadge report={validationData} />}
+					{projectName && <span className="text-[11px] text-muted-foreground truncate">{projectName}</span>}
 				</div>
 				{task.waves && task.waves.length > 0 && (
 					<div className="pt-1">

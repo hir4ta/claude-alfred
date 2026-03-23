@@ -34,26 +34,33 @@ export function TaskListView({
 				const isCompleted = task.status === "completed" || task.status === "done" || task.status === "cancelled";
 				const projectId = (task as Record<string, unknown>).project_id as string | undefined;
 
+				const projectName = (task as Record<string, unknown>).project_name as string | undefined;
+
 				return (
 					<Link
-						key={task.slug}
+						key={`${task.slug}-${projectId ?? ""}`}
 						to="/tasks/$slug"
 						params={{ slug: task.slug }}
 						search={projectId ? { project: projectId } : {}}
 						className={cn(
-							"flex items-center gap-3 h-10 px-3 rounded-organic border border-transparent transition-colors hover:bg-accent/50",
+							"flex flex-col gap-1 px-3 py-2 rounded-organic border border-transparent transition-colors hover:bg-accent/50",
 							task.slug === selectedSlug && "border-border bg-accent/30",
 							isCompleted && "opacity-60",
 						)}
 					>
-						<TaskStatusDot status={task.status ?? "pending"} />
-						<span className="text-sm font-mono truncate min-w-0 flex-1">{task.slug}</span>
-						<div className="flex items-center gap-2 shrink-0 w-32">
+						<div className="flex items-center gap-2 min-w-0">
+							<TaskStatusDot status={task.status ?? "pending"} />
+							<span className="text-sm font-mono truncate flex-1">{task.slug}</span>
+						</div>
+						<div className="flex items-center gap-2 pl-5">
 							<Progress value={progress} className="h-1 flex-1" />
 							<span className="text-[10px] tabular-nums text-muted-foreground w-8 text-right">
 								{task.completed}/{task.total}
 							</span>
 						</div>
+						{projectName && (
+							<span className="text-[10px] text-muted-foreground truncate pl-5">{projectName}</span>
+						)}
 					</Link>
 				);
 			})}
