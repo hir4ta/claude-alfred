@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbDatabase } from "./db.js";
 
 export const SCHEMA_VERSION = 10;
 
@@ -265,14 +265,14 @@ const LEGACY_INDEXES = [
 
 const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
-function dropSafe(db: Database.Database, kind: string, name: string): void {
+function dropSafe(db: DbDatabase, kind: string, name: string): void {
 	if (!SAFE_IDENTIFIER.test(name)) {
 		throw new Error(`store: unsafe identifier in DROP ${kind}: "${name}"`);
 	}
 	db.exec(`DROP ${kind} IF EXISTS ${name}`);
 }
 
-function seedTagAliases(db: Database.Database): void {
+function seedTagAliases(db: DbDatabase): void {
 	const stmt = db.prepare("INSERT OR IGNORE INTO tag_aliases (tag, alias) VALUES (?, ?)");
 	for (const [tag, aliases] of Object.entries(TAG_ALIASES)) {
 		for (const alias of aliases) {
@@ -281,7 +281,7 @@ function seedTagAliases(db: Database.Database): void {
 	}
 }
 
-function rebuildFromScratch(db: Database.Database): void {
+function rebuildFromScratch(db: DbDatabase): void {
 	for (const trigger of LEGACY_TRIGGERS) {
 		dropSafe(db, "TRIGGER", trigger);
 	}
@@ -309,13 +309,13 @@ function rebuildFromScratch(db: Database.Database): void {
 	seedTagAliases(db);
 }
 
-function setSchemaVersion(db: Database.Database, ver: number): void {
+function setSchemaVersion(db: DbDatabase, ver: number): void {
 	db.exec("DELETE FROM schema_version");
 	db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(ver);
-	db.pragma(`user_version = ${ver}`);
+	db.exec(`PRAGMA user_version = ${ver}`);
 }
 
-export function migrate(db: Database.Database): void {
+export function migrate(db: DbDatabase): void {
 	let current = 0;
 	try {
 		const row = db.prepare("SELECT version FROM schema_version LIMIT 1").get() as
@@ -341,7 +341,7 @@ export function migrate(db: Database.Database): void {
  * FR-1a (knowledge-lifecycle): Add verification columns to knowledge_index.
  * Uses ALTER TABLE ADD COLUMN (idempotent via try-catch) to avoid rebuildFromScratch.
  */
-function addVerificationColumns(db: Database.Database): void {
+function addVerificationColumns(db: DbDatabase): void {
 	const columns = [
 		"ALTER TABLE knowledge_index ADD COLUMN verification_due TEXT",
 		"ALTER TABLE knowledge_index ADD COLUMN last_verified TEXT",

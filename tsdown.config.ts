@@ -10,7 +10,7 @@ export default defineConfig([
     banner: { js: '#!/usr/bin/env node' },
     loader: { '.tmpl': 'text' },
     deps: {
-      neverBundle: ['better-sqlite3'],
+      neverBundle: ['better-sqlite3', 'bun:sqlite'],
       onlyBundle: false,
     },
   },
@@ -21,7 +21,7 @@ export default defineConfig([
     target: 'node22',
     loader: { '.tmpl': 'text' },
     deps: {
-      neverBundle: ['better-sqlite3'],
+      neverBundle: ['better-sqlite3', 'bun:sqlite'],
       onlyBundle: false,
     },
   },

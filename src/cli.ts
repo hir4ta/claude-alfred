@@ -110,12 +110,18 @@ const main = defineCommand({
 				const nodeMajor = parseInt(nodeVer.slice(1), 10);
 				check(nodeMajor >= 22, `Node.js ${nodeVer}`, ">=22 required");
 
-				// better-sqlite3
+				// SQLite driver
 				try {
-					await import("better-sqlite3");
-					check(true, "better-sqlite3 loaded");
+					const { isBun } = await import("./store/db.js");
+					if (isBun) {
+						await import("bun:sqlite");
+						check(true, "bun:sqlite loaded");
+					} else {
+						await import("better-sqlite3");
+						check(true, "better-sqlite3 loaded");
+					}
 				} catch {
-					check(false, "better-sqlite3", "not found — run npm rebuild");
+					check(false, "sqlite driver", "not found — run npm rebuild");
 				}
 
 				// DB

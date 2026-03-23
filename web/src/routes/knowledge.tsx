@@ -2,10 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { KnowledgeListView } from "@/components/knowledge-list-view";
-import { BookshelfView } from "@/components/bookshelf-view";
 import { KnowledgeDialog } from "@/components/knowledge-dialog";
 import { ButlerEmpty } from "@/components/butler-empty";
-import { ViewSwitcher } from "@/components/view-switcher";
 import { StaggerContainer } from "@/components/stagger-container";
 import {
 	Pagination,
@@ -23,7 +21,6 @@ import {
 } from "@/lib/api";
 
 import { useI18n } from "@/lib/i18n";
-import { useViewMode } from "@/lib/use-view-mode";
 import type { KnowledgeEntry, KnowledgeStats } from "@/lib/types";
 import { SUB_TYPE_COLORS } from "@/lib/types";
 
@@ -34,8 +31,6 @@ export const Route = createFileRoute("/knowledge")({
 function KnowledgePage() {
 	const [selected, setSelected] = useState<KnowledgeEntry | null>(null);
 	const [page, setPage] = useState(1);
-	const [viewMode, setViewModeRaw] = useViewMode("knowledge", "bookshelf");
-	const setViewMode = (mode: "list" | "bookshelf") => { setViewModeRaw(mode); setPage(1); };
 
 	const search = useSearch({ strict: false }) as { project?: string };
 	const projectId = search.project;
@@ -46,9 +41,8 @@ function KnowledgePage() {
 
 	return (
 		<div className="space-y-5">
-			{/* Stats + View Switcher */}
-			<div className="flex items-center justify-between">
-				<ViewSwitcher current={viewMode} onChange={setViewMode} />
+			{/* Stats */}
+			<div className="flex items-center justify-end">
 				{statsData && <StatsBar stats={statsData} />}
 			</div>
 
@@ -60,14 +54,9 @@ function KnowledgePage() {
 					))}
 				</div>
 			) : entries.length > 0 ? (
-				viewMode === "list" ? (
-					<ListWithPagination entries={entries} onSelect={setSelected} page={page} setPage={setPage} />
-				) : (
-					/* Bookshelf handles its own pagination dynamically based on window size */
-					<BookshelfView entries={entries} onSelect={(entry) => setSelected(entry)} />
-				)
+				<ListWithPagination entries={entries} onSelect={setSelected} page={page} setPage={setPage} />
 			) : (
-				<ButlerEmpty scene="bookshelf" messageKey="empty.noMemories" />
+				<ButlerEmpty scene="monocle" messageKey="empty.noMemories" />
 			)}
 
 			{/* Knowledge detail dialog */}

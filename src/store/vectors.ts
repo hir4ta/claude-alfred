@@ -84,7 +84,7 @@ export function vectorSearch(
       WHERE e.source = ? ${filter}
       LIMIT ?
     `)
-			.all(source, maxCandidates) as Array<{ source_id: number; source: string; vector: Buffer }>;
+			.all(source, maxCandidates) as Array<{ source_id: number; source: string; vector: Buffer | Uint8Array }>;
 
 		let highQualityCount = 0;
 		for (const row of rows) {
@@ -129,19 +129,21 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 	return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-export function serializeFloat32(vec: number[]): Buffer {
-	const buf = Buffer.allocUnsafe(vec.length * 4);
+export function serializeFloat32(vec: number[]): Uint8Array {
+	const buf = new ArrayBuffer(vec.length * 4);
+	const view = new DataView(buf);
 	for (let i = 0; i < vec.length; i++) {
-		buf.writeFloatLE(vec[i]!, i * 4);
+		view.setFloat32(i * 4, vec[i]!, true); // little-endian
 	}
-	return buf;
+	return new Uint8Array(buf);
 }
 
-export function deserializeFloat32(blob: Buffer): number[] {
-	const n = blob.length / 4;
+export function deserializeFloat32(blob: Buffer | Uint8Array): number[] {
+	const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+	const n = blob.byteLength / 4;
 	const vec: number[] = new Array(n);
 	for (let i = 0; i < n; i++) {
-		vec[i] = blob.readFloatLE(i * 4);
+		vec[i] = view.getFloat32(i * 4, true); // little-endian
 	}
 	return vec;
 }
@@ -230,7 +232,7 @@ export function findSimilarSpecs(
 	// Get the target spec's embedding
 	const targetRow = store.db
 		.prepare("SELECT vector FROM embeddings WHERE source = 'spec' AND source_id = ?")
-		.get(specId) as { vector: Buffer } | undefined;
+		.get(specId) as { vector: Buffer | Uint8Array } | undefined;
 
 	if (!targetRow) {
 		// FTS5 fallback: keyword match on spec content

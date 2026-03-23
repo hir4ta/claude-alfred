@@ -18,12 +18,11 @@ async function main() {
 
 	// 2. Create DB with schema migration.
 	try {
-		// Dynamic import to handle better-sqlite3 not being available during CI.
-		const Database = (await import("better-sqlite3")).default;
+		const { openDatabaseSync, pragmaSet } = await import("./store/db.js");
 		const { migrate } = await import("./store/schema.js");
 		const dbPath = join(dbDir, "alfred.db");
-		const db = new Database(dbPath);
-		db.pragma("journal_mode = WAL");
+		const db = openDatabaseSync(dbPath);
+		pragmaSet(db, "journal_mode = WAL");
 		migrate(db);
 		db.close();
 		console.log("[alfred] database ready:", dbPath);

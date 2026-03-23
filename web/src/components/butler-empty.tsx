@@ -1,4 +1,4 @@
-import { BookOpen, CircleAlert, ListChecks, Search, Trophy } from "@animated-color-icons/lucide-react";
+import { CircleAlert, ListChecks, Search, Trophy } from "@animated-color-icons/lucide-react";
 import { motion } from "motion/react";
 import type { LucideProps } from "lucide-react";
 import type { ComponentType } from "react";
@@ -6,12 +6,11 @@ import { useI18n } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
 import { butlerSpring } from "@/lib/motion";
 
-type ButlerScene = "empty-tray" | "monocle" | "bookshelf" | "concerned" | "bow";
+type ButlerScene = "empty-tray" | "monocle" | "concerned" | "bow";
 
 const sceneIcons: Record<ButlerScene, { icon: ComponentType<LucideProps>; color: string }> = {
 	"empty-tray": { icon: ListChecks, color: "#40513b" },
 	monocle: { icon: Search, color: "#7b6b8d" },
-	bookshelf: { icon: BookOpen, color: "#2d8b7a" },
 	concerned: { icon: CircleAlert, color: "#e67e22" },
 	bow: { icon: Trophy, color: "#628141" },
 };

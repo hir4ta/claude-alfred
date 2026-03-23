@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type Database from "better-sqlite3";
+import type { DbDatabase } from "../store/db.js";
 import { Store } from "../store/index.js";
 import type { KnowledgeRow } from "../types.js";
 
@@ -9,7 +9,7 @@ export const TEST_PROJECT_ID = "test-project-id";
 
 /** Insert a test project into the projects table. Accepts Store or raw Database. */
 export function insertTestProject(
-	storeOrDb: Store | Database.Database,
+	storeOrDb: Store | DbDatabase,
 	id = TEST_PROJECT_ID,
 	path = "/test",
 ): string {

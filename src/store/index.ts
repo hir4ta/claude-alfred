@@ -1,15 +1,15 @@
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import Database from "better-sqlite3";
+import { type DbDatabase, openDatabaseSync, pragmaSet } from "./db.js";
 import { migrate, SCHEMA_VERSION } from "./schema.js";
 
 export class Store {
-	readonly db: Database.Database;
+	readonly db: DbDatabase;
 	readonly dbPath: string;
 	expectedDims = 0;
 
-	private constructor(db: Database.Database, dbPath: string) {
+	private constructor(db: DbDatabase, dbPath: string) {
 		this.db = db;
 		this.dbPath = dbPath;
 	}
@@ -17,16 +17,17 @@ export class Store {
 	static open(dbPath: string): Store {
 		mkdirSync(dirname(dbPath), { recursive: true });
 
-		const db = new Database(dbPath);
+		const db = openDatabaseSync(dbPath);
 
-		db.pragma("journal_mode = WAL");
-		db.pragma("foreign_keys = ON");
-		db.pragma("synchronous = NORMAL");
-		db.pragma("cache_size = -8000");
-		db.pragma("mmap_size = 268435456");
-		db.pragma("temp_store = MEMORY");
+		pragmaSet(db, "journal_mode = WAL");
+		pragmaSet(db, "foreign_keys = ON");
+		pragmaSet(db, "synchronous = NORMAL");
+		pragmaSet(db, "cache_size = -8000");
+		pragmaSet(db, "mmap_size = 268435456");
+		pragmaSet(db, "temp_store = MEMORY");
 
-		const uv = db.pragma("user_version", { simple: true }) as number;
+		const row = db.prepare("PRAGMA user_version").get() as { user_version: number } | undefined;
+		const uv = row?.user_version ?? 0;
 		if (uv !== SCHEMA_VERSION) {
 			migrate(db);
 		}
