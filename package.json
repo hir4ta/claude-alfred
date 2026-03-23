@@ -9,8 +9,7 @@
   "files": [
     "dist/",
     "web/dist/",
-    "templates/",
-    "content/"
+    "templates/"
   ],
   "engines": {
     "bun": ">=1.3"
