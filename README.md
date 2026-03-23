@@ -8,8 +8,6 @@ A development butler for [Claude Code](https://docs.anthropic.com/en/docs/claude
 
 **Other tools suggest. alfred enforces.**
 
-[Japanese README](README.ja.md)
-
 ## 30-second version
 
 ```
@@ -94,9 +92,6 @@ With Opus 4.6's 1M context window, compaction is rarer but more destructive when
 | `/alfred:mend` | Bug fix. Reproduce, root-cause (with past bug memory), fix, verify |
 | `/alfred:tdd` | Test-driven. Red, green, refactor — remembers patterns across sessions |
 | `/alfred:inspect` | 6-profile quality review. Parallel agents, scored findings |
-| `/alfred:survey` | Reverse-engineer specs from existing code, with confidence scores |
-| `/alfred:salon` | Brainstorm. 3 specialists ideate in parallel, then debate tradeoffs |
-| `/alfred:archive` | Ingest reference docs (PDF, CSV, big text) into searchable knowledge |
 
 ## How it works
 
@@ -116,8 +111,8 @@ Hooks (invisible)
   v
 Storage
   |-- .alfred/knowledge/   -> JSON (decisions/, patterns/, rules/) — source of truth
-  |-- .alfred/specs/       -> spec files + version history + reviews
-  +-- ~/.claude-alfred/    -> SQLite search index + audit log (rebuildable)
+  |-- .alfred/specs/       -> spec files
+  +-- ~/.claude-alfred/    -> SQLite search index (rebuildable)
 ```
 
 ## MCP tools
@@ -142,7 +137,7 @@ Patterns auto-promote to rules after 15+ search hits.
 
 Search pipeline: Voyage AI vectors with reranking > FTS5 with fuzzy matching > keyword fallback. "auth" finds "authentication", "login", and more.
 
-Each entry tracks its author (via `git user.name`). Export/import knowledge between projects with `alfred knowledge export/import`.
+Each entry tracks its author (via `git user.name`).
 
 ## Adaptive specs
 

@@ -13,8 +13,8 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP, Bun.serve) / 
 | Package | Role |
 |---|---|
 | `src/mcp/` | MCP server (2 tools: dossier, ledger) — @modelcontextprotocol/sdk + Zod. dossier split into `src/mcp/dossier/{index,helpers,init,lifecycle,crud}.ts` |
-| `src/store/` | SQLite persistence (projects + knowledge_index + spec_index + audit_log + embeddings + FTS5), project registry, spec sync, audit sync |
-| `src/git/` | Git integration: export/import/diff, user.name resolution |
+| `src/store/` | SQLite persistence (projects + knowledge_index + spec_index + embeddings + FTS5), project registry, spec sync |
+| `src/git/` | Git integration: user.name resolution |
 | `src/embedder/` | Voyage AI (voyage-4-large, vector search + rerank-2.5) |
 | `src/spec/` | Spec management: .alfred/specs/ (8 file types) + Size-based scaling + Validate + Templates |
 | `src/hooks/` | Hook handlers (SessionStart / PreCompact / UserPromptSubmit / PostToolUse / PreToolUse / Stop) |
@@ -38,17 +38,14 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP, Bun.serve) / 
 
 1. **Spec Creation** — Create spec documents via `/alfred:brief` or `dossier action=init`
 2. **Self-Review** (all sizes including S)
-   - OK → User approval request (M/L only; S exempt)
-   - NG → Fix → Self-review (loop until OK)
-3. **User Spec Review** (M/L only, via `alfred dashboard`)
    - OK → Implementation phase
-   - NG → Back to step 1
-4. **Implementation** (per Wave, Wave-centric enforcement)
+   - NG → Fix → Self-review (loop until OK)
+3. **Implementation** (per Wave, Wave-centric enforcement)
    - Each Wave ends with T-N.R Review: commit → self-review → knowledge save
    - Task completion: explicit `dossier action=check task_id="T-X.Y"` (no heuristic auto-check)
    - Wave completion: git commit detected → review gate set → Edit/Write blocked until reviewed
    - Knowledge accumulation via `ledger save` (DIRECTIVE)
-5. **All Waves Complete** → Final self-review (Closing Wave)
+4. **All Waves Complete** → Final self-review (Closing Wave)
    - OK → `dossier action=complete` (summary creation)
    - NG → Fix → Self-review (loop until OK)
 
@@ -56,8 +53,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP, Bun.serve) / 
 
 | Step | Mechanism | Level |
 |------|-----------|-------|
-| Spec required | UserPromptSubmit DIRECTIVE + PreToolUse advisory | DIRECTIVE/CONTEXT |
-| Spec approval (M/L) | PreToolUse + dossier complete | DENY |
+| Spec suggested | UserPromptSubmit CONTEXT (必ず提案、サイレントスキップ禁止) | CONTEXT |
 | Wave self-review | review-gate.json via PreToolUse (fix_mode for review→fix→re-review loop) | DENY (fix_mode: ALLOW) |
 | Wave commit + knowledge | PostToolUse DIRECTIVE | DIRECTIVE |
 | Task progress update | Explicit `dossier action=check` | Manual |
@@ -75,9 +71,7 @@ task check                    # tsc --noEmit + Biome lint
 task fix                      # Biome auto-fix
 task test                     # vitest
 task clean                    # Clean build artifacts (dist/ + web/dist/)
-bun dist/cli.mjs serve       # MCP server (stdio)
 bun dist/cli.mjs dashboard   # Open browser dashboard (localhost:7575)
-bun dist/cli.mjs hook <Event> # Hook handler (SessionStart/PreCompact/UserPromptSubmit/PostToolUse/PreToolUse/Stop)
 bun dist/cli.mjs version     # Show version
 ```
 
@@ -109,12 +103,10 @@ bun dist/cli.mjs version     # Show version
 
 ### Database & Schema
 - @.claude/rules/store-internals.md (schema V10, vector search, SQL safety, knowledge architecture)
-- Schema V10: knowledge_index.author, audit_log table (UNIQUE dedup), idx_ki_author, idx_audit_project_time, idx_audit_actor
 - rebuildFromScratch migration pattern (V9→V10)
 
-
-### Spec Management & Review
-- @.claude/rules/spec-details.md (sizes, types, templates, validation, confidence, approval gate, review)
+### Spec Management
+- @.claude/rules/spec-details.md (sizes, types, templates, validation, confidence)
 
 ### Web Dashboard
 
@@ -124,22 +116,13 @@ bun dist/cli.mjs version     # Show version
 - React SPA: Vite 8 + TanStack Router (file-based) + TanStack Query + shadcn/ui + Tailwind CSS v4
 - Build: `task build` (bun run build:web → tsdown bundle)
 - Dev mode: `ALFRED_DEV=1 alfred dashboard` + `task dev` (Vite HMR proxy)
-- 5 tabs: Overview (/) / Tasks (/tasks) / Knowledge (/knowledge) / Activity (/activity) / Projects (/projects)
-- Cross-project: ProjectSelector filters all tabs via `?project=<uuid>`. GlobalSearch (Cmd+K) for unified knowledge+spec search
-- Review mode: line-numbered spec viewer, inline comments, Approve/Request Changes with confirmation dialog
-- Review API: POST/GET /api/tasks/:slug/review (submit review + get status + history). Creates review JSON in .alfred/specs/{slug}/reviews/
+- 3 tabs: Overview (+ プロジェクトリスト) / Tasks (/tasks) / Knowledge (/knowledge)
+- 全プロジェクト横断表示、リアルタイム進捗(SSE)
 - Markdown rendering: react-markdown + react-syntax-highlighter for rich spec display
-- SSE: EventSource → TanStack Query invalidation for real-time updates
 - Brand palette (DEC-15): session #40513b, decision #628141, pattern #2d8b7a, rule #e67e22, error #c0392b, purple #7b6b8d, dark #44403c
-- Dashboard API: Hono REST endpoints (src/api/server.ts). KnowledgeRow → KnowledgeEntry mapping via toKnowledgeEntry()
-- Confidence: spec.ParseConfidence() (extracted from mcpserver to spec package)
-- Activity tab: Rework Rate (bar chart, pending=half-opacity) + Cycle Time breakdown (stacked bar: planning/approval/implementation) + Audit log table (server-side pagination 50/page)
-- Feedback metrics: spec.complete records changed_files in audit detail, PostToolUse tracks first_commit per spec, getReworkRates() + getCycleTimeBreakdown() in src/store/audit.ts
-- recharts: devDependency, Vite frontend bundle only (not in tsdown backend)
 - Knowledge lifecycle: verification badges (verified/overdue/pending), Knowledge Gaps collapsible section, `GET /api/knowledge/gaps`
-- Verification: knowledge_index に verification_due/last_verified/verification_count カラム (ALTER TABLE, V10 維持). `ledger action=verify` で Leitner 方式検証. SessionStart で期限切れ通知
-- Gap detection: UserPromptSubmit で bestScore < 0.3 + implement intent → `.alfred/.state/knowledge-gaps.jsonl` に記録
-- Wave enforcement (#24/#25): dossier complete は全 Wave のタスクチェックを検証（Closing Wave だけでなく）。gate clear は reason 30文字以上必須。fix_mode は 60分タイムアウト。チェックボックスは大文字 X にも対応
+- Verification: knowledge_index に verification_due/last_verified/verification_count カラム. `ledger action=verify` で Leitner 方式検証. SessionStart で期限切れ通知
+- Wave enforcement: dossier complete は全 Wave のタスクチェックを検証。gate clear は reason 30文字以上必須。fix_mode は 60分タイムアウト
 
 ### Knowledge & Search
 
@@ -147,22 +130,21 @@ bun dist/cli.mjs version     # Show version
 
 ### Naming Convention (Butler Theme)
 
-- Skills: brief, attend, tdd, inspect, mend, survey, salon, archive
+- Skills: brief, attend, tdd, inspect, mend
 - MCP tools: dossier (spec management), ledger (knowledge)
 
 ### Deliberation Style
 
 - **Spec review**: brief/attend focus agent review on requirements.md + design.md only (fix loop until 0 Critical/High). Other files get inline quick check
 - **Code review**: attend spawns `alfred:code-reviewer` agent per Wave boundary in foreground (3 parallel sub-reviewers: security, logic, design)
-- **Other skills**: inspect/salon/mend/survey use inline multi-perspective deliberation (no sub-agents)
-- **Approval gate**: user reviews in `alfred dashboard`, not text-based
+- **Other skills**: inspect/mend use inline multi-perspective deliberation (no sub-agents)
 - tasks.md updated after each task completion (dashboard real-time progress)
 - attend/mend: MUST call `dossier action=complete` at end to close spec
 
 ## Quality Gates
 
 - At each meaningful implementation milestone, perform **thorough self-review from multiple perspectives** (delegate to another agent if possible)
-- After self-review, update README.md / README.ja.md / CLAUDE.md to reflect changes
+- After self-review, update README.md / CLAUDE.md to reflect changes
 - Maintain test coverage at **50% or above** (`bun run test`; hook handlers may be excluded)
 
 ## Compact Instructions
@@ -171,4 +153,3 @@ bun dist/cli.mjs version     # Show version
 - Preserve Orchestrator State from `.alfred/.state/orchestrator-{slug}.json` (phase, iteration, counters)
 - Keep all CLAUDE.md rules intact (re-read from disk after compact)
 - Do NOT discard in-progress implementation context or recent decisions
-

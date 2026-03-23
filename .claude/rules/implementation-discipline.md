@@ -10,13 +10,13 @@ This file enforces the invariant Spec-Driven Development Flow defined in CLAUDE.
 - A Wave contains one or more Tasks
 - These relationships are never violated
 
-## Step 1: Spec-First Rule
+## Step 1: Spec Proposal
 
-Before writing ANY implementation code (new features, bug fixes, refactors):
+Before writing implementation code (new features, bug fixes, refactors):
 1. Check if an active spec exists via `dossier action=status`
-2. If no spec → create one via `/alfred:brief` or `dossier action=init` (minimum S size)
-3. Never skip this step — even for "small" changes
-4. Enforced: UserPromptSubmit DIRECTIVE + PreToolUse DENY
+2. If no spec → propose spec creation to user (CONTEXT level, not DIRECTIVE)
+3. Always propose — never silently skip. User can say "skip" to proceed without spec
+4. Enforced: UserPromptSubmit CONTEXT + PreToolUse advisory
 
 ## Step 2: Self-Review Rule (All Sizes)
 
@@ -25,13 +25,7 @@ After all spec documents are created:
 2. Fix all Critical and Warning findings
 3. This applies to ALL sizes including S
 
-## Step 3: User Approval (M/L Only)
-
-- M/L specs require user approval via `alfred dashboard` before implementation
-- S specs are exempt from user approval
-- Enforced: PreToolUse DENY + dossier complete validation
-
-## Step 4: Implementation (Per Wave)
+## Step 3: Implementation (Per Wave)
 
 ### Per Task Completion
 - tasks.md checkbox auto-updated by PostToolUse hook (autoCheckTasks): file path matching for Edit/Write, stdout matching for Bash
@@ -50,7 +44,7 @@ After all spec documents are created:
    - If no knowledge to save, state the reason explicitly
 4. **Continue to next Wave** — After gate clear, proceed immediately to next Wave or Closing Wave. Do NOT stop and wait for user input
 
-## Step 5: Completion
+## Step 4: Completion
 
 After all Waves (including Closing Wave) are done:
 1. Final self-review (Closing Wave checkbox)
