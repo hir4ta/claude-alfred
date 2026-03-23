@@ -54,9 +54,36 @@ main() {
   curl -fsSL "${url}" -o "${INSTALL_DIR}/alfred"
   chmod +x "${INSTALL_DIR}/alfred"
 
-  # Setup database and rules
+  # Setup database
   echo "Setting up alfred..."
+  mkdir -p "${HOME}/.claude-alfred"
   "${INSTALL_DIR}/alfred" doctor 2>/dev/null || true
+
+  # Install user rules (ensures MCP tool usage instructions are always loaded)
+  local rules_dir="${HOME}/.claude/rules"
+  mkdir -p "${rules_dir}"
+  cat > "${rules_dir}/alfred.md" << 'RULES'
+---
+description: alfred MCP tool usage guidelines — when and how to call knowledge and config-review
+---
+
+# alfred MCP Tools
+
+alfred's knowledge base contains extensive curated Claude Code docs and best practices with vector search.
+
+## knowledge — Search docs and best practices
+
+**ALWAYS call knowledge BEFORE** answering questions about Claude Code. Do not guess or rely on training data.
+
+Call when the user's question or task involves ANY of:
+- Hooks, skills, rules, agents, plugins, MCP servers, CLAUDE.md, memory
+- Permissions, settings, compaction, CLI features, IDE integrations
+- Best practices for Claude Code configuration or workflow
+- Evaluating whether code follows Claude Code conventions
+
+Do NOT call for: general programming, project-specific code, non-Claude-Code topics.
+RULES
+  echo "Rules installed: ${rules_dir}/alfred.md"
 
   # Ensure ~/.local/bin is in PATH
   if ! echo "$PATH" | grep -q "${INSTALL_DIR}"; then
