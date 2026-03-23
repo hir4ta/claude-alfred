@@ -84,7 +84,7 @@ bun dist/cli.mjs version     # Show version
 ### Build & Distribution
 
 - `bun run build` (tsdown) after src/ changes — output is `dist/cli.mjs`
-- Plugin content source of truth: `content/` (hooks, mcp config). `plugin/` is git-tracked for marketplace distribution
+- `plugin/` is git-tracked for marketplace distribution (hooks, mcp config, skills, agents, rules)
 - MCP tools return structured JSON
 - MCP server version: dynamically set from resolvedVersion() (not hardcoded)
 - **dependencies はゼロ** — bun:sqlite (built-in) を使用、他のライブラリは全て devDependencies に書き tsdown でバンドル
