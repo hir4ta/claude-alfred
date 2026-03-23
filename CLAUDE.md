@@ -6,9 +6,9 @@ Development butler for Claude Code — MCP server + Hook handler.
 
 ## Stack
 
-TypeScript (Node.js 22+, ESM) / SQLite (better-sqlite3) / Voyage AI (embedding) / React SPA (Vite 8 + TanStack Router + shadcn/ui)
+TypeScript (Bun 1.3+, ESM) / SQLite (bun:sqlite) / Voyage AI (embedding) / React SPA (Vite 8 + TanStack Router + shadcn/ui) / TUI (OpenTUI + @opentui/react)
 
-Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelcontextprotocol/sdk (MCP)
+Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP, Bun.serve) / @modelcontextprotocol/sdk (MCP)
 
 ## Structure
 
@@ -21,6 +21,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP) / @modelconte
 | `src/spec/` | Spec management: .alfred/specs/ (8 file types) + Size-based scaling + Validate + Templates |
 | `src/hooks/` | Hook handlers (SessionStart / PreCompact / UserPromptSubmit / PostToolUse / PreToolUse / Stop) |
 | `src/api/` | HTTP API server: Hono, REST handlers, SSE, SPA serving. `schemas.ts` = Zod schema (API型の single source of truth, frontend は `import type` で参照) |
+| `src/tui/` | OpenTUI terminal dashboard: real-time spec progress viewer (Bun-only, @opentui/react) |
 | `src/cli.ts` | CLI entry point (citty dispatch) |
 | `web/` | React SPA: Vite 8, TanStack Router/Query, shadcn/ui, Tailwind CSS v4, Biome |
 
@@ -70,15 +71,16 @@ Taskfile (task runner) を使用。`task` コマンドで実行。
 
 ```bash
 task build                    # Build React SPA + tsdown (full pipeline)
-task dev                      # Start Vite dev server (use with ALFRED_DEV=1 node dist/cli.mjs dashboard)
+task dev                      # Start Vite dev server (use with ALFRED_DEV=1 bun dist/cli.mjs dashboard)
+bun src/tui/main.tsx          # TUI dashboard (real-time spec progress)
 task check                    # tsc --noEmit + Biome lint
 task fix                      # Biome auto-fix
 task test                     # vitest
 task clean                    # Clean build artifacts (dist/ + web/dist/)
-node dist/cli.mjs serve       # MCP server (stdio)
-node dist/cli.mjs dashboard   # Open browser dashboard (localhost:7575)
-node dist/cli.mjs hook <Event> # Hook handler (SessionStart/PreCompact/UserPromptSubmit/PostToolUse/PreToolUse/Stop)
-node dist/cli.mjs version     # Show version
+bun dist/cli.mjs serve       # MCP server (stdio)
+bun dist/cli.mjs dashboard   # Open browser dashboard (localhost:7575)
+bun dist/cli.mjs hook <Event> # Hook handler (SessionStart/PreCompact/UserPromptSubmit/PostToolUse/PreToolUse/Stop)
+bun dist/cli.mjs version     # Show version
 ```
 
 ## Release
@@ -89,11 +91,11 @@ node dist/cli.mjs version     # Show version
 
 ### Build & Distribution
 
-- `npm run build` (tsdown) after src/ changes — output is `dist/cli.mjs`
+- `bun run build` (tsdown) after src/ changes — output is `dist/cli.mjs`
 - Plugin content source of truth: `content/` (hooks, mcp config). `plugin/` is git-tracked for marketplace distribution
 - MCP tools return structured JSON
 - MCP server version: dynamically set from resolvedVersion() (not hardcoded)
-- **npm dependencies は better-sqlite3 のみ** — 他のライブラリは全て devDependencies に書き、tsdown でバンドルする。ユーザーの `npm install` 時に追加ダウンロードを最小化するため
+- **npm dependencies はゼロ** — bun:sqlite (built-in) を使用、他のライブラリは全て devDependencies に書き tsdown でバンドル。ユーザーの `bun install` 時に追加ダウンロードを最小化するため
 
 ### Configuration & API
 
@@ -122,7 +124,7 @@ node dist/cli.mjs version     # Show version
 - @.claude/rules/butler-design.md (Butler Design System: animated icons, grain texture, spring animation, empty states, organic radius, neo-brutalist accents, color storytelling)
 - `alfred dashboard`: HTTP server + browser open (localhost:7575)
 - React SPA: Vite 8 + TanStack Router (file-based) + TanStack Query + shadcn/ui + Tailwind CSS v4
-- Build: `task build` (npm run build:web → tsdown bundle)
+- Build: `task build` (bun run build:web → tsdown bundle)
 - Dev mode: `ALFRED_DEV=1 alfred dashboard` + `task dev` (Vite HMR proxy)
 - 5 tabs: Overview (/) / Tasks (/tasks) / Knowledge (/knowledge) / Activity (/activity) / Projects (/projects)
 - Cross-project: ProjectSelector filters all tabs via `?project=<uuid>`. GlobalSearch (Cmd+K) for unified knowledge+spec search
@@ -163,7 +165,7 @@ node dist/cli.mjs version     # Show version
 
 - At each meaningful implementation milestone, perform **thorough self-review from multiple perspectives** (delegate to another agent if possible)
 - After self-review, update README.md / README.ja.md / CLAUDE.md to reflect changes
-- Maintain test coverage at **50% or above** (`npm test`; hook handlers may be excluded)
+- Maintain test coverage at **50% or above** (`bun run test`; hook handlers may be excluded)
 
 ## Compact Instructions
 

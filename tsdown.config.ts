@@ -7,10 +7,10 @@ export default defineConfig([
     platform: 'node',
     target: 'node22',
     clean: true,
-    banner: { js: '#!/usr/bin/env node' },
+    banner: { js: '#!/usr/bin/env bun' },
     loader: { '.tmpl': 'text' },
     deps: {
-      neverBundle: ['better-sqlite3', 'bun:sqlite'],
+      neverBundle: ['bun:sqlite'],
       onlyBundle: false,
     },
   },
@@ -21,7 +21,7 @@ export default defineConfig([
     target: 'node22',
     loader: { '.tmpl': 'text' },
     deps: {
-      neverBundle: ['better-sqlite3', 'bun:sqlite'],
+      neverBundle: ['bun:sqlite'],
       onlyBundle: false,
     },
   },

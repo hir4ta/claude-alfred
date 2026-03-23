@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
+import { serveStatic } from "hono/bun";
 import { Hono } from "hono";
 import type { Embedder } from "../embedder/index.js";
 import { appendAudit } from "../spec/audit.js";
@@ -845,13 +844,13 @@ export async function startDashboard(
 		openBrowser(addr);
 	}
 
-	const server = serve({ fetch: app.fetch, port: opts.port });
+	const server = Bun.serve({ fetch: app.fetch, port: opts.port });
 
 	await new Promise<void>((resolve) => {
 		const shutdown = () => {
 			console.error("\nshutting down...");
-			server.close(() => resolve());
-			setTimeout(() => process.exit(0), 2000);
+			server.stop();
+			resolve();
 		};
 		process.on("SIGINT", shutdown);
 		process.on("SIGTERM", shutdown);

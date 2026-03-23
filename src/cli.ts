@@ -105,23 +105,16 @@ const main = defineCommand({
 
 				console.log(`alfred doctor (v${version})\n`);
 
-				// Node.js version
-				const nodeVer = process.version;
-				const nodeMajor = parseInt(nodeVer.slice(1), 10);
-				check(nodeMajor >= 22, `Node.js ${nodeVer}`, ">=22 required");
+				// Bun version
+				const bunVer = typeof Bun !== "undefined" ? Bun.version : null;
+				check(!!bunVer, `Bun ${bunVer ?? "not found"}`, ">=1.3 required");
 
-				// SQLite driver
+				// bun:sqlite
 				try {
-					const { isBun } = await import("./store/db.js");
-					if (isBun) {
-						await import("bun:sqlite");
-						check(true, "bun:sqlite loaded");
-					} else {
-						await import("better-sqlite3");
-						check(true, "better-sqlite3 loaded");
-					}
+					await import("bun:sqlite");
+					check(true, "bun:sqlite loaded");
 				} catch {
-					check(false, "sqlite driver", "not found — run npm rebuild");
+					check(false, "bun:sqlite", "not available");
 				}
 
 				// DB

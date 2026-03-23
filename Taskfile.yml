@@ -13,7 +13,7 @@ tasks:
     desc: Build React SPA and TypeScript CLI
     deps: [web:build]
     cmds:
-      - npm run build
+      - bun run build
 
   dev:
     desc: Start Vite dev server (use with ALFRED_DEV=1 alfred dashboard)
@@ -24,23 +24,23 @@ tasks:
   check:
     desc: Run all checks (tsc + Biome lint)
     cmds:
-      - npm run typecheck
-      - npm run lint
+      - bun run typecheck
+      - bun run lint
 
   fix:
     desc: Auto-fix Biome lint/format issues (safe)
     cmds:
-      - npm run lint:fix
+      - bun run lint:fix
 
   fix:unsafe:
     desc: Auto-fix all Biome issues including unsafe fixes
     cmds:
-      - npx biome check --write --unsafe src/ web/src/
+      - bunx biome check --write --unsafe src/ web/src/
 
   test:
     desc: Run vitest
     cmds:
-      - npm test
+      - bun run test
 
   clean:
     desc: Clean build artifacts
@@ -61,4 +61,3 @@ tasks:
       - package.json
     generates:
       - dist/**/*
-
