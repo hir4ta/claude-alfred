@@ -1,6 +1,6 @@
 import type { Embedder } from "../../embedder/index.js";
 import type { Store } from "../../store/index.js";
-import { dossierUpdate, dossierStatus, dossierSwitch, dossierDelete, dossierHistory, dossierRollback, dossierReview, dossierValidate } from "./crud.js";
+import { dossierUpdate, dossierStatus, dossierSwitch, dossierDelete, dossierValidate } from "./crud.js";
 import { type DossierParams, errorResult, resolveProjectPath } from "./helpers.js";
 import { dossierInit } from "./init.js";
 import { dossierComplete, dossierGate, dossierCheck, dossierDefer, dossierCancel } from "./lifecycle.js";
@@ -23,12 +23,6 @@ export async function handleDossier(store: Store, emb: Embedder | null, params: 
 			return dossierComplete(projectPath, store, params);
 		case "delete":
 			return dossierDelete(projectPath, params);
-		case "history":
-			return dossierHistory(projectPath, params);
-		case "rollback":
-			return dossierRollback(projectPath, params);
-		case "review":
-			return dossierReview(projectPath, params);
 		case "validate":
 			return dossierValidate(projectPath, params);
 		case "gate":

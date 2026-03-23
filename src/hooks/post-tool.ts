@@ -1,6 +1,5 @@
 import { extractReviewFindings, saveKnowledgeEntries } from "../mcp/knowledge-extractor.js";
 import { truncate } from "../mcp/helpers.js";
-import { appendAudit } from "../spec/audit.js";
 import { updateTaskStatus } from "../spec/status.js";
 import { effectiveStatus, readActive, readActiveState, SpecDir } from "../spec/types.js";
 import { searchKnowledgeFTS } from "../store/fts.js";
@@ -468,7 +467,6 @@ function trackFirstCommit(projectPath: string, stdout: string): void {
 			commit,
 			timestamp: new Date().toISOString(),
 		});
-		appendAudit(projectPath, { action: "first_commit", target: slug });
 	} catch {
 		/* no active spec — skip */
 	}

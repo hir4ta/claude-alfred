@@ -10,8 +10,6 @@ You are the Architect. Propose a concrete technical design.
 Task: {task-slug}
 Requirements: {requirements from Step 3}
 Research context: {knowledge + web results from Step 4}
-Steering context: {steering_context from dossier init, if available — use for project architecture awareness}
-
 Your job:
 1. Search the web for architectural patterns and prior art relevant to this task
 2. Propose a concrete architecture (components, data flow, interfaces)

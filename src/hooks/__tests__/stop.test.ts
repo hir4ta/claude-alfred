@@ -32,7 +32,6 @@ afterEach(() => {
 
 function setupSpec(opts: {
 	size?: string;
-	reviewStatus?: string;
 	status?: string;
 	sessionContent?: string;
 }): void {
@@ -42,7 +41,6 @@ function setupSpec(opts: {
 
 	let yaml = `primary: ${slug}\ntasks:\n  - slug: ${slug}\n    started_at: 2026-01-01T00:00:00Z\n`;
 	if (opts.size) yaml += `    size: ${opts.size}\n`;
-	if (opts.reviewStatus) yaml += `    review_status: ${opts.reviewStatus}\n`;
 	if (opts.status) yaml += `    status: ${opts.status}\n`;
 	writeFileSync(join(specsDir, "_active.md"), yaml);
 
@@ -130,7 +128,7 @@ describe("stop", () => {
 	});
 
 	it("BLOCKS when review-gate is active", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "M" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",

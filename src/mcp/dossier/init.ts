@@ -1,9 +1,8 @@
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { Embedder } from "../../embedder/index.js";
 import { writeReviewGate } from "../../hooks/review-gate.js";
 import { stateDir } from "../../hooks/state.js";
-import { appendAudit } from "../../spec/audit.js";
 import { initSpec } from "../../spec/init.js";
 import type { SpecSize, SpecType } from "../../spec/types.js";
 import { searchKnowledgeFTS, subTypeBoost } from "../../store/fts.js";
@@ -11,7 +10,7 @@ import type { Store } from "../../store/index.js";
 import { getKnowledgeByIDs } from "../../store/knowledge.js";
 import { vectorSearchKnowledge } from "../../store/vectors.js";
 import { truncate } from "../helpers.js";
-import { type DossierParams, errorResult, jsonResult, truncateAtNewline } from "./helpers.js";
+import { type DossierParams, errorResult, jsonResult } from "./helpers.js";
 
 export async function dossierInit(
 	projectPath: string,
@@ -34,12 +33,6 @@ export async function dossierInit(
 		return errorResult(`init failed: ${err}`);
 	}
 
-	appendAudit(projectPath, {
-		action: "spec.init",
-		target: params.task_slug,
-		detail: params.description,
-		user: "mcp",
-	});
 
 	// Clear polish mode — new spec starts, polish period ends.
 	// Note: in parallel sessions on the same branch, this may clear another session's polish.
@@ -62,25 +55,6 @@ export async function dossierInit(
 	if (params.description && emb) {
 		const suggestions = await searchRelatedKnowledge(store, emb, params.description, 5);
 		if (suggestions.length > 0) result.suggested_knowledge = suggestions;
-	}
-
-	// Steering context — inject all 3 steering docs for spec creation context.
-	const steeringDir = join(projectPath, ".alfred", "steering");
-	const steeringFiles = ["product.md", "structure.md", "tech.md"];
-	const steeringParts: string[] = [];
-	for (const sf of steeringFiles) {
-		const sfPath = join(steeringDir, sf);
-		if (existsSync(sfPath)) {
-			try {
-				steeringParts.push(truncateAtNewline(readFileSync(sfPath, "utf-8"), 3000));
-			} catch { /* ignore */ }
-		}
-	}
-	if (steeringParts.length > 0) {
-		result.steering_context = steeringParts.join("\n\n---\n\n");
-	} else {
-		result.steering_hint =
-			"project steering docs not found — run `/alfred:init` to set up project context";
 	}
 
 	if (params.description) {

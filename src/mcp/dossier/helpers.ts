@@ -1,12 +1,5 @@
 import { resolve } from "node:path";
 
-/** Truncate at the last newline before maxLen to avoid mid-line cuts. */
-export function truncateAtNewline(s: string, maxLen: number): string {
-	if (s.length <= maxLen) return s;
-	const lastNewline = s.lastIndexOf("\n", maxLen);
-	return lastNewline > 0 ? s.slice(0, lastNewline) : s.slice(0, maxLen);
-}
-
 export interface DossierParams {
 	action: string;
 	project_path?: string;

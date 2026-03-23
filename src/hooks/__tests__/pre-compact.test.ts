@@ -27,10 +27,10 @@ afterEach(() => {
 	rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function setupActiveSpec(slug: string, tasksContent: string, size = "S", reviewStatus = "approved") {
+function setupActiveSpec(slug: string, tasksContent: string, size = "S") {
 	const specsDir = join(tmpDir, ".alfred", "specs", slug);
 	mkdirSync(specsDir, { recursive: true });
-	const active = `primary: ${slug}\ntasks:\n  - slug: ${slug}\n    started_at: "2025-01-01"\n    status: active\n    size: ${size}\n    spec_type: feature\n    review_status: ${reviewStatus}\n`;
+	const active = `primary: ${slug}\ntasks:\n  - slug: ${slug}\n    started_at: "2025-01-01"\n    status: active\n    size: ${size}\n    spec_type: feature\n`;
 	writeFileSync(join(tmpDir, ".alfred", "specs", "_active.md"), active);
 	writeFileSync(join(specsDir, "requirements.md"), "# Requirements");
 	writeFileSync(join(specsDir, "tasks.md"), tasksContent);
@@ -114,20 +114,6 @@ describe("preCompact", () => {
 			const active = readFileSync(join(tmpDir, ".alfred", "specs", "_active.md"), "utf-8");
 			expect(active).not.toContain("status: active");
 		}
-	});
-
-	it("skips auto-complete for M spec without approval", async () => {
-		setupActiveSpec("m-block", "# Tasks\n- [x] All done", "M", "pending");
-
-		const io = suppressIO();
-		try {
-			const { preCompact } = await import("../pre-compact.js");
-			await preCompact({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
-		} finally { io.restore(); }
-
-		expect(io.stderr.some((l) => l.includes("skipped auto-complete"))).toBe(true);
-		const active = readFileSync(join(tmpDir, ".alfred", "specs", "_active.md"), "utf-8");
-		expect(active).toContain("status: active");
 	});
 
 	it("returns early when cwd is empty", async () => {

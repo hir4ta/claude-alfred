@@ -1,21 +1,19 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { clearReviewGate, readReviewGate } from "../../hooks/review-gate.js";
-import { appendAudit } from "../../spec/audit.js";
 import { stripTemplate } from "../../spec/templates.js";
 import type { SpecFile, SpecSize, SpecType } from "../../spec/types.js";
 import {
 	readActive,
 	readActiveState,
 	effectiveStatus,
-	reviewStatusFor,
 	removeTask,
 	SpecDir,
 	switchActive,
 } from "../../spec/types.js";
 import { validateSpec } from "../../spec/validate.js";
 import type { Store } from "../../store/index.js";
-import { type DossierParams, errorResult, jsonResult, truncateAtNewline } from "./helpers.js";
+import { type DossierParams, errorResult, jsonResult } from "./helpers.js";
 
 export function dossierUpdate(projectPath: string, store: Store, params: DossierParams) {
 	if (!params.file) return errorResult("file is required for update");
@@ -103,26 +101,10 @@ export function dossierStatus(projectPath: string) {
 		started_at: task?.started_at,
 		size: task?.size ?? "L",
 		spec_type: task?.spec_type ?? "feature",
-		review_status: task?.review_status ?? "pending",
 	};
 	if (task?.completed_at) result.completed_at = task.completed_at;
 
 	result.lang = process.env.ALFRED_LANG || "en";
-
-	// Steering summary for context restoration after compaction.
-	const steeringDir = join(projectPath, ".alfred", "steering");
-	const steeringSummary: string[] = [];
-	for (const sf of ["product.md", "structure.md", "tech.md"]) {
-		const sfPath = join(steeringDir, sf);
-		if (existsSync(sfPath)) {
-			try {
-				steeringSummary.push(truncateAtNewline(readFileSync(sfPath, "utf-8"), 800));
-			} catch { /* ignore */ }
-		}
-	}
-	if (steeringSummary.length > 0) {
-		result.steering_summary = steeringSummary.join("\n---\n");
-	}
 
 	// Read all spec file contents.
 	if (sd.exists()) {
@@ -174,7 +156,6 @@ export function dossierDelete(projectPath: string, params: DossierParams) {
 			/* fail-open */
 		}
 
-		appendAudit(projectPath, { action: "spec.delete", target: params.task_slug, user: "mcp" });
 		return jsonResult({
 			task_slug: params.task_slug,
 			deleted: true,
@@ -183,128 +164,6 @@ export function dossierDelete(projectPath: string, params: DossierParams) {
 	} catch (err) {
 		return errorResult(`${err}`);
 	}
-}
-
-export function dossierHistory(projectPath: string, params: DossierParams) {
-	if (!params.file) return errorResult("file is required for history");
-
-	let taskSlug = params.task_slug;
-	if (!taskSlug) {
-		try {
-			taskSlug = readActive(projectPath);
-		} catch (err) {
-			return errorResult(`no active spec: ${err}`);
-		}
-	}
-
-	const sd = new SpecDir(projectPath, taskSlug);
-	const histDir = join(sd.dir(), ".history");
-	const file = params.file;
-
-	let versions: Array<{ timestamp: string; size: number }> = [];
-	try {
-		const entries = readdirSync(histDir)
-			.filter((e) => e.startsWith(`${file}.`))
-			.sort()
-			.reverse();
-		versions = entries.map((e) => {
-			const ts = e.slice(file.length + 1);
-			let size = 0;
-			try {
-				size = readFileSync(join(histDir, e), "utf-8").length;
-			} catch {
-				/* ignore */
-			}
-			return { timestamp: ts, size };
-		});
-	} catch {
-		/* no history */
-	}
-
-	return jsonResult({ task_slug: taskSlug, file, versions, count: versions.length });
-}
-
-export function dossierRollback(projectPath: string, params: DossierParams) {
-	if (!params.file) return errorResult("file is required for rollback");
-	if (!params.version)
-		return errorResult("version is required for rollback (use history to list versions)");
-
-	let taskSlug = params.task_slug;
-	if (!taskSlug) {
-		try {
-			taskSlug = readActive(projectPath);
-		} catch (err) {
-			return errorResult(`no active spec: ${err}`);
-		}
-	}
-
-	const sd = new SpecDir(projectPath, taskSlug);
-	const histDir = join(sd.dir(), ".history");
-	const histPath = join(histDir, `${params.file}.${params.version}`);
-
-	let content: string;
-	try {
-		content = readFileSync(histPath, "utf-8");
-	} catch {
-		return errorResult(`version not found: ${params.version}`);
-	}
-
-	try {
-		sd.writeFile(params.file as SpecFile, content);
-	} catch (err) {
-		return errorResult(`rollback failed: ${err}`);
-	}
-
-	return jsonResult({
-		task_slug: taskSlug,
-		file: params.file,
-		version: params.version,
-		rolled_back: true,
-	});
-}
-
-export function dossierReview(projectPath: string, params: DossierParams) {
-	let taskSlug = params.task_slug;
-	if (!taskSlug) {
-		try {
-			taskSlug = readActive(projectPath);
-		} catch (err) {
-			return errorResult(`no active spec: ${err}`);
-		}
-	}
-
-	const status = reviewStatusFor(projectPath, taskSlug);
-
-	// Check for review files.
-	const sd = new SpecDir(projectPath, taskSlug);
-	const reviewsDir = join(sd.dir(), "reviews");
-	let latestReview: unknown = null;
-	let unresolvedCount = 0;
-
-	try {
-		const files = readdirSync(reviewsDir)
-			.filter((f) => f.startsWith("review-"))
-			.sort()
-			.reverse();
-		if (files[0]) {
-			const reviewData = JSON.parse(readFileSync(join(reviewsDir, files[0]), "utf-8"));
-			latestReview = reviewData;
-			if (Array.isArray(reviewData.comments)) {
-				unresolvedCount = reviewData.comments.filter(
-					(c: { resolved?: boolean }) => !c.resolved,
-				).length;
-			}
-		}
-	} catch {
-		/* no reviews */
-	}
-
-	return jsonResult({
-		task_slug: taskSlug,
-		review_status: status || "pending",
-		latest_review: latestReview,
-		unresolved_count: unresolvedCount,
-	});
 }
 
 export function dossierValidate(projectPath: string, params: DossierParams) {

@@ -57,15 +57,6 @@ const main = defineCommand({
 				// Sync specs from all registered projects
 				await syncAllProjectSpecs(store, emb);
 
-				// Sync audit.jsonl → audit_log for all active projects
-				const { syncAuditJsonl } = await import("./store/audit.js");
-				const { listActiveProjects } = await import("./store/project.js");
-				for (const p of listActiveProjects(store)) {
-					if (existsSync(join(p.path, ".alfred"))) {
-						await syncAuditJsonl(store, p.id, p.path);
-					}
-				}
-
 				const version = await resolveVersion();
 				await startDashboard(cwd, store, emb, {
 					port: parseInt(args.port, 10),

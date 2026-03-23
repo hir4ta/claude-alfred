@@ -6,7 +6,6 @@
  * Budget: ~600ms within PostToolUse 4.5s internal timeout.
  */
 
-import { appendAudit } from "../spec/audit.js";
 import { readActive, SpecDir } from "../spec/types.js";
 import type { DirectiveItem } from "./directives.js";
 import { shouldAutoAppend } from "./lang-filter.js";
@@ -96,11 +95,6 @@ export function detectDrift(
 			message: `Source file(s) changed but not referenced in spec '${slug}':\n${shown.map((f) => `- ${f}`).join("\n")}${extra}\nConsider adding to design.md \`**File**:\` references or tasks.md \`Files:\` line.`,
 		});
 
-		appendAudit(projectPath, {
-			action: "drift-detection.warning",
-			target: slug,
-			detail: JSON.stringify({ files: drifted }),
-		});
 	} catch {
 		/* fail-open: drift detection errors don't affect PostToolUse */
 	}

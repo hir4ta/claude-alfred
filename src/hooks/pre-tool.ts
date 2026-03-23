@@ -108,35 +108,18 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// No active spec → check for polish mode or spec-prompt (already asked)
+	// No active spec → allow with advisory.
 	if (!spec) {
-		const polish = readStateJSON<{ slug?: string }>(ev.cwd, "polish.json", {});
-		if (polish.slug) {
-			allowTool(`Polish mode (post-complete '${polish.slug}')`);
-			return;
-		}
 		// spec-prompt: already asked user about spec creation this session → suppress advisory
 		const prompted = readStateJSON<{ prompted?: boolean }>(ev.cwd, "spec-prompt.json", {});
 		if (prompted.prompted) {
 			allowTool("Spec prompt already issued (implicit skip)");
 			return;
 		}
-		// No active spec, no polish, not yet prompted → allow with advisory.
 		process.stderr.write(
 			"[alfred] No active spec. Consider creating one: dossier action=init\n",
 		);
 		allowTool("No active spec (advisory warning emitted)");
-		return;
-	}
-
-	// M/L with unapproved review → deny.
-	if (["M", "L"].includes(spec.size) && spec.reviewStatus !== "approved") {
-		const reason = [
-			`Spec '${spec.slug}' (size ${spec.size}) is not approved. Submit review via \`alfred dashboard\` or run self-review before implementation.`,
-			'- "I\'ll get the review after implementation" → The Stop hook will block you from finishing anyway',
-			'- "This edit is trivial" → All M/L edits are gated. Use dossier init size=S for trivial changes',
-		].join("\n");
-		denyTool(reason);
 		return;
 	}
 

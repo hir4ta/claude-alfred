@@ -1,13 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { appendAudit } from "../spec/audit.js";
 import {
 	completeTask,
 	readActive,
 	readActiveState,
-	reviewStatusFor,
 	SpecDir,
-	verifyReviewFile,
 } from "../spec/types.js";
 import { openDefaultCached } from "../store/index.js";
 import { upsertKnowledge } from "../store/knowledge.js";
@@ -112,21 +109,7 @@ export async function preCompact(ev: HookEvent, _signal: AbortSignal): Promise<v
 		const sd = new SpecDir(projectPath, taskSlug);
 		const tasksFile = sd.readFile("tasks.md");
 		if (isTasksCompleted(tasksFile)) {
-			// FR-2: Apply approval gate for M+ specs before auto-complete.
-			const state2 = readActiveState(projectPath);
-			const task2 = state2.tasks.find((t) => t.slug === taskSlug);
-			const size = task2?.size ?? "L";
-			if (["M", "L"].includes(size)) {
-				const reviewStatus = reviewStatusFor(projectPath, taskSlug);
-				const verification = verifyReviewFile(projectPath, taskSlug);
-				if (reviewStatus !== "approved" || !verification.valid) {
-					notifyUser("skipped auto-complete: review not approved for %s spec '%s'", size, taskSlug);
-				} else {
-					doAutoComplete(projectPath, taskSlug);
-				}
-			} else {
-				doAutoComplete(projectPath, taskSlug);
-			}
+			doAutoComplete(projectPath, taskSlug);
 		}
 	} catch {
 		/* fail-open */
@@ -222,12 +205,6 @@ function extractDecisions(transcript: string): Decision[] {
 
 function doAutoComplete(projectPath: string, taskSlug: string): void {
 	completeTask(projectPath, taskSlug);
-	appendAudit(projectPath, {
-		action: "spec.complete",
-		target: taskSlug,
-		detail: "auto-completed during compact",
-		user: "auto",
-	});
 	notifyUser("auto-completed task '%s'", taskSlug);
 }
 

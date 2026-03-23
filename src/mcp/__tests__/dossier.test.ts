@@ -308,43 +308,6 @@ describe("dossier delete", () => {
 	});
 });
 
-describe("dossier history & rollback", () => {
-	it("returns empty history for new spec", async () => {
-		await handleDossier(store, null, {
-			action: "init",
-			project_path: tmpDir,
-			task_slug: "hist-test",
-		});
-		const result = await handleDossier(store, null, {
-			action: "history",
-			project_path: tmpDir,
-			file: "tasks.md",
-		});
-		expect(parseResult(result).count).toBe(0);
-	});
-
-	it("creates history after update", async () => {
-		await handleDossier(store, null, {
-			action: "init",
-			project_path: tmpDir,
-			task_slug: "hist-test",
-		});
-		await handleDossier(store, null, {
-			action: "update",
-			project_path: tmpDir,
-			file: "tasks.md",
-			content: "# Updated",
-			mode: "replace",
-		});
-		const result = await handleDossier(store, null, {
-			action: "history",
-			project_path: tmpDir,
-			file: "tasks.md",
-		});
-		expect(parseResult(result).count).toBeGreaterThan(0);
-	});
-});
-
 describe("dossier gate", () => {
 	it("sets spec-review gate", async () => {
 		await handleDossier(store, null, {
@@ -398,23 +361,6 @@ describe("dossier gate", () => {
 		});
 		const data = parseResult(result);
 		expect(data.cleared).toBe(true);
-	});
-});
-
-describe("dossier review", () => {
-	it("returns no review when none submitted", async () => {
-		await handleDossier(store, null, {
-			action: "init",
-			project_path: tmpDir,
-			task_slug: "rev-test",
-		});
-		const result = await handleDossier(store, null, {
-			action: "review",
-			project_path: tmpDir,
-			task_slug: "rev-test",
-		});
-		const data = parseResult(result);
-		expect(data.review_status).toBeDefined();
 	});
 });
 

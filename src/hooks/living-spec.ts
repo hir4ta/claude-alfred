@@ -8,7 +8,6 @@
 
 import { execSync } from "node:child_process";
 import { dirname } from "node:path";
-import { appendAudit } from "../spec/audit.js";
 import { readActive, SpecDir } from "../spec/types.js";
 import { shouldAutoAppend } from "./lang-filter.js";
 
@@ -58,11 +57,6 @@ export function handleLivingSpec(cwd: string): Set<string> {
 
 		if (appended.size > 0) {
 			sd.writeFile("design.md", updatedContent);
-			appendAudit(cwd, {
-				action: "living-spec.update",
-				target: slug,
-				detail: JSON.stringify({ files: [...appended], components: appendedComponents }),
-			});
 		}
 	} catch {
 		/* fail-open */

@@ -13,9 +13,7 @@ import {
 	parseSpecType,
 	readActiveState,
 	removeTask,
-	reviewStatusFor,
 	SpecDir,
-	setReviewStatus,
 	switchActive,
 	transitionStatus,
 	VALID_SLUG,
@@ -199,15 +197,6 @@ describe("ActiveState management", () => {
 		const newPrimary = completeTask(tmpDir, "task-a");
 		expect(newPrimary).toBe("");
 		expect(() => readActiveState(tmpDir)).toThrow();
-	});
-
-	it("manages review status", () => {
-		writeTestState({
-			primary: "task-a",
-			tasks: [{ slug: "task-a", started_at: "2026-01-01T00:00:00Z" }],
-		});
-		setReviewStatus(tmpDir, "task-a", "approved");
-		expect(reviewStatusFor(tmpDir, "task-a")).toBe("approved");
 	});
 
 	it("removes task", () => {

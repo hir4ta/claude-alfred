@@ -2,8 +2,6 @@
 
 Development butler for Claude Code — MCP server + Hook handler.
 
-> **役割分離**: このファイル（CLAUDE.md）は **ルール・制約・行動規範** を定義する。プロジェクトの詳細な知識（アーキテクチャ、技術スタック、ディレクトリ構造）は `.alfred/steering/` のステアリングドキュメントに定義され、dossier init/status 経由で自動注入される。
-
 ## Stack
 
 TypeScript (Bun 1.3+, ESM) / SQLite (bun:sqlite) / Voyage AI (embedding) / React SPA (Vite 8 + TanStack Router + shadcn/ui) / TUI (OpenTUI + @opentui/react)
@@ -149,7 +147,7 @@ bun dist/cli.mjs version     # Show version
 
 ### Naming Convention (Butler Theme)
 
-- Skills: brief, attend, tdd, inspect, mend, survey, salon, polish, archive
+- Skills: brief, attend, tdd, inspect, mend, survey, salon, archive
 - MCP tools: dossier (spec management), ledger (knowledge)
 
 ### Deliberation Style

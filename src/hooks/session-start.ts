@@ -41,14 +41,6 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
 		notifyUser("warning: knowledge sync failed: %s", err);
 	}
 
-	// Suggest /alfred:init if steering docs are missing.
-	const steeringDir = join(ev.cwd, ".alfred", "steering");
-	if (!existsSync(join(steeringDir, "product.md"))) {
-		notifyUser(
-			"tip: run `/alfred:init` to set up project steering docs, templates, and knowledge index",
-		);
-	}
-
 	// Suggest ledger reflect when knowledge base has grown.
 	suggestLedgerReflect(store);
 

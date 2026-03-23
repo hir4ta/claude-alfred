@@ -9,7 +9,6 @@ paths:
 - Knowledge sync + spec context injection (knowledge dir walk + adaptive onboarding)
 - Adaptive onboarding: injection depth by project knowledge count (0-5: full spec, 6-20: session+goal, 21+: session only)
 - Suggests `ledger action=reflect` when 20+ knowledge entries exist and last reflect >7 days ago
-- Suggests `/alfred:init` if steering docs are missing
 
 ## PreCompact
 - Auto-updates Next Steps completion status from transcript
@@ -17,7 +16,6 @@ paths:
 - Structured chapter memory (JSON): goal, decisions, summary
 - Knowledge detection: transcript research patterns (2+ hits from 13 keywords) → stderr reminder to save findings
 - Auto-completes task when tasks.md Status="completed"/"done" or all Next Steps are checked
-- Suggests updating steering docs when architecture-related decisions detected
 - Session continuity: writes .alfred/.pending-compact.json breadcrumb, SessionStart resolves → session_links table
 
 ## UserPromptSubmit

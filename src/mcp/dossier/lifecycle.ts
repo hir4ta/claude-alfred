@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { clearReviewGate, readReviewGate, writeReviewGate } from "../../hooks/review-gate.js";
 import { shouldAutoAppend } from "../../hooks/lang-filter.js";
 import { ensureStateDir, readWaveProgress, writeStateJSON, writeWaveProgress } from "../../hooks/state.js";
-import { appendAudit } from "../../spec/audit.js";
 import { updateTaskStatus } from "../../spec/status.js";
 import type { SpecSize, SpecType } from "../../spec/types.js";
 import {
@@ -10,9 +9,7 @@ import {
 	effectiveStatus,
 	readActive,
 	readActiveState,
-	reviewStatusFor,
 	SpecDir,
-	verifyReviewFile,
 	writeActiveState,
 } from "../../spec/types.js";
 import { validateSpec } from "../../spec/validate.js";
@@ -66,25 +63,8 @@ export async function dossierComplete(projectPath: string, store: Store, params:
 		}
 	}
 
-	// Approval gate for M+ specs.
 	const state = readActiveState(projectPath);
 	const task = state.tasks.find((t) => t.slug === taskSlug);
-	if (task) {
-		const size = task.size ?? "L";
-		if (["M", "L"].includes(size)) {
-			const reviewStatus = reviewStatusFor(projectPath, taskSlug);
-			if (reviewStatus !== "approved") {
-				return errorResult(
-					`completion requires review_status="approved" for ${size} specs (current: "${reviewStatus || "pending"}"). Review in alfred dashboard.`,
-				);
-			}
-			// Verify review JSON file exists with approved status (FR-1).
-			const verification = verifyReviewFile(projectPath, taskSlug);
-			if (!verification.valid) {
-				return errorResult(`approval gate: ${verification.reason}. Review in alfred dashboard.`);
-			}
-		}
-	}
 
 	// Validation gate: all sizes must pass validation (no fail checks).
 	// Two failure modes: (1) validateSpec returns fails → block completion.
@@ -124,17 +104,6 @@ export async function dossierComplete(projectPath: string, store: Store, params:
 
 		const currentStatus = effectiveStatus(task?.status);
 		const newPrimary = completeTask(projectPath, taskSlug);
-		appendAudit(projectPath, {
-			action: "spec.complete",
-			target: taskSlug,
-			user: "mcp",
-			detail: JSON.stringify({ changed_files: changedFiles, size: task?.size ?? "M" }),
-		});
-		appendAudit(projectPath, {
-			action: "task.status_change",
-			target: taskSlug,
-			detail: `${currentStatus} → done (dossier:complete)`,
-		});
 		// design.md pattern auto-extraction removed (FR-6).
 		// Knowledge accumulation happens intentionally at Wave boundaries via ledger.
 
@@ -268,12 +237,6 @@ export function dossierGate(projectPath: string, params: DossierParams) {
 				reason: gateReason,
 			});
 
-			appendAudit(projectPath, {
-				action: "gate.set",
-				target: taskSlug,
-				detail: `${gateType}${params.wave ? ` wave=${params.wave}` : ""}`,
-				user: "mcp",
-			});
 
 			return jsonResult({
 				gate: gateType,
@@ -317,12 +280,6 @@ export function dossierGate(projectPath: string, params: DossierParams) {
 				} catch { /* fail-open */ }
 			}
 
-			appendAudit(projectPath, {
-				action: "gate.clear",
-				target: gate.slug,
-				detail: reason,
-				user: "mcp",
-			});
 
 			return jsonResult({ cleared: true, reason });
 		}
@@ -346,12 +303,6 @@ export function dossierGate(projectPath: string, params: DossierParams) {
 				reason: `[fix_mode] ${fixReason} (original: ${gate.reason})`,
 			});
 
-			appendAudit(projectPath, {
-				action: "gate.fix",
-				target: gate.slug,
-				detail: fixReason,
-				user: "mcp",
-			});
 
 			return jsonResult({
 				fix_mode: true,

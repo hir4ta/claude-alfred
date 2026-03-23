@@ -22,7 +22,6 @@ afterEach(() => {
 function setupSpec(opts: {
 	primary?: string;
 	size?: string;
-	reviewStatus?: string;
 	status?: string;
 	tasksContent?: string;
 }): void {
@@ -32,7 +31,6 @@ function setupSpec(opts: {
 
 	let yaml = `primary: ${slug}\ntasks:\n  - slug: ${slug}\n    started_at: 2026-01-01T00:00:00Z\n`;
 	if (opts.size) yaml += `    size: ${opts.size}\n`;
-	if (opts.reviewStatus) yaml += `    review_status: ${opts.reviewStatus}\n`;
 	if (opts.status) yaml += `    status: ${opts.status}\n`;
 	writeFileSync(join(specsDir, "_active.md"), yaml);
 
@@ -45,12 +43,11 @@ function setupSpec(opts: {
 
 describe("tryReadActiveSpec", () => {
 	it("returns spec state from _active.md", () => {
-		setupSpec({ size: "M", reviewStatus: "approved", status: "active" });
+		setupSpec({ size: "M", status: "active" });
 		const spec = tryReadActiveSpec(tmpDir);
 		expect(spec).not.toBeNull();
 		expect(spec!.slug).toBe("test-task");
 		expect(spec!.size).toBe("M");
-		expect(spec!.reviewStatus).toBe("approved");
 	});
 
 	it("returns null when _active.md missing (fail-open)", () => {

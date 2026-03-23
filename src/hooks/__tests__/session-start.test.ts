@@ -77,24 +77,8 @@ describe("sessionStart", () => {
 		await sessionStart({ cwd: "" } as any, AbortSignal.timeout(5000));
 	});
 
-	it("suggests /alfred:init when steering docs missing", async () => {
-		mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
-		const stderr = suppressStderr();
-		const stdout = suppressStdout();
-		try {
-			const { sessionStart } = await import("../session-start.js");
-			await sessionStart({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
-			expect(stderr.lines.some((l) => l.includes("/alfred:init"))).toBe(true);
-		} finally {
-			stderr.restore();
-			stdout.restore();
-		}
-	});
-
 	it("injects 1% rule context when .alfred exists", async () => {
 		mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
-		mkdirSync(join(tmpDir, ".alfred", "steering"), { recursive: true });
-		writeFileSync(join(tmpDir, ".alfred", "steering", "product.md"), "# Product");
 
 		const stdoutWrites: string[] = [];
 		const origStdout = process.stdout.write;
@@ -123,9 +107,6 @@ describe("sessionStart", () => {
 		writeFileSync(join(specsDir, "session.md"), "# Session\n## Status: active\n## Current Focus\nTesting");
 		writeFileSync(join(specsDir, "requirements.md"), "# Requirements\n## FR-1: Test feature");
 		writeFileSync(join(specsDir, "tasks.md"), "# Tasks\n- [ ] T-1.1: Do thing");
-		mkdirSync(join(tmpDir, ".alfred", "steering"), { recursive: true });
-		writeFileSync(join(tmpDir, ".alfred", "steering", "product.md"), "# Product");
-
 		const stdoutWrites: string[] = [];
 		const origStdout = process.stdout.write;
 		process.stdout.write = ((chunk: string | Buffer) => {

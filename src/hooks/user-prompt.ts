@@ -242,52 +242,28 @@ export function checkSpecRequired(cwd: string, intent: string | null): Directive
 	// Only enforce in alfred-initialized projects.
 	if (!existsSync(join(cwd, ".alfred"))) return null;
 
-	// Read active state once for both Stage 1 and Stage 2.
+	// Stage 1: No active spec → propose spec creation (CONTEXT level, not DIRECTIVE).
+	// Always propose, never silently skip. But user can say "skip" to proceed without spec.
 	let state;
 	try {
 		state = readActiveState(cwd);
 	} catch {
-		// Stage 1: No active spec → ask user whether to create one (1-shot DIRECTIVE).
-		// spec-prompt.json tracks whether we already asked this session.
 		const prompted = readStateJSON<{ prompted?: boolean }>(cwd, "spec-prompt.json", {});
-		if (prompted.prompted) return null; // Already asked this session → implicit skip
+		if (prompted.prompted) return null;
 
 		const lang = (process.env.ALFRED_LANG || "en").toLowerCase();
 		writeStateJSON(cwd, "spec-prompt.json", { prompted: true, at: new Date().toISOString() });
 		return {
-			level: "DIRECTIVE",
+			level: "CONTEXT",
 			message: lang.startsWith("ja")
 				? "新しい実装タスクです。AskUserQuestion で「spec を作成しますか？ (S/M/L/スキップ)」とユーザーに確認してください。ユーザーが「スキップ」を選んだ場合、そのまま実装に進んでください。"
 				: "New implementation task. Use AskUserQuestion to ask the user: 'Create a spec? (S/M/L/Skip)'. If the user selects Skip, proceed without a spec.",
-			rationalizations: [
-				'"I already know what to build" → A quick S-size spec takes <2min and catches assumptions',
-				'"The user just wants me to code" → Ask first. If they say Skip, proceed freely',
-			],
-			spiritVsLetter: true,
 		};
 	}
 
-	// Stage 2 (FR-7): Spec exists but not approved (M/L only).
+	// Stage 1.5: Spec exists + implement intent → WARNING for parallel dev safety.
 	try {
 		const taskSlug = state.primary;
-		const task = taskSlug ? state.tasks.find((t) => t.slug === taskSlug) : undefined;
-		if (task && ["M", "L"].includes(task.size ?? "") && task.review_status !== "approved") {
-			return {
-				level: "DIRECTIVE",
-				message: `Spec '${taskSlug}' (size ${task.size}) requires review approval before implementation. Submit review via \`alfred dashboard\` or run spec self-review first.`,
-				rationalizations: [
-					'"The spec is obvious, review is overkill" → Review catches design bugs that waste 10x more implementation time',
-					'"I\'ll fix issues during implementation" → The approval gate at complete will block you anyway',
-					'"I already ran self-review mentally" → Self-review requires 3 parallel agents, not mental evaluation',
-				],
-				spiritVsLetter: true,
-			};
-		}
-
-		// Stage 1.5: Spec exists + implement intent → WARNING for parallel dev safety.
-		// When an active spec exists, the user might be working on a different task.
-		// Suppressed when the user has already edited files for this spec in this session
-		// (slug present in worked-slugs = confirmed working on this spec).
 		if (taskSlug) {
 			const workedSlugs = readWorkedSlugs(cwd);
 			if (!workedSlugs.includes(taskSlug)) {
@@ -298,7 +274,7 @@ export function checkSpecRequired(cwd: string, intent: string | null): Directive
 			}
 		}
 	} catch {
-		/* ignore parse errors — graceful fallback */
+		/* ignore parse errors */
 	}
 
 	return null;

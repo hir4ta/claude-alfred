@@ -80,8 +80,6 @@ Development Flow** (see CLAUDE.md): Spec > Wave > Task hierarchy.
 
 ### 3. [INIT] Create spec and gather requirements
 1. Call `dossier` action=init to create the spec directory (creates all 7 template files)
-   - If response contains `steering_context`, **read it carefully** — it contains all 3 steering docs (product, structure, tech). Use this as the primary project context for ALL spec files: architecture decisions, directory layout, tech stack, naming conventions
-   - If response contains `steering_hint`, inform the user about `/alfred:init`
 2. Call `knowledge` to search for relevant best practices
 3. Ask user (max 3 questions):
    - What is the goal? (one sentence)
@@ -91,7 +89,6 @@ Development Flow** (see CLAUDE.md): Spec > Wave > Task hierarchy.
 ### 4. [RESEARCH] Write and review research.md
 
 **Write**: Call `dossier` action=update, file=research.md with:
-- Use steering context (product/structure/tech) to ground analysis in project architecture, conventions, and tech stack
 - Existing code analysis (scan relevant files)
 - Gap analysis (current state → required state → gaps)
 - Implementation options with effort/risk assessment

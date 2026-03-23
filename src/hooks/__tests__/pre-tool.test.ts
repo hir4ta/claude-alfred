@@ -23,12 +23,11 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function setupSpec(opts: { size?: string; reviewStatus?: string; status?: string }): void {
+function setupSpec(opts: { size?: string; status?: string }): void {
 	const specsDir = join(tmpDir, ".alfred", "specs");
 	mkdirSync(specsDir, { recursive: true });
 	let yaml = `primary: test-task\ntasks:\n  - slug: test-task\n    started_at: 2026-01-01T00:00:00Z\n`;
 	if (opts.size) yaml += `    size: ${opts.size}\n`;
-	if (opts.reviewStatus) yaml += `    review_status: ${opts.reviewStatus}\n`;
 	if (opts.status) yaml += `    status: ${opts.status}\n`;
 	writeFileSync(join(specsDir, "_active.md"), yaml);
 }
@@ -55,20 +54,8 @@ function getDecision(): string | undefined {
 }
 
 describe("preToolUse", () => {
-	it("denies Edit on M unapproved spec", async () => {
-		setupSpec({ size: "M", reviewStatus: "pending" });
-		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		expect(getDecision()).toBe("deny");
-	});
-
-	it("denies Write on L unapproved spec", async () => {
-		setupSpec({ size: "L", reviewStatus: "pending" });
-		await preToolUse(makeEvent("Write", join(tmpDir, "src/new.ts")));
-		expect(getDecision()).toBe("deny");
-	});
-
-	it("allows Edit on M approved spec (skips prompt hook)", async () => {
-		setupSpec({ size: "M", reviewStatus: "approved" });
+	it("allows Edit on M spec (no approval gate)", async () => {
+		setupSpec({ size: "M" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
 		expect(getDecision()).toBe("allow");
 	});
@@ -87,7 +74,7 @@ describe("preToolUse", () => {
 	});
 
 	it("allows Edit to .alfred/ paths (spec exempt)", async () => {
-		setupSpec({ size: "M", reviewStatus: "pending" });
+		setupSpec({ size: "M" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, ".alfred/specs/test-task/design.md")));
 		expect(getDecision()).toBe("allow");
 	});
@@ -99,19 +86,19 @@ describe("preToolUse", () => {
 	});
 
 	it("allows non-blockable tools (Read)", async () => {
-		setupSpec({ size: "M", reviewStatus: "pending" });
+		setupSpec({ size: "M" });
 		await preToolUse(makeEvent("Read"));
 		expect(stdoutData.length).toBe(0);
 	});
 
 	it("allows non-blockable tools (Bash)", async () => {
-		setupSpec({ size: "M", reviewStatus: "pending" });
+		setupSpec({ size: "M" });
 		await preToolUse(makeEvent("Bash"));
 		expect(stdoutData.length).toBe(0);
 	});
 
 	it("denies Edit when legacy XL spec exists (XL removed, treated as malformed)", async () => {
-		setupSpec({ size: "XL", reviewStatus: "changes_requested" });
+		setupSpec({ size: "XL" });
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
 		// XL is no longer in VALID_SIZES → parseSpecState returns null → isActiveSpecMalformed = true → deny
 		expect(getDecision()).toBe("deny");
@@ -120,7 +107,7 @@ describe("preToolUse", () => {
 
 describe("preToolUse — review gate", () => {
 	it("denies Edit when spec-review gate is active", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",
@@ -131,7 +118,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("denies Write when wave-review gate is active", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "wave-review",
 			slug: "test-task",
@@ -143,7 +130,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("allows Edit when gate is in fix_mode (#15/#20)", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "wave-review",
 			slug: "test-task",
@@ -156,7 +143,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("denies Edit when gate is active without fix_mode (#15/#20)", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "wave-review",
 			slug: "test-task",
@@ -168,7 +155,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("allows Edit to project-external file when gate is active (#16)", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",
@@ -180,7 +167,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("allows Edit to docs/ when gate is active (#16)", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",
@@ -191,7 +178,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("allows Edit to root-level .md when gate is active (#16)", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",
@@ -202,7 +189,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("still denies Edit to src/ when gate is active (#16)", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",
@@ -213,7 +200,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("allows Edit when gate slug does not match active spec (stale gate ignored)", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "other-task",
@@ -224,7 +211,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("allows .alfred/ edits even when gate is active", async () => {
-		setupSpec({ size: "L", reviewStatus: "approved" });
+		setupSpec({ size: "L" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",
@@ -235,7 +222,7 @@ describe("preToolUse — review gate", () => {
 	});
 
 	it("gate takes priority over approval gate", async () => {
-		setupSpec({ size: "M", reviewStatus: "approved" });
+		setupSpec({ size: "M" });
 		writeReviewGate(tmpDir, {
 			gate: "spec-review",
 			slug: "test-task",

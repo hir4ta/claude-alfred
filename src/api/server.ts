@@ -4,15 +4,13 @@ import { fileURLToPath } from "node:url";
 import { serveStatic } from "hono/bun";
 import { Hono } from "hono";
 import type { Embedder } from "../embedder/index.js";
-import { appendAudit } from "../spec/audit.js";
-import type { ReviewStatus, SpecFile, SpecSize, SpecType } from "../spec/types.js";
+import type { SpecFile, SpecSize, SpecType } from "../spec/types.js";
 import {
 	completeTask,
 	filesForSize,
 	readActiveState,
 	SpecDir,
 	VALID_SLUG,
-	verifyReviewFile,
 	writeActiveState,
 } from "../spec/types.js";
 import { searchKnowledgeFTS, searchUnified } from "../store/fts.js";
@@ -80,7 +78,7 @@ export function createApp(
 	}
 
 	function enrichTask(
-		task: { slug: string; status?: string; started_at?: string; completed_at?: string; size?: string; spec_type?: string; review_status?: string; owner?: string },
+		task: { slug: string; status?: string; started_at?: string; completed_at?: string; size?: string; spec_type?: string; owner?: string },
 		projPath: string,
 		projectName: string,
 		projectId?: string,
@@ -505,201 +503,9 @@ export function createApp(
 		}
 	});
 
-	// --- Activity API (T-2.3: cross-project) ---
-
-	app.get("/api/activity", async (c) => {
-		const { queryAuditLog } = await import("../store/audit.js");
-		const filterProjectId = getProjectFilter(c.req.query("project"));
-		const actor = c.req.query("actor") || undefined;
-		const since = c.req.query("since") || undefined;
-		const limit = Math.min(parseInt(c.req.query("limit") ?? "100", 10) || 100, 500);
-		const offset = parseInt(c.req.query("offset") ?? "0", 10) || 0;
-
-		const result = queryAuditLog(store, {
-			projectId: filterProjectId || undefined,
-			actor,
-			since,
-			limit,
-			offset,
-		});
-
-		const entries = result.entries.map((e) => {
-			const proj = getProject(store, e.projectId);
-			const detailParts = [e.action, e.detail]
-				.filter((v) => v && v !== "{}" && v !== "[]")
-				.join(" — ");
-			return {
-				timestamp: e.timestamp,
-				action: e.event,
-				target: e.slug,
-				detail: detailParts,
-				actor: e.actor,
-				project_name: proj?.name ?? "",
-			};
-		});
-
-		return c.json({ entries, total: result.total });
-	});
-
-	app.get("/api/activity/analytics", async (c) => {
-		const { getKnowledgeHitRanking, getSpecCompletionStats, getReworkRates, getCycleTimeBreakdown } = await import("../store/audit.js");
-		const filterProjectId = getProjectFilter(c.req.query("project")) || undefined;
-
-		const hitRanking = getKnowledgeHitRanking(store, { projectId: filterProjectId });
-		const completionStats = getSpecCompletionStats(store, { projectId: filterProjectId });
-		const reworkRates = getReworkRates(store, { projectId: filterProjectId });
-		const cycleTimeBreakdown = getCycleTimeBreakdown(store, { projectId: filterProjectId });
-
-		return c.json({ hitRanking, completionStats, reworkRates, cycleTimeBreakdown });
-	});
-
-	app.get("/api/analytics/heatmap", (c) => {
-		const filterProjectId = getProjectFilter(c.req.query("project")) || undefined;
-		const weeks = Math.min(Math.max(Math.floor(Number(c.req.query("weeks"))) || 16, 1), 52);
-		const since = new Date();
-		since.setDate(since.getDate() - weeks * 7);
-		const sinceStr = since.toISOString();
-
-		const projectFilter = filterProjectId ? "AND project_id = ?" : "";
-		const params: unknown[] = [sinceStr];
-		if (filterProjectId) params.push(filterProjectId);
-
-		const rows = store.db.prepare(
-			`SELECT date(timestamp) as date, COUNT(*) as count FROM audit_log WHERE timestamp >= ? ${projectFilter} GROUP BY date(timestamp) ORDER BY date ASC`,
-		).all(...params) as Array<{ date: string; count: number }>;
-
-		return c.json({ data: rows, weeks });
-	});
-
-	app.get("/api/specs/:slug/similar", async (c) => {
-		const { findSimilarSpecs } = await import("../store/vectors.js");
-		const slug = c.req.param("slug");
-		const limit = parseInt(c.req.query("limit") ?? "5", 10) || 5;
-
-		// Find spec_index id for this slug
-		const specRow = store.db
-			.prepare("SELECT id FROM spec_index WHERE slug = ? LIMIT 1")
-			.get(slug) as { id: number } | undefined;
-		if (!specRow) return c.json({ similar: [] });
-
-		const similar = findSimilarSpecs(store, specRow.id, { limit });
-		return c.json({ similar });
-	});
-
 	app.get("/api/health", (c) => {
 		const stats = getKnowledgeStats(store);
 		return c.json({ total: stats.total, bySubType: stats.bySubType });
-	});
-
-	// --- Review API ---
-
-	app.get("/api/tasks/:slug/review", (c) => {
-		const slug = c.req.param("slug");
-		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
-
-		const sd = new SpecDir(projectPath, slug);
-		const reviewsDir = join(sd.dir(), "reviews");
-
-		let status = "pending";
-		try {
-			const state = readActiveState(projectPath);
-			status = state.tasks.find((t) => t.slug === slug)?.review_status ?? "pending";
-		} catch { /* no active state */ }
-
-		let latestReview: unknown = null;
-		let unresolvedCount = 0;
-
-		try {
-			const files = readdirSync(reviewsDir)
-				.filter((f) => f.startsWith("review-") && f.endsWith(".json"))
-				.sort()
-				.reverse();
-			if (files[0]) {
-				const data = JSON.parse(readFileSync(join(reviewsDir, files[0]), "utf-8"));
-				latestReview = data;
-				if (Array.isArray(data.comments)) {
-					unresolvedCount = data.comments.filter((c: { resolved?: boolean }) => !c.resolved).length;
-				}
-			}
-		} catch { /* no reviews */ }
-
-		return c.json({ review_status: status, latest_review: latestReview, unresolved_count: unresolvedCount });
-	});
-
-	app.get("/api/tasks/:slug/review/history", (c) => {
-		const slug = c.req.param("slug");
-		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
-
-		const reviewsDir = join(new SpecDir(projectPath, slug).dir(), "reviews");
-		const reviews: unknown[] = [];
-
-		try {
-			const files = readdirSync(reviewsDir)
-				.filter((f) => f.startsWith("review-") && f.endsWith(".json"))
-				.sort();
-			for (const f of files) {
-				try { reviews.push(JSON.parse(readFileSync(join(reviewsDir, f), "utf-8"))); }
-				catch { /* skip corrupt */ }
-			}
-		} catch { /* no reviews dir */ }
-
-		return c.json({ reviews });
-	});
-
-	app.post("/api/tasks/:slug/review", async (c) => {
-		const slug = c.req.param("slug");
-		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
-
-		const sd = new SpecDir(projectPath, slug);
-		if (!sd.exists()) return c.json({ error: "spec not found" }, 404);
-
-		let body: { status: string; comments?: Array<{ file: string; line: number; endLine?: number; body: string }> };
-		try { body = await c.req.json(); } catch { return c.json({ error: "invalid JSON body" }, 400); }
-
-		const reviewStatus = body.status;
-		if (reviewStatus !== "approved" && reviewStatus !== "changes_requested") {
-			return c.json({ error: 'status must be "approved" or "changes_requested"' }, 400);
-		}
-
-		const ts = new Date().toISOString();
-		const rawComments = Array.isArray(body.comments) ? body.comments.slice(0, 100) : [];
-		const { getGitUserName } = await import("../git/user.js");
-		const reviewer = getGitUserName(projectPath);
-		const review = {
-			timestamp: ts,
-			status: reviewStatus,
-			reviewer,
-			comments: rawComments.map((comment: Record<string, unknown>) => ({
-				file: String(comment.file ?? "").slice(0, 500),
-				line: Math.max(0, Number(comment.line) || 0),
-				...(comment.endLine ? { endLine: Math.max(0, Number(comment.endLine) || 0) } : {}),
-				body: String(comment.body ?? "").slice(0, 10000),
-				resolved: false,
-			})),
-		};
-
-		const reviewsDir = join(sd.dir(), "reviews");
-		mkdirSync(reviewsDir, { recursive: true });
-		const filename = `review-${ts.replace(/[:.]/g, "")}-${Date.now() % 10000}.json`;
-		writeFileSync(join(reviewsDir, filename), JSON.stringify(review, null, 2));
-
-		try {
-			const state = readActiveState(projectPath);
-			const task = state.tasks.find((t) => t.slug === slug);
-			if (task) {
-				task.review_status = reviewStatus as ReviewStatus;
-				writeActiveState(projectPath, state);
-			}
-		} catch { /* state update failure is non-fatal */ }
-
-		appendAudit(projectPath, {
-			action: "review.submit",
-			target: slug,
-			detail: `${reviewStatus} (${review.comments.length} comments)`,
-			user: "dashboard",
-		});
-
-		return c.json({ ok: true, review_status: reviewStatus, file: filename });
 	});
 
 	// --- Complete API ---
@@ -718,19 +524,8 @@ export function createApp(
 		if (!task) return c.json({ error: "task not found" }, 404);
 		if (task.status === "completed") return c.json({ error: "task already completed" }, 400);
 
-		if (["M", "L"].includes(task.size ?? "")) {
-			if (task.review_status !== "approved") {
-				return c.json({ error: `${task.size} spec requires approval before completion` }, 400);
-			}
-			const verification = verifyReviewFile(projectPath, slug);
-			if (!verification.valid) {
-				return c.json({ error: `review verification failed: ${verification.reason}` }, 400);
-			}
-		}
-
 		try {
 			const newPrimary = completeTask(projectPath, slug);
-			appendAudit(projectPath, { action: "spec.complete", target: slug, detail: "completed via dashboard", user: "dashboard" });
 			return c.json({ ok: true, new_primary: newPrimary });
 		} catch (err) {
 			return c.json({ error: String(err) }, 500);

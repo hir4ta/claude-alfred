@@ -1,7 +1,6 @@
 import {
 	existsSync,
 	mkdirSync,
-	readdirSync,
 	readFileSync,
 	renameSync,
 	rmSync,
@@ -23,9 +22,6 @@ export type SpecFile =
 export type SpecSize = "S" | "M" | "L";
 export type SpecType = "feature" | "bugfix";
 
-/** Sizes that require dashboard approval before implementation. */
-export const APPROVAL_REQUIRED_SIZES: ReadonlySet<string> = new Set(["M", "L"]);
-export type ReviewStatus = "pending" | "approved" | "changes_requested" | "";
 export type TaskStatus = "pending" | "in-progress" | "review" | "done" | "deferred" | "cancelled";
 
 const TASK_STATUSES = new Set<string>(["pending", "in-progress", "review", "done", "deferred", "cancelled"]);
@@ -64,7 +60,6 @@ export interface ActiveTask {
 	started_at: string;
 	status?: string;
 	completed_at?: string;
-	review_status?: ReviewStatus;
 	size?: SpecSize;
 	spec_type?: SpecType;
 	owner?: string;
@@ -159,7 +154,6 @@ export class SpecDir {
 	}
 
 	writeFile(f: SpecFile, content: string): void {
-		this.saveHistory(f);
 		this.writeFileRaw(f, content);
 	}
 
@@ -178,33 +172,6 @@ export class SpecDir {
 		const tmp = `${path}.tmp`;
 		writeFileSync(tmp, content);
 		renameSync(tmp, path);
-	}
-
-	private saveHistory(f: SpecFile): void {
-		try {
-			const path = this.filePath(f);
-			if (!existsSync(path)) return;
-			const histDir = join(this.dir(), ".history");
-			mkdirSync(histDir, { recursive: true });
-			const ts = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
-			const histPath = join(histDir, `${f}.${ts}`);
-			const content = readFileSync(path, "utf-8");
-			writeFileSync(histPath, content);
-			// Purge old versions (keep max 20).
-			const entries = readdirSync(histDir)
-				.filter((e) => e.startsWith(`${f}.`))
-				.sort();
-			while (entries.length > 20) {
-				const old = entries.shift()!;
-				try {
-					rmSync(join(histDir, old));
-				} catch {
-					/* best effort */
-				}
-			}
-		} catch {
-			/* fail-open: history save errors don't prevent writes */
-		}
 	}
 
 	allSections(): Section[] {
@@ -316,84 +283,6 @@ export function completeTask(projectPath: string, taskSlug: string): string {
 	return state.primary;
 }
 
-export function setReviewStatus(projectPath: string, taskSlug: string, status: ReviewStatus): void {
-	const state = readActiveState(projectPath);
-	const task = state.tasks.find((t) => t.slug === taskSlug);
-	if (!task) throw new Error(`task "${taskSlug}" not found in _active.md`);
-	task.review_status = status;
-	writeActiveState(projectPath, state);
-}
-
-export function reviewStatusFor(projectPath: string, taskSlug: string): ReviewStatus {
-	try {
-		const state = readActiveState(projectPath);
-		return state.tasks.find((t) => t.slug === taskSlug)?.review_status ?? "";
-	} catch {
-		return "";
-	}
-}
-
-export interface ReviewVerification {
-	valid: boolean;
-	reason: string;
-}
-
-/**
- * Verify that a valid review JSON file exists with status=approved and zero unresolved comments.
- * Does NOT read _active.md (no overlap with reviewStatusFor).
- *
- * Legacy mode: if reviews/ directory is absent → valid (backward compat).
- * If reviews/ exists but is empty → invalid.
- */
-export function verifyReviewFile(projectPath: string, taskSlug: string): ReviewVerification {
-	const reviewsDir = join(specsDir(projectPath), taskSlug, "reviews");
-
-	// Legacy mode: no reviews/ directory = pre-enforcement era.
-	if (!existsSync(reviewsDir)) {
-		return { valid: true, reason: "legacy: no reviews/ directory" };
-	}
-
-	let files: string[];
-	try {
-		files = readdirSync(reviewsDir)
-			.filter((f) => f.startsWith("review-") && f.endsWith(".json"))
-			.sort()
-			.reverse();
-	} catch {
-		return { valid: false, reason: "failed to read reviews/ directory" };
-	}
-
-	if (files.length === 0) {
-		return { valid: false, reason: "no review JSON files found in reviews/" };
-	}
-
-	// Parse the latest review file.
-	const latestFile = files[0]!;
-	let reviewData: { status?: string; comments?: Array<{ resolved?: boolean }> };
-	try {
-		reviewData = JSON.parse(readFileSync(join(reviewsDir, latestFile), "utf-8"));
-	} catch {
-		return { valid: false, reason: `failed to parse ${latestFile}` };
-	}
-
-	if (reviewData.status !== "approved") {
-		return {
-			valid: false,
-			reason: `latest review status is "${reviewData.status ?? "unknown"}", not "approved"`,
-		};
-	}
-
-	// Check for unresolved comments (missing resolved field → treated as unresolved).
-	if (Array.isArray(reviewData.comments)) {
-		const unresolved = reviewData.comments.filter((c) => !c.resolved).length;
-		if (unresolved > 0) {
-			return { valid: false, reason: `${unresolved} unresolved review comment(s) remain` };
-		}
-	}
-
-	return { valid: true, reason: `verified via ${latestFile}` };
-}
-
 export function removeTask(projectPath: string, taskSlug: string): boolean {
 	const state = readActiveState(projectPath);
 	const filtered = state.tasks.filter((t) => t.slug !== taskSlug);
@@ -423,55 +312,3 @@ export function removeTask(projectPath: string, taskSlug: string): boolean {
 	return false;
 }
 
-export type ApprovalStatus = "approved" | "changes_requested" | "pending";
-
-/**
- * Check multi-reviewer approval status.
- * Reads all review JSON files and determines aggregate status.
- */
-export function checkApprovalStatus(
-	reviewDir: string,
-	requiredApprovers: number,
-): ApprovalStatus {
-	if (!existsSync(reviewDir)) return "pending";
-
-	const files = readdirSync(reviewDir)
-		.filter((f) => f.startsWith("review-") && f.endsWith(".json"))
-		.sort(); // chronological by timestamp in filename
-
-	if (files.length === 0) return "pending";
-
-	// Collect latest review per reviewer (skip empty/unknown reviewers from count)
-	const latestByReviewer = new Map<string, { status: string; timestamp: string }>();
-	for (const file of files) {
-		try {
-			const content = JSON.parse(readFileSync(join(reviewDir, file), "utf-8")) as {
-				status?: string;
-				reviewer?: string;
-				timestamp?: string;
-			};
-			const reviewer = content.reviewer || "";
-			if (!reviewer || reviewer === "unknown") continue; // skip unidentified reviewers
-			const existing = latestByReviewer.get(reviewer);
-			if (!existing || (content.timestamp ?? "") > existing.timestamp) {
-				latestByReviewer.set(reviewer, {
-					status: content.status ?? "approved",
-					timestamp: content.timestamp ?? "",
-				});
-			}
-		} catch { /* skip invalid */ }
-	}
-
-	// Any changes_requested → block
-	for (const review of latestByReviewer.values()) {
-		if (review.status === "changes_requested") return "changes_requested";
-	}
-
-	// Count distinct approvers
-	let approvedCount = 0;
-	for (const review of latestByReviewer.values()) {
-		if (review.status === "approved") approvedCount++;
-	}
-
-	return approvedCount >= requiredApprovers ? "approved" : "pending";
-}

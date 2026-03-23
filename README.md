@@ -35,7 +35,6 @@ Then in Claude Code:
 ```
 /plugin marketplace add hir4ta/claude-alfred
 /plugin install alfred
-/init    # select "alfred" — sets up steering docs + knowledge index
 ```
 
 Optional: add `export VOYAGE_API_KEY=your-key` to `~/.zshrc` for semantic search (~$0.01/session). Works fine without it — falls back to full-text search.
@@ -98,7 +97,6 @@ With Opus 4.6's 1M context window, compaction is rarer but more destructive when
 | `/alfred:survey` | Reverse-engineer specs from existing code, with confidence scores |
 | `/alfred:salon` | Brainstorm. 3 specialists ideate in parallel, then debate tradeoffs |
 | `/alfred:archive` | Ingest reference docs (PDF, CSV, big text) into searchable knowledge |
-| `/alfred:init` | Project onboarding. Multi-agent codebase exploration + steering docs |
 
 ## How it works
 
@@ -119,7 +117,6 @@ Hooks (invisible)
 Storage
   |-- .alfred/knowledge/   -> JSON (decisions/, patterns/, rules/) — source of truth
   |-- .alfred/specs/       -> spec files + version history + reviews
-  |-- .alfred/steering/    -> project context (product, structure, tech)
   +-- ~/.claude-alfred/    -> SQLite search index + audit log (rebuildable)
 ```
 
@@ -189,7 +186,7 @@ npm uninstall -g claude-alfred
 rm -rf ~/.claude-alfred/                          # SQLite search index
 rm -f ~/.claude/rules/alfred.md                   # user rules
 rm -rf ~/.claude/plugins/cache/claude-alfred/      # plugin cache
-rm -rf .alfred/                                    # project specs, knowledge, steering (per project)
+rm -rf .alfred/                                    # project specs, knowledge (per project)
 ```
 
 ## License

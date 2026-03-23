@@ -19,13 +19,12 @@ function setupAlfred(): void {
 	mkdirSync(join(tmpDir, ".alfred"), { recursive: true });
 }
 
-function setupSpec(opts: { size?: string; reviewStatus?: string }): void {
+function setupSpec(opts: { size?: string }): void {
 	setupAlfred();
 	const specsDir = join(tmpDir, ".alfred", "specs");
 	mkdirSync(specsDir, { recursive: true });
 	let yaml = `primary: test-task\ntasks:\n  - slug: test-task\n    started_at: 2026-01-01T00:00:00Z\n`;
 	if (opts.size) yaml += `    size: ${opts.size}\n`;
-	if (opts.reviewStatus) yaml += `    review_status: ${opts.reviewStatus}\n`;
 	writeFileSync(join(specsDir, "_active.md"), yaml);
 }
 
@@ -79,21 +78,21 @@ describe("checkSpecRequired", () => {
 		setupAlfred();
 		const result = checkSpecRequired(tmpDir, "implement");
 		expect(result).not.toBeNull();
-		expect(result!.level).toBe("DIRECTIVE");
+		expect(result!.level).toBe("CONTEXT");
 	});
 
 	it("returns DIRECTIVE when no spec and bugfix intent", () => {
 		setupAlfred();
 		const result = checkSpecRequired(tmpDir, "bugfix");
 		expect(result).not.toBeNull();
-		expect(result!.level).toBe("DIRECTIVE");
+		expect(result!.level).toBe("CONTEXT");
 	});
 
 	it("returns DIRECTIVE when no spec and tdd intent", () => {
 		setupAlfred();
 		const result = checkSpecRequired(tmpDir, "tdd");
 		expect(result).not.toBeNull();
-		expect(result!.level).toBe("DIRECTIVE");
+		expect(result!.level).toBe("CONTEXT");
 	});
 
 	it("returns null for review intent (no spec required)", () => {
@@ -106,16 +105,8 @@ describe("checkSpecRequired", () => {
 		expect(checkSpecRequired(tmpDir, "research")).toBeNull();
 	});
 
-	it("returns DIRECTIVE when M spec is unapproved", () => {
-		setupSpec({ size: "M", reviewStatus: "pending" });
-		const result = checkSpecRequired(tmpDir, "implement");
-		expect(result).not.toBeNull();
-		expect(result!.level).toBe("DIRECTIVE");
-		expect(result!.message).toContain("requires review approval");
-	});
-
-	it("returns WARNING when M spec is approved (parallel dev guard still applies)", () => {
-		setupSpec({ size: "M", reviewStatus: "approved" });
+	it("returns WARNING when spec exists (parallel dev guard)", () => {
+		setupSpec({ size: "M" });
 		const result = checkSpecRequired(tmpDir, "implement");
 		expect(result).not.toBeNull();
 		expect(result!.level).toBe("WARNING");
@@ -157,10 +148,10 @@ describe("checkSpecRequired", () => {
 		expect(checkSpecRequired(tmpDir, "implement")).toBeNull();
 	});
 
-	it("includes rationalizations in directive", () => {
+	it("returns CONTEXT level (proposal, not DIRECTIVE)", () => {
 		setupAlfred();
 		const result = checkSpecRequired(tmpDir, "implement");
-		expect(result!.rationalizations).toBeDefined();
-		expect(result!.rationalizations!.length).toBeGreaterThan(0);
+		expect(result).not.toBeNull();
+		expect(result!.level).toBe("CONTEXT");
 	});
 });

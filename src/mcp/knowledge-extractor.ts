@@ -1,4 +1,3 @@
-import { appendAudit } from "../spec/audit.js";
 import { SpecDir } from "../spec/types.js";
 import type { Store } from "../store/index.js";
 import { upsertKnowledge } from "../store/knowledge.js";
@@ -173,12 +172,6 @@ export function saveKnowledgeEntries(
 
 	if (saved > 0) {
 		try {
-			appendAudit(projectPath, {
-				action: "knowledge.auto-extract",
-				target: subType,
-				detail: `${saved} ${subType}(s) extracted`,
-				user: "mcp",
-			});
 		} catch {
 			/* audit failure is non-critical */
 		}

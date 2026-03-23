@@ -1,4 +1,3 @@
-import { appendAudit } from "./audit.js";
 import {
 	type TaskStatus,
 	effectiveStatus,
@@ -42,9 +41,4 @@ export function updateTaskStatus(
 	}
 	writeActiveState(projectPath, state);
 
-	appendAudit(projectPath, {
-		action: "task.status_change",
-		target: slug,
-		detail: `${oldStatus} → ${newStatus} (${trigger})`,
-	});
 }

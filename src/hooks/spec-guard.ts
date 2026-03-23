@@ -5,12 +5,10 @@ import { readActiveState } from "../spec/types.js";
 export interface SpecState {
 	slug: string;
 	size: string;
-	reviewStatus: string;
 	status: string;
 }
 
 const VALID_SIZES = new Set(["S", "M", "L", ""]);
-const VALID_REVIEW_STATUSES = new Set(["pending", "approved", "changes_requested", ""]);
 
 /**
  * Read active spec state from _active.md via proper YAML parsing.
@@ -51,12 +49,9 @@ function parseSpecState(cwd: string): SpecState | null {
 	const task = state.tasks.find((t) => t.slug === state.primary);
 	if (!task) return null;
 	const size = task.size ?? "";
-	const reviewStatus = task.review_status ?? "pending";
 	const status = task.status ?? "pending";
-	// Enum validation: reject unknown values.
 	if (!VALID_SIZES.has(size)) return null;
-	if (!VALID_REVIEW_STATUSES.has(reviewStatus)) return null;
-	return { slug: task.slug, size, reviewStatus, status };
+	return { slug: task.slug, size, status };
 }
 
 /**
