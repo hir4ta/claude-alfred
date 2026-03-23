@@ -641,15 +641,15 @@ export async function startDashboard(
 
 	const server = Bun.serve({ fetch: app.fetch, port: opts.port, idleTimeout: 255 });
 
-	await new Promise<void>((resolve) => {
-		const shutdown = () => {
-			console.error("\nshutting down...");
-			server.stop();
-			resolve();
-		};
-		process.on("SIGINT", shutdown);
-		process.on("SIGTERM", shutdown);
-	});
+	const shutdown = () => {
+		server.stop();
+		process.exit(0);
+	};
+	process.on("SIGINT", shutdown);
+	process.on("SIGTERM", shutdown);
+
+	// Keep process alive
+	await new Promise(() => {});
 }
 
 // --- Helpers ---
