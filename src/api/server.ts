@@ -639,7 +639,7 @@ export async function startDashboard(
 		openBrowser(addr);
 	}
 
-	const server = Bun.serve({ fetch: app.fetch, port: opts.port });
+	const server = Bun.serve({ fetch: app.fetch, port: opts.port, idleTimeout: 255 });
 
 	await new Promise<void>((resolve) => {
 		const shutdown = () => {

@@ -7,7 +7,7 @@ const main = defineCommand({
 	},
 	subCommands: {
 		serve: defineCommand({
-			meta: { description: "Start MCP server (stdio)" },
+			meta: { description: "[internal] Start MCP server (stdio)" },
 			async run() {
 				const { Store } = await import("./store/index.js");
 				const { Embedder } = await import("./embedder/index.js");
@@ -66,7 +66,7 @@ const main = defineCommand({
 			},
 		}),
 		hook: defineCommand({
-			meta: { description: "Handle hook event" },
+			meta: { description: "[internal] Handle hook event" },
 			args: {
 				event: { type: "positional", description: "Event name" },
 			},
@@ -137,13 +137,10 @@ const main = defineCommand({
 				check(
 					hasAlfred,
 					`Project: .alfred/ exists in ${cwd}`,
-					"not initialized — run /alfred:init in Claude Code",
+					"not initialized — create a spec via /alfred:brief in Claude Code",
 				);
 			},
 		}),
-		knowledge: defineCommand({
-			meta: { description: "Knowledge management" },
-			}),
 		tui: defineCommand({
 			meta: { description: "Open TUI spec progress viewer" },
 			async run() {

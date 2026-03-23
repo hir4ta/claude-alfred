@@ -74,6 +74,9 @@ export const translations = {
 	"knowledge.verification.overdue": { en: "Overdue", ja: "期限切れ" },
 	"knowledge.verification.pending": { en: "Pending", ja: "未検証" },
 
+	// Projects
+	"overview.projects": { en: "Projects", ja: "プロジェクト" },
+
 	// Filters (dynamic via t(`filter.${s}`))
 	"filter.all": { en: "All", ja: "全て" },
 	"filter.active": { en: "Active", ja: "アクティブ" },

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useSearch } from "@tanstack/react-router";
-import { Brain, CheckCircle2, Clock, Zap } from "@animated-color-icons/lucide-react";
+import { Brain, CheckCircle2, Clock, FolderOpen, Zap } from "@animated-color-icons/lucide-react";
 import { useState } from "react";
 import {
 	Pagination,
@@ -13,12 +13,12 @@ import {
 import { StaggerContainer } from "@/components/stagger-container";
 import {
 	knowledgeStatsQueryOptions,
+	projectsQueryOptions,
 	tasksQueryOptions,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { StatCard } from "@/components/overview/stat-card";
 import { TaskCard } from "@/components/overview/task-card";
-
 import { HeroTile } from "@/components/overview/hero-tile";
 
 export const Route = createFileRoute("/")({
@@ -34,6 +34,7 @@ function OverviewPage() {
 	const projectId = search.project;
 	const { data: tasksData, isLoading: tasksLoading } = useQuery(tasksQueryOptions(projectId));
 	const { data: statsData } = useQuery(knowledgeStatsQueryOptions(projectId));
+	const { data: projectsData } = useQuery(projectsQueryOptions());
 
 	const tasks = [...(tasksData?.tasks ?? [])].sort((a, b) => {
 		const aTime = a.started_at ?? "";
@@ -84,6 +85,32 @@ function OverviewPage() {
 					</div>
 				)}
 			</div>
+
+			{/* Projects */}
+			{(projectsData?.projects?.length ?? 0) > 0 && (
+				<section className="space-y-3">
+					<h2
+						className="text-2xl font-semibold tracking-tight text-foreground"
+						style={{ fontFamily: "var(--font-display)" }}
+					>
+						{t("overview.projects")}
+					</h2>
+					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+						{projectsData!.projects.filter((p) => p.status === "active").map((project) => (
+							<div
+								key={project.id}
+								className="al-icon-wrapper flex items-center gap-3 rounded-organic border border-border/60 bg-card px-4 py-3 hover:border-border hover:-translate-y-0.5 transition-transform"
+							>
+								<FolderOpen className="size-4 shrink-0" style={{ color: "#40513b" }} />
+								<div className="min-w-0 flex-1">
+									<p className="text-sm font-medium truncate">{project.name}</p>
+									<p className="text-[11px] text-muted-foreground truncate font-mono">{project.path}</p>
+								</div>
+							</div>
+						))}
+					</div>
+				</section>
+			)}
 
 			{/* Remaining task cards */}
 			{remainingTasks.length > 0 && (() => {
