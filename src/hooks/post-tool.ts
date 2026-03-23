@@ -11,56 +11,18 @@ import type { HookEvent } from "./dispatcher.js";
 import { notifyUser } from "./dispatcher.js";
 
 import { isSpecFilePath } from "./spec-guard.js";
-import { addWorkedSlug, parseWaveProgress, readStateJSON, readStateText, readWaveProgress, writeStateJSON, writeStateText, writeWaveProgress } from "./state.js";
+import { addWorkedSlug, parseWaveProgress, readStateJSON, readWaveProgress, writeStateJSON, writeWaveProgress } from "./state.js";
 import { writeReviewGate } from "./review-gate.js";
-
-function readExploreCount(cwd: string): number {
-	return parseInt(readStateText(cwd, "explore-count", "0"), 10) || 0;
-}
-
-function writeExploreCount(cwd: string, n: number): void {
-	writeStateText(cwd, "explore-count", String(n));
-}
 
 export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<void> {
 	if (!ev.cwd || !ev.tool_name) return;
 
 	const items: DirectiveItem[] = [];
 
-	// Exploration detection (persisted across short-lived hook processes via .alfred/.state/).
+	// Read/Grep/Glob: no post-processing needed.
 	if (ev.tool_name === "Read" || ev.tool_name === "Grep" || ev.tool_name === "Glob") {
-		// Skip explore tracking entirely when active spec exists (FR-9).
-		let hasActiveSpec = false;
-		try { readActive(ev.cwd); hasActiveSpec = true; } catch { /* no active spec */ }
-
-		if (!hasActiveSpec) {
-			const count = readExploreCount(ev.cwd) + 1;
-			writeExploreCount(ev.cwd, count);
-			if (count >= 5) {
-				items.push({
-					level: "WARNING",
-					message: `5+ consecutive ${ev.tool_name} calls without a spec. Consider \`/alfred:survey\` to reverse-engineer a spec from the code.`,
-				});
-				writeExploreCount(ev.cwd, 0);
-			}
-		}
-
-		// Archive nudge: suggest /alfred:archive for large reference files.
-		if (ev.tool_name === "Read" && ev.tool_input) {
-			const input = ev.tool_input as Record<string, unknown>;
-			const filePath = typeof input.file_path === "string" ? input.file_path : "";
-			if (isArchivableFile(filePath)) {
-				items.push({
-					level: "CONTEXT",
-					message: `Large reference file detected (${filePath.split("/").pop()}). Consider \`/alfred:archive\` to ingest it as structured knowledge.`,
-				});
-			}
-		}
-
-		emitDirectives("PostToolUse", items);
 		return;
 	}
-	writeExploreCount(ev.cwd, 0);
 
 	if (ev.tool_name === "Bash" && !signal.aborted) {
 		await handleBashResult(ev, items, signal);
@@ -376,14 +338,6 @@ export function isGitCommit(stdout: string): boolean {
 			(stdout.includes("insertion") || stdout.includes("deletion")))
 	);
 }
-
-/** Detect large reference files suitable for /alfred:archive. */
-function isArchivableFile(filePath: string): boolean {
-	if (!filePath) return false;
-	const ext = filePath.toLowerCase().split(".").pop() ?? "";
-	return ["pdf", "csv", "tsv", "xlsx", "docx", "txt"].includes(ext);
-}
-
 
 /**
  * Check if active spec should be completed after a git commit.

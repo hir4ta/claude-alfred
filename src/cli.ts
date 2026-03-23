@@ -75,16 +75,6 @@ const main = defineCommand({
 				await runHook(args.event as string);
 			},
 		}),
-		"plugin-bundle": defineCommand({
-			meta: { description: "Generate plugin bundle" },
-			args: {
-				output: { type: "positional", description: "Output directory", default: "plugin" },
-			},
-			async run({ args }) {
-				// Placeholder — will copy content/ to output dir.
-				console.log(`plugin-bundle: output=${args.output} (not yet implemented)`);
-			},
-		}),
 		doctor: defineCommand({
 			meta: { description: "Check installation health" },
 			async run() {
@@ -153,74 +143,23 @@ const main = defineCommand({
 		}),
 		knowledge: defineCommand({
 			meta: { description: "Knowledge management" },
-			subCommands: {
-				export: defineCommand({
-					meta: { description: "Export knowledge as JSON" },
-					async run() {
-						const { exportKnowledge } = await import("./git/knowledge-io.js");
-						const result = exportKnowledge(process.cwd());
-						process.stdout.write(JSON.stringify(result.entries, null, 2) + "\n");
-						process.stderr.write(`Exported ${result.count} entries\n`);
-					},
-				}),
-				import: defineCommand({
-					meta: { description: "Import knowledge from JSON (stdin)" },
-					async run() {
-						const { importKnowledge } = await import("./git/knowledge-io.js");
-						const chunks: Buffer[] = [];
-						const MAX_SIZE = 50 * 1024 * 1024; // 50MB
-						let totalSize = 0;
-						for await (const chunk of process.stdin) {
-							totalSize += (chunk as Buffer).length;
-							if (totalSize > MAX_SIZE) {
-								process.stderr.write("Error: input exceeds 50MB limit\n");
-								process.exit(1);
-							}
-							chunks.push(chunk as Buffer);
-						}
-						const input = Buffer.concat(chunks).toString("utf-8");
-						let entries: unknown[];
-						try {
-							entries = JSON.parse(input);
-							if (!Array.isArray(entries)) throw new Error("expected JSON array");
-						} catch (err) {
-							process.stderr.write(`Error: invalid JSON input: ${err}\n`);
-							process.exit(1);
-						}
-						const result = importKnowledge(process.cwd(), entries);
-						console.log(`Imported: ${result.imported}, Skipped: ${result.skipped}, Similar: ${result.similar}`);
-					},
-				}),
-				diff: defineCommand({
-					meta: { description: "Show uncommitted knowledge changes" },
-					async run() {
-						const { showKnowledgeDiff } = await import("./git/knowledge-io.js");
-						const result = showKnowledgeDiff(process.cwd());
-						if (result.added.length === 0 && result.modified.length === 0 && result.deleted.length === 0) {
-							console.log("変更なし");
-							return;
-						}
-						for (const f of result.added) console.log(`+ ${f}`);
-						for (const f of result.deleted) console.log(`- ${f}`);
-						for (const m of result.modified) {
-							console.log(`M ${m.path}`);
-							for (const c of m.changes) {
-								console.log(`  ${c.field}: ${c.before} → ${c.after}`);
-							}
-						}
-					},
-				}),
-			},
-		}),
+			}),
 		tui: defineCommand({
 			meta: { description: "Open TUI spec progress viewer" },
 			async run() {
 				const { fileURLToPath } = await import("node:url");
 				const { join } = await import("node:path");
 				const { execSync } = await import("node:child_process");
+				// Resolve TUI path relative to this script's location (works from any cwd)
+				const { existsSync } = await import("node:fs");
 				const thisDir = fileURLToPath(new URL(".", import.meta.url));
-				// TUI is a standalone Bun script (requires OpenTUI + JSX)
+				// In dev: thisDir = .../src/ → ../src/tui/main.tsx
+				// In dist: thisDir = .../dist/ → ../src/tui/main.tsx
 				const tuiPath = join(thisDir, "..", "src", "tui", "main.tsx");
+				if (!existsSync(tuiPath)) {
+					process.stderr.write(`Error: TUI script not found at ${tuiPath}\n`);
+					process.exit(1);
+				}
 				try {
 					execSync(`bun "${tuiPath}"`, { stdio: "inherit" });
 				} catch {

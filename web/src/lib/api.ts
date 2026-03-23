@@ -3,8 +3,6 @@ import type {
 	KnowledgeResponse,
 	KnowledgeStats,
 	ProjectRecord,
-	ReviewHistoryResponse,
-	ReviewStatusResponse,
 	SearchResponse,
 	SpecContentResponse,
 	SpecsResponse,
@@ -119,22 +117,6 @@ export const validationQueryOptions = (slug: string, projectId?: string) =>
 		enabled: !!slug,
 	});
 
-export const reviewQueryOptions = (slug: string) =>
-	queryOptions({
-		queryKey: ["review", slug],
-		queryFn: () => fetchJSON<ReviewStatusResponse>(taskURL(slug, "review")),
-		staleTime: REF_STALE,
-		enabled: !!slug,
-	});
-
-export const reviewHistoryQueryOptions = (slug: string) =>
-	queryOptions({
-		queryKey: ["review-history", slug],
-		queryFn: () => fetchJSON<ReviewHistoryResponse>(`${taskURL(slug, "review")}/history`),
-		staleTime: REF_STALE,
-		enabled: !!slug,
-	});
-
 export const projectsQueryOptions = () =>
 	queryOptions({
 		queryKey: ["projects"],
@@ -162,77 +144,7 @@ export const versionQueryOptions = () =>
 		staleTime: REF_STALE,
 	});
 
-// --- Heatmap ---
-
-export interface HeatmapResponse {
-	data: Array<{ date: string; count: number }>;
-	weeks: number;
-}
-
-export const heatmapQueryOptions = (projectId?: string) =>
-	queryOptions({
-		queryKey: ["heatmap", projectId],
-		queryFn: () => {
-			const url = projectId ? `/api/analytics/heatmap?project=${projectId}` : "/api/analytics/heatmap";
-			return fetchJSON<HeatmapResponse>(url);
-		},
-		staleTime: REF_STALE,
-	});
-
-// --- Activity / Analytics ---
-
-export interface AnalyticsResponse {
-	hitRanking: Array<{ id: number; title: string; hitCount: number; projectName: string }>;
-	completionStats: Array<{ size: string; avgDays: number; count: number }>;
-	reworkRates: Array<{
-		slug: string; size: string; completedAt: string;
-		reworkRate: number; reworkedCount: number; totalCount: number; pending: boolean;
-	}>;
-	cycleTimeBreakdown: Array<{
-		slug: string; size: string;
-		phases: { planning: number | null; approvalWait: number | null; implementation: number | null; total: number };
-	}>;
-}
-
-export const analyticsQueryOptions = (projectId?: string) =>
-	queryOptions({
-		queryKey: ["analytics", projectId],
-		queryFn: () => {
-			const url = projectId ? `/api/activity/analytics?project=${projectId}` : "/api/activity/analytics";
-			return fetchJSON<AnalyticsResponse>(url);
-		},
-		staleTime: REF_STALE,
-	});
-
-export const activityQueryOptions = (page = 0, projectId?: string) =>
-	queryOptions({
-		queryKey: ["activity", page, projectId],
-		queryFn: () => {
-			const params = new URLSearchParams({ limit: "50", offset: String(page * 50) });
-			if (projectId) params.set("project", projectId);
-			return fetchJSON<{ entries: Array<{ timestamp: string; action: string; target: string; detail: string; actor: string; project_name?: string }>; total: number }>(`/api/activity?${params}`);
-		},
-		staleTime: LIVE_STALE,
-	});
-
 // --- Mutations ---
-
-export async function submitReview(
-	slug: string,
-	status: "approved" | "changes_requested",
-	comments: { file: string; line: number; body: string; endLine?: number }[],
-) {
-	const res = await fetch(taskURL(slug, "review"), {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ status, comments }),
-	});
-	if (!res.ok) {
-		const body = await res.json().catch(() => ({ error: res.statusText }));
-		throw new Error(body.error ?? `HTTP ${res.status}`);
-	}
-	return res.json();
-}
 
 export async function completeTask(slug: string) {
 	const res = await fetch(taskURL(slug, "complete"), {

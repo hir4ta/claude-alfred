@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, MessageSquareText, BookOpen } from "@animated-color-icons/lucide-react";
+import { Check, ChevronDown, Copy } from "@animated-color-icons/lucide-react";
 import { useCallback, useState } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -38,20 +38,12 @@ interface SectionCardProps {
 	color?: string;
 	defaultOpen?: boolean;
 	slug?: string;
-	canReview?: boolean;
-	isReviewMode?: boolean;
-	onToggleReviewMode?: () => void;
-	reviewPanel?: React.ReactNode;
 }
 
 export function SectionCard({
 	title,
 	content,
 	defaultOpen = false,
-	canReview,
-	isReviewMode,
-	onToggleReviewMode,
-	reviewPanel,
 }: SectionCardProps) {
 	const { t } = useI18n();
 	const [open, setOpen] = useState(defaultOpen);
@@ -77,40 +69,11 @@ export function SectionCard({
 						)}
 					/>
 				</div>
-				<div className="flex items-center gap-1.5 shrink-0 ml-2">
-					{canReview && onToggleReviewMode && (
-						<button
-							type="button"
-							onClick={(e) => { e.stopPropagation(); onToggleReviewMode(); }}
-							className={cn(
-								"flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors shrink-0",
-								isReviewMode
-									? "bg-brand-pattern/[0.12] text-[#2d8b7a] border border-[rgba(45,139,122,0.3)]"
-									: "bg-muted text-muted-foreground border border-transparent hover:border-border hover:bg-accent",
-							)}
-						>
-							{isReviewMode ? (
-								<>
-									<MessageSquareText className="size-3" />
-									{t("section.reviewMode")}
-								</>
-							) : (
-								<>
-									<BookOpen className="size-3" />
-									{t("section.reviewMode")}
-								</>
-							)}
-						</button>
-					)}
-				</div>
 			</div>
 
 			{open && (
 				<div className="border-t px-4 py-3">
-					{isReviewMode && reviewPanel ? (
-						reviewPanel
-					) : (
-						<div
+					<div
 							className="prose prose-sm prose-stone dark:prose-invert max-w-none
 							prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
 							prose-h1:text-base prose-h1:mt-0 prose-h1:mb-2
@@ -160,7 +123,6 @@ export function SectionCard({
 								{content.replace(/<!--[\s\S]*?-->/g, "")}
 							</Markdown>
 						</div>
-					)}
 				</div>
 			)}
 		</div>

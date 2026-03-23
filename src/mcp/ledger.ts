@@ -69,8 +69,6 @@ export async function handleLedger(store: Store, emb: Embedder | null, params: L
 			return ledgerPromote(store, params);
 		case "candidates":
 			return ledgerCandidates(store);
-		case "reflect":
-			return ledgerReflect(store, emb, params);
 		case "verify":
 			return ledgerVerify(store, params);
 		case "stale":
@@ -581,100 +579,3 @@ async function ledgerVerify(store: Store, params: LedgerParams) {
 	});
 }
 
-// --- Reflect ---
-
-async function ledgerReflect(store: Store, emb: Embedder | null, _params: LedgerParams) {
-	const stats = getKnowledgeStats(store);
-	const candidates = getPromotionCandidates(store);
-	const lang = toLang();
-
-	const promotionCandidates = candidates.map((d) => ({
-		id: d.id,
-		title: d.title,
-		hit_count: d.hitCount,
-		current: d.subType,
-		suggested: "rule",
-	}));
-
-	// FR-3: Overdue verifications.
-	let overdueVerifications: Array<{ id: number; title: string; sub_type: string; overdue_days: number }> = [];
-	let verificationRate = 0;
-	try {
-		const overdueRows = store.db
-			.prepare(`SELECT id, title, sub_type, verification_due FROM knowledge_index
-				WHERE enabled = 1 AND verification_due IS NOT NULL AND verification_due < datetime('now')
-				ORDER BY verification_due ASC LIMIT 10`)
-			.all() as Array<{ id: number; title: string; sub_type: string; verification_due: string }>;
-		overdueVerifications = overdueRows.map((r) => ({
-			id: r.id,
-			title: r.title,
-			sub_type: r.sub_type,
-			overdue_days: Math.floor((Date.now() - Date.parse(r.verification_due)) / 86400000),
-		}));
-
-		const rateRow = store.db
-			.prepare(`SELECT
-				COUNT(CASE WHEN last_verified IS NOT NULL THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) as rate
-				FROM knowledge_index WHERE enabled = 1`)
-			.get() as { rate: number | null } | undefined;
-		verificationRate = Math.round((rateRow?.rate ?? 0) * 100) / 100;
-	} catch { /* verification columns may not exist */ }
-
-	// FR-3: Gap summary.
-	const gapSummary = readGapSummary(_params.project_path ?? process.cwd());
-
-	return jsonResult({
-		summary: {
-			total_memories: stats.total,
-			by_sub_type: stats.bySubType,
-			avg_hit_count: Math.round(stats.avgHitCount * 100) / 100,
-			most_accessed: stats.topAccessed.map((d) => ({
-				title: d.title,
-				hit_count: d.hitCount,
-				sub_type: d.subType,
-			})),
-		},
-		promotion_candidates: promotionCandidates,
-		overdue_verifications: overdueVerifications,
-		verification_rate: verificationRate,
-		gap_summary: gapSummary,
-		lang,
-	});
-}
-
-/**
- * FR-3: Read knowledge-gaps.jsonl and produce a summary.
- */
-function readGapSummary(projectPath: string): { total: number; top_groups: Array<{ topic: string; count: number; last_seen: string }> } {
-	const gapsPath = join(projectPath, ".alfred", ".state", "knowledge-gaps.jsonl");
-	try {
-		const raw = readFileSync(gapsPath, "utf-8");
-		const lines = raw.split("\n").filter((l) => l.trim());
-		const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
-		const recent = lines
-			.map((l) => { try { return JSON.parse(l); } catch { return null; } })
-			.filter((e): e is { query: string; timestamp: string } => e?.timestamp > thirtyDaysAgo);
-
-		// Group by first 30 chars of query.
-		const groups = new Map<string, { count: number; last_seen: string }>();
-		for (const e of recent) {
-			const topic = e.query.slice(0, 30);
-			const existing = groups.get(topic);
-			if (existing) {
-				existing.count++;
-				if (e.timestamp > existing.last_seen) existing.last_seen = e.timestamp;
-			} else {
-				groups.set(topic, { count: 1, last_seen: e.timestamp });
-			}
-		}
-
-		const topGroups = [...groups.entries()]
-			.sort((a, b) => b[1].count - a[1].count)
-			.slice(0, 5)
-			.map(([topic, v]) => ({ topic, count: v.count, last_seen: v.last_seen }));
-
-		return { total: recent.length, top_groups: topGroups };
-	} catch {
-		return { total: 0, top_groups: [] };
-	}
-}

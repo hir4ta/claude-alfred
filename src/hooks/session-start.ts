@@ -41,8 +41,6 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
 		notifyUser("warning: knowledge sync failed: %s", err);
 	}
 
-	// Suggest ledger reflect when knowledge base has grown.
-	suggestLedgerReflect(store);
 
 	// FR-1b: Check overdue knowledge verifications (SQL only, <200ms).
 	checkOverdueVerifications(store, ev.cwd);
@@ -187,19 +185,6 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
 		}
 	}
 	return { frontmatter: fm, body: content.slice(end + 3).trim() };
-}
-
-function suggestLedgerReflect(store: ReturnType<typeof openDefaultCached>): void {
-	try {
-		const count = countKnowledge(store, "");
-		if (count < 20) return;
-		notifyUser(
-			"knowledge health: %d memories. Consider `ledger action=reflect` for a health report.",
-			count,
-		);
-	} catch {
-		/* ignore */
-	}
 }
 
 /**

@@ -37,37 +37,6 @@ function setupActiveSpec(slug: string) {
 	writeFileSync(join(specsDir, "tasks.md"), "# Tasks\n## Wave 1\n- [ ] T-1.1: Add `src/hooks/test.ts`\n- [ ] T-1.2: Update documentation");
 }
 
-describe("postToolUse exploration tracking", () => {
-	it("emits survey suggestion at 5 consecutive reads", async () => {
-		const io = suppressIO();
-		try {
-			const { postToolUse } = await import("../post-tool.js");
-			for (let i = 0; i < 5; i++) {
-				await postToolUse({ cwd: tmpDir, tool_name: "Read", tool_input: {} } as any, AbortSignal.timeout(5000));
-			}
-			const output = io.stdout.join("");
-			expect(output).toContain("survey");
-		} finally { io.restore(); }
-	});
-
-	it("resets explore count on non-Read/Grep/Glob tool", async () => {
-		const io = suppressIO();
-		try {
-			const { postToolUse } = await import("../post-tool.js");
-			// Build up count
-			for (let i = 0; i < 3; i++) {
-				await postToolUse({ cwd: tmpDir, tool_name: "Grep", tool_input: {} } as any, AbortSignal.timeout(5000));
-			}
-			// Non-read tool resets
-			await postToolUse({ cwd: tmpDir, tool_name: "Bash", tool_response: { exitCode: 0, stdout: "ok" } } as any, AbortSignal.timeout(5000));
-			// Read again - should start from 0
-			const { readStateText } = await import("../state.js");
-			const count = parseInt(readStateText(tmpDir, "explore-count", "0"), 10);
-			expect(count).toBe(0);
-		} finally { io.restore(); }
-	});
-});
-
 describe("postToolUse Bash error handling", () => {
 	it("emits test failure warning on test error", async () => {
 		const io = suppressIO();
@@ -126,31 +95,4 @@ describe("postToolUse returns early", () => {
 	});
 });
 
-describe("postToolUse archive nudge", () => {
-	it("suggests archive for PDF files", async () => {
-		const io = suppressIO();
-		try {
-			const { postToolUse } = await import("../post-tool.js");
-			await postToolUse({
-				cwd: tmpDir, tool_name: "Read",
-				tool_input: { file_path: "/docs/reference.pdf" },
-			} as any, AbortSignal.timeout(5000));
-			const output = io.stdout.join("");
-			expect(output).toContain("archive");
-		} finally { io.restore(); }
-	});
-
-	it("suggests archive for CSV files", async () => {
-		const io = suppressIO();
-		try {
-			const { postToolUse } = await import("../post-tool.js");
-			await postToolUse({
-				cwd: tmpDir, tool_name: "Read",
-				tool_input: { file_path: "/data/export.csv" },
-			} as any, AbortSignal.timeout(5000));
-			const output = io.stdout.join("");
-			expect(output).toContain("archive");
-		} finally { io.restore(); }
-	});
-});
 

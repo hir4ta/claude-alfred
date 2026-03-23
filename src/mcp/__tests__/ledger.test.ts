@@ -360,20 +360,6 @@ describe("ledger candidates", () => {
 	});
 });
 
-describe("ledger reflect", () => {
-	it("returns stats summary", async () => {
-		upsertKnowledge(store, makeRow({
-			filePath: "decisions/r1.json", title: "Reflect Test",
-		}));
-
-		const result = await handleLedger(store, null, { action: "reflect" });
-		const data = parseResult(result);
-		expect(data.summary.total_memories).toBeGreaterThanOrEqual(1);
-		expect(data.summary.by_sub_type).toBeDefined();
-		expect(data.promotion_candidates).toBeDefined();
-	});
-});
-
 describe("ledger unknown action", () => {
 	it("returns error for unknown action", async () => {
 		const result = await handleLedger(store, null, { action: "unknown" });
