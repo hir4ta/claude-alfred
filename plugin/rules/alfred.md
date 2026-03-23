@@ -1,10 +1,6 @@
----
-description: alfred MCP tool usage guidelines — when and how to call knowledge and config-review
----
-
 # alfred MCP Tools
 
-alfred's knowledge base contains extensive curated Claude Code docs and best practices with vector search.
+alfred's knowledge base contains curated Claude Code docs and best practices with vector search.
 
 ## knowledge — Search docs and best practices
 
@@ -24,5 +20,3 @@ Call when:
 - Reviewing or auditing `.claude/` configuration
 - Evaluating CLAUDE.md quality or looking for improvements
 - Checking overall Claude Code setup health
-
-Cross-references file contents with the knowledge base for targeted suggestions.

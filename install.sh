@@ -59,17 +59,14 @@ main() {
   mkdir -p "${HOME}/.claude-alfred"
   "${INSTALL_DIR}/alfred" doctor 2>/dev/null || true
 
-  # Install user rules (ensures MCP tool usage instructions are always loaded)
+  # Install user rules (ensures MCP tool usage + spec workflow instructions are always loaded)
   local rules_dir="${HOME}/.claude/rules"
   mkdir -p "${rules_dir}"
-  cat > "${rules_dir}/alfred.md" << 'RULES'
----
-description: alfred MCP tool usage guidelines — when and how to call knowledge and config-review
----
 
+  cat > "${rules_dir}/alfred.md" << 'RULES'
 # alfred MCP Tools
 
-alfred's knowledge base contains extensive curated Claude Code docs and best practices with vector search.
+alfred's knowledge base contains curated Claude Code docs and best practices with vector search.
 
 ## knowledge — Search docs and best practices
 
@@ -82,8 +79,43 @@ Call when the user's question or task involves ANY of:
 - Evaluating whether code follows Claude Code conventions
 
 Do NOT call for: general programming, project-specific code, non-Claude-Code topics.
+
+## config-review — Audit .claude/ config against best practices
+
+Call when:
+- Reviewing or auditing `.claude/` configuration
+- Evaluating CLAUDE.md quality or looking for improvements
+- Checking overall Claude Code setup health
 RULES
-  echo "Rules installed: ${rules_dir}/alfred.md"
+
+  cat > "${rules_dir}/alfred-protocol.md" << 'RULES'
+# Alfred Protocol — Spec-Driven Development
+
+When a `.alfred/specs/` directory exists in the project, follow this protocol strictly.
+
+## Task Tracking
+
+- After completing each task, explicitly call `dossier action=check task_id="T-X.Y"`
+- Do NOT rely solely on auto-detection — always confirm task completion explicitly
+- Record decisions via `ledger action=save sub_type=decision` as they happen
+
+## Wave Completion — Mandatory Review Gate
+
+When all tasks in a Wave are done:
+
+1. **Commit** with Wave number in message
+2. **Self-review** via `alfred:code-reviewer` agent or `/alfred:inspect`
+3. **Fix** Critical/High findings before proceeding
+4. **Gate clear** — `dossier action=gate sub_action=clear reason="<review summary>"` (30+ chars, include: review method, findings count, fix summary)
+5. **Knowledge** — `ledger action=save` (pattern/decision/rule). If nothing to save, state why
+6. **Next Wave** — Proceed immediately, do NOT stop and wait for user input
+
+## Completing a Spec
+
+- Call `dossier action=complete` to close the spec
+- Prefer complete over delete — completed specs serve as searchable knowledge
+RULES
+  echo "Rules installed: ${rules_dir}/alfred.md, alfred-protocol.md"
 
   # Ensure ~/.local/bin is in PATH
   if ! echo "$PATH" | grep -q "${INSTALL_DIR}"; then
