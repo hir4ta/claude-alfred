@@ -189,13 +189,17 @@ function check(ok: boolean, label: string, hint?: string): void {
 	}
 }
 
+declare const __ALFRED_VERSION__: string | undefined;
+
 async function resolveVersion(): Promise<string> {
+	// Prefer build-time embedded version (works in any location)
+	if (typeof __ALFRED_VERSION__ !== "undefined") return __ALFRED_VERSION__;
+	// Fallback: resolve from package.json (dev mode)
 	try {
 		const { readFileSync } = await import("node:fs");
 		const { join } = await import("node:path");
 		const { fileURLToPath } = await import("node:url");
 		const thisDir = fileURLToPath(new URL(".", import.meta.url));
-		// Try package.json relative to dist/
 		for (const rel of ["..", "../.."]) {
 			try {
 				const pkg = JSON.parse(readFileSync(join(thisDir, rel, "package.json"), "utf-8"));
