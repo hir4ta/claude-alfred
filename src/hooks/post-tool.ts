@@ -1,6 +1,6 @@
 import { extractReviewFindings, saveKnowledgeEntries } from "../mcp/knowledge-extractor.js";
 import { updateTaskStatus } from "../spec/status.js";
-import { effectiveStatus, readActive, readActiveState, SpecDir } from "../spec/types.js";
+import { effectiveStatus, parseTasksFile, readActive, readActiveState, SpecDir } from "../spec/types.js";
 import { openDefaultCached } from "../store/index.js";
 import { getPromotionCandidates, promoteSubType } from "../store/knowledge.js";
 import type { DirectiveItem } from "./directives.js";
@@ -118,15 +118,14 @@ export function detectWaveCompletion(
 	const items: DirectiveItem[] = [];
 	try {
 		const sd = new SpecDir(projectPath, taskSlug);
-		const tasksData = JSON.parse(sd.readFile("tasks.json"));
-		const allWaves = [...(tasksData.waves ?? []), tasksData.closing].filter(Boolean);
+		const tasksData = parseTasksFile(sd.readFile("tasks.json"));
 		const prev = readWaveProgress(projectPath);
 
 		const progress: { slug: string; current_wave: number; waves: Record<string, { total: number; checked: number; reviewed: boolean }> } = {
 			slug: taskSlug, current_wave: 1, waves: {},
 		};
 
-		for (const wave of allWaves) {
+		for (const wave of tasksData.waves) {
 			const key = String(wave.key);
 			const total = wave.tasks.length;
 			const checked = wave.tasks.filter((t: { checked: boolean }) => t.checked).length;

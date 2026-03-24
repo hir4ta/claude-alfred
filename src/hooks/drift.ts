@@ -6,7 +6,7 @@
  * Budget: ~600ms within PostToolUse 4.5s internal timeout.
  */
 
-import { readActive, SpecDir } from "../spec/types.js";
+import { allTasks, parseTasksFile, readActive, SpecDir } from "../spec/types.js";
 import type { DirectiveItem } from "./directives.js";
 import { shouldAutoAppend } from "./lang-filter.js";
 import { extractChangedFiles, parseDesignFileRefs } from "./living-spec.js";
@@ -61,9 +61,8 @@ export function detectDrift(
 
 		// tasks.json file references (task.files arrays).
 		try {
-			const data = JSON.parse(sd.readFile("tasks.json"));
-			const allTasks = [...(data.waves ?? []).flatMap((w: any) => w.tasks), ...(data.closing?.tasks ?? [])];
-			for (const t of allTasks) {
+			const tasksData = parseTasksFile(sd.readFile("tasks.json"));
+			for (const t of allTasks(tasksData)) {
 				for (const f of (t.files ?? [])) specRefs.add(f);
 			}
 		} catch { /* no tasks.json */ }

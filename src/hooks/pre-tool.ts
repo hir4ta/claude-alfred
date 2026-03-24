@@ -9,7 +9,6 @@ import {
 	isSpecFilePath,
 	tryReadActiveSpec,
 } from "./spec-guard.js";
-import { readStateJSON } from "./state.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
 
@@ -108,18 +107,9 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// No active spec → allow with advisory.
+	// No active spec → allow silently. Spec creation is user-initiated.
 	if (!spec) {
-		// spec-prompt: already asked user about spec creation this session → suppress advisory
-		const prompted = readStateJSON<{ prompted?: boolean }>(ev.cwd, "spec-prompt.json", {});
-		if (prompted.prompted) {
-			allowTool("Spec prompt already issued (implicit skip)");
-			return;
-		}
-		process.stderr.write(
-			"[alfred] No active spec. Consider creating one: dossier action=init\n",
-		);
-		allowTool("No active spec (advisory warning emitted)");
+		allowTool("No active spec (user-initiated spec creation)");
 		return;
 	}
 

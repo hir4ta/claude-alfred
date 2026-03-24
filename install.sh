@@ -93,6 +93,13 @@ RULES
 
 When a `.alfred/specs/` directory exists in the project, follow this protocol strictly.
 
+## Spec Creation (User-Initiated)
+
+Spec creation is triggered by the user, not auto-proposed by Claude.
+- User explicitly requests: "spec作って", "/alfred:brief", "specを作成して" etc.
+- When requested: ask for size (S/M/L) → create via `dossier action=init`
+- Implementation without a spec is normal and allowed
+
 ## Task Tracking
 
 - After completing each task, explicitly call `dossier action=check task_id="T-X.Y"`

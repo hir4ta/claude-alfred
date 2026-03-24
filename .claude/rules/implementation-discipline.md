@@ -10,13 +10,12 @@ This file enforces the invariant Spec-Driven Development Flow defined in CLAUDE.
 - A Wave contains one or more Tasks
 - These relationships are never violated
 
-## Step 1: Spec Proposal
+## Step 1: Spec Creation (User-Initiated)
 
-Before writing implementation code (new features, bug fixes, refactors):
-1. Check if an active spec exists via `dossier action=status`
-2. If no spec → DIRECTIVE: use AskUserQuestion to ask user about spec creation (S/M/L/Skip)
-3. Always propose — never silently skip. User can say "skip" to proceed without spec
-4. Enforced: UserPromptSubmit DIRECTIVE + PreToolUse advisory. Guard resets per session
+Spec creation is user-initiated. Users explicitly request spec creation (e.g., "spec作って", "/alfred:brief").
+- Do NOT auto-propose spec creation before implementation
+- When user requests a spec: ask for size (S/M/L) → create via `dossier action=init`
+- Implementation without a spec is normal and allowed
 
 ## Step 2: Self-Review Rule (All Sizes)
 

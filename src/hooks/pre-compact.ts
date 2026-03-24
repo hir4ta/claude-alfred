@@ -1,7 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+	allTasks,
 	completeTask,
+	parseTasksFile,
 	readActive,
 	SpecDir,
 } from "../spec/types.js";
@@ -76,9 +78,9 @@ export async function preCompact(ev: HookEvent, _signal: AbortSignal): Promise<v
 	try {
 		const taskSlug = readActive(projectPath);
 		const sd = new SpecDir(projectPath, taskSlug);
-		const tasksData = JSON.parse(sd.readFile("tasks.json"));
-		const allTasks = [...(tasksData.waves ?? []).flatMap((w: any) => w.tasks), ...(tasksData.closing?.tasks ?? [])];
-		if (allTasks.length > 0 && allTasks.every((t: any) => t.checked)) {
+		const tasksData = parseTasksFile(sd.readFile("tasks.json"));
+		const tasks = allTasks(tasksData);
+		if (tasks.length > 0 && tasks.every((t) => t.checked)) {
 			doAutoComplete(projectPath, taskSlug);
 		}
 	} catch {

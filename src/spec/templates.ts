@@ -96,17 +96,17 @@ function generateTasksTemplate(data: TemplateData, lang: string): TasksFile {
 					},
 				],
 			},
+			{
+				key: "closing",
+				title: "Closing",
+				tasks: [
+					{ id: "T-C.1", title: isJa ? "最終セルフレビュー" : "Final self-review", checked: false },
+					{ id: "T-C.2", title: isJa ? "CLAUDE.md / README 更新" : "Update CLAUDE.md / README if needed", checked: false },
+					{ id: "T-C.3", title: isJa ? "テスト通過確認" : "Verify tests pass", checked: false },
+					{ id: "T-C.4", title: isJa ? "ナレッジ保存" : "Save key learnings via ledger save", checked: false },
+				],
+			},
 		],
-		closing: {
-			key: "closing",
-			title: "Closing",
-			tasks: [
-				{ id: "T-C.1", title: isJa ? "最終セルフレビュー" : "Final self-review", checked: false },
-				{ id: "T-C.2", title: isJa ? "CLAUDE.md / README 更新" : "Update CLAUDE.md / README if needed", checked: false },
-				{ id: "T-C.3", title: isJa ? "テスト通過確認" : "Verify tests pass", checked: false },
-				{ id: "T-C.4", title: isJa ? "ナレッジ保存" : "Save key learnings via ledger save", checked: false },
-			],
-		},
 	};
 }
 

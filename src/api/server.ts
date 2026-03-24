@@ -9,6 +9,7 @@ import type { SpecFile, SpecSize, SpecType } from "../spec/types.js";
 import {
 	completeTask,
 	filesForSize,
+	parseTasksFile,
 	readActiveState,
 	readCancelState,
 	readCompleteState,
@@ -92,9 +93,8 @@ export function createApp(
 		let totalChecked = 0;
 		let totalAll = 0;
 		try {
-			const data = JSON.parse(sd.readFile("tasks.json"));
-			const allWaves = [...(data.waves ?? []), data.closing].filter(Boolean);
-			const waves = allWaves.map((w: any) => {
+			const data = parseTasksFile(sd.readFile("tasks.json"));
+			const waves = data.waves.map((w: any) => {
 				const tasks = w.tasks ?? [];
 				const checked = tasks.filter((t: any) => t.checked).length;
 				return { key: String(w.key), title: w.title, total: tasks.length, checked, isCurrent: false };

@@ -36,7 +36,7 @@ Build: bun build (bundle + compile) / vitest (test) / citty (CLI) / hono (HTTP, 
 
 ### Development Flow
 
-1. **Spec Creation** — Create spec documents via `/alfred:brief` or `dossier action=init`
+1. **Spec Creation** (user-initiated) — User explicitly requests spec creation via `/alfred:brief` or `dossier action=init`. Implementation without spec is allowed
 2. **Self-Review** (all sizes including S)
    - OK → Implementation phase
    - NG → Fix → Self-review (loop until OK)
@@ -53,7 +53,7 @@ Build: bun build (bundle + compile) / vitest (test) / citty (CLI) / hono (HTTP, 
 
 | Step | Mechanism | Level |
 |------|-----------|-------|
-| Spec suggested | UserPromptSubmit DIRECTIVE (AskUserQuestion で確認必須) | DIRECTIVE |
+| Spec creation | User-initiated (no auto-proposal) | Manual |
 | Wave self-review | review-gate.json via PreToolUse (fix_mode for review→fix→re-review loop) | DENY (fix_mode: ALLOW) |
 | Wave commit + knowledge | PostToolUse DIRECTIVE | DIRECTIVE |
 | Task progress update | Explicit `dossier action=check` | Manual |

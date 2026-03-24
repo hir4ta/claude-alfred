@@ -35,9 +35,9 @@ Optional: add `export VOYAGE_API_KEY=your-key` to `~/.zshrc` for semantic search
 
 ## What makes it different
 
-Most spec tools give you a slash command and hope you use it. alfred uses Claude Code's hook system to **enforce** the workflow — no spec, no code edits.
+Most spec tools give you a slash command and hope you use it. alfred uses Claude Code's hook system to **enforce** the review workflow — every wave is reviewed before the next one starts.
 
-**Enforcement, not suggestions.** Two gates protect your code. A spec gate blocks implementation until a spec exists. A review gate blocks the next wave until the current one passes self-review. This isn't prompt-level advice — it's PreToolUse hooks that physically deny Edit and Write.
+**Enforcement where it matters.** A review gate blocks the next wave until the current one passes self-review. This isn't prompt-level advice — it's a PreToolUse hook that physically denies Edit and Write. Spec creation itself is user-initiated — you choose when to plan and when to just code.
 
 **Self-review at every boundary.** alfred spawns parallel code-review agents (security, logic, design) at every wave boundary. Critical or high findings must be fixed before the gate opens. This adds time — but catches issues that would cost more later.
 
@@ -47,7 +47,7 @@ Most spec tools give you a slash command and hope you use it. alfred uses Claude
 
 **Context that adapts.** alfred adjusts how much it injects based on project maturity. A new project gets full spec context on session start. A mature one with 20+ knowledge entries gets just the current task and goal — no context bloat.
 
-**Skills that show up on their own.** Researching? alfred suggests `/brief`. Fixing a bug? `/mend`. It classifies your intent (semantic or keyword, bilingual EN/JA) and nudges the right skill.
+**Skills for every mode.** `/brief` for planning, `/mend` for bug fixes, `/attend` for full autopilot. Pick the right tool — or just ask Claude directly.
 
 **A dashboard for visibility.** `alfred dashboard` opens `localhost:7575` with real-time task progress (SSE), spec viewing, and knowledge health. Cross-project view. English/Japanese toggle.
 
@@ -58,7 +58,7 @@ Most spec tools give you a slash command and hope you use it. alfred uses Claude
 alfred is deliberately slower than other AI coding tools. Here's why:
 
 - **Self-review loops add time.** Every wave boundary triggers a code review. Findings above Medium must be fixed before proceeding. This means a feature that takes 10 minutes with raw Claude might take 30 with alfred.
-- **Spec-first means planning before coding.** You write requirements and design before implementation. For a quick script, that's overhead. For anything you'll maintain, it's an investment.
+- **Specs mean planning before coding.** When you choose to create a spec, you write requirements and design before implementation. For a quick script, skip it. For anything you'll maintain, it's an investment.
 - **Knowledge accumulation pays off over time.** The first project is the slowest. By the third, alfred surfaces past decisions, avoids repeated mistakes, and generates specs grounded in real experience.
 
 The bet: **time spent on review and knowledge now saves debugging and rework later.**
@@ -100,8 +100,8 @@ You
   v
 Hooks (invisible)
   |-- SessionStart     -> restore context, sync knowledge
-  |-- UserPromptSubmit -> semantic search + skill nudge + spec enforcement
-  |-- PreToolUse       -> spec gate + review gate
+  |-- UserPromptSubmit -> semantic knowledge search
+  |-- PreToolUse       -> review gate
   |-- PostToolUse      -> auto-update progress, living spec, drift detection
   |-- PreCompact       -> snapshot tasks, extract decisions
   |-- Stop             -> review gate block + reminders
@@ -160,7 +160,7 @@ alfred update    # downloads latest binary + dashboard assets from GitHub Releas
 ```
 
 ```
-/plugin update alfred    # update skills, agents, rules (in Claude Code)
+/plugin update alfred    # update skills, agents, hooks (in Claude Code)
 ```
 
 ## Uninstalling

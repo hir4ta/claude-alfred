@@ -1,25 +1,27 @@
 import { createCliRenderer } from "@opentui/core";
-import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
+import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useState, useEffect, useCallback, createElement } from "react";
 import { openDefaultCached } from "../store/index.js";
-import { type TaskInfo, loadTasks, resolveProject } from "./data.js";
+import { type TaskInfo, loadTasks, resolveAllProjects } from "./data.js";
 
-// --- Everforest Dark palette ---
+// --- Gruvbox Material Dark (medium) ---
 const C = {
-	fg: "#d3c6aa",         // primary text
-	fgBright: "#e6ddc4",   // emphasized text
-	fgMuted: "#9da9a0",    // secondary text
-	fgDim: "#5c6a72",      // subtle / disabled
-	accent: "#7fbbb3",     // aqua — active items, focused borders
-	accentBright: "#a7d4cb", // shimmer highlight
-	green: "#a7c080",      // completed tasks
-	yellow: "#dbbc7f",     // in-progress
-	orange: "#e69875",     // wave headers
-	red: "#e67e80",        // closing wave
-	purple: "#d699b6",     // review tasks
-	blue: "#7fbbb3",       // progress bar filled
-	border: "#414b50",     // borders
-	selectedBg: "#343f44", // selected item bg
+	bg: "#282828",
+	bg1: "#32302f",
+	bg3: "#45403d",
+	bg5: "#5a524c",
+	fg: "#d4be98",
+	fg1: "#ddc7a1",
+	red: "#ea6962",
+	orange: "#e78a4e",
+	yellow: "#d8a657",
+	green: "#a9b665",
+	aqua: "#89b482",
+	blue: "#7daea3",
+	purple: "#d3869b",
+	grey0: "#7c6f64",
+	grey1: "#928374",
+	grey2: "#a89984",
 };
 
 // --- Shimmer ---
@@ -33,7 +35,7 @@ function useShimmer(speed = 150) {
 	return frame;
 }
 
-function ShimmerText({ text, baseColor = "#e69875", brightColor = "#f0c5a0", speed = 120, width = 3 }: {
+function ShimmerText({ text, baseColor = C.orange, brightColor = C.yellow, speed = 120, width = 3 }: {
 	text: string; baseColor?: string; brightColor?: string; speed?: number; width?: number;
 }) {
 	const frame = useShimmer(speed);
@@ -57,18 +59,101 @@ function ShimmerText({ text, baseColor = "#e69875", brightColor = "#f0c5a0", spe
 
 // --- Components ---
 
-function ProgressBar({ value, total, width = 20, showPercent = false, color: overrideColor }: { value: number; total: number; width?: number; showPercent?: boolean; color?: string }) {
+function ProgressBar({ value, total, width = 20, showPercent = false, color: overrideColor }: {
+	value: number; total: number; width?: number; showPercent?: boolean; color?: string;
+}) {
 	const pct = total > 0 ? value / total : 0;
 	const filled = Math.round(pct * width);
-	const color = overrideColor ?? (pct >= 1 ? C.green : C.blue);
+	const color = overrideColor ?? (pct >= 1 ? C.green : C.purple);
 	const label = showPercent ? `${Math.round(pct * 100)}%` : `${value}/${total}`;
 
 	return (
 		<text>
 			<span fg={color}>{"━".repeat(filled)}</span>
-			<span fg={C.fgDim}>{"─".repeat(width - filled)}</span>
-			<span fg={C.fgMuted}> {label}</span>
+			<span fg={C.bg5}>{"─".repeat(width - filled)}</span>
+			<span fg={C.grey1}> {label}</span>
 		</text>
+	);
+}
+
+function StatusBadge({ status }: { status: string }) {
+	const map: Record<string, { label: string; fg: string; bg: string }> = {
+		active: { label: " active ", fg: C.bg, bg: C.green },
+		"in-progress": { label: " active ", fg: C.bg, bg: C.green },
+		completed: { label: " done ", fg: C.fg, bg: C.bg5 },
+		cancelled: { label: " cancel ", fg: C.bg, bg: C.red },
+		deferred: { label: " defer ", fg: C.bg, bg: C.yellow },
+	};
+	const { label, fg, bg } = map[status] ?? { label: ` ${status} `, fg: C.bg, bg: C.grey0 };
+	return <text content={label} fg={fg} bg={bg} />;
+}
+
+// --- Header with ASCII title ---
+
+function Header({ projCount, taskCount, filterMode, filterText }: {
+	projCount: number; taskCount: number; filterMode: boolean; filterText: string;
+}) {
+	const { width: cols } = useTerminalDimensions();
+	const wide = cols >= 60;
+
+	return (
+		<box style={{ flexDirection: "column", paddingX: 1 }}>
+			{wide ? (
+				/* ASCII Font title + stats */
+				<box style={{ flexDirection: "row" }}>
+					<ascii-font text="alfred" font="tiny" color={C.aqua} />
+					<box style={{ flexDirection: "column", paddingLeft: 2, justifyContent: "flex-end" }}>
+						<text>
+							<span fg={C.grey1}>{projCount} project{projCount !== 1 ? "s" : ""} · </span>
+							<span fg={C.fg}>{taskCount} spec{taskCount !== 1 ? "s" : ""}</span>
+						</text>
+					</box>
+				</box>
+			) : (
+				/* Compact fallback for narrow terminals */
+				<box style={{ height: 1 }}>
+					<text>
+						<b fg={C.aqua}>alfred</b>
+						<span fg={C.bg5}>{" │ "}</span>
+						<span fg={C.grey1}>{projCount} proj · </span>
+						<span fg={C.fg}>{taskCount} spec{taskCount !== 1 ? "s" : ""}</span>
+					</text>
+				</box>
+			)}
+			{/* Filter bar (only shown when active) */}
+			{filterMode && (
+				<box style={{ height: 1, flexDirection: "row" }}>
+					<text>
+						<span fg={C.yellow}> / </span>
+						<span fg={C.fg1}>{filterText}</span>
+						<span fg={C.grey0}>▎</span>
+					</text>
+				</box>
+			)}
+		</box>
+	);
+}
+
+// --- Project Tabs ---
+
+function ProjectTabs({ projects, selectedIdx, onSelect }: {
+	projects: Array<{ name: string }>; selectedIdx: number; onSelect: (i: number) => void;
+}) {
+	if (projects.length <= 1) return null;
+	return (
+		<box style={{ flexDirection: "row", paddingX: 1, height: 1, gap: 1 }}>
+			{projects.map((p, i) => {
+				const isActive = i === selectedIdx;
+				return (
+					<text
+						key={p.name}
+						content={isActive ? ` ${p.name} ` : ` ${p.name} `}
+						fg={isActive ? C.bg : C.grey1}
+						bg={isActive ? C.aqua : C.bg3}
+					/>
+				);
+			})}
+		</box>
 	);
 }
 
@@ -77,25 +162,36 @@ function ProgressBar({ value, total, width = 20, showPercent = false, color: ove
 function SpecList({ tasks, selectedIdx }: { tasks: TaskInfo[]; selectedIdx: number }) {
 	if (tasks.length === 0) {
 		return (
-			<box style={{ padding: 1 }}>
-				<text fg={C.fgMuted}>No active specs.</text>
+			<box style={{ borderStyle: "rounded", borderColor: C.bg5, flexDirection: "column", flexGrow: 1, padding: 1 }}>
+				<text fg={C.grey1}>No specs found.</text>
 			</box>
 		);
 	}
 
 	return (
-		<box style={{ borderStyle: "rounded", borderColor: C.border, flexDirection: "column", flexGrow: 1, overflow: "hidden" }}>
+		<box style={{ borderStyle: "rounded", borderColor: C.bg5, flexDirection: "column", flexGrow: 1, overflow: "hidden" }}>
 			{tasks.map((task, i) => {
 				const isSelected = i === selectedIdx;
-				const bg = isSelected ? C.selectedBg : undefined;
-				const indicator = isSelected ? "▸ " : "  ";
+				const bg = isSelected ? C.bg3 : undefined;
+				const indicator = isSelected ? "▸" : " ";
 
 				return (
-					<box key={task.slug} style={{ paddingX: 1, paddingY: 1, backgroundColor: bg, flexDirection: "column" }}>
-						<text content={`${indicator}${task.slug}`} fg={isSelected ? C.fgBright : C.fg} />
-						<text content={`  Size: ${task.size}`} fg={C.fgDim} />
-						<box style={{ paddingLeft: 2 }}>
-							<ProgressBar value={task.completed} total={task.total} width={15} showPercent />
+					<box key={`${task.projectName}/${task.slug}`} style={{ paddingX: 1, backgroundColor: bg, flexDirection: "column" }}>
+						{/* Line 1: indicator + spec name */}
+						<box style={{ flexDirection: "row", height: 1 }}>
+							<text content={`${indicator} ${task.slug}`} fg={isSelected ? C.fg1 : C.fg} />
+						</box>
+						{/* Line 2: project name */}
+						<box style={{ paddingLeft: 2, height: 1 }}>
+							<text content={task.projectName} fg={C.grey0} />
+						</box>
+						{/* Line 3: progress */}
+						<box style={{ paddingLeft: 2, height: 1 }}>
+							<ProgressBar value={task.completed} total={task.total} width={10} showPercent />
+						</box>
+						{/* Line 4: status badge */}
+						<box style={{ paddingLeft: 2, height: 1 }}>
+							<StatusBadge status={task.status} />
 						</box>
 					</box>
 				);
@@ -108,80 +204,126 @@ function SpecList({ tasks, selectedIdx }: { tasks: TaskInfo[]; selectedIdx: numb
 
 function SpecDetail({ task, focused }: { task: TaskInfo; focused: boolean }) {
 	return (
-		<box style={{ borderStyle: "rounded", borderColor: focused ? C.accent : C.border, flexDirection: "column", flexGrow: 1 }}>
-		<scrollbox focused={focused} style={{ contentOptions: { flexDirection: "column", padding: 1, gap: 1 } }}>
-			{task.waves.length === 0 && (
-				<box style={{ padding: 1 }}>
-					<text fg={C.fgMuted}>{task.status === "completed" ? "✓ Completed" : task.status === "cancelled" ? "✗ Cancelled" : "No tasks.json"}</text>
+		<box style={{ borderStyle: "rounded", borderColor: focused ? C.aqua : C.bg5, flexDirection: "column", flexGrow: 1, overflow: "hidden" }} title={task.slug}>
+			<scrollbox focused={focused} style={{ contentOptions: { flexDirection: "column", padding: 1, gap: 1 } }}>
+				{/* Spec header */}
+				<box style={{ flexDirection: "row", gap: 1, height: 1 }}>
+					<text content={task.slug} fg={C.fg1} />
+					<StatusBadge status={task.status} />
+					<text content={`${task.size}`} fg={C.grey0} />
+					{task.startedAt && <text content={`started ${task.startedAt.slice(0, 10)}`} fg={C.bg5} />}
 				</box>
-			)}
-			{task.waves.map((wave) => {
-				const done = wave.total > 0 && wave.checked === wave.total;
-				const isCur = wave.isCurrent;
-				const isClosing = wave.key === "closing";
-				const waveLabel = isClosing ? "Closing" : `Wave ${wave.key}`;
-				const headerText = `${waveLabel}: ${wave.title}`;
-				// Color per wave type
-				const waveColor = isClosing ? C.red : done ? C.green : isCur ? C.orange : C.fgMuted;
-				const barColor = isClosing ? C.red : done ? C.green : C.blue;
 
-				return (
-					<box key={wave.key} style={{ flexDirection: "column" }}>
-						{/* Wave header */}
-						{isCur
-							? <ShimmerText text={`▸ ${headerText}`} speed={100} width={4} />
-							: <text content={`  ${headerText}`} fg={waveColor} />
-						}
-						{/* Wave progress */}
-						<box style={{ paddingLeft: 4 }}>
-							<ProgressBar value={wave.checked} total={wave.total} width={20} color={barColor} />
-						</box>
-						{/* Individual tasks */}
-						{wave.tasks && wave.tasks.map((t) => {
-							const isReview = /T-\d+\.R\b/i.test(t.id) || /review|レビュー/i.test(t.label);
-							let icon: string;
-							let color: string;
-							if (t.checked) {
-								icon = "✓";
-								color = isClosing ? C.red : isReview ? C.purple : C.green;
-							} else if (isCur) {
-								icon = "○";
-								color = isReview ? C.purple : C.fg;
-							} else {
-								icon = "·";
-								color = C.fgDim;
+				{/* Overall progress */}
+				<ProgressBar value={task.completed} total={task.total} width={30} showPercent />
+
+				{/* Separator */}
+				<text content={"─".repeat(50)} fg={C.bg5} />
+
+				{task.waves.length === 0 && (
+					<text fg={C.grey1}>
+						{task.status === "completed" ? "✓ Completed" : task.status === "cancelled" ? "✗ Cancelled" : "No tasks.json"}
+					</text>
+				)}
+
+				{task.waves.map((wave) => {
+					const done = wave.total > 0 && wave.checked === wave.total;
+					const isCur = wave.isCurrent;
+					const isClosing = wave.key === "closing";
+					const waveLabel = isClosing ? "Closing" : `Wave ${wave.key}`;
+					const labelColor = isClosing ? C.red : done ? C.green : isCur ? C.orange : C.grey1;
+					const titleColor = isClosing ? C.grey1 : done ? C.grey1 : isCur ? C.fg1 : C.grey0;
+					const barColor = isClosing ? C.red : done ? C.green : C.purple;
+
+					return (
+						<box key={wave.key} style={{ flexDirection: "column" }}>
+							{isCur
+								? <ShimmerText text={`▸ ${waveLabel}: ${wave.title}`} speed={100} width={5} />
+								: (
+									<text>
+										<span fg={labelColor}>{`  ${waveLabel}`}</span>
+										<span fg={titleColor}>{`: ${wave.title}`}</span>
+									</text>
+								)
 							}
-							return (
-								<box key={t.id} style={{ paddingLeft: 4 }}>
-									<text content={`${icon} ${t.label}`} fg={color} />
-								</box>
-							);
-						})}
-					</box>
-				);
-			})}
-		</scrollbox>
+							<box style={{ paddingLeft: 4 }}>
+								<ProgressBar value={wave.checked} total={wave.total} width={20} color={barColor} />
+							</box>
+							{wave.tasks?.map((t) => {
+								let icon: string;
+								let iconColor: string;
+								let idColor: string;
+								let titleColor: string;
+								if (t.checked) {
+									icon = "✓";
+									iconColor = isClosing ? C.grey1 : C.green;
+									idColor = isClosing ? C.grey0 : C.aqua;
+									titleColor = isClosing ? C.grey1 : C.fg;
+								} else if (isCur) {
+									icon = "○";
+									iconColor = C.yellow;
+									idColor = C.aqua;
+									titleColor = C.fg1;
+								} else {
+									icon = "·";
+									iconColor = C.bg5;
+									idColor = C.bg5;
+									titleColor = C.bg5;
+								}
+								const paddedId = t.id.padEnd(7);
+								return (
+									<box key={t.id} style={{ paddingLeft: 4, flexDirection: "row" }}>
+										<text>
+											<span fg={iconColor}>{`${icon} `}</span>
+											<span fg={idColor}>{paddedId}</span>
+										</text>
+										<box style={{ flexShrink: 1 }}>
+											<text content={t.title} fg={titleColor} />
+										</box>
+									</box>
+								);
+							})}
+						</box>
+					);
+				})}
+			</scrollbox>
 		</box>
 	);
 }
 
-// --- App (exported for cli.ts integration) ---
+// --- App ---
 
 export { App };
 
 function App({ showAll = false }: { showAll?: boolean }) {
+	const [allProjects, setAllProjects] = useState<Array<{ path: string; name: string }>>([]);
+	const [projIdx, setProjIdx] = useState(-1); // -1 = all projects
 	const [tasks, setTasks] = useState<TaskInfo[]>([]);
 	const [selectedIdx, setSelectedIdx] = useState(0);
-	const [projName, setProjName] = useState("");
 	const [detailFocused, setDetailFocused] = useState(false);
+	const [filterMode, setFilterMode] = useState(false);
+	const [filterText, setFilterText] = useState("");
 
 	const refresh = useCallback(() => {
 		const store = openDefaultCached();
-		const proj = resolveProject(store);
-		setProjName(proj.name);
-		const allTasks = loadTasks(proj.path, proj.name, { showAll });
-		setTasks(showAll ? allTasks : allTasks.filter((t) => t.status !== "done" && t.status !== "completed" && t.status !== "cancelled"));
-	}, [showAll]);
+		const projects = resolveAllProjects(store);
+		setAllProjects(projects);
+
+		const targetProjects = projIdx === -1 ? projects : projects[projIdx] ? [projects[projIdx]] : projects;
+		const allTasks: TaskInfo[] = [];
+		for (const proj of targetProjects) {
+			allTasks.push(...loadTasks(proj.path, proj.name, { showAll }));
+		}
+
+		let filtered = showAll ? allTasks : allTasks.filter((t) => t.status !== "done" && t.status !== "completed" && t.status !== "cancelled");
+
+		if (filterText) {
+			const q = filterText.toLowerCase();
+			filtered = filtered.filter((t) => t.slug.toLowerCase().includes(q) || t.projectName.toLowerCase().includes(q));
+		}
+
+		setTasks(filtered);
+	}, [showAll, projIdx, filterText]);
 
 	useEffect(() => {
 		refresh();
@@ -195,11 +337,36 @@ function App({ showAll = false }: { showAll?: boolean }) {
 			renderer.destroy();
 			process.exit(0);
 		}
+
+		// Filter mode
+		if (filterMode) {
+			if (key.name === "escape" || key.name === "return") {
+				setFilterMode(false);
+				return;
+			}
+			if (key.name === "backspace") {
+				setFilterText((t) => t.slice(0, -1));
+				return;
+			}
+			if (key.raw && key.raw.length === 1 && key.raw.charCodeAt(0) >= 32) {
+				setFilterText((t) => t + key.raw);
+				return;
+			}
+			return;
+		}
+
+		// Detail scroll mode
 		if (detailFocused) {
-			if (key.name === "escape") {
+			if (key.name === "escape" || key.name === "q") {
 				setDetailFocused(false);
 			}
 			return;
+		}
+
+		// Normal mode
+		if (key.name === "q") {
+			renderer.destroy();
+			process.exit(0);
 		}
 		if (key.name === "j" || key.name === "down") {
 			setSelectedIdx((prev) => Math.min(prev + 1, tasks.length - 1));
@@ -207,40 +374,89 @@ function App({ showAll = false }: { showAll?: boolean }) {
 			setSelectedIdx((prev) => Math.max(prev - 1, 0));
 		} else if (key.name === "return" && tasks.length > 0) {
 			setDetailFocused(true);
+		} else if (key.raw === "/") {
+			setFilterMode(true);
+		} else if (key.name === "tab" && !key.shift) {
+			// Next project tab
+			setProjIdx((i) => {
+				const max = allProjects.length - 1;
+				return i >= max ? -1 : i + 1;
+			});
+			setSelectedIdx(0);
+		} else if (key.name === "tab" && key.shift) {
+			// Prev project tab
+			setProjIdx((i) => {
+				const max = allProjects.length - 1;
+				return i === -1 ? max : i - 1;
+			});
+			setSelectedIdx(0);
 		}
 	});
 
 	const selected = tasks[selectedIdx];
+	const projTabs = [{ name: "all" }, ...allProjects];
+	const activeTabIdx = projIdx + 1; // -1 → 0 (all)
+
+	const helpParts: string[] = [];
+	if (!detailFocused) {
+		helpParts.push("j/k select");
+		helpParts.push("enter detail");
+		helpParts.push("/ filter");
+		if (allProjects.length > 1) helpParts.push("tab project");
+		helpParts.push("q quit");
+	}
+	const helpText = helpParts.join(" · ");
 
 	return (
 		<box style={{ flexDirection: "column", width: "100%", height: "100%" }}>
-			{/* Header */}
-			<box style={{ flexDirection: "row", paddingX: 1, height: 1 }}>
-				<text>
-					<span fg={C.accent}>alfred</span>
-					<span fg={C.fgDim}> · {projName} · </span>
-					<span fg={C.fgMuted}>{tasks.length} active</span>
-					<span fg={C.fgDim}> │ {detailFocused ? "↑↓ scroll · esc back" : "j/k navigate · enter detail"} · ctrl+c quit</span>
-				</text>
+			{/* Header — fixed, never shrinks */}
+			<box style={{ flexShrink: 0 }}>
+				<Header
+					projCount={allProjects.length}
+					taskCount={tasks.length}
+					filterMode={filterMode}
+					filterText={filterText}
+				/>
 			</box>
 
-			{/* 2-column layout */}
-			<box style={{ flexGrow: 1, paddingX: 1, paddingBottom: 1, flexDirection: "row", gap: 1 }}>
-				<box style={{ width: "30%", flexDirection: "column" }}>
+			{/* Project tabs — fixed */}
+			{allProjects.length > 1 && (
+				<box style={{ flexShrink: 0 }}>
+					<ProjectTabs
+						projects={projTabs}
+						selectedIdx={activeTabIdx}
+						onSelect={(i) => { setProjIdx(i - 1); setSelectedIdx(0); }}
+					/>
+				</box>
+			)}
+
+			{/* Main content — fills remaining space, height:0 prevents content from expanding */}
+			<box style={{ height: 0, flexGrow: 1, paddingX: 1, paddingBottom: 1, flexDirection: "row", gap: 1, overflow: "hidden" }}>
+				<box style={{ width: "30%", flexDirection: "column", overflow: "hidden" }}>
 					<SpecList tasks={tasks} selectedIdx={selectedIdx} />
 				</box>
-				<box style={{ width: "70%", flexDirection: "column" }}>
+				<box style={{ width: "70%", flexDirection: "column", overflow: "hidden" }}>
 					{selected
 						? <SpecDetail task={selected} focused={detailFocused} />
-						: <box style={{ padding: 1 }}><text fg={C.fgMuted}>No active specs.</text></box>
+						: (
+							<box style={{ borderStyle: "rounded", borderColor: C.bg5, flexGrow: 1, padding: 2, justifyContent: "center", alignItems: "center" }}>
+								<text fg={C.grey1}>No specs to display.</text>
+								{filterText && <text fg={C.grey0}>Filter: "{filterText}" — press / to search</text>}
+							</box>
+						)
 					}
 				</box>
+			</box>
+
+			{/* Footer — fixed, never shrinks */}
+			<box style={{ flexShrink: 0, paddingX: 1, height: 1 }}>
+				<text content={helpText} fg={C.grey0} />
 			</box>
 		</box>
 	);
 }
 
-// --- Entry point (exported for cli.ts integration) ---
+// --- Entry point ---
 export function runTui(opts?: { showAll?: boolean }) {
 	const showAll = opts?.showAll ?? false;
 	return new Promise<void>((resolve, reject) => {
@@ -267,7 +483,7 @@ export function runTui(opts?: { showAll?: boolean }) {
 	});
 }
 
-// Auto-run when executed directly (e.g. `bun src/tui/main.tsx --all`)
+// Auto-run when executed directly
 if (import.meta.main) {
 	const showAll = process.argv.includes("--all");
 	runTui({ showAll });

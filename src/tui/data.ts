@@ -3,10 +3,12 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseTasksFile } from "../spec/types.js";
 import { Store } from "../store/index.js";
 
 export interface TaskItem {
 	id: string;
+	title: string;
 	label: string;
 	checked: boolean;
 }
@@ -64,17 +66,12 @@ function readCancelState(projPath: string): StateFile {
 
 // --- JSON → WaveInfo conversion ---
 
-interface TasksJson {
-	slug: string;
-	waves: Array<{ key: number | string; title: string; tasks: Array<{ id: string; title: string; checked: boolean }> }>;
-	closing: { key: number | string; title: string; tasks: Array<{ id: string; title: string; checked: boolean }> };
-}
-
-function jsonToWaves(data: TasksJson): WaveInfo[] {
-	const allWaves = [...data.waves, data.closing];
+function jsonToWaves(data: { waves: Array<{ key: number | string; title: string; tasks: Array<{ id: string; title: string; checked: boolean }> }> }): WaveInfo[] {
+	const allWaves = data.waves;
 	const result: WaveInfo[] = allWaves.map(w => {
 		const tasks = w.tasks.map(t => ({
 			id: t.id,
+			title: t.title,
 			label: `${t.id} ${t.title}`,
 			checked: t.checked,
 		}));
@@ -128,7 +125,7 @@ function buildTaskInfo(projPath: string, projName: string, task: TaskEntry): Tas
 
 	try {
 		const raw = readFileSync(join(projPath, ".alfred", "specs", task.slug, "tasks.json"), "utf-8");
-		const data: TasksJson = JSON.parse(raw);
+		const data = parseTasksFile(raw);
 		waves = jsonToWaves(data);
 		for (const w of waves) { completed += w.checked; total += w.total; }
 		const cur = waves.find(w => w.isCurrent);
@@ -155,21 +152,37 @@ function buildTaskInfo(projPath: string, projName: string, task: TaskEntry): Tas
 	};
 }
 
-// --- Project resolution ---
+// --- Project resolution (cross-project) ---
 
-export function resolveProject(store: Store): { path: string; name: string } {
+export function resolveAllProjects(store: Store): Array<{ path: string; name: string }> {
+	const results: Array<{ path: string; name: string }> = [];
+	const seen = new Set<string>();
+
 	const cwd = process.cwd();
-	// Try cwd first — even without DB registration, if .alfred/ exists here, use it
-	if (existsSync(join(cwd, ".alfred", "specs", "_active.json")) || existsSync(join(cwd, ".alfred", "specs"))) {
+	// CWD first if it has .alfred/specs/
+	if (existsSync(join(cwd, ".alfred", "specs"))) {
 		const row = store.db.prepare("SELECT name FROM projects WHERE path = ? LIMIT 1").get(cwd) as { name: string } | undefined;
-		return { path: cwd, name: row?.name ?? cwd.split("/").pop() ?? "project" };
+		results.push({ path: cwd, name: row?.name ?? cwd.split("/").pop() ?? "project" });
+		seen.add(cwd);
 	}
-	// Fall back to DB registered projects
-	const row = store.db.prepare("SELECT id, name, path FROM projects WHERE path = ? AND status = 'active' LIMIT 1").get(cwd) as { id: string; name: string; path: string } | undefined;
-	if (row) return { path: row.path, name: row.name };
-	try {
-		const fallback = store.db.prepare("SELECT id, name, path FROM projects WHERE status = 'active' ORDER BY rowid DESC LIMIT 1").get() as { id: string; name: string; path: string } | undefined;
-		if (fallback) return { path: fallback.path, name: fallback.name };
-	} catch { /* last_seen_at may not exist */ }
-	return { path: cwd, name: cwd.split("/").pop() ?? "unknown" };
+
+	// All active DB projects that have .alfred/specs/
+	const rows = store.db
+		.prepare("SELECT name, path FROM projects WHERE status = 'active' ORDER BY last_seen_at DESC")
+		.all() as Array<{ name: string; path: string }>;
+	for (const row of rows) {
+		if (seen.has(row.path)) continue;
+		if (existsSync(join(row.path, ".alfred", "specs"))) {
+			results.push({ path: row.path, name: row.name });
+			seen.add(row.path);
+		}
+	}
+
+	return results;
+}
+
+/** @deprecated Use resolveAllProjects for cross-project support */
+export function resolveProject(store: Store): { path: string; name: string } {
+	const all = resolveAllProjects(store);
+	return all[0] ?? { path: process.cwd(), name: process.cwd().split("/").pop() ?? "unknown" };
 }

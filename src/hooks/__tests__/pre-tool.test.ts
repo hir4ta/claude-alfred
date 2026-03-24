@@ -85,9 +85,8 @@ describe("preToolUse", () => {
 		expect(getDecision()).toBe("allow");
 	});
 
-	it("allows Edit with advisory when no active spec (#19: prompt hook removed)", async () => {
+	it("allows Edit silently when no active spec (user-initiated spec creation)", async () => {
 		await preToolUse(makeEvent("Edit", join(tmpDir, "src/index.ts")));
-		// Now emits allowTool() with advisory — prompt hook no longer exists
 		expect(getDecision()).toBe("allow");
 	});
 

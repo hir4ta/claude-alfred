@@ -46,9 +46,47 @@ export interface SpecWave {
 
 export interface TasksFile {
 	slug: string;
-	waves: SpecWave[];
-	closing: SpecWave;
+	waves: SpecWave[]; // includes closing wave (key === "closing")
 	dependency_graph?: Record<string, string[]>;
+}
+
+/**
+ * Parse raw JSON into a normalized TasksFile.
+ * Handles both formats:
+ *   - New: closing wave inside waves array (key === "closing")
+ *   - Legacy: closing as separate top-level field
+ * Always returns closing wave as the last element of waves[].
+ */
+export function parseTasksFile(raw: string): TasksFile {
+	const data = JSON.parse(raw);
+	const waves: SpecWave[] = Array.isArray(data.waves) ? data.waves : [];
+
+	// Legacy format: closing as separate field → merge into waves
+	const hasClosingInWaves = waves.some((w) => w.key === "closing");
+	if (!hasClosingInWaves && data.closing && typeof data.closing === "object") {
+		waves.push({ ...data.closing, key: "closing" });
+	}
+
+	return {
+		slug: data.slug ?? "",
+		waves,
+		dependency_graph: data.dependency_graph,
+	};
+}
+
+/** Get the closing wave, or undefined if missing. */
+export function closingWave(data: TasksFile): SpecWave | undefined {
+	return data.waves.find((w) => w.key === "closing");
+}
+
+/** Get implementation waves (everything except closing). */
+export function implWaves(data: TasksFile): SpecWave[] {
+	return data.waves.filter((w) => w.key !== "closing");
+}
+
+/** Get all tasks across all waves (including closing). */
+export function allTasks(data: TasksFile): SpecTask[] {
+	return data.waves.flatMap((w) => w.tasks);
 }
 
 export interface TestScenario {

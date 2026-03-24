@@ -20,7 +20,7 @@ paths:
 - Knowledge search: Voyage vector search → FTS5 fallback → keyword fallback
 - Intent classification: Haiku via Anthropic Messages API (ANTHROPIC_API_KEY required, fail-open without key). Runs in parallel with knowledge search
 - 7 intents (research/plan/implement/bugfix/review/tdd/save-knowledge) → skill suggestion via additionalContext
-- Spec proposal (Stage 1): no active spec + implementation keywords → DIRECTIVE requiring AskUserQuestion. Guard resets per session
+- Spec creation is user-initiated (no auto-proposal). Removed: Stage 1 spec proposal DIRECTIVE
 - Parallel dev guard (Stage 1.5): active spec exists + implementation keywords + slug NOT in worked-slugs → WARNING
 
 ## PostToolUse
@@ -44,7 +44,7 @@ paths:
 - Enforcement order: .alfred/ exempt → gate-exempt paths (docs/, .md, .claude/, project-external) → malformed check → review-gate → allow
 - Gate clear: `dossier action=gate sub_action=clear reason="..."` (reason required)
 - Gate fix mode: `dossier action=gate sub_action=fix reason="..."` — switches gate to `fix_mode: true`, allowing Edit/Write for applying fixes while keeping gate logically active
-- Spec-first guard: no active spec → advisory warning + allowTool. Spec proposal is via UserPromptSubmit CONTEXT
+- No active spec → silent allowTool (spec creation is user-initiated, no advisory)
 - Active spec optimization: command handler calls `allowTool()` when spec exists and all gates pass
 
 ## Stop (review gate + session scope)

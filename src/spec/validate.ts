@@ -1,4 +1,4 @@
-import { SpecDir, filesForSize } from "./types.js";
+import { SpecDir, allTasks as getAllTasks, closingWave, filesForSize, parseTasksFile } from "./types.js";
 import type { SpecFile, SpecSize, SpecType, TasksFile, TestSpecsFile } from "./types.js";
 
 export interface ValidationCheck {
@@ -96,13 +96,14 @@ export function validateSpec(
 	const researchContent = readFile("research.md") ?? "";
 
 	// JSON files
-	const tasksData = readJsonFile<TasksFile>(sd, "tasks.json");
+	let tasksData: TasksFile | null = null;
+	try { tasksData = parseTasksFile(sd.readFile("tasks.json")); } catch { /* missing */ }
 	const testSpecsData = readJsonFile<TestSpecsFile>(sd, "test-specs.json");
 
 	// Collect all task requirements from JSON
-	const allTasks = tasksData ? [...tasksData.waves.flatMap(w => w.tasks), ...(tasksData.closing?.tasks ?? [])] : [];
-	const allTaskFRs = new Set(allTasks.flatMap(t => t.requirements ?? []));
-	const allTaskIDs = allTasks.map(t => t.id);
+	const allTasksList = tasksData ? getAllTasks(tasksData) : [];
+	const allTaskFRs = new Set(allTasksList.flatMap(t => t.requirements ?? []));
+	const allTaskIDs = allTasksList.map(t => t.id);
 
 	// ---- 2. min_fr_count ----
 	if (specType === "bugfix") {
@@ -152,7 +153,7 @@ export function validateSpec(
 
 	// ---- 5. task_to_fr ----
 	if (expectedFiles.includes("tasks.json") && specType !== "bugfix") {
-		const tasksWithFR = allTasks.filter(t => !t.id.startsWith("T-C.") && !t.id.match(/T-\d+\.R/i));
+		const tasksWithFR = allTasksList.filter(t => !t.id.startsWith("T-C.") && !t.id.match(/T-\d+\.R/i));
 		const orphanTasks = tasksWithFR.filter(t => !t.requirements || t.requirements.length === 0);
 		checks.push(
 			orphanTasks.length === 0
@@ -186,7 +187,7 @@ export function validateSpec(
 	// ---- 8. closing_wave ----
 	if (expectedFiles.includes("tasks.json")) {
 		checks.push(
-			tasksData?.closing
+			tasksData && closingWave(tasksData)
 				? { name: "closing_wave", status: "pass", message: "Closing wave found in tasks.json" }
 				: { name: "closing_wave", status: "fail", message: "No closing wave in tasks.json" },
 		);
@@ -232,7 +233,7 @@ export function validateSpec(
 	// ---- 11. orphan_tasks ----
 	if (expectedFiles.includes("tasks.json") && tasksData && specType !== "bugfix") {
 		const frIDs = new Set(extractIDs(primaryContent, ID.FR));
-		const orphans = allTasks
+		const orphans = allTasksList
 			.filter(t => !t.id.startsWith("T-C.") && !t.id.match(/T-\d+\.R/i))
 			.filter(t => {
 				const refs = t.requirements ?? [];
@@ -261,7 +262,7 @@ export function validateSpec(
 		// 13. nfr_traceability
 		if (specType !== "bugfix") {
 			const nfrIDs = extractIDs(primaryContent, ID.NFR);
-			const taskNFRs = new Set(allTasks.flatMap(t => (t.requirements ?? []).filter(r => r.startsWith("NFR-"))));
+			const taskNFRs = new Set(allTasksList.flatMap(t => (t.requirements ?? []).filter(r => r.startsWith("NFR-"))));
 			const unreferencedNFR = nfrIDs.filter(n => !taskNFRs.has(n));
 			checks.push(
 				unreferencedNFR.length === 0 || nfrIDs.length === 0

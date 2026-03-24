@@ -6,8 +6,11 @@ import { updateTaskStatus } from "../../spec/status.js";
 import type { SpecSize, SpecType, TasksFile } from "../../spec/types.js";
 import {
 	cancelTask,
+	closingWave,
 	completeTask,
 	effectiveStatus,
+	implWaves,
+	parseTasksFile,
 	readActive,
 	readActiveState,
 	SpecDir,
@@ -79,7 +82,7 @@ export async function dossierComplete(projectPath: string, store: Store, params:
 	// Check ALL wave tasks — DENY if unchecked items remain (#24).
 	try {
 		const sd = new SpecDir(projectPath, taskSlug);
-		const tasksData: TasksFile = JSON.parse(sd.readFile("tasks.json"));
+		const tasksData = parseTasksFile(sd.readFile("tasks.json"));
 		const wavesError = checkAllWaveTasks(tasksData);
 		if (wavesError) return errorResult(`task completion gate: ${wavesError}`);
 		const closingError = checkClosingWave(tasksData);
@@ -118,13 +121,12 @@ export async function dossierComplete(projectPath: string, store: Store, params:
 }
 
 /**
- * Check that ALL Wave tasks (excluding Closing Wave) are checked.
- * JSON-based: reads tasks.json directly.
+ * Check that ALL implementation Wave tasks (excluding Closing) are checked.
  */
 function checkAllWaveTasks(tasksData: TasksFile): string | undefined {
 	const uncheckedByWave: Array<{ wave: string; count: number }> = [];
 
-	for (const wave of tasksData.waves) {
+	for (const wave of implWaves(tasksData)) {
 		const unchecked = wave.tasks.filter(t => !t.checked).length;
 		if (unchecked > 0) {
 			uncheckedByWave.push({ wave: `${wave.title}`, count: unchecked });
@@ -140,14 +142,14 @@ function checkAllWaveTasks(tasksData: TasksFile): string | undefined {
 
 /**
  * Check that ALL Closing Wave items are checked.
- * JSON-based: reads tasks.json closing field.
  */
 function checkClosingWave(tasksData: TasksFile): string | undefined {
-	if (!tasksData.closing) {
+	const cw = closingWave(tasksData);
+	if (!cw) {
 		return "No Closing wave found in tasks.json.";
 	}
 
-	const unchecked = tasksData.closing.tasks.filter(t => !t.checked);
+	const unchecked = cw.tasks.filter(t => !t.checked);
 	if (unchecked.length > 0) {
 		const items = unchecked.map(t => t.title).join(", ");
 		return `Closing Wave has ${unchecked.length} unchecked item(s): ${items}. Check all items via \`dossier action=check task_id="T-C.N"\` before completing.`;
@@ -305,17 +307,16 @@ export function dossierCheck(projectPath: string, params: DossierParams) {
 	const sd = new SpecDir(projectPath, taskSlug);
 	let tasksData: TasksFile;
 	try {
-		tasksData = JSON.parse(sd.readFile("tasks.json"));
+		tasksData = parseTasksFile(sd.readFile("tasks.json"));
 	} catch {
 		return errorResult("tasks.json not found or invalid");
 	}
 
-	// Find the task by ID across all waves + closing
-	const allWaves = [...tasksData.waves, tasksData.closing];
+	// Find the task by ID across all waves (including closing)
 	let found = false;
 	let alreadyChecked = false;
 
-	for (const wave of allWaves) {
+	for (const wave of tasksData.waves) {
 		for (const task of wave.tasks) {
 			if (task.id.toLowerCase() === taskId.toLowerCase()) {
 				if (task.checked) {
@@ -342,7 +343,7 @@ export function dossierCheck(projectPath: string, params: DossierParams) {
 
 	// Detect wave completion
 	const waveMessages: string[] = [];
-	for (const wave of allWaves) {
+	for (const wave of tasksData.waves) {
 		if (wave.tasks.every(t => t.checked) && wave.tasks.length > 0) {
 			const label = wave.key === "closing" ? "Closing" : `Wave ${wave.key}`;
 			const total = wave.tasks.length;
