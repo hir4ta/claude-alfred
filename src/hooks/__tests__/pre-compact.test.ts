@@ -3,25 +3,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Store } from "../../store/index.js";
+import * as storeModule from "../../store/index.js";
 import { suppressIO } from "../../__tests__/test-utils.js";
 
 let tmpDir: string;
 let store: Store;
 
-vi.mock("../../store/index.js", async (importOriginal) => {
-	const mod = await importOriginal<typeof import("../../store/index.js")>();
-	return {
-		...mod,
-		openDefaultCached: () => store,
-	};
-});
-
 beforeEach(() => {
 	tmpDir = mkdtempSync(join(tmpdir(), "pre-compact-test-"));
 	store = Store.open(join(tmpDir, "test.db"));
+	vi.spyOn(storeModule, "openDefaultCached").mockReturnValue(store);
 });
 
 afterEach(() => {
+	vi.restoreAllMocks();
 	store.close();
 	rmSync(tmpDir, { recursive: true, force: true });
 });

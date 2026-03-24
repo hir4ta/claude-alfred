@@ -100,7 +100,10 @@ describe("validateSpec — negative tests (bad specs should fail)", () => {
 
 	it("fails spec missing closing wave", () => {
 		initSpec("test-noclosing", "M", "feature", {
-			"tasks.md": "# Tasks\n## Wave 1\n### T-1.1: Do something\n- Requirements: FR-1\n",
+			"tasks.json": JSON.stringify({
+				slug: "test-noclosing",
+				waves: [{ key: 1, title: "Wave 1", tasks: [{ id: "T-1.1", title: "Do something", checked: false, requirements: ["FR-1"] }] }],
+			}),
 		});
 		const result = validateSpec(tmpDir, "test-noclosing", "M", "feature");
 		const check = result.checks.find((c) => c.name === "closing_wave");
@@ -121,12 +124,18 @@ describe("validateSpec — negative tests (bad specs should fail)", () => {
 		expect(check?.message).toContain("FR-3");
 	});
 
-	it("passes task_to_fr with checkbox format tasks.md", () => {
+	it("passes task_to_fr with tasks.json format", () => {
 		initSpec("test-checkbox-fmt", "M", "feature", {
 			"requirements.md":
 				"# Requirements\n## Functional Requirements\n### FR-1: A\n### FR-2: B\n## Non-Functional Requirements\n",
-			"tasks.md":
-				"# Tasks\n## Wave 1\n- [x] T-1.1 [S] Do A\n  _Requirements: FR-1 | Files: src/a.ts_\n- [ ] T-1.2 [S] Do B\n  _Requirements: FR-2 | Files: src/b.ts_\n## Wave: Closing\n- [ ] T-C.1 Review\n",
+			"tasks.json": JSON.stringify({
+				slug: "test-checkbox-fmt",
+				waves: [{ key: 1, title: "Wave 1", tasks: [
+					{ id: "T-1.1", title: "Do A", checked: true, requirements: ["FR-1"] },
+					{ id: "T-1.2", title: "Do B", checked: false, requirements: ["FR-2"] },
+				] }],
+				closing: { key: "closing", title: "Closing", tasks: [{ id: "T-C.1", title: "Review", checked: false }] },
+			}),
 		});
 		const result = validateSpec(tmpDir, "test-checkbox-fmt", "M", "feature");
 		const frToTask = result.checks.find((c) => c.name === "fr_to_task");
@@ -135,12 +144,18 @@ describe("validateSpec — negative tests (bad specs should fail)", () => {
 		expect(taskToFr?.status).toBe("pass");
 	});
 
-	it("passes task_to_fr with inline FR reference on checkbox line", () => {
+	it("passes task_to_fr with requirements array in tasks.json", () => {
 		initSpec("test-inline-fr", "M", "feature", {
 			"requirements.md":
 				"# Requirements\n## Functional Requirements\n### FR-1: A\n### FR-2: B\n### FR-3: C\n## Non-Functional Requirements\n",
-			"tasks.md":
-				"# Tasks\n## Wave 1\n- [ ] T-1.1 (FR-1, FR-2): Do A and B\n- [ ] T-1.2 (FR-3): Do C\n## Wave: Closing\n- [ ] T-C.1 Review\n",
+			"tasks.json": JSON.stringify({
+				slug: "test-inline-fr",
+				waves: [{ key: 1, title: "Wave 1", tasks: [
+					{ id: "T-1.1", title: "Do A and B", checked: false, requirements: ["FR-1", "FR-2"] },
+					{ id: "T-1.2", title: "Do C", checked: false, requirements: ["FR-3"] },
+				] }],
+				closing: { key: "closing", title: "Closing", tasks: [{ id: "T-C.1", title: "Review", checked: false }] },
+			}),
 		});
 		const result = validateSpec(tmpDir, "test-inline-fr", "M", "feature");
 		const taskToFr = result.checks.find((c) => c.name === "task_to_fr");
@@ -153,8 +168,14 @@ describe("validateSpec — negative tests (bad specs should fail)", () => {
 		initSpec("test-task-nofr", "M", "feature", {
 			"requirements.md":
 				"# Requirements\n## Functional Requirements\n### FR-1: A\n## Non-Functional Requirements\n",
-			"tasks.md":
-				"# Tasks\n## Wave 1\n### T-1.1: Do A\n- Requirements: FR-1\n### T-1.2: Do B\n- No requirements here\n## Wave: Closing\n- [ ] Review\n",
+			"tasks.json": JSON.stringify({
+				slug: "test-task-nofr",
+				waves: [{ key: 1, title: "Wave 1", tasks: [
+					{ id: "T-1.1", title: "Do A", checked: false, requirements: ["FR-1"] },
+					{ id: "T-1.2", title: "Do B", checked: false, requirements: [] },
+				] }],
+				closing: { key: "closing", title: "Closing", tasks: [{ id: "T-C.1", title: "Review", checked: false }] },
+			}),
 		});
 		const normal = validateSpec(tmpDir, "test-task-nofr", "M", "feature");
 		const check = normal.checks.find((c) => c.name === "task_to_fr");

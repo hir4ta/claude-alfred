@@ -311,6 +311,7 @@ const main = defineCommand({
 			meta: { description: "Show active specs in TUI" },
 			async run() {
 				try {
+					// @ts-ignore — tui/main.tsx uses OpenTUI JSX (separate tsconfig)
 					const { runTui } = await import("./tui/main.js");
 					await runTui({ showAll: false });
 				} catch (err: unknown) {
@@ -329,6 +330,7 @@ const main = defineCommand({
 			meta: { description: "Show all specs in TUI (including completed)" },
 			async run() {
 				try {
+					// @ts-ignore — tui/main.tsx uses OpenTUI JSX (separate tsconfig)
 					const { runTui } = await import("./tui/main.js");
 					await runTui({ showAll: true });
 				} catch (err: unknown) {

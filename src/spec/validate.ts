@@ -100,7 +100,7 @@ export function validateSpec(
 	const testSpecsData = readJsonFile<TestSpecsFile>(sd, "test-specs.json");
 
 	// Collect all task requirements from JSON
-	const allTasks = tasksData ? [...tasksData.waves.flatMap(w => w.tasks), ...tasksData.closing.tasks] : [];
+	const allTasks = tasksData ? [...tasksData.waves.flatMap(w => w.tasks), ...(tasksData.closing?.tasks ?? [])] : [];
 	const allTaskFRs = new Set(allTasks.flatMap(t => t.requirements ?? []));
 	const allTaskIDs = allTasks.map(t => t.id);
 

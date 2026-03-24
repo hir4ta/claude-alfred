@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { readActiveState } from "../spec/types.js";
+import { readActiveState, parseSize } from "../spec/types.js";
 
 interface SpecState {
 	slug: string;
@@ -14,6 +14,12 @@ function parseSpecState(cwd: string): SpecState | null {
 	if (!state.primary) return null;
 	const task = state.tasks.find((t) => t.slug === state.primary);
 	if (!task) return null;
+	// Validate size — legacy D/XL are treated as malformed (hard error)
+	try {
+		parseSize(task.size ?? "M");
+	} catch {
+		return null;
+	}
 	return {
 		slug: state.primary,
 		status: task.status ?? "pending",
