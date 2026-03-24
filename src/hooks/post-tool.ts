@@ -372,16 +372,21 @@ function markReReviewedIfFixMode(projectPath: string, toolResponse: unknown): vo
 		if (!gate?.fix_mode || gate.re_reviewed) return;
 
 		// Check if the agent response looks like a review result.
+		// Require at least 1 structural pattern AND 1 severity pattern to avoid false positives.
 		const text = typeof toolResponse === "string"
 			? toolResponse
 			: JSON.stringify(toolResponse);
-		const reviewPatterns = [
-			/\bcritical\b/i, /\bhigh\b/i, /\bmedium\b/i, /\blow\b/i,
+		const structuralPatterns = [
 			/\bfinding/i, /\bverdict/i, /\breview\s+summary/i,
-			/PASS|NEEDS\s+FIX/i,
+			/PASS\s+(WITH\s+)?WARNING/i, /NEEDS\s+FIX/i,
+			/\breview\b.*\bcomplete/i, /\d+\s+critical/i,
 		];
-		const matchCount = reviewPatterns.filter((p) => p.test(text)).length;
-		if (matchCount < 2) return; // Need at least 2 patterns to confirm it's a review
+		const severityPatterns = [
+			/\bcritical\b/i, /\bhigh\b/i, /\bmedium\b/i, /\blow\b/i,
+		];
+		const hasStructural = structuralPatterns.some((p) => p.test(text));
+		const hasSeverity = severityPatterns.some((p) => p.test(text));
+		if (!hasStructural || !hasSeverity) return;
 
 		gate.re_reviewed = true;
 		gate.re_reviewed_at = new Date().toISOString();

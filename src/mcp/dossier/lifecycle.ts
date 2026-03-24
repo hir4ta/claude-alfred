@@ -264,6 +264,8 @@ export function dossierGate(projectPath: string, params: DossierParams) {
 				...gate,
 				fix_mode: true,
 				fix_mode_at: new Date().toISOString(),
+				re_reviewed: false,
+				re_reviewed_at: undefined,
 				reason: `[fix_mode] ${fixReason} (original: ${gate.reason})`,
 			});
 
