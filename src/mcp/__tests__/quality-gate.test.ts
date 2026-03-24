@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkActionability } from "../quality-gate.js";
+import { checkActionability, qualityGate } from "../quality-gate.js";
 
 describe("checkActionability", () => {
 	describe("decision", () => {
@@ -109,4 +109,54 @@ describe("checkActionability", () => {
 			expect(result).toBeNull();
 		});
 	});
+});
+
+describe("qualityGate", () => {
+	it("returns only actionability warning when emb is null (NFR-2)", async () => {
+		const result = await qualityGate(
+			null as any, // store not needed when emb is null
+			null, // no embedder
+			"test text",
+			'{"title":"test"}',
+			"decision",
+			{ title: "概要説明", reasoning: "理由の記述" },
+		);
+		// No duplicate/contradiction checks without embedder
+		expect(result.embedding).toBeNull();
+		expect(result.similarExisting).toEqual([]);
+		// Actionability check still runs — "概要説明" + "理由の記述" has no action words
+		expect(result.warnings.some((w) => w.type === "low_actionability")).toBe(true);
+	});
+
+	it("returns no warnings when emb is null and actionable (NFR-2)", async () => {
+		const result = await qualityGate(
+			null as any,
+			null,
+			"test text",
+			'{"title":"test"}',
+			"rule",
+			{ title: "テストでは実DBを使用する", text: "常に実DBを使用すること" },
+		);
+		expect(result.warnings).toEqual([]);
+		expect(result.embedding).toBeNull();
+	});
+
+	it("handles embedder timeout gracefully (NFR-1)", async () => {
+		const slowEmbedder = {
+			model: "test-model",
+			embedForStorage: () => new Promise<number[]>((resolve) => setTimeout(() => resolve([1, 2, 3]), 5000)),
+		};
+		const result = await qualityGate(
+			null as any, // store won't be reached due to timeout
+			slowEmbedder as any,
+			"test",
+			'{"title":"test"}',
+			"rule",
+			{ title: "テスト設定", text: "設定すること" },
+		);
+		// Should timeout and fall back — no embedding, no duplicate warnings
+		expect(result.embedding).toBeNull();
+		// Only actionability (which passes here)
+		expect(result.warnings.filter((w) => w.type === "near_duplicate")).toEqual([]);
+	}, 6000);
 });

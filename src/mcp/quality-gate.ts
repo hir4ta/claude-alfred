@@ -1,5 +1,5 @@
 import type { Embedder } from "../embedder/index.js";
-import { classifyConflict, searchKnowledgeFTS } from "../store/fts.js";
+import { classifyConflict } from "../store/fts.js";
 import type { Store } from "../store/index.js";
 import { getKnowledgeByID } from "../store/knowledge.js";
 import { vectorSearchKnowledge } from "../store/vectors.js";
@@ -102,6 +102,10 @@ export async function qualityGate(
 							message: `類似度 ${(match.score * 100).toFixed(0)}% の既存ナレッジあり`,
 							related: { id: doc.id, title: doc.title, similarity: match.score },
 						});
+						// Near-duplicates are added to similarExisting but skip contradiction check
+						// (contradiction is meaningless for nearly identical content).
+						similarExisting.push({ id: doc.id, title: doc.title, similarity: match.score });
+						continue;
 					}
 
 					if (match.score >= SIMILAR_THRESHOLD) {
@@ -183,8 +187,11 @@ export function checkActionability(
 // --- Helpers ---
 
 function rejectAfter<T>(promise: Promise<T>, ms: number): Promise<T> {
+	let timer: ReturnType<typeof setTimeout>;
 	return Promise.race([
-		promise,
-		new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+		promise.finally(() => clearTimeout(timer)),
+		new Promise<never>((_, reject) => {
+			timer = setTimeout(() => reject(new Error("timeout")), ms);
+		}),
 	]);
 }
