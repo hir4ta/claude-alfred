@@ -29,14 +29,11 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 
 	}
 
-	// Track worked slug + auto-check tasks + auto-transition for Edit/Write.
+	// Track worked slug + auto-transition for Edit/Write.
+	// Task completion is now handled by the PostToolUse agent hook (FR-3/FR-4).
 	if ((ev.tool_name === "Edit" || ev.tool_name === "Write") && ev.tool_input) {
 		const input = ev.tool_input as Record<string, unknown>;
 		const filePath = typeof input.file_path === "string" ? input.file_path : "";
-		// Auto-check tasks when file matches task description.
-		if (filePath) {
-			autoCheckTasks(ev.cwd!, filePath, items);
-		}
 		// Track worked slug for session-scoped Stop hook reminders.
 		try {
 			const slug = readActive(ev.cwd!);
@@ -103,12 +100,7 @@ async function handleBashResult(
 	// On Bash success: auto-check tasks + check for git commit.
 	if (response.exitCode === 0) {
 		const stdout = response.stdout ?? "";
-		// Auto-check tasks from Bash output (command + stdout).
-		const commandStr =
-			typeof ev.tool_input === "object" && ev.tool_input !== null
-				? ((ev.tool_input as { command?: string }).command ?? "")
-				: "";
-		autoCheckTasks(ev.cwd!, `${stdout}\n${commandStr}`, items);
+		// Task completion is now handled by the PostToolUse agent hook (FR-3/FR-4).
 
 		if (isGitCommit(stdout) && !signal.aborted) {
 			// FR-2 (feedback-metrics): Track first commit for cycle time breakdown.
@@ -175,82 +167,6 @@ async function searchErrorContext(
 }
 
 
-/**
- * Auto-check tasks.json tasks when implementation matches task descriptions.
- * Uses file path matching against task.files and task.title.
- */
-function autoCheckTasks(projectPath: string, context: string, items: DirectiveItem[]): void {
-	try {
-		const taskSlug = readActive(projectPath);
-		const sd = new SpecDir(projectPath, taskSlug);
-
-		let tasksData: { waves: Array<{ tasks: Array<{ id: string; title: string; checked: boolean; files?: string[] }> }>; closing: { tasks: Array<{ id: string; title: string; checked: boolean; files?: string[] }> } };
-		try {
-			tasksData = JSON.parse(sd.readFile("tasks.json"));
-		} catch {
-			return; // no tasks.json
-		}
-
-		let changed = false;
-		const allWaves = [...tasksData.waves, tasksData.closing];
-
-		for (const wave of allWaves) {
-			for (const task of wave.tasks) {
-				if (task.checked) continue;
-				if (matchTaskDescription(task.title, context) || matchTaskFiles(task.files, context)) {
-					task.checked = true;
-					changed = true;
-				}
-			}
-		}
-
-		if (changed) {
-			sd.writeFile("tasks.json", JSON.stringify(tasksData, null, 2) + "\n");
-			// Detect wave completion after auto-check.
-			const waveItems = detectWaveCompletion(projectPath, taskSlug);
-			items.push(...waveItems);
-		}
-		// #27 fix: Do NOT emit unchecked count CONTEXT here.
-		// Unchecked task nudges caused Claude to stall on large specs (14+ min bake).
-	} catch {
-		/* fail-open */
-	}
-}
-
-/**
- * Match a task description against context (stdout/file path).
- * Strategies:
- * 1. Backtick-quoted paths in description matched against context
- * 2. Filename matching (extension-bearing words matched against context)
- */
-export function matchTaskDescription(description: string, context: string): boolean {
-	if (!context || !description) return false;
-	const lowerCtx = context.toLowerCase();
-
-	const backtickPaths = description.match(/`([^`]+\.[a-z]+)`/g);
-	if (backtickPaths) {
-		for (const quoted of backtickPaths) {
-			const path = quoted.slice(1, -1);
-			if (lowerCtx.includes(path.toLowerCase())) return true;
-		}
-	}
-
-	const filenamePattern = /\b([\w.-]+\.[a-z]{1,4})\b/gi;
-	const filenames = [...description.matchAll(filenamePattern)]
-		.map(m => m[1]!.toLowerCase())
-		.filter(f => f.length > 4 && !f.startsWith("."));
-	for (const fname of filenames) {
-		if (lowerCtx.includes(fname)) return true;
-	}
-
-	return false;
-}
-
-function matchTaskFiles(files: string[] | undefined, context: string): boolean {
-	if (!files || !context) return false;
-	const lowerCtx = context.toLowerCase();
-	return files.some(f => lowerCtx.includes(f.toLowerCase()));
-}
 
 /**
  * Detect wave completion after tasks.json update.
