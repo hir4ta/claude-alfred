@@ -362,29 +362,33 @@ export function dossierCheck(projectPath: string, params: DossierParams) {
 			return errorResult(`task_id "${taskId}" not found: Closing Wave has only ${closingIndex} item(s)`);
 		}
 	} else {
-		// Standard T-N.N format: match by text inclusion in checkbox line.
-		// Also supports T-N.R: find `### T-N.R` header → check the first checkbox below it.
+		// T-N.R format: find `### T-N.R` header → check ALL checkboxes below it.
+		// Fallback: match checkbox line containing T-N.R text.
 		const reviewHeaderMatch = taskId.match(/^T-\d+\.R$/i);
 		if (reviewHeaderMatch) {
 			const headerPattern = new RegExp(`^###\\s+${taskId.replace(".", "\\.")}\\b`, "i");
 			let foundHeader = false;
+			let allAlreadyChecked = true;
 			for (let i = 0; i < lines.length; i++) {
 				const line = lines[i]!;
 				if (headerPattern.test(line)) {
 					foundHeader = true;
 					continue;
 				}
+				if (foundHeader && /^##[# ]/.test(line)) break; // Left section
 				if (foundHeader && /^- \[ \] /.test(line)) {
 					lines[i] = line.replace("- [ ]", "- [x]");
 					checked = true;
-					break;
+					allAlreadyChecked = false;
 				}
 				if (foundHeader && /^- \[[xX]\] /.test(line)) {
-					return jsonResult({ task_id: taskId, status: "already_checked" });
+					// Already checked — continue to find unchecked ones
 				}
-				if (foundHeader && /^##[# ]/.test(line)) break; // Left section
 			}
-			if (!checked && !foundHeader) {
+			if (foundHeader && !checked && allAlreadyChecked) {
+				return jsonResult({ task_id: taskId, status: "already_checked" });
+			}
+			if (!foundHeader) {
 				// Fallback: T-N.R written as checkbox line instead of header (e.g. "- [ ] T-1.R ...")
 				for (let i = 0; i < lines.length; i++) {
 					const line = lines[i]!;
