@@ -364,7 +364,7 @@ const main = defineCommand({
 						const alternatives = (args.alternatives ?? "").slice(0, 1000);
 
 						// Build DecisionEntry JSON
-						const id = `dec-compact-${Date.now()}`;
+						const id = `dec-compact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 						const entry = {
 							id,
 							title,
