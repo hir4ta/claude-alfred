@@ -8,7 +8,6 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
-import { parse, stringify } from "yaml";
 
 export type SpecFile =
 	| "requirements.md"
@@ -19,6 +18,7 @@ export type SpecFile =
 	| "research.md"
 	| "session.md"
 	| "bugfix.md";
+
 export type SpecSize = "S" | "M" | "L";
 export type SpecType = "feature" | "bugfix";
 
@@ -70,6 +70,10 @@ export interface ActiveState {
 	tasks: ActiveTask[];
 }
 
+export interface TerminalState {
+	tasks: ActiveTask[];
+}
+
 export interface Section {
 	file: SpecFile;
 	content: string;
@@ -115,15 +119,20 @@ export function filesForSize(size: SpecSize, specType: SpecType): SpecFile[] {
 	}
 }
 
-// Path helpers
-export function rootDir(projectPath: string): string {
+export function alfredDir(projectPath: string): string {
 	return join(projectPath, ".alfred");
 }
 export function specsDir(projectPath: string): string {
 	return join(projectPath, ".alfred", "specs");
 }
 export function activePath(projectPath: string): string {
-	return join(projectPath, ".alfred", "specs", "_active.md");
+	return join(projectPath, ".alfred", "specs", "_active.json");
+}
+export function completePath(projectPath: string): string {
+	return join(projectPath, ".alfred", "specs", "_complete.json");
+}
+export function cancelPath(projectPath: string): string {
+	return join(projectPath, ".alfred", "specs", "_cancel.json");
 }
 
 export class SpecDir {
@@ -200,52 +209,114 @@ export class SpecDir {
 	}
 }
 
-// _active.md management
+// --- JSON state file helpers ---
 
-export function readActive(projectPath: string): string {
-	const state = readActiveState(projectPath);
-	if (!state.primary) throw new Error("no primary task in _active.md");
-	return state.primary;
+function readJsonState<T>(path: string, fallback: T): T {
+	try {
+		return JSON.parse(readFileSync(path, "utf-8"));
+	} catch {
+		return fallback;
+	}
 }
 
-export function readActiveState(projectPath: string): ActiveState {
-	const path = activePath(projectPath);
-	let data: string;
-	try {
-		data = readFileSync(path, "utf-8");
-	} catch {
-		throw new Error("read _active.md: file not found");
-	}
+function writeJsonState(path: string, data: unknown): void {
+	const dir = join(path, "..");
+	mkdirSync(dir, { recursive: true });
+	writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+}
 
-	// Try YAML first.
+function appendToTerminalState(path: string, task: ActiveTask): void {
+	const state = readJsonState<TerminalState>(path, { tasks: [] });
+	state.tasks.push(task);
+	writeJsonState(path, state);
+}
+
+// --- Migration from _active.md ---
+
+function legacyActivePath(projectPath: string): string {
+	return join(projectPath, ".alfred", "specs", "_active.md");
+}
+
+function migrateFromMarkdown(projectPath: string): ActiveState | null {
+	const mdPath = legacyActivePath(projectPath);
+	if (!existsSync(mdPath)) return null;
+
+	const data = readFileSync(mdPath, "utf-8");
+	let state: ActiveState | null = null;
+
+	// Try YAML-like format (primary + tasks array)
 	try {
-		const state = parse(data) as ActiveState;
-		if (state?.primary != null || state?.tasks) return state;
+		const { parse } = require("yaml");
+		const parsed = parse(data) as ActiveState;
+		if (parsed?.primary != null || parsed?.tasks) {
+			state = parsed;
+		}
 	} catch {
 		/* fall through to legacy */
 	}
 
-	// Legacy format.
-	let slug = "",
-		startedAt = "";
-	for (const line of data.split("\n")) {
-		if (line.startsWith("task: ")) slug = line.slice(6);
-		if (line.startsWith("started_at: ")) startedAt = line.slice(12);
+	// Legacy format (task: slug / started_at: ...)
+	if (!state) {
+		let slug = "";
+		let startedAt = "";
+		for (const line of data.split("\n")) {
+			if (line.startsWith("task: ")) slug = line.slice(6);
+			if (line.startsWith("started_at: ")) startedAt = line.slice(12);
+		}
+		if (slug) {
+			state = { primary: slug, tasks: [{ slug, started_at: startedAt }] };
+		}
 	}
-	if (!slug) throw new Error("no task field in _active.md");
-	return { primary: slug, tasks: [{ slug, started_at: startedAt }] };
+
+	if (state) {
+		// Write JSON and remove legacy file
+		writeJsonState(activePath(projectPath), state);
+		rmSync(mdPath, { force: true });
+		return state;
+	}
+
+	return null;
+}
+
+// --- State management ---
+
+export function readActive(projectPath: string): string {
+	const state = readActiveState(projectPath);
+	if (!state.primary) throw new Error("no primary task in _active.json");
+	return state.primary;
+}
+
+export function readActiveState(projectPath: string): ActiveState {
+	const jsonPath = activePath(projectPath);
+
+	// Try JSON first
+	if (existsSync(jsonPath)) {
+		return readJsonState<ActiveState>(jsonPath, { primary: "", tasks: [] });
+	}
+
+	// Try migration from _active.md
+	const migrated = migrateFromMarkdown(projectPath);
+	if (migrated) return migrated;
+
+	throw new Error("read _active.json: file not found");
+}
+
+export function readCompleteState(projectPath: string): TerminalState {
+	return readJsonState<TerminalState>(completePath(projectPath), { tasks: [] });
+}
+
+export function readCancelState(projectPath: string): TerminalState {
+	return readJsonState<TerminalState>(cancelPath(projectPath), { tasks: [] });
 }
 
 export function writeActiveState(projectPath: string, state: ActiveState): void {
-	mkdirSync(specsDir(projectPath), { recursive: true });
-	const data = stringify(state);
-	writeFileSync(activePath(projectPath), data);
+	writeJsonState(activePath(projectPath), state);
 }
 
 export function switchActive(projectPath: string, taskSlug: string): void {
 	const state = readActiveState(projectPath);
 	const task = state.tasks.find((t) => t.slug === taskSlug);
-	if (!task) throw new Error(`task "${taskSlug}" not found in _active.md`);
+	if (!task) throw new Error(`task "${taskSlug}" not found in _active.json`);
 	const status = effectiveStatus(task.status);
 	if (status === "done" || status === "cancelled") {
 		throw new Error(`task "${taskSlug}" is ${status}`);
@@ -257,7 +328,7 @@ export function switchActive(projectPath: string, taskSlug: string): void {
 export function completeTask(projectPath: string, taskSlug: string): string {
 	const state = readActiveState(projectPath);
 	const task = state.tasks.find((t) => t.slug === taskSlug);
-	if (!task) throw new Error(`task "${taskSlug}" not found in _active.md`);
+	if (!task) throw new Error(`task "${taskSlug}" not found in _active.json`);
 	const current = effectiveStatus(task.status);
 	if (current === "done") throw new Error(`task "${taskSlug}" is already done`);
 	if (current === "cancelled") throw new Error(`task "${taskSlug}" is cancelled`);
@@ -269,8 +340,39 @@ export function completeTask(projectPath: string, taskSlug: string): string {
 			})?.slug ?? "";
 	}
 
-	// Issue #22: Remove completed entry from _active.md to prevent accumulation.
+	// Move to _complete.json with completed_at timestamp
+	task.status = "completed";
+	task.completed_at = new Date().toISOString();
+	appendToTerminalState(completePath(projectPath), task);
+
+	// Remove from _active.json
 	state.tasks = state.tasks.filter((t) => t.slug !== taskSlug);
+	if (state.tasks.length === 0) {
+		try {
+			rmSync(activePath(projectPath));
+		} catch {
+			/* ignore */
+		}
+		return state.primary;
+	}
+	writeActiveState(projectPath, state);
+	return state.primary;
+}
+
+export function cancelTask(projectPath: string, taskSlug: string): string {
+	const state = readActiveState(projectPath);
+	const task = state.tasks.find((t) => t.slug === taskSlug);
+	if (!task) throw new Error(`task "${taskSlug}" not found in _active.json`);
+
+	// Move to _cancel.json
+	task.status = "cancelled";
+	appendToTerminalState(cancelPath(projectPath), task);
+
+	// Remove from _active.json
+	state.tasks = state.tasks.filter((t) => t.slug !== taskSlug);
+	if (state.primary === taskSlug) {
+		state.primary = state.tasks[0]?.slug ?? "";
+	}
 	if (state.tasks.length === 0) {
 		try {
 			rmSync(activePath(projectPath));
@@ -287,7 +389,7 @@ export function removeTask(projectPath: string, taskSlug: string): boolean {
 	const state = readActiveState(projectPath);
 	const filtered = state.tasks.filter((t) => t.slug !== taskSlug);
 	if (filtered.length === state.tasks.length) {
-		throw new Error(`task "${taskSlug}" not found in _active.md`);
+		throw new Error(`task "${taskSlug}" not found in _active.json`);
 	}
 
 	const sd = new SpecDir(projectPath, taskSlug);
@@ -311,4 +413,3 @@ export function removeTask(projectPath: string, taskSlug: string): boolean {
 	writeActiveState(projectPath, state);
 	return false;
 }
-

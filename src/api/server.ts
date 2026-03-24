@@ -10,6 +10,8 @@ import {
 	completeTask,
 	filesForSize,
 	readActiveState,
+	readCancelState,
+	readCompleteState,
 	SpecDir,
 	VALID_SLUG,
 	writeActiveState,
@@ -172,22 +174,16 @@ export function createApp(
 		}
 
 		const enriched = state.tasks.map((task) => enrichTask(task, projPath, projName, projId));
-		const activeSlugs = new Set(state.tasks.map((t) => t.slug));
 
-		// Collect completed specs (directories in specs/ not in _active.md)
-		let archived: Record<string, unknown>[] = [];
-		const specsDir = join(projPath, ".alfred", "specs");
-		try {
-			const dirs = readdirSync(specsDir).filter((d) => {
-				if (d.startsWith("_") || !VALID_SLUG.test(d) || activeSlugs.has(d)) return false;
-				try { return statSync(join(specsDir, d)).isDirectory(); } catch { return false; }
-			});
-			archived = dirs.map((slug) =>
-				enrichTask({ slug, status: "completed", started_at: "" }, projPath, projName, projId),
-			);
-		} catch { /* no specs dir */ }
+		// Collect completed and cancelled specs from JSON state files
+		const completed = readCompleteState(projPath).tasks.map((task) =>
+			enrichTask(task, projPath, projName, projId),
+		);
+		const cancelled = readCancelState(projPath).tasks.map((task) =>
+			enrichTask(task, projPath, projName, projId),
+		);
 
-		return { active: state.primary, tasks: [...enriched, ...archived] };
+		return { active: state.primary, tasks: [...enriched, ...completed, ...cancelled] };
 	}
 
 	// --- API Routes ---

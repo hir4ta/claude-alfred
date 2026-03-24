@@ -61,10 +61,10 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	// Fail-closed: if _active.md exists but can't be parsed, deny rather than silently allowing.
+	// Fail-closed: if _active.json exists but can't be parsed, deny rather than silently allowing.
 	if (isActiveSpecMalformed(ev.cwd)) {
 		denyTool(
-			"Failed to read spec state (_active.md exists but could not be parsed). Fix or delete .alfred/specs/_active.md before editing source files.",
+			"Failed to read spec state (_active.json exists but could not be parsed). Fix or delete .alfred/specs/_active.json before editing source files.",
 		);
 		return;
 	}

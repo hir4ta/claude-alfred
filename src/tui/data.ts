@@ -1,11 +1,9 @@
 /**
  * Data layer for TUI — reads directly from filesystem.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Store } from "../store/index.js";
-
-const VALID_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 export interface TaskItem {
 	id: string;
@@ -35,44 +33,31 @@ export interface TaskInfo {
 	projectName: string;
 }
 
-// --- Active state parser ---
+// --- State file readers ---
 
-function readActiveState(projPath: string): { primary: string; tasks: Array<{ slug: string; status?: string; started_at?: string; size?: string; spec_type?: string }> } {
-	const activePath = join(projPath, ".alfred", "specs", "_active.md");
-	if (!existsSync(activePath)) return { primary: "", tasks: [] };
+type TaskEntry = { slug: string; status?: string; started_at?: string; size?: string; spec_type?: string };
+type StateFile = { primary?: string; tasks: TaskEntry[] };
 
-	const content = readFileSync(activePath, "utf-8");
-	type Task = { slug: string; status?: string; started_at?: string; size?: string; spec_type?: string };
-	const tasks: Task[] = [];
-	let primary = "";
-	let current: Task | null = null;
-
-	for (const line of content.split("\n")) {
-		const primaryMatch = line.match(/^primary:\s*(.+)/);
-		if (primaryMatch) {
-			primary = primaryMatch[1]!.trim().replace(/^["']|["']$/g, "");
-			continue;
-		}
-		const slugMatch = line.match(/^\s+-\s+slug:\s*(.+)/);
-		if (slugMatch) {
-			current = { slug: slugMatch[1]!.trim() };
-			tasks.push(current);
-			continue;
-		}
-		if (current) {
-			const kv = line.match(/^\s+(\w+):\s*(.+)/);
-			if (kv) {
-				const [, key, val] = kv;
-				const v = val!.trim();
-				if (key === "status") current.status = v;
-				else if (key === "started_at") current.started_at = v;
-				else if (key === "size") current.size = v;
-				else if (key === "spec_type") current.spec_type = v;
-			}
-		}
+function readJsonState(path: string): StateFile {
+	try {
+		return JSON.parse(readFileSync(path, "utf-8"));
+	} catch {
+		return { tasks: [] };
 	}
+}
 
-	return { primary, tasks };
+function readActiveState(projPath: string): StateFile & { primary: string } {
+	const p = join(projPath, ".alfred", "specs", "_active.json");
+	const state = readJsonState(p);
+	return { primary: state.primary ?? "", tasks: state.tasks };
+}
+
+function readCompleteState(projPath: string): StateFile {
+	return readJsonState(join(projPath, ".alfred", "specs", "_complete.json"));
+}
+
+function readCancelState(projPath: string): StateFile {
+	return readJsonState(join(projPath, ".alfred", "specs", "_cancel.json"));
 }
 
 // --- Wave + task parser ---
@@ -122,53 +107,30 @@ function parseWaves(content: string): WaveInfo[] {
 // --- Load tasks ---
 
 export function loadTasks(projPath: string, projName: string, opts?: { showAll?: boolean }): TaskInfo[] {
-	const state = (() => {
-		try { return readActiveState(projPath); } catch { return { primary: "", tasks: [] }; }
-	})();
+	const state = readActiveState(projPath);
 
-	const activeSlugs = new Set(state.tasks.map((t) => t.slug));
-
-	// Build task list from _active.md entries
+	// Build task list from _active.json entries
 	const tasks: TaskInfo[] = state.tasks.map((task) => buildTaskInfo(projPath, projName, task));
 
-	// When showAll, also scan spec directories for completed specs not in _active.md
+	// When showAll, add completed and cancelled specs from their JSON files
 	if (opts?.showAll) {
-		const specsDir = join(projPath, ".alfred", "specs");
-		if (existsSync(specsDir)) {
-			for (const entry of readdirSync(specsDir)) {
-				if (activeSlugs.has(entry)) continue;
-				if (!VALID_SLUG.test(entry)) continue;
-				const specDir = join(specsDir, entry);
-				if (!statSync(specDir).isDirectory()) continue;
-				if (!existsSync(join(specDir, "tasks.md"))) continue;
-				tasks.push(buildTaskInfo(projPath, projName, { slug: entry, status: "completed" }));
-			}
+		const complete = readCompleteState(projPath);
+		for (const task of complete.tasks) {
+			tasks.push(buildTaskInfo(projPath, projName, task));
+		}
+		const cancel = readCancelState(projPath);
+		for (const task of cancel.tasks) {
+			tasks.push(buildTaskInfo(projPath, projName, task));
 		}
 	}
 
 	return tasks;
 }
 
-function detectSize(specDir: string): string {
-	const specFiles = ["requirements.md", "bugfix.md", "design.md", "tasks.md", "test-specs.md", "research.md"];
-	let count = 0;
-	for (const f of specFiles) {
-		if (existsSync(join(specDir, f))) count++;
-	}
-	if (count <= 3) return "S";
-	if (count <= 4) return "M";
-	return "L";
-}
-
-function detectSpecType(specDir: string): string {
-	if (existsSync(join(specDir, "bugfix.md"))) return "bugfix";
-	return "feature";
-}
-
 function buildTaskInfo(
 	projPath: string,
 	projName: string,
-	task: { slug: string; status?: string; started_at?: string; size?: string; spec_type?: string },
+	task: TaskEntry,
 ): TaskInfo {
 	let waves: WaveInfo[] = [];
 	let focus = "";
@@ -187,8 +149,8 @@ function buildTaskInfo(
 	return {
 		slug: task.slug,
 		status: task.status ?? "active",
-		size: task.size ?? detectSize(specDir),
-		specType: task.spec_type ?? detectSpecType(specDir),
+		size: task.size ?? "M",
+		specType: task.spec_type ?? "feature",
 		startedAt: task.started_at ?? "",
 		focus,
 		completed,
@@ -203,7 +165,7 @@ function buildTaskInfo(
 export function resolveProject(store: Store): { path: string; name: string } {
 	const cwd = process.cwd();
 	// Try cwd first — even without DB registration, if .alfred/ exists here, use it
-	if (existsSync(join(cwd, ".alfred", "specs", "_active.md"))) {
+	if (existsSync(join(cwd, ".alfred", "specs", "_active.json")) || existsSync(join(cwd, ".alfred", "specs"))) {
 		const row = store.db.prepare("SELECT name FROM projects WHERE path = ? LIMIT 1").get(cwd) as { name: string } | undefined;
 		return { path: cwd, name: row?.name ?? cwd.split("/").pop() ?? "project" };
 	}

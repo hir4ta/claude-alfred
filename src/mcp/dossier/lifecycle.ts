@@ -5,6 +5,7 @@ import { readWaveProgress, writeWaveProgress } from "../../hooks/state.js";
 import { updateTaskStatus } from "../../spec/status.js";
 import type { SpecSize, SpecType } from "../../spec/types.js";
 import {
+	cancelTask,
 	completeTask,
 	effectiveStatus,
 	readActive,
@@ -19,7 +20,7 @@ import { type DossierParams, errorResult, jsonResult } from "./helpers.js";
 
 /**
  * FR-1: Collect source files changed during spec lifetime via git log.
- * Uses started_at from _active.md as the time boundary.
+ * Uses started_at from _active.json as the time boundary.
  * Timeout: 3s, returns empty array on failure.
  */
 function getChangedFilesForSpec(projectPath: string, startedAt: string): Promise<string[]> {
@@ -503,19 +504,9 @@ export function dossierCancel(projectPath: string, params: DossierParams) {
 	}
 
 	try {
-		updateTaskStatus(projectPath, taskSlug, "cancelled", "dossier:cancel");
+		cancelTask(projectPath, taskSlug);
 	} catch (err) {
 		return errorResult(`${err}`);
-	}
-
-	// Move primary to next non-terminal task.
-	const state = readActiveState(projectPath);
-	if (state.primary === taskSlug) {
-		state.primary = state.tasks.find((t) => {
-			const s = effectiveStatus(t.status);
-			return s !== "done" && s !== "cancelled" && t.slug !== taskSlug;
-		})?.slug ?? "";
-		writeActiveState(projectPath, state);
 	}
 
 	return jsonResult({ task_slug: taskSlug, status: "cancelled", cancelled: true });

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ActiveState, TaskStatus } from "../types.js";
 import {
+	cancelTask,
 	completeTask,
 	detectSize,
 	effectiveStatus,
@@ -12,6 +13,8 @@ import {
 	parseSize,
 	parseSpecType,
 	readActiveState,
+	readCancelState,
+	readCompleteState,
 	removeTask,
 	SpecDir,
 	switchActive,
@@ -189,7 +192,7 @@ describe("ActiveState management", () => {
 		expect(state.primary).toBe("task-a");
 	});
 
-	it("deletes _active.md when last task is completed", () => {
+	it("deletes _active.json when last task is completed", () => {
 		writeTestState({
 			primary: "task-a",
 			tasks: [{ slug: "task-a", started_at: "2026-01-01T00:00:00Z" }],
@@ -197,6 +200,40 @@ describe("ActiveState management", () => {
 		const newPrimary = completeTask(tmpDir, "task-a");
 		expect(newPrimary).toBe("");
 		expect(() => readActiveState(tmpDir)).toThrow();
+	});
+
+	it("completeTask moves entry to _complete.json with metadata", () => {
+		writeTestState({
+			primary: "task-a",
+			tasks: [{ slug: "task-a", started_at: "2026-01-01T00:00:00Z", size: "S", spec_type: "bugfix" }],
+		});
+		completeTask(tmpDir, "task-a");
+		const complete = readCompleteState(tmpDir);
+		expect(complete.tasks).toHaveLength(1);
+		expect(complete.tasks[0]!.slug).toBe("task-a");
+		expect(complete.tasks[0]!.completed_at).toBeTruthy();
+		expect(complete.tasks[0]!.size).toBe("S");
+		expect(complete.tasks[0]!.spec_type).toBe("bugfix");
+		expect(complete.tasks[0]!.started_at).toBe("2026-01-01T00:00:00Z");
+	});
+
+	it("cancelTask moves entry to _cancel.json", () => {
+		writeTestState({
+			primary: "task-a",
+			tasks: [
+				{ slug: "task-a", started_at: "2026-01-01T00:00:00Z" },
+				{ slug: "task-b", started_at: "2026-01-02T00:00:00Z" },
+			],
+		});
+		const newPrimary = cancelTask(tmpDir, "task-a");
+		expect(newPrimary).toBe("task-b");
+		const cancelled = readCancelState(tmpDir);
+		expect(cancelled.tasks).toHaveLength(1);
+		expect(cancelled.tasks[0]!.slug).toBe("task-a");
+		expect(cancelled.tasks[0]!.status).toBe("cancelled");
+		// Should not be in active
+		const active = readActiveState(tmpDir);
+		expect(active.tasks.find((t) => t.slug === "task-a")).toBeUndefined();
 	});
 
 	it("removes task", () => {

@@ -51,7 +51,7 @@ export async function syncProjectSpecs(
 			});
 		}
 	} catch {
-		/* no _active.md */
+		/* no _active.json */
 	}
 
 	// Walk spec directories

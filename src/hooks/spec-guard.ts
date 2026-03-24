@@ -11,7 +11,7 @@ export interface SpecState {
 const VALID_SIZES = new Set(["S", "M", "L", ""]);
 
 /**
- * Read active spec state from _active.md via proper YAML parsing.
+ * Read active spec state from _active.json via proper YAML parsing.
  * Returns null on any error (NFR-2: fail-open).
  */
 export function tryReadActiveSpec(cwd: string | undefined): SpecState | null {
@@ -24,13 +24,13 @@ export function tryReadActiveSpec(cwd: string | undefined): SpecState | null {
 }
 
 /**
- * Check if _active.md exists but cannot be parsed or has invalid enum values.
+ * Check if _active.json exists but cannot be parsed or has invalid enum values.
  * Used by PreToolUse to deny edits instead of silently allowing.
  * Returns false when primary is empty (no active spec = valid state).
  */
 export function isActiveSpecMalformed(cwd: string | undefined): boolean {
 	if (!cwd) return false;
-	const path = join(cwd, ".alfred", "specs", "_active.md");
+	const path = join(cwd, ".alfred", "specs", "_active.json");
 	if (!existsSync(path)) return false;
 	try {
 		const state = readActiveState(cwd);

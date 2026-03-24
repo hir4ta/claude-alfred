@@ -59,7 +59,7 @@ export function initSpec(
 		throw new Error(`write template files: ${err}`);
 	}
 
-	// Update _active.md.
+	// Update _active.json.
 	const now = new Date().toISOString();
 	let state: ActiveState;
 	try {
