@@ -7,7 +7,8 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { parse as parseYAML } from "yaml";
 
 export type SpecFile =
 	| "requirements.md"
@@ -212,23 +213,27 @@ export class SpecDir {
 // --- JSON state file helpers ---
 
 function readJsonState<T>(path: string, fallback: T): T {
+	let raw: string;
 	try {
-		return JSON.parse(readFileSync(path, "utf-8"));
-	} catch {
-		return fallback;
+		raw = readFileSync(path, "utf-8");
+	} catch (err: unknown) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return fallback;
+		throw err;
 	}
+	return JSON.parse(raw);
 }
 
-function writeJsonState(path: string, data: unknown): void {
-	const dir = join(path, "..");
-	mkdirSync(dir, { recursive: true });
-	writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+function writeJsonState(filePath: string, data: unknown): void {
+	mkdirSync(dirname(filePath), { recursive: true });
+	const tmp = `${filePath}.tmp`;
+	writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n");
+	renameSync(tmp, filePath);
 }
 
-function appendToTerminalState(path: string, task: ActiveTask): void {
-	const state = readJsonState<TerminalState>(path, { tasks: [] });
+function appendToTerminalState(filePath: string, task: ActiveTask): void {
+	const state = readJsonState<TerminalState>(filePath, { tasks: [] });
 	state.tasks.push(task);
-	writeJsonState(path, state);
+	writeJsonState(filePath, state);
 }
 
 // --- Migration from _active.md ---
@@ -246,8 +251,7 @@ function migrateFromMarkdown(projectPath: string): ActiveState | null {
 
 	// Try YAML-like format (primary + tasks array)
 	try {
-		const { parse } = require("yaml");
-		const parsed = parse(data) as ActiveState;
+		const parsed = parseYAML(data) as ActiveState;
 		if (parsed?.primary != null || parsed?.tasks) {
 			state = parsed;
 		}
