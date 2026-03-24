@@ -1,7 +1,7 @@
 ---
 name: release
 description: Release claude-alfred. Version can be specified or auto-detected
-allowed-tools: Bash(npm *, node *, git *, gh *), Read, Edit, Glob, Grep, Write
+allowed-tools: Bash(bun *, git *, gh *), Read, Edit, Glob, Grep
 ---
 
 Release claude-alfred.
@@ -30,14 +30,14 @@ Arguments: `$ARGUMENTS`
 Run in order; **abort release if any fails**:
 
 ```
-npm run typecheck
-npm test
-npm run build
+bun run typecheck
+bun test
+bun build.ts
 ```
 
 ## Version Update (3 files)
 
-1. `npm version <VERSION> --no-git-tag-version` — updates package.json + package-lock.json
+1. Edit `version` in `package.json` directly (no package-lock.json in this project)
 2. Update `plugins[0].version` in `.claude-plugin/marketplace.json` to `<VERSION>`
 3. Update `version` in `plugin/.claude-plugin/plugin.json` to `<VERSION>`
 
@@ -45,7 +45,7 @@ All 3 must match. This is the version that Claude Code uses for plugin caching.
 
 ## Commit & Tag
 
-1. Stage release files: `git add package.json package-lock.json .claude-plugin/marketplace.json plugin/.claude-plugin/plugin.json`
+1. Stage release files: `git add package.json .claude-plugin/marketplace.json plugin/.claude-plugin/plugin.json`
    - Include other uncommitted files if agreed with user
 2. Commit message: `v<VERSION>: <one-line summary of commits>` (in English)
    - Generate summary from `git log <prev-tag>..HEAD --oneline`
@@ -63,6 +63,12 @@ git push origin v<VERSION>
 
 ### CI Monitoring
 
+Tag push triggers `.github/workflows/release.yml` which:
+- Builds 4 platform binaries (darwin-arm64, darwin-x64, linux-x64, linux-arm64)
+- Packages web assets (alfred-web-assets.tar.gz)
+- Creates GitHub Release with auto-generated release notes + all artifacts
+
+Monitor:
 1. `gh run list --limit 1` — check Release workflow started
 2. `gh run watch <run-id>` — watch until completion
 3. If CI fails → fix the issue, delete the tag (`git tag -d v<VERSION> && git push origin :refs/tags/v<VERSION>`), and re-release
@@ -72,7 +78,6 @@ git push origin v<VERSION>
 After CI succeeds:
 ```
 gh release view v<VERSION>
-npm view claude-alfred version
 ```
 
 ## Completion Report
@@ -82,5 +87,4 @@ npm view claude-alfred version
 | Version | v<VERSION> |
 | Commit | <hash> |
 | CI | success/failure (duration) |
-| npm | https://www.npmjs.com/package/claude-alfred |
 | Release URL | https://github.com/hir4ta/claude-alfred/releases/tag/v<VERSION> |
