@@ -126,17 +126,18 @@ const main = defineCommand({
 				const lang = process.env.ALFRED_LANG;
 				check(true, `ALFRED_LANG: ${lang || "(not set, default: en)"}`);
 
-				// User rules
+				// User rules — plugin distributes rules, so user copies are stale duplicates
 				const rulesDir = join(home, ".claude", "rules");
 				try {
-					const rules = readdirSync(rulesDir).filter((f) => f.startsWith("alfred"));
-					check(
-						rules.length > 0,
-						`Rules: ${rulesDir} (${rules.length} alfred files)`,
-						"no alfred rules found",
-					);
+					const staleRules = readdirSync(rulesDir).filter((f) => f.startsWith("alfred"));
+					if (staleRules.length > 0) {
+						check(false, `Stale user rules: ${staleRules.join(", ")}`,
+							`remove from ${rulesDir} — plugin distributes these automatically`);
+					} else {
+						check(true, "No stale user rules (plugin distributes rules)");
+					}
 				} catch {
-					check(false, "Rules", `${rulesDir} not found`);
+					check(true, "No stale user rules (plugin distributes rules)");
 				}
 
 				// Project .alfred/
