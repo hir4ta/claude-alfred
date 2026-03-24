@@ -114,14 +114,20 @@ describe("extractDecisions", () => {
 });
 
 describe("extractReviewFindings", () => {
-	it("extracts CRITICAL findings", () => {
-		const text = "[CRITICAL] SQL injection vulnerability in query builder\nUses unsanitized user input in raw SQL queries\nThis could allow arbitrary data access";
+	it("extracts CRITICAL findings with review-finding tag and metadata (FR-9)", () => {
+		const text = "[CRITICAL] src/foo.ts:10 — SQL injection vulnerability in query builder\nUses unsanitized user input in raw SQL queries\nThis could allow arbitrary data access";
 		const entries = extractReviewFindings(text, "test-slug", "en");
 		expect(entries).toHaveLength(1);
 		expect(entries[0]!.type).toBe("bad");
 		expect(entries[0]!.title).toContain("SQL injection");
 		expect(entries[0]!.context).toContain("test-slug");
 		expect(entries[0]!.status).toBe("draft");
+		// FR-9: review-finding tag
+		expect(entries[0]!.tags).toContain("review-finding");
+		expect(entries[0]!.tags).toContain("test-slug");
+		// FR-9: severity + file:line in pattern field
+		expect(entries[0]!.pattern).toMatch(/\[critical\]/);
+		expect(entries[0]!.pattern).toContain("src/foo.ts:10");
 	});
 
 	it("extracts HIGH findings", () => {

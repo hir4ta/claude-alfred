@@ -47,6 +47,8 @@ interface LedgerParams {
 	// Common
 	tags?: string;
 	project_path?: string;
+	// Verify: review-finding outcome (FR-10)
+	outcome?: string;
 }
 
 function jsonResult(data: unknown) {
@@ -567,15 +569,43 @@ async function ledgerVerify(store: Store, params: LedgerParams) {
 	// JSON update (source of truth — write first).
 	const projectPath = params.project_path ?? process.cwd();
 	const jsonPath = join(projectPath, ".alfred", "knowledge", doc.filePath);
+	let parsed: Record<string, unknown>;
 	try {
 		const raw = readFileSync(jsonPath, "utf-8");
-		const parsed = JSON.parse(raw);
+		parsed = JSON.parse(raw);
 		parsed.verification_due = verificationDue;
 		parsed.last_verified = lastVerified;
 		parsed.verification_count = newCount;
-		atomicWriteSync(jsonPath, `${JSON.stringify(parsed, null, 2)}\n`);
 	} catch (err) {
 		return errorResult(`failed to update JSON: ${err}`);
+	}
+
+	// FR-10: review-finding outcome recording.
+	const outcome = params.outcome as "confirmed" | "rejected" | undefined;
+	let outcomeApplied = false;
+	if (outcome) {
+		const tags = Array.isArray(parsed.tags) ? parsed.tags : [];
+		const isReviewFinding = tags.includes("review-finding");
+
+		if (isReviewFinding) {
+			if (outcome === "confirmed") {
+				parsed.status = "approved";
+				try {
+					store.db.prepare("UPDATE knowledge_index SET enabled = 1 WHERE id = ?").run(params.id);
+				} catch { /* fail-open */ }
+			} else if (outcome === "rejected") {
+				parsed.status = "rejected";
+				// enabled stays 0 (already disabled from initial save)
+			}
+			outcomeApplied = true;
+		}
+		// Non-review-finding entries: outcome is ignored, normal verify only (NFR-3).
+	}
+
+	try {
+		atomicWriteSync(jsonPath, `${JSON.stringify(parsed, null, 2)}\n`);
+	} catch (err) {
+		return errorResult(`failed to write JSON: ${err}`);
 	}
 
 	// DB update (after JSON success).
@@ -591,6 +621,7 @@ async function ledgerVerify(store: Store, params: LedgerParams) {
 		title: doc.title,
 		verification_due: verificationDue,
 		verification_count: newCount,
+		...(outcomeApplied ? { outcome } : {}),
 	});
 }
 

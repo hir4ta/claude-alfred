@@ -201,7 +201,9 @@ function extractReviewKnowledge(projectPath: string, toolResponse: unknown): voi
 		if (findings.length === 0) return;
 
 		const store = openDefaultCached();
-		const saved = saveKnowledgeEntries(store, projectPath, findings, "pattern");
+		// FR-9: review findings saved as enabled=0 to prevent search pollution.
+		// Use ledger verify outcome=confirmed to enable (FR-10).
+		const saved = saveKnowledgeEntries(store, projectPath, findings, "pattern", { enabled: false });
 		if (saved > 0) {
 			notifyUser("extracted %d pattern(s) from review findings", saved);
 		}

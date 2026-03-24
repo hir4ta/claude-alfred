@@ -252,6 +252,11 @@ Actions:
 			// Common
 			tags: z.string().optional().describe("Comma-separated tags for search"),
 			project_path: z.string().optional().describe("Project root path"),
+			// Verify: review-finding outcome (FR-10)
+			outcome: z
+				.enum(["confirmed", "rejected"])
+				.optional()
+				.describe("Review finding outcome (for verify action on review-finding entries)"),
 		},
 		async (params) => {
 			return handleLedger(store, emb, params);

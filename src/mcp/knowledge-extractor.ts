@@ -90,18 +90,24 @@ export function extractReviewFindings(
 
 		if (description.length < 10) continue;
 
+		// Extract severity and file:line for calibration metadata (FR-9).
+		const severityMatch = line.match(/\[(CRITICAL|HIGH|critical|high)\]/i);
+		const severity = severityMatch ? severityMatch[1]!.toLowerCase() : "high";
+		const fileLineMatch = line.match(/([^\s:]+\.\w+):(\d+)/);
+		const fileRef = fileLineMatch ? `${fileLineMatch[1]}:${fileLineMatch[2]}` : "";
+
 		const id = `pat-review-${taskSlug}-${entries.length + 1}`;
 		entries.push({
 			id,
 			type: "bad",
 			title: truncate(description, 100),
 			context: `Review finding from task ${taskSlug}`,
-			pattern: truncate(description, 500),
+			pattern: `[${severity}] ${fileRef} — ${truncate(description, 500)}`,
 			applicationConditions: "When similar code patterns are encountered",
 			expectedOutcomes: "Avoid repeating this anti-pattern",
-			tags: ["review", taskSlug],
+			tags: ["review-finding", taskSlug],
 			createdAt: now,
-			status: "draft", // Not auto-approved — needs human review via ledger reflect
+			status: "draft",
 			lang,
 		});
 	}
@@ -140,8 +146,10 @@ export function saveKnowledgeEntries(
 	projectPath: string,
 	entries: Array<DecisionEntry | PatternEntry>,
 	subType: "decision" | "pattern",
+	options?: { enabled?: boolean },
 ): number {
 	const proj = resolveOrRegisterProject(store, projectPath);
+	const enabled = options?.enabled ?? true;
 	let saved = 0;
 
 	for (const entry of entries) {
@@ -161,7 +169,7 @@ export function saveKnowledgeEntries(
 				updatedAt: "",
 				hitCount: 0,
 				lastAccessed: "",
-				enabled: true,
+				enabled,
 			};
 			const result = upsertKnowledge(store, row);
 			if (result.changed) saved++;
