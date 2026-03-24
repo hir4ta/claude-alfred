@@ -3,7 +3,7 @@ import { clearReviewGate, readReviewGate, writeReviewGate } from "../../hooks/re
 import { shouldAutoAppend } from "../../hooks/lang-filter.js";
 import { readWaveProgress, writeWaveProgress } from "../../hooks/state.js";
 import { updateTaskStatus } from "../../spec/status.js";
-import type { SpecSize, SpecType } from "../../spec/types.js";
+import type { SpecSize, SpecType, TasksFile } from "../../spec/types.js";
 import {
 	cancelTask,
 	completeTask,
@@ -79,13 +79,13 @@ export async function dossierComplete(projectPath: string, store: Store, params:
 	// Check ALL wave tasks — DENY if unchecked items remain (#24).
 	try {
 		const sd = new SpecDir(projectPath, taskSlug);
-		const tasksContent = sd.readFile("tasks.md");
-		const wavesError = checkAllWaveTasks(tasksContent);
+		const tasksData: TasksFile = JSON.parse(sd.readFile("tasks.json"));
+		const wavesError = checkAllWaveTasks(tasksData);
 		if (wavesError) return errorResult(`task completion gate: ${wavesError}`);
-		const closingError = checkClosingWave(tasksContent);
+		const closingError = checkClosingWave(tasksData);
 		if (closingError) return errorResult(`closing wave gate: ${closingError}`);
 	} catch {
-		/* tasks.md may not exist for all sizes */
+		/* tasks.json may not exist for all sizes */
 	}
 
 	try {
@@ -119,69 +119,38 @@ export async function dossierComplete(projectPath: string, store: Store, params:
 
 /**
  * Check that ALL Wave tasks (excluding Closing Wave) are checked.
- * Returns error message listing unchecked items if any, undefined if all done.
- * Fixes #24: dossier complete was only checking Closing Wave.
+ * JSON-based: reads tasks.json directly.
  */
-function checkAllWaveTasks(tasksContent: string): string | undefined {
-	const lines = tasksContent.split("\n");
+function checkAllWaveTasks(tasksData: TasksFile): string | undefined {
 	const uncheckedByWave: Array<{ wave: string; count: number }> = [];
-	let currentWave: string | null = null;
-	let isClosing = false;
 
-	for (const line of lines) {
-		// Detect wave headers: "## Wave 1: ...", "## Wave 2", etc.
-		const waveMatch = line.match(/^## Wave[:\s]*(\d+[\w\s:：—-]*)/i);
-		if (waveMatch) {
-			currentWave = waveMatch[1]!.trim();
-			isClosing = false;
-			continue;
-		}
-		// Detect Closing Wave header — stop counting
-		if (/^## (?:Wave:\s*)?[Cc]losing(?:\s+[Ww]ave)?/i.test(line)) {
-			currentWave = null;
-			isClosing = true;
-			continue;
-		}
-		// Stop at next ## section after closing
-		if (line.startsWith("## ") && isClosing) {
-			isClosing = false;
-			continue;
-		}
-		// Count unchecked items in non-Closing waves
-		if (currentWave && /^- \[ \] /.test(line)) {
-			const existing = uncheckedByWave.find((w) => w.wave === currentWave);
-			if (existing) {
-				existing.count++;
-			} else {
-				uncheckedByWave.push({ wave: currentWave, count: 1 });
-			}
+	for (const wave of tasksData.waves) {
+		const unchecked = wave.tasks.filter(t => !t.checked).length;
+		if (unchecked > 0) {
+			uncheckedByWave.push({ wave: `${wave.title}`, count: unchecked });
 		}
 	}
 
 	if (uncheckedByWave.length === 0) return undefined;
 
 	const total = uncheckedByWave.reduce((s, w) => s + w.count, 0);
-	const details = uncheckedByWave.map((w) => `Wave ${w.wave}: ${w.count}`).join(", ");
+	const details = uncheckedByWave.map(w => `${w.wave}: ${w.count}`).join(", ");
 	return `${total} unchecked task(s) in implementation waves (${details}). Check all tasks via \`dossier action=check task_id="T-X.Y"\` before completing.`;
 }
 
 /**
  * Check that ALL Closing Wave items are checked.
- * Returns error message listing unchecked items if any, undefined if all done.
+ * JSON-based: reads tasks.json closing field.
  */
-function checkClosingWave(tasksContent: string): string | undefined {
-	const closingIdx = tasksContent.search(/## (?:Wave:\s*)?[Cc]losing(?:\s+[Ww]ave)?/i);
-	if (closingIdx === -1)
-		return "No Closing Wave found in tasks.md. Add self-review, CLAUDE.md update, and test verification items.";
+function checkClosingWave(tasksData: TasksFile): string | undefined {
+	if (!tasksData.closing) {
+		return "No Closing wave found in tasks.json.";
+	}
 
-	const closingSection = tasksContent.slice(closingIdx);
-	const nextSection = closingSection.indexOf("\n##", 1);
-	const body = nextSection === -1 ? closingSection : closingSection.slice(0, nextSection);
-
-	const uncheckedItems = body.match(/^- \[ \] .+$/gm);
-	if (uncheckedItems && uncheckedItems.length > 0) {
-		const items = uncheckedItems.map((line) => line.replace(/^- \[ \] /, "").trim()).join(", ");
-		return `Closing Wave has ${uncheckedItems.length} unchecked item(s): ${items}. Check all items via \`dossier action=check task_id="T-C.N"\` before completing.`;
+	const unchecked = tasksData.closing.tasks.filter(t => !t.checked);
+	if (unchecked.length > 0) {
+		const items = unchecked.map(t => t.title).join(", ");
+		return `Closing Wave has ${unchecked.length} unchecked item(s): ${items}. Check all items via \`dossier action=check task_id="T-C.N"\` before completing.`;
 	}
 
 	return undefined;
@@ -323,130 +292,53 @@ export function dossierCheck(projectPath: string, params: DossierParams) {
 	}
 
 	const sd = new SpecDir(projectPath, taskSlug);
-	let tasks: string;
+	let tasksData: TasksFile;
 	try {
-		tasks = sd.readFile("tasks.md");
+		tasksData = JSON.parse(sd.readFile("tasks.json"));
 	} catch {
-		return errorResult("tasks.md not found");
+		return errorResult("tasks.json not found or invalid");
 	}
 
-	const lines = tasks.split("\n");
-	let checked = false;
-	const taskIdLower = taskId.toLowerCase();
+	// Find the task by ID across all waves + closing
+	const allWaves = [...tasksData.waves, tasksData.closing];
+	let found = false;
+	let alreadyChecked = false;
 
-	// T-C.N format: match Nth unchecked checkbox in Closing Wave section.
-	const closingMatch = taskId.match(/^T-C\.(\d+)$/i);
-	if (closingMatch) {
-		const nth = parseInt(closingMatch[1]!, 10);
-		let inClosing = false;
-		let closingIndex = 0;
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]!;
-			if (/^## (?:Wave:\s*)?[Cc]losing(?:\s+[Ww]ave)?/i.test(line)) {
-				inClosing = true;
-				continue;
-			}
-			if (inClosing && line.startsWith("## ")) break; // Left Closing section
-			if (inClosing && line.match(/^- \[[ xX]\] /)) {
-				closingIndex++;
-				if (closingIndex === nth) {
-					if (/^- \[[xX]\] /.test(line)) {
-						return jsonResult({ task_id: taskId, status: "already_checked" });
-					}
-					lines[i] = line.replace("- [ ]", "- [x]");
-					checked = true;
-					break;
+	for (const wave of allWaves) {
+		for (const task of wave.tasks) {
+			if (task.id.toLowerCase() === taskId.toLowerCase()) {
+				if (task.checked) {
+					alreadyChecked = true;
+				} else {
+					task.checked = true;
+					found = true;
 				}
+				break;
 			}
 		}
-		if (!checked && closingIndex < nth) {
-			return errorResult(`task_id "${taskId}" not found: Closing Wave has only ${closingIndex} item(s)`);
-		}
-	} else {
-		// T-N.R format: find `### T-N.R` header → check ALL checkboxes below it.
-		// Fallback: match checkbox line containing T-N.R text.
-		const reviewHeaderMatch = taskId.match(/^T-\d+\.R$/i);
-		if (reviewHeaderMatch) {
-			const headerPattern = new RegExp(`^###\\s+${taskId.replaceAll(".", "\\.")}\\b`, "i");
-			let foundHeader = false;
-			let subItemCount = 0;
-			for (let i = 0; i < lines.length; i++) {
-				const line = lines[i]!;
-				if (headerPattern.test(line)) {
-					foundHeader = true;
-					continue;
-				}
-				if (foundHeader && /^##[# ]/.test(line)) break; // Left section
-				if (foundHeader && /^- \[ \] /.test(line)) {
-					lines[i] = line.replace("- [ ]", "- [x]");
-					checked = true;
-					subItemCount++;
-				}
-				if (foundHeader && /^- \[[xX]\] /.test(line)) {
-					subItemCount++;
-				}
-			}
-			if (foundHeader && !checked && subItemCount > 0) {
-				return jsonResult({ task_id: taskId, status: "already_checked" });
-			}
-			if (foundHeader && !checked && subItemCount === 0) {
-				return errorResult(`task_id "${taskId}" header found but no checkbox items beneath it`);
-			}
-			if (!foundHeader) {
-				// Fallback: T-N.R written as checkbox line instead of header (e.g. "- [ ] T-1.R ...")
-				for (let i = 0; i < lines.length; i++) {
-					const line = lines[i]!;
-					if (line.match(/^- \[ \] /) && line.toLowerCase().includes(taskIdLower)) {
-						lines[i] = line.replace("- [ ]", "- [x]");
-						checked = true;
-						break;
-					}
-				}
-				if (!checked) {
-					const alreadyChecked = lines.some(
-						(l) => /^- \[[xX]\] /.test(l) && l.toLowerCase().includes(taskIdLower),
-					);
-					if (alreadyChecked) {
-						return jsonResult({ task_id: taskId, status: "already_checked" });
-					}
-					return errorResult(`task_id "${taskId}" not found in tasks.md`);
-				}
-			}
-		} else {
-			for (let i = 0; i < lines.length; i++) {
-				const line = lines[i]!;
-				if (line.match(/^- \[ \] /) && line.toLowerCase().includes(taskIdLower)) {
-					lines[i] = line.replace("- [ ]", "- [x]");
-					checked = true;
-					break;
-				}
-			}
-
-			if (!checked) {
-				const alreadyChecked = lines.some(
-					(l) => /^- \[[xX]\] /.test(l) && l.toLowerCase().includes(taskIdLower),
-				);
-				if (alreadyChecked) {
-					return jsonResult({ task_id: taskId, status: "already_checked" });
-				}
-				return errorResult(`task_id "${taskId}" not found in tasks.md`);
-			}
-		}
+		if (found || alreadyChecked) break;
 	}
 
-	const updatedContent = lines.join("\n");
-	sd.writeFile("tasks.md", updatedContent);
+	if (alreadyChecked) {
+		return jsonResult({ task_id: taskId, status: "already_checked", task_slug: taskSlug });
+	}
+	if (!found) {
+		return errorResult(`task_id "${taskId}" not found in tasks.json`);
+	}
 
-	// Detect wave completion (reuse logic from post-tool).
+	// Write back
+	sd.writeFile("tasks.json", JSON.stringify(tasksData, null, 2) + "\n");
+
+	// Detect wave completion
 	const waveMessages: string[] = [];
-	try {
-		const { detectWaveCompletion } = require("../../hooks/post-tool.js");
-		const waveItems = detectWaveCompletion(projectPath, taskSlug, updatedContent);
-		for (const item of waveItems) {
-			waveMessages.push(item.message);
+	for (const wave of allWaves) {
+		if (wave.tasks.every(t => t.checked) && wave.tasks.length > 0) {
+			const label = wave.key === "closing" ? "closing" : `Wave ${wave.key}`;
+			const total = wave.tasks.length;
+			waveMessages.push(
+				`Wave ${label} complete (${total}/${total} tasks). You MUST now: 1) Commit your changes, 2) Run self-review (delegate to alfred:code-reviewer or /alfred:inspect), 3) Save any learnings via \`ledger save\`. Then clear the gate with \`dossier action=gate sub_action=clear reason="..."\`.`
+			);
 		}
-	} catch {
-		/* wave detection is optional */
 	}
 
 	return jsonResult({

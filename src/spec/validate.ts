@@ -1,5 +1,5 @@
 import { SpecDir, filesForSize } from "./types.js";
-import type { SpecFile, SpecSize, SpecType } from "./types.js";
+import type { SpecFile, SpecSize, SpecType, TasksFile, TestSpecsFile } from "./types.js";
 
 export interface ValidationCheck {
 	name: string;
@@ -15,47 +15,18 @@ export interface ValidationResult {
 	summary: string;
 }
 
-// --- ID extraction patterns ---
+// --- ID extraction (for Markdown files only) ---
 
 const ID = {
 	FR: /FR-\d+/g,
 	NFR: /NFR-\d+/g,
-	T: /T-\d+\.\d+/g,
-	TS: /TS-\d+\.\d+/g,
-	DEC: /DEC-\d+/g,
-	CHG: /CHG-\d+/g,
 };
 
 function extractIDs(content: string, pattern: RegExp): string[] {
 	return [...new Set(content.match(pattern) ?? [])];
 }
 
-// --- Gherkin validation ---
-
-function validateGherkin(content: string): { valid: boolean; issues: string[] } {
-	const issues: string[] = [];
-	// Find gherkin blocks (inside ```gherkin ... ```)
-	const gherkinBlocks = content.match(/```gherkin\n([\s\S]*?)```/g);
-	if (!gherkinBlocks || gherkinBlocks.length === 0) {
-		return { valid: true, issues: [] }; // No gherkin blocks = skip
-	}
-
-	for (const block of gherkinBlocks) {
-		const body = block.replace(/^```gherkin\n/, "").replace(/```$/, "").trim();
-		if (!body) continue;
-		const hasGiven = /\bGiven\b/i.test(body);
-		const hasWhen = /\bWhen\b/i.test(body);
-		const hasThen = /\bThen\b/i.test(body);
-		if (!hasGiven && !hasWhen && !hasThen) {
-			issues.push("Gherkin block missing Given/When/Then keywords");
-		} else if (!hasThen) {
-			issues.push("Gherkin block missing Then (expected result)");
-		}
-	}
-	return { valid: issues.length === 0, issues };
-}
-
-// --- Placeholder detection ---
+// --- Placeholder detection (Markdown files only) ---
 
 const PLACEHOLDER_PATTERNS = [
 	/\[TODO\]/gi,
@@ -73,10 +44,19 @@ function countPlaceholders(content: string): number {
 	return count;
 }
 
+// --- JSON file helpers ---
+
+function readJsonFile<T>(sd: SpecDir, f: SpecFile): T | null {
+	try {
+		return JSON.parse(sd.readFile(f));
+	} catch {
+		return null;
+	}
+}
+
 // --- Main validation ---
 
 export interface ValidateOptions {
-	/** When true, promote all "warn" results to "fail". Use at completion time. */
 	strict?: boolean;
 }
 
@@ -91,7 +71,6 @@ export function validateSpec(
 	const expectedFiles = filesForSize(size, specType);
 	const checks: ValidationCheck[] = [];
 
-	// Helper to read file safely
 	function readFile(f: SpecFile): string | null {
 		try {
 			return sd.readFile(f);
@@ -110,26 +89,33 @@ export function validateSpec(
 		}
 	}
 
-	// Read primary file content
-	const primaryFile: SpecFile = specType === "bugfix" ? "bugfix.md" : "requirements.md";
+	// Read file contents
+	const primaryFile: SpecFile = specType === "bugfix" ? "bugfix.json" : "requirements.md";
 	const primaryContent = readFile(primaryFile) ?? "";
-	const tasksContent = readFile("tasks.md") ?? "";
 	const designContent = readFile("design.md") ?? "";
-	const testSpecsContent = readFile("test-specs.md") ?? "";
 	const researchContent = readFile("research.md") ?? "";
+
+	// JSON files
+	const tasksData = readJsonFile<TasksFile>(sd, "tasks.json");
+	const testSpecsData = readJsonFile<TestSpecsFile>(sd, "test-specs.json");
+
+	// Collect all task requirements from JSON
+	const allTasks = tasksData ? [...tasksData.waves.flatMap(w => w.tasks), ...tasksData.closing.tasks] : [];
+	const allTaskFRs = new Set(allTasks.flatMap(t => t.requirements ?? []));
+	const allTaskIDs = allTasks.map(t => t.id);
 
 	// ---- 2. min_fr_count ----
 	if (specType === "bugfix") {
-		// Substantive content check for bugfix
+		const bugfix = readJsonFile<{ summary?: string; fix_strategy?: string }>(sd, "bugfix.json");
+		const hasContent = bugfix && bugfix.summary && bugfix.fix_strategy;
 		checks.push(
-			primaryContent.length > 200
+			hasContent
 				? { name: "min_fr_count", status: "pass", message: "Bugfix has substantive content" }
 				: { name: "min_fr_count", status: "warn", message: "Bugfix content may be insufficient" },
 		);
 	} else {
 		const frIDs = extractIDs(primaryContent, ID.FR);
-		const minCount = size === "S" ? 1 : size === "M" ? 3 : 5; // L default 5
-		// Template defaults start with 1 FR — warn instead of fail to allow incremental authoring (DEC-4/NFR-3).
+		const minCount = size === "S" ? 1 : size === "M" ? 3 : 5;
 		const status = frIDs.length >= minCount ? "pass" : frIDs.length > 0 ? "warn" : "fail";
 		checks.push({
 			name: "min_fr_count",
@@ -141,8 +127,11 @@ export function validateSpec(
 	// ---- 3. content_placeholder ----
 	let totalPlaceholders = 0;
 	for (const f of expectedFiles) {
-		const c = readFile(f);
-		if (c) totalPlaceholders += countPlaceholders(c);
+		if (f.endsWith(".md")) {
+			const c = readFile(f);
+			if (c) totalPlaceholders += countPlaceholders(c);
+		}
+		// JSON files don't have placeholders in the traditional sense
 	}
 	checks.push(
 		totalPlaceholders === 0
@@ -151,44 +140,24 @@ export function validateSpec(
 	);
 
 	// ---- 4. fr_to_task ----
-	if (expectedFiles.includes("tasks.md") && specType !== "bugfix") {
+	if (expectedFiles.includes("tasks.json") && specType !== "bugfix") {
 		const frIDs = extractIDs(primaryContent, ID.FR);
-		const taskFRs = extractIDs(tasksContent, ID.FR);
-		const unreferenced = frIDs.filter((fr) => !taskFRs.includes(fr));
+		const unreferenced = frIDs.filter(fr => !allTaskFRs.has(fr));
 		checks.push(
 			unreferenced.length === 0
-				? { name: "fr_to_task", status: "pass", message: "All FR-N referenced in tasks.md" }
-				: { name: "fr_to_task", status: "fail", message: `FR not referenced in tasks.md: ${unreferenced.join(", ")}` },
+				? { name: "fr_to_task", status: "pass", message: "All FR-N referenced in tasks.json" }
+				: { name: "fr_to_task", status: "fail", message: `FR not referenced in tasks.json: ${unreferenced.join(", ")}` },
 		);
 	}
 
 	// ---- 5. task_to_fr ----
-	if (expectedFiles.includes("tasks.md") && specType !== "bugfix") {
-		const taskIDs = extractIDs(tasksContent, ID.T);
-		// Check each task has FR reference in one of three formats:
-		//   ### T-1.1 header + "- Requirements: FR-N" line
-		//   - [ ] T-1.1 checkbox + "_Requirements: FR-N_" italic line
-		//   - [ ] T-1.1 (FR-1, FR-2): inline FR reference on the task line itself
-		const taskLines = tasksContent.split("\n");
-		const tasksWithFR: Set<string> = new Set();
-		let currentTask = "";
-		for (const line of taskLines) {
-			const taskMatch = line.match(/(?:###\s+|[-*]\s+\[[ xX]\]\s+)(T-\d+\.\d+)/);
-			if (taskMatch) {
-				currentTask = taskMatch[1]!;
-				// Inline FR reference on the same line: T-1.1 (FR-1, FR-2): ...
-				const inlineFRs = extractIDs(line, ID.FR);
-				if (inlineFRs.length > 0) tasksWithFR.add(currentTask);
-			}
-			if (currentTask && /(?:^[-\s]*|_)Requirements:\s*(?:FR-|NFR-|全|all\b)/i.test(line)) {
-				tasksWithFR.add(currentTask);
-			}
-		}
-		const orphanTasks = taskIDs.filter((t) => !tasksWithFR.has(t));
+	if (expectedFiles.includes("tasks.json") && specType !== "bugfix") {
+		const tasksWithFR = allTasks.filter(t => !t.id.startsWith("T-C.") && !t.id.match(/T-\d+\.R/i));
+		const orphanTasks = tasksWithFR.filter(t => !t.requirements || t.requirements.length === 0);
 		checks.push(
 			orphanTasks.length === 0
-				? { name: "task_to_fr", status: "pass", message: "All T-N.N have Requirements: FR-N" }
-				: { name: "task_to_fr", status: "warn", message: `Tasks without FR reference: ${orphanTasks.join(", ")}` },
+				? { name: "task_to_fr", status: "pass", message: "All T-N.N have requirements" }
+				: { name: "task_to_fr", status: "warn", message: `Tasks without FR reference: ${orphanTasks.map(t => t.id).join(", ")}` },
 		);
 	}
 
@@ -196,7 +165,7 @@ export function validateSpec(
 	if (expectedFiles.includes("design.md") && specType !== "bugfix") {
 		const frIDs = extractIDs(primaryContent, ID.FR);
 		const designFRs = extractIDs(designContent, ID.FR);
-		const unreferenced = frIDs.filter((fr) => !designFRs.includes(fr));
+		const unreferenced = frIDs.filter(fr => !designFRs.includes(fr));
 		checks.push(
 			unreferenced.length === 0
 				? { name: "design_fr_references", status: "pass", message: "All FR-N referenced in design.md" }
@@ -205,108 +174,74 @@ export function validateSpec(
 	}
 
 	// ---- 7. testspec_fr_references ----
-	if (expectedFiles.includes("test-specs.md")) {
-		const tsIDs = extractIDs(testSpecsContent, ID.TS);
-		// Check each TS has Source: FR-N
-		const tsWithSource: Set<string> = new Set();
-		const lines = testSpecsContent.split("\n");
-		let currentTSList: string[] = [];
-		for (const line of lines) {
-			// Single TS header: ### TS-1.1: ...
-			const tsSingle = line.match(/#{2,3}\s+(TS-\d+\.\d+)(?:\s|:)/);
-			// Range TS header: ### TS-3.2 - TS-3.5: ...
-			const tsRange = line.match(/#{2,3}\s+TS-(\d+)\.(\d+)\s*[-–]\s*TS-\d+\.(\d+)/);
-			if (tsRange) {
-				const wave = tsRange[1]!;
-				const from = parseInt(tsRange[2]!, 10);
-				const to = parseInt(tsRange[3]!, 10);
-				currentTSList = [];
-				for (let i = from; i <= to; i++) currentTSList.push(`TS-${wave}.${i}`);
-			} else if (tsSingle) {
-				currentTSList = [tsSingle[1]!];
-			}
-			if (
-				currentTSList.length > 0 &&
-				(/^-\s*Source:\s*(FR-\d+|NFR-\d+)/i.test(line) ||
-					/<!--\s*source:\s*(FR-\d+|NFR-\d+)/i.test(line))
-			) {
-				for (const ts of currentTSList) tsWithSource.add(ts);
-			}
-		}
-		const noSource = tsIDs.filter((ts) => !tsWithSource.has(ts));
+	if (expectedFiles.includes("test-specs.json") && testSpecsData) {
+		const noSource = testSpecsData.specs.filter(ts => !ts.source);
 		checks.push(
 			noSource.length === 0
-				? { name: "testspec_fr_references", status: "pass", message: "All TS-N.N have Source: FR/NFR reference" }
-				: { name: "testspec_fr_references", status: "warn", message: `TS without Source: ${noSource.join(", ")}` },
+				? { name: "testspec_fr_references", status: "pass", message: "All TS have source reference" }
+				: { name: "testspec_fr_references", status: "warn", message: `TS without Source: ${noSource.map(ts => ts.id).join(", ")}` },
 		);
 	}
 
 	// ---- 8. closing_wave ----
-	if (expectedFiles.includes("tasks.md")) {
-		const hasClosing = /## (?:Wave:\s*)?[Cc]losing(?:\s+[Ww]ave)?/i.test(tasksContent);
+	if (expectedFiles.includes("tasks.json")) {
 		checks.push(
-			hasClosing
-				? { name: "closing_wave", status: "pass", message: "Closing wave found in tasks.md" }
-				: { name: "closing_wave", status: "fail", message: "No Closing wave in tasks.md" },
+			tasksData?.closing
+				? { name: "closing_wave", status: "pass", message: "Closing wave found in tasks.json" }
+				: { name: "closing_wave", status: "fail", message: "No closing wave in tasks.json" },
 		);
 	}
 
 	// ---- 9. gherkin_syntax ----
-	if (expectedFiles.includes("test-specs.md")) {
-		const gherkin = validateGherkin(testSpecsContent);
+	if (expectedFiles.includes("test-specs.json") && testSpecsData) {
+		const issues: string[] = [];
+		for (const spec of testSpecsData.specs) {
+			for (const scenario of spec.scenarios) {
+				const hasGiven = scenario.steps.some(s => /^Given\b/i.test(s));
+				const hasThen = scenario.steps.some(s => /^Then\b/i.test(s));
+				if (!hasGiven && !hasThen) {
+					issues.push(`${spec.id}/${scenario.name}: missing Given/Then`);
+				} else if (!hasThen) {
+					issues.push(`${spec.id}/${scenario.name}: missing Then`);
+				}
+			}
+		}
 		checks.push(
-			gherkin.valid
+			issues.length === 0
 				? { name: "gherkin_syntax", status: "pass", message: "Gherkin syntax valid" }
-				: { name: "gherkin_syntax", status: "warn", message: `Gherkin issues: ${gherkin.issues.join("; ")}` },
+				: { name: "gherkin_syntax", status: "warn", message: `Gherkin issues: ${issues.join("; ")}` },
 		);
 	}
 
 	// ---- 10. orphan_tests ----
-	if (expectedFiles.includes("test-specs.md") && specType !== "bugfix") {
+	if (expectedFiles.includes("test-specs.json") && testSpecsData && specType !== "bugfix") {
 		const frIDs = new Set(extractIDs(primaryContent, ID.FR));
 		const nfrIDs = new Set(extractIDs(primaryContent, ID.NFR));
-		const lines = testSpecsContent.split("\n");
-		const orphans: string[] = [];
-		let currentTS = "";
-		for (const line of lines) {
-			const tsMatch = line.match(/##\s+(TS-\d+\.\d+)/);
-			if (tsMatch) currentTS = tsMatch[1]!;
-			if (currentTS && /^-\s*Source:/i.test(line)) {
-				const refs = extractIDs(line, ID.FR).concat(extractIDs(line, ID.NFR));
-				if (refs.length === 0 || !refs.some((r) => frIDs.has(r) || nfrIDs.has(r))) {
-					orphans.push(currentTS);
-				}
-				currentTS = "";
-			}
-		}
+		const orphans = testSpecsData.specs.filter(ts => {
+			if (!ts.source) return false;
+			const refs = extractIDs(ts.source, ID.FR).concat(extractIDs(ts.source, ID.NFR));
+			return refs.length > 0 && !refs.some(r => frIDs.has(r) || nfrIDs.has(r));
+		});
 		checks.push(
 			orphans.length === 0
 				? { name: "orphan_tests", status: "pass", message: "No orphan tests" }
-				: { name: "orphan_tests", status: "warn", message: `Tests with no matching FR/NFR: ${orphans.join(", ")}` },
+				: { name: "orphan_tests", status: "warn", message: `Tests with no matching FR/NFR: ${orphans.map(t => t.id).join(", ")}` },
 		);
 	}
 
 	// ---- 11. orphan_tasks ----
-	if (expectedFiles.includes("tasks.md") && specType !== "bugfix") {
+	if (expectedFiles.includes("tasks.json") && tasksData && specType !== "bugfix") {
 		const frIDs = new Set(extractIDs(primaryContent, ID.FR));
-		const taskLines = tasksContent.split("\n");
-		const orphans: string[] = [];
-		let currentTask = "";
-		for (const line of taskLines) {
-			const taskMatch = line.match(/###\s+(T-\d+\.\d+)/);
-			if (taskMatch) currentTask = taskMatch[1]!;
-			if (currentTask && /^-\s*Requirements:/i.test(line)) {
-				const refs = extractIDs(line, ID.FR);
-				if (refs.length === 0 || !refs.some((r) => frIDs.has(r))) {
-					orphans.push(currentTask);
-				}
-				currentTask = "";
-			}
-		}
+		const orphans = allTasks
+			.filter(t => !t.id.startsWith("T-C.") && !t.id.match(/T-\d+\.R/i))
+			.filter(t => {
+				const refs = t.requirements ?? [];
+				return refs.length > 0 && !refs.some(r => frIDs.has(r));
+			});
 		checks.push(
 			orphans.length === 0
 				? { name: "orphan_tasks", status: "pass", message: "No orphan tasks" }
-				: { name: "orphan_tasks", status: "warn", message: `Tasks with no matching FR: ${orphans.join(", ")}` },
+				: { name: "orphan_tasks", status: "warn", message: `Tasks with no matching FR: ${orphans.map(t => t.id).join(", ")}` },
 		);
 	}
 
@@ -324,16 +259,16 @@ export function validateSpec(
 	// ---- L only checks ----
 	if (size === "L") {
 		// 13. nfr_traceability
-		const nfrIDs = extractIDs(primaryContent, ID.NFR);
-		const taskNFRs = extractIDs(tasksContent, ID.NFR);
-		const unreferencedNFR = nfrIDs.filter((n) => !taskNFRs.includes(n));
-		checks.push(
-			unreferencedNFR.length === 0 || nfrIDs.length === 0
-				? { name: "nfr_traceability", status: "pass", message: "NFR-N traceability OK" }
-				: { name: "nfr_traceability", status: "warn", message: `NFR not in tasks.md: ${unreferencedNFR.join(", ")}` },
-		);
-
-		// 14. (decisions_completeness removed — decisions saved via ledger directly)
+		if (specType !== "bugfix") {
+			const nfrIDs = extractIDs(primaryContent, ID.NFR);
+			const taskNFRs = new Set(allTasks.flatMap(t => (t.requirements ?? []).filter(r => r.startsWith("NFR-"))));
+			const unreferencedNFR = nfrIDs.filter(n => !taskNFRs.has(n));
+			checks.push(
+				unreferencedNFR.length === 0 || nfrIDs.length === 0
+					? { name: "nfr_traceability", status: "pass", message: "NFR-N traceability OK" }
+					: { name: "nfr_traceability", status: "warn", message: `NFR not in tasks.json: ${unreferencedNFR.join(", ")}` },
+			);
+		}
 
 		// 15. research_completeness
 		const researchLen = researchContent.replace(/^#.*$/gm, "").replace(/<!--.*?-->/gs, "").trim().length;
@@ -347,7 +282,7 @@ export function validateSpec(
 	// ---- 22. grounding_coverage (L opt-in) ----
 	if (size === "L" && primaryContent.includes("grounding:")) {
 		const groundingMatches = primaryContent.match(/grounding:\s*(\w+)/g) ?? [];
-		const speculative = groundingMatches.filter((g) => /speculative/i.test(g)).length;
+		const speculative = groundingMatches.filter(g => /speculative/i.test(g)).length;
 		const ratio = groundingMatches.length > 0 ? speculative / groundingMatches.length : 0;
 		checks.push(
 			ratio <= 0.3
@@ -360,15 +295,14 @@ export function validateSpec(
 }
 
 function buildResult(checks: ValidationCheck[], opts?: ValidateOptions): ValidationResult {
-	// Strict mode: promote all warnings to failures (used at completion time).
 	if (opts?.strict) {
 		for (const c of checks) {
 			if (c.status === "warn") c.status = "fail";
 		}
 	}
-	const passed = checks.filter((c) => c.status === "pass").length;
-	const failed = checks.filter((c) => c.status === "fail").length;
-	const warned = checks.filter((c) => c.status === "warn").length;
+	const passed = checks.filter(c => c.status === "pass").length;
+	const failed = checks.filter(c => c.status === "fail").length;
+	const warned = checks.filter(c => c.status === "warn").length;
 	return {
 		checks,
 		passed,
