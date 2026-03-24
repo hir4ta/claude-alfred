@@ -141,6 +141,10 @@ bun dist/cli.mjs version     # Show version
 - tasks.json updated after each task completion (dashboard real-time progress)
 - attend/mend: MUST call `dossier action=complete` at end to close spec
 
+### Troubleshooting
+
+- 修正→実行が3回連続失敗した場合、同じアプローチを繰り返さない。公式ドキュメント・事例を徹底リサーチしてからアプローチを再検討すること
+
 ## Quality Gates
 
 - At each meaningful implementation milestone, perform **thorough self-review from multiple perspectives** (delegate to another agent if possible)
