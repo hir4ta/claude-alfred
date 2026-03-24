@@ -159,7 +159,18 @@ function ProjectTabs({ projects, selectedIdx, onSelect }: {
 
 // --- Spec List (left panel) ---
 
-function SpecList({ tasks, selectedIdx }: { tasks: TaskInfo[]; selectedIdx: number }) {
+const ITEM_H = 5; // 4 lines content + 1 margin
+
+function SpecList({ tasks, selectedIdx, maxRows }: { tasks: TaskInfo[]; selectedIdx: number; maxRows: number }) {
+	// Hooks must be called before any early return (Rules of Hooks)
+	const capacity = Math.max(1, Math.floor(maxRows / ITEM_H));
+	const [scrollTop, setScrollTop] = useState(0);
+
+	useEffect(() => {
+		if (selectedIdx < scrollTop) setScrollTop(selectedIdx);
+		else if (selectedIdx >= scrollTop + capacity) setScrollTop(selectedIdx - capacity + 1);
+	}, [selectedIdx, scrollTop, capacity]);
+
 	if (tasks.length === 0) {
 		return (
 			<box style={{ borderStyle: "rounded", borderColor: C.bg5, flexDirection: "column", flexGrow: 1, padding: 1 }}>
@@ -168,15 +179,22 @@ function SpecList({ tasks, selectedIdx }: { tasks: TaskInfo[]; selectedIdx: numb
 		);
 	}
 
+	const visible = tasks.slice(scrollTop, scrollTop + capacity);
+	const hasMore = scrollTop + capacity < tasks.length;
+	const hasAbove = scrollTop > 0;
+
 	return (
 		<box style={{ borderStyle: "rounded", borderColor: C.bg5, flexDirection: "column", flexGrow: 1, overflow: "hidden" }}>
-			{tasks.map((task, i) => {
+			{hasAbove && <box style={{ height: 1, paddingX: 1 }}><text fg={C.grey0} content="▲" /></box>}
+			{visible.map((task, vi) => {
+				const i = scrollTop + vi;
 				const isSelected = i === selectedIdx;
 				const bg = isSelected ? C.bg3 : undefined;
 				const indicator = isSelected ? "▸" : " ";
+				const isLast = vi === visible.length - 1;
 
 				return (
-					<box key={`${task.projectName}/${task.slug}`} style={{ paddingX: 1, backgroundColor: bg, flexDirection: "column" }}>
+					<box key={`${task.projectName}/${task.slug}`} style={{ paddingX: 1, backgroundColor: bg, flexDirection: "column", height: 4, marginBottom: isLast ? 0 : 1 }}>
 						{/* Line 1: indicator + spec name */}
 						<box style={{ flexDirection: "row", height: 1 }}>
 							<text content={`${indicator} ${task.slug}`} fg={isSelected ? C.fg1 : C.fg} />
@@ -196,6 +214,7 @@ function SpecList({ tasks, selectedIdx }: { tasks: TaskInfo[]; selectedIdx: numb
 					</box>
 				);
 			})}
+			{hasMore && <box style={{ height: 1, paddingX: 1 }}><text fg={C.grey0} content="▼" /></box>}
 		</box>
 	);
 }
@@ -296,6 +315,7 @@ function SpecDetail({ task, focused }: { task: TaskInfo; focused: boolean }) {
 export { App };
 
 function App({ showAll = false }: { showAll?: boolean }) {
+	const { height: termRows } = useTerminalDimensions();
 	const [allProjects, setAllProjects] = useState<Array<{ path: string; name: string }>>([]);
 	const [projIdx, setProjIdx] = useState(-1); // -1 = all projects
 	const [tasks, setTasks] = useState<TaskInfo[]>([]);
@@ -422,6 +442,9 @@ function App({ showAll = false }: { showAll?: boolean }) {
 				/>
 			</box>
 
+			{/* Spacer */}
+			<box style={{ flexShrink: 0, height: 1 }} />
+
 			{/* Project tabs — fixed */}
 			{allProjects.length > 1 && (
 				<box style={{ flexShrink: 0 }}>
@@ -436,7 +459,7 @@ function App({ showAll = false }: { showAll?: boolean }) {
 			{/* Main content — fills remaining space, height:0 prevents content from expanding */}
 			<box style={{ height: 0, flexGrow: 1, paddingX: 1, paddingBottom: 1, flexDirection: "row", gap: 1, overflow: "hidden" }}>
 				<box style={{ width: "30%", flexDirection: "column", overflow: "hidden" }}>
-					<SpecList tasks={tasks} selectedIdx={selectedIdx} />
+					<SpecList tasks={tasks} selectedIdx={selectedIdx} maxRows={Math.max(5, termRows - 10)} />
 				</box>
 				<box style={{ width: "70%", flexDirection: "column", overflow: "hidden" }}>
 					{selected
