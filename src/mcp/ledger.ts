@@ -590,6 +590,7 @@ async function ledgerVerify(store: Store, params: LedgerParams) {
 		if (isReviewFinding) {
 			if (outcome === "confirmed") {
 				parsed.status = "approved";
+				parsed.enabled = true;
 				try {
 					store.db.prepare("UPDATE knowledge_index SET enabled = 1 WHERE id = ?").run(params.id);
 				} catch { /* fail-open */ }

@@ -96,13 +96,14 @@ export function extractReviewFindings(
 		const fileLineMatch = line.match(/([^\s:]+\.\w+):(\d+)/);
 		const fileRef = fileLineMatch ? `${fileLineMatch[1]}:${fileLineMatch[2]}` : "";
 
+		const prefix = fileRef ? `[${severity}] ${fileRef} —` : `[${severity}]`;
 		const id = `pat-review-${taskSlug}-${entries.length + 1}`;
 		entries.push({
 			id,
 			type: "bad",
 			title: truncate(description, 100),
 			context: `Review finding from task ${taskSlug}`,
-			pattern: `[${severity}] ${fileRef} — ${truncate(description, 500)}`,
+			pattern: `${prefix} ${truncate(description, 500)}`,
 			applicationConditions: "When similar code patterns are encountered",
 			expectedOutcomes: "Avoid repeating this anti-pattern",
 			tags: ["review-finding", taskSlug],
@@ -175,13 +176,6 @@ export function saveKnowledgeEntries(
 			if (result.changed) saved++;
 		} catch {
 			/* fail-open: individual entry save failure doesn't stop batch */
-		}
-	}
-
-	if (saved > 0) {
-		try {
-		} catch {
-			/* audit failure is non-critical */
 		}
 	}
 
