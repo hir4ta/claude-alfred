@@ -115,13 +115,37 @@ This ensures the dashboard shows real-time progress.
 Per-task review is NOT required. Review happens at Wave boundaries.
 
 When all tasks in a Wave are completed (before starting next Wave):
+
 1. **Commit** changes with Wave number in message
 2. **Self-review**: Spawn `alfred:code-reviewer` agent **in foreground** (NOT background) with the Wave's full diff. The agent returns aggregated findings directly — read and act on them immediately
-3. If Critical findings → fix and re-review (max 2 iterations)
-4. If Warnings only → fix if straightforward, proceed if not
-5. **Knowledge accumulation**: Save learnings via `ledger save` (decision/pattern/rule). If no knowledge to save, state the reason explicitly
-6. Clear gate: `dossier action=gate sub_action=clear reason="Wave N review: [summary]"`
-7. Proceed to next Wave
+3. **Persist findings**: Parse the structured findings JSON block from the code-reviewer output and Write it to `.alfred/.state/review-findings-{slug}.json`:
+   ```json
+   {"slug": "{task-slug}", "wave": N, "reviewed_at": "ISO8601", "findings": [...]}
+   ```
+   Each finding gets a deterministic ID: hash of `file + ":" + line + ":" + category`.
+4. If Critical findings → enter fix_mode, fix issues, then **re-review with previous findings** (see Re-review below)
+5. If Warnings only → fix if straightforward, proceed if not
+6. **Knowledge accumulation**: Save learnings via `ledger save` (decision/pattern/rule). If no knowledge to save, state the reason explicitly
+7. Clear gate: `dossier action=gate sub_action=clear reason="Wave N review: [summary]"`
+8. Proceed to next Wave
+
+### Re-review (fix_mode)
+
+When re-reviewing after fixes:
+
+1. Read previous findings from `.alfred/.state/review-findings-{slug}.json`
+2. **Oscillation detection** (structural, NOT prompt-based):
+   - For each current finding, compute findingId = hash(file + ":" + line + ":" + category)
+   - Compare with previous finding IDs
+   - If a findingId was present → fixed → present again: **OSCILLATION detected**
+   - Lock the previous fix direction as a directive: `[DIRECTIVE] Oscillation at {file:line}. Previous fix locked.`
+   - After 3 consecutive oscillations on the same findingId → AskUserQuestion to resolve
+3. Spawn `alfred:code-reviewer` agent in foreground with:
+   - The current diff
+   - A **"Previous Findings"** section containing the findings JSON from step 1
+   - The code-reviewer will apply its Validation Criteria (root cause check, no new issues, resolution check)
+4. Parse new findings, update `.alfred/.state/review-findings-{slug}.json`
+5. Max 2 re-review iterations. Still Critical → BLOCKED.
 
 **IMPORTANT**: Always spawn code-reviewer in **foreground** (default). Do NOT use `run_in_background` — background agents' results are difficult to retrieve and parse. Foreground execution blocks until the review completes, but the results are directly usable.
 
