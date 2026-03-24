@@ -10,10 +10,10 @@ tasks:
       - task --list
 
   build:
-    desc: Build React SPA and TypeScript CLI
+    desc: Build React SPA and CLI bundle
     deps: [web:build]
     cmds:
-      - bun run build
+      - bun build.ts
 
   dev:
     desc: Start Vite dev server (use with ALFRED_DEV=1 alfred dashboard)

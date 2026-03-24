@@ -17,7 +17,7 @@
     "bun": ">=1.3"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "bun build.ts",
     "build:web": "cd web && bun run build",
     "dev": "bun --watch src/cli.ts",
     "typecheck": "tsc --noEmit",
@@ -25,7 +25,7 @@
     "lint:fix": "biome check --write src/ web/src/",
     "test": "bunx --bun vitest run",
     "test:watch": "bunx --bun vitest",
-    "prepack": "bun run build:web && bun run build"
+    "prepack": "bun run build:web && bun build.ts"
   },
   "dependencies": {},
   "devDependencies": {
@@ -39,7 +39,6 @@
     "eta": "^4",
     "hono": "^4",
     "react": "19.2.4",
-    "tsdown": "^0",
     "typescript": "^5.8",
     "vitest": "^3",
     "yaml": "^2",

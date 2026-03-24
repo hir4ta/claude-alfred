@@ -36,18 +36,18 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build JS bundle
-        run: bun run build
+      - name: Patch @opentui/core for static platform import
+        run: |
+          PLATFORM="${{ matrix.target }}"
+          PLATFORM="${PLATFORM#bun-}"
+          OS="${PLATFORM%-*}"
+          ARCH="${PLATFORM##*-}"
+          bash scripts/patch-opentui.sh "$OS" "$ARCH"
 
       - name: Compile binary
         run: |
-          bun build dist/cli.mjs \
-            --compile \
-            --minify \
+          bun build.ts --compile \
             --target=${{ matrix.target }} \
-            --external @opentui/core \
-            --external @opentui/react \
-            --external react \
             --outfile=${{ matrix.artifact }}
 
       - name: Upload artifact

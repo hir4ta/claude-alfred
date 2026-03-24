@@ -6,7 +6,7 @@ Development butler for Claude Code — MCP server + Hook handler.
 
 TypeScript (Bun 1.3+, ESM) / SQLite (bun:sqlite) / Voyage AI (embedding) / React SPA (Vite 8 + TanStack Router + shadcn/ui) / TUI (OpenTUI + @opentui/react)
 
-Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP, Bun.serve) / @modelcontextprotocol/sdk (MCP)
+Build: bun build (bundle + compile) / vitest (test) / citty (CLI) / hono (HTTP, Bun.serve) / @modelcontextprotocol/sdk (MCP)
 
 ## Structure
 
@@ -64,7 +64,7 @@ Build: tsdown (bundle) / vitest (test) / citty (CLI) / hono (HTTP, Bun.serve) / 
 Taskfile (task runner) を使用。`task` コマンドで実行。
 
 ```bash
-task build                    # Build React SPA + tsdown (full pipeline)
+task build                    # Build React SPA + CLI bundle (bun build)
 task dev                      # Start Vite dev server (use with ALFRED_DEV=1 bun dist/cli.mjs dashboard)
 bun src/tui/main.tsx          # TUI dashboard (real-time spec progress)
 task check                    # tsc --noEmit + Biome lint
@@ -83,11 +83,11 @@ bun dist/cli.mjs version     # Show version
 
 ### Build & Distribution
 
-- `bun run build` (tsdown) after src/ changes — output is `dist/cli.mjs`
+- `bun build.ts` after src/ changes — output is `dist/cli.mjs`; `bun build.ts --compile` for single binary
 - `plugin/` is git-tracked for marketplace distribution (hooks, mcp config, skills, agents, rules)
 - MCP tools return structured JSON
 - MCP server version: dynamically set from resolvedVersion() (not hardcoded)
-- **dependencies はゼロ** — bun:sqlite (built-in) を使用、他のライブラリは全て devDependencies に書き tsdown でバンドル
+- **dependencies はゼロ** — bun:sqlite (built-in) を使用、他のライブラリは全て devDependencies に書き bun build でバンドル
 
 ### Configuration & API
 
