@@ -134,18 +134,19 @@ When all tasks in a Wave are completed (before starting next Wave):
 When re-reviewing after fixes:
 
 1. Read previous findings from `.alfred/.state/review-findings-{slug}.json`
-2. **Oscillation detection** (structural, NOT prompt-based):
-   - For each current finding, compute findingId = hash(file + ":" + line + ":" + category)
-   - Compare with previous finding IDs
+2. Spawn `alfred:code-reviewer` agent in foreground with:
+   - The current diff
+   - Previous findings wrapped in `<previous-findings>...</previous-findings>` block
+   - The code-reviewer will apply its Validation Criteria (root cause check, no new issues, resolution check)
+3. Parse new structured findings JSON from code-reviewer output
+4. **Oscillation detection** (structural, NOT prompt-based):
+   - For each new finding, build findingId = `file:line:category` (string)
+   - Compare with previous finding IDs (same format)
    - If a findingId was present → fixed → present again: **OSCILLATION detected**
    - Lock the previous fix direction as a directive: `[DIRECTIVE] Oscillation at {file:line}. Previous fix locked.`
-   - After 3 consecutive oscillations on the same findingId → AskUserQuestion to resolve
-3. Spawn `alfred:code-reviewer` agent in foreground with:
-   - The current diff
-   - A **"Previous Findings"** section containing the findings JSON from step 1
-   - The code-reviewer will apply its Validation Criteria (root cause check, no new issues, resolution check)
-4. Parse new findings, update `.alfred/.state/review-findings-{slug}.json`
-5. Max 2 re-review iterations. Still Critical → BLOCKED.
+   - After 2 consecutive oscillations on the same findingId → AskUserQuestion to resolve
+5. Update `.alfred/.state/review-findings-{slug}.json` with new findings
+6. Max 3 re-review iterations (to allow oscillation escape). Still Critical → BLOCKED.
 
 **IMPORTANT**: Always spawn code-reviewer in **foreground** (default). Do NOT use `run_in_background` — background agents' results are difficult to retrieve and parse. Foreground execution blocks until the review completes, but the results are directly usable.
 

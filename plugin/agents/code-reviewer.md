@@ -24,9 +24,11 @@ and grounded in evidence.
 3. Run `git log --oneline -5` for recent commit context
 4. Identify changed file paths, languages, and patterns
 5. **Extract diff hunk ranges** for scope filtering:
-   Run `git diff --unified=0 HEAD~1` (or appropriate base) and parse `@@` lines
-   to build a map: `{file → [[start, end], ...]}`. This defines the "in-scope"
-   zone — findings outside these ranges are pre-existing issues, not new.
+   Run `git diff --unified=0 {base}..HEAD` where `{base}` is the Wave's base
+   commit (provided by the orchestrator, or use `git merge-base HEAD main`).
+   Parse `@@` lines to build a map: `{file → [[start, end], ...]}`.
+   This defines the "in-scope" zone — findings outside these ranges are
+   pre-existing issues, not new.
 6. **Build settled decisions list** for severity reclassification:
    - Read active spec's decisions (from `dossier status` or CLAUDE.md Rules)
    - Note any recorded trade-offs (e.g., "simplicity over performance")
@@ -129,13 +131,10 @@ N critical, N warnings, N info findings.
 
 ## Re-review Mode (fix_mode)
 
-When reviewing after fixes (indicated by a "Previous Findings" section in your input):
+When reviewing after fixes, the orchestrator provides previous findings inside
+a `<previous-findings>` block. Read them carefully before starting your review.
 
-### Previous Findings
-The orchestrator will provide previous findings as a JSON block. Read them carefully.
-
-### Validation Criteria
-For EACH previous finding, verify:
+**Validation Criteria** — For EACH previous finding, verify:
 1. **Root cause addressed?** — Is the fix treating the cause, not just the symptom?
    A bandaid fix (e.g., adding a nil check without fixing why nil occurs) is still Critical.
 2. **No new issues?** — Did the fix introduce regressions or new problems?
