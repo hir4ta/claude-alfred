@@ -259,7 +259,14 @@ export function createApp(
 		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
 		if (!VALID_SPEC_FILES.has(file)) return c.json({ error: "invalid spec file" }, 400);
 
-		const sd = new SpecDir(projectPath, slug);
+		const filterProjectId = getProjectFilter(c.req.query("project"));
+		let targetPath = projectPath;
+		if (filterProjectId) {
+			const filterProj = getProject(store, filterProjectId);
+			if (!filterProj) return c.json({ error: "project not found" }, 404);
+			targetPath = filterProj.path;
+		}
+		const sd = new SpecDir(targetPath, slug);
 		const histDir = join(sd.dir(), ".history");
 		const versions: Array<{ timestamp: string; size: number }> = [];
 		try {
@@ -285,7 +292,14 @@ export function createApp(
 		if (!VALID_SPEC_FILES.has(file)) return c.json({ error: "invalid spec file" }, 400);
 		if (!/^[0-9T]{15}$/.test(version)) return c.json({ error: "invalid version format" }, 400);
 
-		const sd = new SpecDir(projectPath, slug);
+		const filterProjectId = getProjectFilter(c.req.query("project"));
+		let targetPath = projectPath;
+		if (filterProjectId) {
+			const filterProj = getProject(store, filterProjectId);
+			if (!filterProj) return c.json({ error: "project not found" }, 404);
+			targetPath = filterProj.path;
+		}
+		const sd = new SpecDir(targetPath, slug);
 		const histPath = join(sd.dir(), ".history", `${file}.${version}`);
 		try {
 			const content = readFileSync(histPath, "utf-8");
@@ -299,7 +313,14 @@ export function createApp(
 		const slug = c.req.param("slug");
 		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
 
-		const sd = new SpecDir(projectPath, slug);
+		const filterProjectId = getProjectFilter(c.req.query("project"));
+		let targetPath = projectPath;
+		if (filterProjectId) {
+			const filterProj = getProject(store, filterProjectId);
+			if (!filterProj) return c.json({ error: "project not found" }, 404);
+			targetPath = filterProj.path;
+		}
+		const sd = new SpecDir(targetPath, slug);
 		const sections = sd.exists() ? sd.allSections() : [];
 		return c.json({ specs: sections });
 	});
@@ -308,11 +329,18 @@ export function createApp(
 		const slug = c.req.param("slug");
 		if (!VALID_SLUG.test(slug)) return c.json({ error: "invalid slug" }, 400);
 
-		const sd = new SpecDir(projectPath, slug);
+		const filterProjectId = getProjectFilter(c.req.query("project"));
+		let targetPath = projectPath;
+		if (filterProjectId) {
+			const filterProj = getProject(store, filterProjectId);
+			if (!filterProj) return c.json({ error: "project not found" }, 404);
+			targetPath = filterProj.path;
+		}
+		const sd = new SpecDir(targetPath, slug);
 		if (!sd.exists()) return c.json({ error: "not found" }, 404);
 
 		let state;
-		try { state = readActiveState(projectPath); } catch {
+		try { state = readActiveState(targetPath); } catch {
 			return c.json({ checks: [], summary: "0/0 passed" });
 		}
 		const task = state.tasks.find((t) => t.slug === slug);
