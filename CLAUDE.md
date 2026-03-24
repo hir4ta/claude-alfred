@@ -138,7 +138,7 @@ bun dist/cli.mjs version     # Show version
 - **Spec review**: brief/attend focus agent review on requirements.md + design.md only (fix loop until 0 Critical/High). Other files get inline quick check
 - **Code review**: attend spawns `alfred:code-reviewer` agent per Wave boundary in foreground (3 parallel sub-reviewers: security, logic, design)
 - **Other skills**: inspect/mend use inline multi-perspective deliberation (no sub-agents)
-- tasks.md updated after each task completion (dashboard real-time progress)
+- tasks.json updated after each task completion (dashboard real-time progress)
 - attend/mend: MUST call `dossier action=complete` at end to close spec
 
 ## Quality Gates
@@ -149,7 +149,7 @@ bun dist/cli.mjs version     # Show version
 
 ## Compact Instructions
 
-- Preserve active spec task slug and current progress from tasks.md
+- Preserve active spec task slug and current progress from tasks.json
 - Preserve Orchestrator State from `.alfred/.state/orchestrator-{slug}.json` (phase, iteration, counters)
 - Keep all CLAUDE.md rules intact (re-read from disk after compact)
 - Do NOT discard in-progress implementation context or recent decisions

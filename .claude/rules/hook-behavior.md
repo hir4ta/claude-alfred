@@ -14,7 +14,7 @@ paths:
 - Decision extraction: base score 0.35, min confidence 0.4 — bare keyword matches require at least one positive signal (rationale/alternative/arch term)
 - Structured chapter memory (JSON): goal, decisions, summary
 - Knowledge detection: transcript research patterns (2+ hits from 13 keywords) → stderr reminder to save findings
-- Auto-completes task when tasks.md Status="completed"/"done" or all Next Steps are checked
+- Auto-completes task when tasks.json Status="completed"/"done" or all Next Steps are checked
 - Session continuity: writes .alfred/.pending-compact.json breadcrumb, SessionStart resolves → session_links table
 
 ## UserPromptSubmit
@@ -27,7 +27,7 @@ paths:
 
 ## PostToolUse
 - Bash error detection → FTS5 knowledge search → additionalContext injection
-- Auto-check tasks: Edit/Write file path matching + Bash stdout matching against tasks.md descriptions (backtick paths + filename matching)
+- Auto-check tasks: Edit/Write file path matching + Bash stdout matching against tasks.json descriptions (backtick paths + filename matching)
 - Bash success → git commit detection → living-spec + drift + wave completion
 
 ## PostToolUse — Living Spec (src/hooks/living-spec.ts)
