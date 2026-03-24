@@ -13,14 +13,16 @@ import { readStateJSON, readWorkedSlugs, writeStateJSON } from "./state.js";
 
 // Simplified implementation-intent check for spec proposal guard (DEC-4).
 // Full intent classification is handled by the prompt hook (FR-1).
-const IMPL_KEYWORDS = [
-	"implement", "add", "create", "build", "refactor", "fix", "bug", "test", "tdd",
-	"実装", "追加", "作成", "修正", "バグ", "テスト", "リファクタ",
+// Word-boundary matching to avoid false positives on common words like "add a comment".
+const IMPL_PATTERNS = [
+	/\bimplement/i, /\brefactor/i, /\bbugfix/i, /\btdd\b/i,
+	/\bfix\s+(the\s+)?bug/i, /\bfix\s+(the\s+)?error/i, /\bfix\s+(the\s+)?issue/i,
+	/\bbug\s+(fix|in|with|report)/i,
+	/実装/, /リファクタ/, /バグ/, /修正/,
 ];
 
 function looksLikeImplementation(prompt: string): boolean {
-	const lower = prompt.toLowerCase();
-	return IMPL_KEYWORDS.some((kw) => lower.includes(kw));
+	return IMPL_PATTERNS.some((re) => re.test(prompt));
 }
 
 export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Promise<void> {
