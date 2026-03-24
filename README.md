@@ -39,9 +39,9 @@ Most spec tools give you a slash command and hope you use it. alfred uses Claude
 
 **Enforcement where it matters.** A review gate blocks the next wave until the current one passes self-review. This isn't prompt-level advice — it's a PreToolUse hook that physically denies Edit and Write. Spec creation itself is user-initiated — you choose when to plan and when to just code.
 
-**Self-review at every boundary.** alfred spawns parallel code-review agents (security, logic, design) at every wave boundary. Critical or high findings must be fixed before the gate opens. This adds time — but catches issues that would cost more later.
+**Self-review at every boundary.** alfred spawns parallel code-review agents (security, logic, design) at every wave boundary. Critical or high findings must be fixed before the gate opens. Findings are triaged — pre-existing issues outside the current diff are downgraded, and already-decided trade-offs are filtered out. Fix→re-review oscillations (A→B→A patterns) are detected structurally and locked. This adds time — but catches issues that would cost more later.
 
-**Knowledge that compounds.** Every decision, pattern, and hard-won lesson goes to `.alfred/knowledge/` as structured JSON. Patterns auto-promote to rules after 15+ search hits. Each knowledge type has its own half-life — rules stay relevant for 120 days, assumptions fade after 30. Before you start a new task, alfred searches past experience and surfaces what's relevant.
+**Knowledge that compounds.** Every decision, pattern, and hard-won lesson goes to `.alfred/knowledge/` as structured JSON. Patterns auto-promote to rules after 15+ search hits. Each knowledge type has its own half-life — rules stay relevant for 120 days, assumptions fade after 30. Before you start a new task, alfred searches past experience and surfaces what's relevant. A quality gate checks every save — near-duplicates (≥90% similarity) and contradictions are flagged, and entries without actionable content get a warning. Review findings are tracked separately and calibrated over time (confirmed as true positives or dismissed as false positives).
 
 **Specs that stay honest.** After every commit, alfred diffs your changes against the design doc. Touched a component not in the spec? You'll hear about it. New source files get auto-appended to the right component section — your spec stays in sync without manual updates.
 
@@ -135,6 +135,14 @@ Patterns auto-promote to rules after 15+ search hits.
 Search pipeline: Voyage AI vectors with reranking > FTS5 with BM25 ranking > keyword fallback. Tag aliases expand queries bilingually — "auth" finds "authentication", "login", "認証", and more.
 
 Each entry tracks its author (via `git user.name`).
+
+**Quality gate** — every `ledger save` runs automatic checks:
+- **Duplicate detection**: semantic similarity ≥0.90 triggers a near-duplicate warning; ≥0.85 returns similar entries for review
+- **Contradiction detection**: high-similarity entries with opposing keywords (use/avoid, must/must not) are flagged
+- **Actionability check**: entries without action words or conditions get a low-actionability warning
+- All checks are warnings only — saves are never blocked (avoids discarding useful knowledge due to false positives)
+
+**Review calibration** — code review findings are saved as `review-finding` patterns (disabled by default, excluded from normal search). Use `ledger verify outcome=confirmed` to mark true positives or `outcome=rejected` for false positives — building a feedback loop that improves review quality over time.
 
 ## Adaptive specs
 

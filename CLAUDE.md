@@ -12,7 +12,7 @@ Build: bun build (bundle + compile) / vitest (test) / citty (CLI) / hono (HTTP, 
 
 | Package | Role |
 |---|---|
-| `src/mcp/` | MCP server (2 tools: dossier, ledger) — @modelcontextprotocol/sdk + Zod. dossier split into `src/mcp/dossier/{index,helpers,init,lifecycle,crud}.ts` |
+| `src/mcp/` | MCP server (2 tools: dossier, ledger) — @modelcontextprotocol/sdk + Zod. dossier split into `src/mcp/dossier/{index,helpers,init,lifecycle,crud}.ts`. `quality-gate.ts` = ledger save 品質ゲート (重複検出, アクショナビリティ, 矛盾検出) |
 | `src/store/` | SQLite persistence (projects + knowledge_index + spec_index + embeddings + FTS5), project registry, spec sync |
 | `src/git/` | Git integration: user.name resolution |
 | `src/embedder/` | Voyage AI (voyage-4-large, vector search + rerank-2.5) |
@@ -127,6 +127,8 @@ bun dist/cli.mjs version     # Show version
 ### Knowledge & Search
 
 - @.claude/rules/knowledge-internals.md (persistence, search pipeline, governance, promotion)
+- Knowledge quality gate (`src/mcp/quality-gate.ts`): ledger save 時に自動実行。セマンティック重複 (>= 0.90 near_duplicate, >= 0.85 similar_existing)、アクショナビリティ (行動指示語チェック EN/JA)、矛盾検出 (classifyConflict + 高類似度)。WARNING のみ、BLOCK しない
+- Review calibration: extractReviewFindings が `review-finding` タグ + `enabled=0` で保存。`ledger verify outcome=confirmed` で enabled=1、`outcome=rejected` で status=rejected
 
 ### Naming Convention (Butler Theme)
 

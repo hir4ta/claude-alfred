@@ -19,3 +19,5 @@ paths:
 - Knowledge governance: `enabled` column in knowledge_index; disabled entries excluded from search
 - Knowledge tab: toggle enabled/disabled via API (PATCH /api/knowledge/{id}/enabled)
 - Knowledge files are git-friendly: sharing via repository, diff-reviewable in PRs
+- Quality gate (`src/mcp/quality-gate.ts`): ledger save 時に実行。セマンティック重複 (0.90 near_duplicate / 0.85 similar_existing)、アクショナビリティ (ACTIONABILITY_PATTERNS EN/JA)、矛盾検出 (classifyConflict + cosine >= 0.85)。WARNING のみ、BLOCK しない。embedding は await + 3秒タイムアウト、成功時は insertEmbedding に再利用
+- Review calibration: review findings は `review-finding` タグ + `enabled=0` + `status=draft` で保存 (通常検索から除外)。`ledger verify outcome=confirmed` → enabled=1 + status=approved、`outcome=rejected` → status=rejected + enabled=0 維持

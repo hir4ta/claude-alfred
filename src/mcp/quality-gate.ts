@@ -138,9 +138,12 @@ export async function qualityGate(
 					}
 				}
 			}
-		} catch {
-			// Timeout or API failure: skip checks, continue with save
-			// embedding = null → ledgerSave falls back to async embedding
+		} catch (err) {
+			// Timeout or API failure: skip checks, continue with save.
+			// embedding = null → ledgerSave falls back to async embedding.
+			if (!(err instanceof Error && err.message === "timeout")) {
+				console.error("[alfred] quality gate error:", err);
+			}
 		}
 	}
 

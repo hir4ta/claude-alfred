@@ -596,7 +596,9 @@ async function ledgerVerify(store: Store, params: LedgerParams) {
 				} catch { /* fail-open */ }
 			} else if (outcome === "rejected") {
 				parsed.status = "rejected";
-				// enabled stays 0 (already disabled from initial save)
+				try {
+					store.db.prepare("UPDATE knowledge_index SET enabled = 0 WHERE id = ?").run(params.id);
+				} catch { /* fail-open */ }
 			}
 			outcomeApplied = true;
 		}
