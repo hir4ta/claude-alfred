@@ -42,7 +42,16 @@ jobs:
         run: bun install
 
       - name: Install target platform native package
-        run: bun add --no-save ${{ matrix.opentui_platform }}
+        run: |
+          PLATFORM="${{ matrix.target }}"
+          PLATFORM="${PLATFORM#bun-}"
+          PKG="@opentui/core-${PLATFORM}"
+          if [ ! -d "node_modules/${PKG}" ]; then
+            echo "Installing ${PKG} for cross-compilation..."
+            npm pack "${PKG}@0.1.90" --pack-destination /tmp 2>/dev/null
+            mkdir -p "node_modules/${PKG}"
+            tar -xzf /tmp/opentui-core-*.tgz -C "node_modules/${PKG}" --strip-components=1
+          fi
 
       - name: Patch @opentui/core for static platform import
         run: |
