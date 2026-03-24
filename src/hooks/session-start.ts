@@ -65,7 +65,7 @@ export async function sessionStart(ev: HookEvent, _signal: AbortSignal): Promise
 	}
 }
 
-function syncKnowledgeIndex(
+export function syncKnowledgeIndex(
 	store: ReturnType<typeof openDefaultCached>,
 	projectPath: string,
 ): void {

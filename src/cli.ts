@@ -36,8 +36,9 @@ const main = defineCommand({
 				const { Store } = await import("./store/index.js");
 				const { Embedder } = await import("./embedder/index.js");
 				const { startDashboard } = await import("./api/server.js");
-				const { resolveOrRegisterProject } = await import("./store/project.js");
+				const { resolveOrRegisterProject, listActiveProjects } = await import("./store/project.js");
 				const { syncAllProjectSpecs } = await import("./store/spec-sync.js");
+				const { syncKnowledgeIndex } = await import("./hooks/session-start.js");
 
 				const cwd = process.cwd();
 				const store = Store.openDefault();
@@ -54,8 +55,15 @@ const main = defineCommand({
 					resolveOrRegisterProject(store, cwd);
 				}
 
-				// Sync specs from all registered projects
+				// Sync specs and knowledge from all registered projects
 				await syncAllProjectSpecs(store, emb);
+				for (const proj of listActiveProjects(store)) {
+					if (existsSync(join(proj.path, ".alfred", "knowledge"))) {
+						try {
+							syncKnowledgeIndex(store, proj.path);
+						} catch { /* fail-open */ }
+					}
+				}
 
 				const version = await resolveVersion();
 				await startDashboard(cwd, store, emb, {
