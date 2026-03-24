@@ -111,6 +111,15 @@ export const translations = {
 	"view.list": { en: "List", ja: "リスト" },
 	"view.card": { en: "Card", ja: "カード" },
 
+	// JSON Spec Renderers
+	"spec.noTestSpecs": { en: "No test specifications defined.", ja: "テスト仕様は未定義です。" },
+	"spec.coverageMatrix": { en: "Coverage Matrix", ja: "カバレッジマトリックス" },
+	"spec.reproSteps": { en: "Reproduction Steps", ja: "再現手順" },
+	"spec.rootCause": { en: "Root Cause", ja: "根本原因" },
+	"spec.fiveWhys": { en: "Five Whys", ja: "5つのなぜ" },
+	"spec.fixStrategy": { en: "Fix Strategy", ja: "修正方針" },
+	"spec.regressionPrevention": { en: "Regression Prevention", ja: "リグレッション防止" },
+
 } as const;
 
 export type TranslationKey = keyof typeof translations;

@@ -315,6 +315,9 @@ function App({ showAll = false }: { showAll?: boolean }) {
 			allTasks.push(...loadTasks(proj.path, proj.name, { showAll }));
 		}
 
+		// Sort by startedAt descending (newest first)
+		allTasks.sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""));
+
 		let filtered = showAll ? allTasks : allTasks.filter((t) => t.status !== "done" && t.status !== "completed" && t.status !== "cancelled");
 
 		if (filterText) {

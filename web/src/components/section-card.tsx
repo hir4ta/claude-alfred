@@ -6,6 +6,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { JsonSpecRenderer } from "./json-spec-renderer";
 
 /** Brand color dot per spec file type */
 function specFileColor(filename: string): string {
@@ -13,9 +14,12 @@ function specFileColor(filename: string): string {
 		"requirements.md": "#40513b",  // session green
 		"design.md": "#628141",        // decision green
 		"tasks.md": "#e67e22",         // rule orange
+		"tasks.json": "#e67e22",       // rule orange
 		"test-specs.md": "#7b6b8d",    // purple
+		"test-specs.json": "#7b6b8d",  // purple
 		"research.md": "#2d8b7a",      // pattern teal
 		"bugfix.md": "#c0392b",        // error red
+		"bugfix.json": "#c0392b",      // error red
 	};
 	return colors[filename] ?? "#6b7280";
 }
@@ -25,11 +29,14 @@ export const SPEC_FILE_COLORS: Record<string, string> = {
 	"requirements.md": "#40513b",
 	"design.md": "#628141",
 	"tasks.md": "#2d8b7a",
+	"tasks.json": "#2d8b7a",
 	"test-specs.md": "#7b6b8d",
+	"test-specs.json": "#7b6b8d",
 	"decisions.md": "#e67e22",
 	"research.md": "#628141",
 	"session.md": "#40513b",
 	"bugfix.md": "#c0392b",
+	"bugfix.json": "#c0392b",
 };
 
 interface SectionCardProps {
@@ -61,7 +68,7 @@ export function SectionCard({
 			>
 				<div className="flex items-center gap-2 flex-1 min-w-0">
 					<div className="size-2 rounded-full shrink-0" style={{ backgroundColor: specFileColor(title) }} />
-					<span className="text-sm font-medium">{title.replace(".md", "")}</span>
+					<span className="text-sm font-medium">{title.replace(/\.(md|json)$/, "")}</span>
 					<ChevronDown
 						className={cn(
 							"size-4 text-muted-foreground transition-transform shrink-0",
@@ -73,7 +80,10 @@ export function SectionCard({
 
 			{open && (
 				<div className="border-t px-4 py-3">
-					<div
+					{title.endsWith(".json") ? (
+						<JsonSpecRenderer filename={title} content={content} />
+					) : (
+						<div
 							className="prose prose-sm prose-stone dark:prose-invert max-w-none
 							prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
 							prose-h1:text-base prose-h1:mt-0 prose-h1:mb-2
@@ -123,6 +133,7 @@ export function SectionCard({
 								{content.replace(/<!--[\s\S]*?-->/g, "")}
 							</Markdown>
 						</div>
+					)}
 				</div>
 			)}
 		</div>
