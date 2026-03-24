@@ -192,14 +192,16 @@ describe("ActiveState management", () => {
 		expect(state.primary).toBe("task-a");
 	});
 
-	it("deletes _active.json when last task is completed", () => {
+	it("empties _active.json when last task is completed", () => {
 		writeTestState({
 			primary: "task-a",
 			tasks: [{ slug: "task-a", started_at: "2026-01-01T00:00:00Z" }],
 		});
 		const newPrimary = completeTask(tmpDir, "task-a");
 		expect(newPrimary).toBe("");
-		expect(() => readActiveState(tmpDir)).toThrow();
+		const state = readActiveState(tmpDir);
+		expect(state.tasks).toHaveLength(0);
+		expect(state.primary).toBe("");
 	});
 
 	it("completeTask moves entry to _complete.json with metadata", () => {

@@ -298,7 +298,7 @@ export function readActiveState(projectPath: string): ActiveState {
 	const migrated = migrateFromMarkdown(projectPath);
 	if (migrated) return migrated;
 
-	throw new Error("read _active.json: file not found");
+	return { primary: "", tasks: [] };
 }
 
 export function readCompleteState(projectPath: string): TerminalState {
@@ -347,14 +347,6 @@ export function completeTask(projectPath: string, taskSlug: string): string {
 
 	// Remove from _active.json
 	state.tasks = state.tasks.filter((t) => t.slug !== taskSlug);
-	if (state.tasks.length === 0) {
-		try {
-			rmSync(activePath(projectPath));
-		} catch {
-			/* ignore */
-		}
-		return state.primary;
-	}
 	writeActiveState(projectPath, state);
 	return state.primary;
 }
@@ -373,14 +365,6 @@ export function cancelTask(projectPath: string, taskSlug: string): string {
 	if (state.primary === taskSlug) {
 		state.primary = state.tasks[0]?.slug ?? "";
 	}
-	if (state.tasks.length === 0) {
-		try {
-			rmSync(activePath(projectPath));
-		} catch {
-			/* ignore */
-		}
-		return state.primary;
-	}
 	writeActiveState(projectPath, state);
 	return state.primary;
 }
@@ -397,19 +381,10 @@ export function removeTask(projectPath: string, taskSlug: string): boolean {
 		rmSync(sd.dir(), { recursive: true, force: true });
 	}
 
-	if (filtered.length === 0) {
-		try {
-			rmSync(activePath(projectPath));
-		} catch {
-			/* ignore */
-		}
-		return true;
-	}
-
 	state.tasks = filtered;
 	if (state.primary === taskSlug) {
-		state.primary = filtered[0]!.slug;
+		state.primary = filtered[0]?.slug ?? "";
 	}
 	writeActiveState(projectPath, state);
-	return false;
+	return filtered.length === 0;
 }

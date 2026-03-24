@@ -18,7 +18,8 @@ paths:
 - SpecType: feature (default, uses requirements.md), bugfix (uses bugfix.md)
 - FilesForSize(size, specType): returns file list for any (size, type) combination
 - Init functional options: WithSize(SpecSize), WithSpecType(SpecType); InitWithResult returns SpecDir + Size + SpecType + Files
-- Backward compat: legacy _active.md without size/spec_type defaults to L/feature; legacy XL/D sizes are treated as malformed (hard error)
+- State files: _active.json (active), _complete.json (completed), _cancel.json (cancelled) — JSON format, auto-migrated from legacy _active.md
+- Backward compat: legacy _active.md auto-migrated to _active.json on first read; legacy XL/D sizes are treated as malformed (hard error)
 
 ## Spec Files
 - Spec v4: 5 files (requirements, design, tasks, test-specs, research); session.md removed — progress tracked via tasks.md; decisions saved via `ledger save sub_type=decision` directly
