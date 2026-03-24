@@ -1,28 +1,24 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Store } from "../../store/index.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Store, _setStoreForTest } from "../../store/index.js";
 import { suppressIO } from "../../__tests__/test-utils.js";
+import { postToolUse } from "../post-tool.js";
+import { readWorkedSlugs } from "../state.js";
 
 let tmpDir: string;
 let store: Store;
-
-vi.mock("../../store/index.js", async (importOriginal) => {
-	const mod = await importOriginal<typeof import("../../store/index.js")>();
-	return {
-		...mod,
-		openDefaultCached: () => store,
-	};
-});
 
 beforeEach(() => {
 	tmpDir = mkdtempSync(join(tmpdir(), "post-tool-ext-"));
 	store = Store.open(join(tmpDir, "test.db"));
 	mkdirSync(join(tmpDir, ".alfred", ".state"), { recursive: true });
+	_setStoreForTest(store);
 });
 
 afterEach(() => {
+	_setStoreForTest(undefined);
 	store.close();
 	rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -41,12 +37,10 @@ describe("postToolUse Bash handling", () => {
 	it("handles normal Bash success without error", async () => {
 		const io = suppressIO();
 		try {
-			const { postToolUse } = await import("../post-tool.js");
 			await postToolUse({
 				cwd: tmpDir, tool_name: "Bash",
 				tool_response: { exitCode: 0, stdout: "all good" },
 			} as any, AbortSignal.timeout(5000));
-			// Should not error
 		} finally { io.restore(); }
 	});
 });
@@ -56,13 +50,11 @@ describe("postToolUse Edit/Write tracking", () => {
 		setupActiveSpec("edit-test");
 		const io = suppressIO();
 		try {
-			const { postToolUse } = await import("../post-tool.js");
 			await postToolUse({
 				cwd: tmpDir, tool_name: "Edit",
 				tool_input: { file_path: join(tmpDir, "src", "test.ts") },
 			} as any, AbortSignal.timeout(5000));
 
-			const { readWorkedSlugs } = await import("../state.js");
 			const slugs = readWorkedSlugs(tmpDir);
 			expect(slugs).toContain("edit-test");
 		} finally { io.restore(); }
@@ -71,15 +63,10 @@ describe("postToolUse Edit/Write tracking", () => {
 
 describe("postToolUse returns early", () => {
 	it("returns early without cwd", async () => {
-		const { postToolUse } = await import("../post-tool.js");
-		// Should not throw
 		await postToolUse({ cwd: "", tool_name: "Bash" } as any, AbortSignal.timeout(5000));
 	});
 
 	it("returns early without tool_name", async () => {
-		const { postToolUse } = await import("../post-tool.js");
 		await postToolUse({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
 	});
 });
-
-

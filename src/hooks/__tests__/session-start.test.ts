@@ -1,32 +1,26 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Store } from "../../store/index.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Store, _setStoreForTest } from "../../store/index.js";
 import { countKnowledge, upsertKnowledge } from "../../store/knowledge.js";
 import type { KnowledgeRow } from "../../types.js";
 import { resetWorkedSlugs, readWorkedSlugs } from "../state.js";
 import { insertTestProject, TEST_PROJECT_ID } from "../../__tests__/test-utils.js";
+import { sessionStart } from "../session-start.js";
 
 let tmpDir: string;
 let store: Store;
-
-// Mock openDefaultCached to return our test store
-vi.mock("../../store/index.js", async (importOriginal) => {
-	const mod = await importOriginal<typeof import("../../store/index.js")>();
-	return {
-		...mod,
-		openDefaultCached: () => store,
-	};
-});
 
 beforeEach(() => {
 	tmpDir = mkdtempSync(join(tmpdir(), "session-start-test-"));
 	store = Store.open(join(tmpDir, "test.db"));
 	insertTestProject(store.db);
+	_setStoreForTest(store);
 });
 
 afterEach(() => {
+	_setStoreForTest(undefined);
 	store.close();
 	rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -73,7 +67,6 @@ describe("worked-slugs reset", () => {
 
 describe("sessionStart", () => {
 	it("returns early when cwd is empty", async () => {
-		const { sessionStart } = await import("../session-start.js");
 		await sessionStart({ cwd: "" } as any, AbortSignal.timeout(5000));
 	});
 
@@ -88,7 +81,6 @@ describe("sessionStart", () => {
 		}) as typeof process.stdout.write;
 		const stderr = suppressStderr();
 		try {
-			const { sessionStart } = await import("../session-start.js");
 			await sessionStart({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
 			const output = stdoutWrites.join("");
 			expect(output).toContain("alfred skill");
@@ -99,7 +91,6 @@ describe("sessionStart", () => {
 	});
 
 	it("builds spec context for active task", async () => {
-		// Setup active spec
 		const specsDir = join(tmpDir, ".alfred", "specs", "ctx-test");
 		mkdirSync(specsDir, { recursive: true });
 		writeFileSync(join(tmpDir, ".alfred", "specs", "_active.json"),
@@ -115,7 +106,6 @@ describe("sessionStart", () => {
 		}) as typeof process.stdout.write;
 		const stderr = suppressStderr();
 		try {
-			const { sessionStart } = await import("../session-start.js");
 			await sessionStart({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
 			const output = stdoutWrites.join("");
 			expect(output).toContain("ctx-test");

@@ -64,6 +64,11 @@ export function openDefaultCached(): Store {
 	return cachedStore;
 }
 
+/** @internal Test-only: override the cached store instance */
+export function _setStoreForTest(s: Store | undefined): void {
+	cachedStore = s;
+}
+
 export function defaultDBPath(): string {
 	return join(homedir(), ".claude-alfred", "alfred.db");
 }

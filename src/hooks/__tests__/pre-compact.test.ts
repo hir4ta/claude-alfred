@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Store } from "../../store/index.js";
-import * as storeModule from "../../store/index.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Store, _setStoreForTest } from "../../store/index.js";
+import { insertTestProject, TEST_PROJECT_ID } from "../../__tests__/test-utils.js";
 import { suppressIO } from "../../__tests__/test-utils.js";
+import { preCompact } from "../pre-compact.js";
 
 let tmpDir: string;
 let store: Store;
@@ -12,11 +13,13 @@ let store: Store;
 beforeEach(() => {
 	tmpDir = mkdtempSync(join(tmpdir(), "pre-compact-test-"));
 	store = Store.open(join(tmpDir, "test.db"));
-	vi.spyOn(storeModule, "openDefaultCached").mockReturnValue(store);
+	// Insert test project to satisfy FK when vi.mock from other test files leaks
+	insertTestProject(store, TEST_PROJECT_ID, tmpDir);
+	_setStoreForTest(store);
 });
 
 afterEach(() => {
-	vi.restoreAllMocks();
+	_setStoreForTest(undefined);
 	store.close();
 	rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -41,7 +44,6 @@ describe("preCompact (FR-6: extractDecisions removed)", () => {
 
 		const io = suppressIO();
 		try {
-			const { preCompact } = await import("../pre-compact.js");
 			await preCompact({ cwd: tmpDir, transcript_path: transcriptPath } as any, AbortSignal.timeout(5000));
 		} finally { io.restore(); }
 
@@ -54,7 +56,6 @@ describe("preCompact (FR-6: extractDecisions removed)", () => {
 
 		const io = suppressIO();
 		try {
-			const { preCompact } = await import("../pre-compact.js");
 			await preCompact({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
 		} finally { io.restore(); }
 
@@ -68,7 +69,6 @@ describe("preCompact (FR-6: extractDecisions removed)", () => {
 
 		const io = suppressIO();
 		try {
-			const { preCompact } = await import("../pre-compact.js");
 			await preCompact({ cwd: tmpDir } as any, AbortSignal.timeout(5000));
 		} finally { io.restore(); }
 
@@ -77,7 +77,6 @@ describe("preCompact (FR-6: extractDecisions removed)", () => {
 	});
 
 	it("returns early when cwd is empty", async () => {
-		const { preCompact } = await import("../pre-compact.js");
 		await preCompact({ cwd: "" } as any, AbortSignal.timeout(5000));
 	});
 });

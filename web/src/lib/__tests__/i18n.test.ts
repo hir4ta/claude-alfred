@@ -16,12 +16,12 @@ describe("i18n translations", () => {
 	});
 
 	it("has nav keys", () => {
-		expect(translations).toHaveProperty("nav.overview");
-		expect(translations).toHaveProperty("nav.knowledge");
+		expect(translations).toHaveProperty(["nav.overview"]);
+		expect(translations).toHaveProperty(["nav.knowledge"]);
 	});
 
 	it("has knowledge keys", () => {
-		expect(translations).toHaveProperty("knowledge.entries");
-		expect(translations).toHaveProperty("knowledge.decision");
+		expect(translations).toHaveProperty(["knowledge.entries"]);
+		expect(translations).toHaveProperty(["knowledge.decision"]);
 	});
 });
