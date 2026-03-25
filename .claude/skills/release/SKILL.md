@@ -30,23 +30,18 @@ Arguments: `$ARGUMENTS`
 Run in order; **abort release if any fails**:
 
 ```
-bun run typecheck
-bun test
+bun tsc --noEmit
+bun vitest run
 bun build.ts
 ```
 
-## Version Update (3 files)
+## Version Update
 
-1. Edit `version` in `package.json` directly (no package-lock.json in this project)
-2. Update `plugins[0].version` in `.claude-plugin/marketplace.json` to `<VERSION>`
-3. Update `version` in `plugin/.claude-plugin/plugin.json` to `<VERSION>`
-
-All 3 must match. This is the version that Claude Code uses for plugin caching.
+Edit `version` in `package.json` only (no plugin files in v1).
 
 ## Commit & Tag
 
-1. Stage release files: `git add package.json .claude-plugin/marketplace.json plugin/.claude-plugin/plugin.json`
-   - Include other uncommitted files if agreed with user
+1. Stage: `git add package.json` (+ other files if agreed with user)
 2. Commit message: `v<VERSION>: <one-line summary of commits>` (in English)
    - Generate summary from `git log <prev-tag>..HEAD --oneline`
    - **NEVER add Co-Authored-By** (public repository)
@@ -65,7 +60,6 @@ git push origin v<VERSION>
 
 Tag push triggers `.github/workflows/release.yml` which:
 - Builds 4 platform binaries (darwin-arm64, darwin-x64, linux-x64, linux-arm64)
-- Packages web assets (alfred-web-assets.tar.gz)
 - Creates GitHub Release with auto-generated release notes + all artifacts
 
 Monitor:
