@@ -1,82 +1,54 @@
 /**
  * alfred TUI — Quality Dashboard
- *
- * Full layout per design/remaining-design.md:
- * - Quality Score + previous session comparison
- * - Gates (on_write / on_commit / test)
- * - Knowledge (error_resolution hits, exemplar injections, convention adherence, DB totals)
- * - Recent Events (real-time stream)
- * - Session Info (elapsed, files, commits, pending-fixes, directives)
  */
 import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useState, useEffect, createElement } from "react";
 import { loadDashboardData, type QualityDashboardData } from "./data.js";
 
-// Gruvbox Material Dark palette (per design spec)
+// Gruvbox Material Dark
 const C = {
-	bg: "#1c1917",
-	fg: "#d3c6aa",
-	dim: "#5c6a72",
-	accent: "#7fbbb3",
+	fg: "#d4be98",
+	dim: "#7c6f64",
+	accent: "#7daea3",
 	green: "#a9b665",
 	yellow: "#d8a657",
 	orange: "#e78a4e",
 	red: "#ea6962",
 	aqua: "#89b482",
-	border: "#414b50",
+	border: "#5a524c",
 };
 
-function scoreColor(score: number): string {
-	if (score >= 80) return C.green;
-	if (score >= 60) return C.yellow;
-	return C.red;
+function scoreColor(n: number) { return n >= 80 ? C.green : n >= 60 ? C.yellow : C.red; }
+
+function bar(pass: number, total: number, w = 10) {
+	if (total === 0) return "─".repeat(w);
+	const f = Math.round((pass / total) * w);
+	return "━".repeat(f) + "─".repeat(w - f);
 }
 
-function bar(pass: number, total: number, width: number): string {
-	if (total === 0) return "─".repeat(width);
-	const filled = Math.round((pass / total) * width);
-	return "█".repeat(filled) + "░".repeat(width - filled);
-}
-
-function rate(pass: number, total: number): string {
-	if (total === 0) return "  -";
-	return `${Math.round((pass / total) * 100)}%`;
-}
-
-function pad(s: string | number, n: number): string {
-	return String(s).padStart(n);
-}
-
-function elapsed(startMs: number): string {
-	const mins = Math.floor((Date.now() - startMs) / 60000);
-	return `${mins}min`;
+function pct(pass: number, total: number) {
+	return total === 0 ? " -" : `${Math.round((pass / total) * 100)}%`;
 }
 
 function App() {
 	const cwd = process.cwd();
 	const [data, setData] = useState<QualityDashboardData | null>(null);
 	const renderer = useRenderer();
-	const { width: termW, height: termH } = useTerminalDimensions();
+	const { height: termH } = useTerminalDimensions();
 
 	useEffect(() => {
 		setData(loadDashboardData(cwd));
-		const interval = setInterval(() => setData(loadDashboardData(cwd)), 2000);
-		return () => clearInterval(interval);
+		const id = setInterval(() => setData(loadDashboardData(cwd)), 2000);
+		return () => clearInterval(id);
 	}, []);
 
 	useKeyboard((key) => {
-		if (key.name === "q" || key.name === "escape") {
-			renderer.destroy();
-		}
+		if (key.name === "q" || key.name === "escape") renderer.destroy();
 		if (key.name === "r") setData(loadDashboardData(cwd));
 	});
 
-	if (!data) {
-		return <box width="100%" height="100%" backgroundColor={C.bg}>
-			<text fg={C.dim}>Loading...</text>
-		</box>;
-	}
+	if (!data) return <text fg={C.dim}>Loading...</text>;
 
 	const s = data.score;
 	const g = data.gates;
@@ -84,96 +56,80 @@ function App() {
 	const kt = data.knowledgeTotals;
 	const sess = data.session;
 
-	const scoreDelta = data.previousScore != null ? s.sessionScore - data.previousScore : null;
-	const deltaStr = scoreDelta != null
-		? scoreDelta >= 0 ? ` ▲ (+${scoreDelta})` : ` ▼ (${scoreDelta})`
-		: "";
-	const deltaColor = scoreDelta != null && scoreDelta >= 0 ? C.green : C.red;
+	const delta = data.previousScore != null ? s.sessionScore - data.previousScore : null;
+	const deltaStr = delta != null ? (delta >= 0 ? `▲+${delta}` : `▼${delta}`) : "";
 
-	const writeTotal = g.onWrite.pass + g.onWrite.fail;
-	const commitTotal = g.onCommit.pass + g.onCommit.fail;
-	const testTotal = g.test.pass + g.test.fail;
-	const errorTotal = k.errorHits + k.errorMisses;
-	const convTotal = k.conventionPass + k.conventionWarn;
+	const wT = g.onWrite.pass + g.onWrite.fail;
+	const cT = g.onCommit.pass + g.onCommit.fail;
+	const tT = g.test.pass + g.test.fail;
+	const eT = k.errorHits + k.errorMisses;
+	const cvT = k.conventionPass + k.conventionWarn;
 
-	const elapsedMins = Math.floor((Date.now() - sess.startedAt) / 60000);
-	const elapsedColor = elapsedMins >= 35 ? C.red : elapsedMins >= 25 ? C.yellow : C.fg;
+	const mins = Math.floor((Date.now() - sess.startedAt) / 60000);
+	const minsColor = mins >= 35 ? C.red : mins >= 25 ? C.yellow : C.fg;
 
-	const eventsHeight = Math.max(termH - 24, 3);
+	const evMax = Math.max(termH - 22, 2);
 
 	return (
-		<box width="100%" height="100%" backgroundColor={C.bg} flexDirection="column">
-			{/* Header: Score */}
-			<box height={3} border title=" alfred " style={{ borderStyle: "single" }} backgroundColor={C.bg}>
-				<text fg={C.fg}> {data.projectName}</text>
-				<text fg={C.dim}> │ Quality Score: </text>
-				<text fg={scoreColor(s.sessionScore)}><strong>{s.sessionScore}/100</strong></text>
-				{scoreDelta != null && <text fg={deltaColor}>{deltaStr}</text>}
-				<text fg={C.dim}> ({s.trend})</text>
+		<box style={{ flexDirection: "column" }}>
+			{/* Header */}
+			<box style={{ flexDirection: "row", paddingX: 1 }}>
+				<ascii-font text="alfred" font="tiny" color={C.accent} />
+				<box style={{ flexDirection: "column", paddingLeft: 2, justifyContent: "flex-end" }}>
+					<text>
+						<span fg={C.fg}>{data.projectName}</span>
+						<span fg={C.dim}> │ Score: </span>
+						<span fg={scoreColor(s.sessionScore)}>{String(s.sessionScore)}/100</span>
+						{delta != null && <span fg={delta >= 0 ? C.green : C.red}> {deltaStr}</span>}
+						<span fg={C.dim}> ({s.trend})</span>
+					</text>
+				</box>
 			</box>
 
 			{/* Gates */}
-			<box height={6} border title="Gates" backgroundColor={C.bg}>
-				<box flexDirection="column" padding={1}>
-					<text fg={C.fg}>
-						{`  on_write   ${pad(g.onWrite.pass, 3)} pass  ${pad(g.onWrite.fail, 3)} fail  ${rate(g.onWrite.pass, writeTotal).padStart(4)}  ${bar(g.onWrite.pass, writeTotal, 10)}`}
-					</text>
-					<text fg={C.fg}>
-						{`  on_commit  ${pad(g.onCommit.pass, 3)} pass  ${pad(g.onCommit.fail, 3)} fail  ${rate(g.onCommit.pass, commitTotal).padStart(4)}  ${bar(g.onCommit.pass, commitTotal, 10)}`}
-					</text>
-					<text fg={C.fg}>
-						{`  test       ${pad(g.test.pass, 3)} pass  ${pad(g.test.fail, 3)} fail  ${rate(g.test.pass, testTotal).padStart(4)}  ${bar(g.test.pass, testTotal, 10)}`}
-					</text>
-				</box>
+			<box style={{ borderStyle: "rounded", borderColor: C.border, flexDirection: "column", paddingX: 1, marginTop: 1 }} title="Gates">
+				<text fg={C.fg}>{`on_write   ${String(g.onWrite.pass).padStart(2)} pass  ${String(g.onWrite.fail).padStart(2)} fail  ${pct(g.onWrite.pass, wT).padStart(4)}  `}<span fg={wT > 0 && g.onWrite.pass === wT ? C.green : C.fg}>{bar(g.onWrite.pass, wT)}</span></text>
+				<text fg={C.fg}>{`on_commit  ${String(g.onCommit.pass).padStart(2)} pass  ${String(g.onCommit.fail).padStart(2)} fail  ${pct(g.onCommit.pass, cT).padStart(4)}  `}<span fg={cT > 0 && g.onCommit.pass === cT ? C.green : C.fg}>{bar(g.onCommit.pass, cT)}</span></text>
+				<text fg={C.fg}>{`test       ${String(g.test.pass).padStart(2)} pass  ${String(g.test.fail).padStart(2)} fail  ${pct(g.test.pass, tT).padStart(4)}  `}<span fg={tT > 0 && g.test.pass === tT ? C.green : C.fg}>{bar(g.test.pass, tT)}</span></text>
 			</box>
 
 			{/* Knowledge */}
-			<box height={6} border title="Knowledge" backgroundColor={C.bg}>
-				<box flexDirection="column" padding={1}>
-					<text fg={C.fg}>
-						{`  error_resolution  hits: ${k.errorHits}/${errorTotal} (${rate(k.errorHits, errorTotal)})  total: ${kt.errorResolutions}`}
-					</text>
-					<text fg={C.fg}>
-						{`  exemplar          injected: ${k.exemplarInjections}      total: ${kt.exemplars}`}
-					</text>
-					<text fg={C.fg}>
-						{`  convention         adherence: ${rate(k.conventionPass, convTotal)}   total: ${kt.conventions}`}
-					</text>
-				</box>
+			<box style={{ borderStyle: "rounded", borderColor: C.border, flexDirection: "column", paddingX: 1 }} title="Knowledge">
+				<text fg={C.fg}>{`error_resolution  hits: ${k.errorHits}/${eT} (${pct(k.errorHits, eT)})  total: ${kt.errorResolutions}`}</text>
+				<text fg={C.fg}>{`exemplar          injected: ${k.exemplarInjections}      total: ${kt.exemplars}`}</text>
+				<text fg={C.fg}>{`convention        adherence: ${pct(k.conventionPass, cvT)}   total: ${kt.conventions}`}</text>
 			</box>
 
 			{/* Recent Events */}
-			<box flexGrow={1} border title="Recent Events" backgroundColor={C.bg}>
-				<box flexDirection="column" padding={1}>
-					{data.recentEvents.slice(0, eventsHeight).map((e, i) => {
-						const icon = e.type.includes("pass") || e.type === "error_hit"
-							? "✓" : e.type.includes("fail") || e.type === "error_miss"
-							? "✗" : "●";
-						const iconColor = icon === "✓" ? C.green : icon === "✗" ? C.red : C.yellow;
-						return (
-							<text key={String(i)} fg={C.fg}>
-								{`  `}<span fg={C.dim}>{e.timestamp}</span>{`  `}<span fg={iconColor}>{icon}</span>{` ${e.type.padEnd(18)}`}<span fg={C.dim}>{e.detail}</span>
-							</text>
-						);
-					})}
-					{data.recentEvents.length === 0 && <text fg={C.dim}>  No events recorded yet</text>}
-				</box>
+			<box style={{ borderStyle: "rounded", borderColor: C.border, flexDirection: "column", paddingX: 1, flexGrow: 1, overflow: "hidden" }} title="Recent Events">
+				{data.recentEvents.length === 0 && <text fg={C.dim}>No events recorded yet</text>}
+				{data.recentEvents.slice(0, evMax).map((e, i) => {
+					const ok = e.type.includes("pass") || e.type === "error_hit";
+					const bad = e.type.includes("fail") || e.type === "error_miss";
+					const icon = ok ? "✓" : bad ? "✗" : "●";
+					const ic = ok ? C.green : bad ? C.red : C.yellow;
+					return (
+						<text key={String(i)} fg={C.fg}>
+							<span fg={C.dim}>{e.timestamp}</span>{`  `}<span fg={ic}>{icon}</span>{` ${e.type.padEnd(18)}`}<span fg={C.dim}>{e.detail}</span>
+						</text>
+					);
+				})}
 			</box>
 
-			{/* Session Info */}
-			<box height={3} border title="Session" backgroundColor={C.bg}>
-				<text fg={C.dim}>
-					{`  `}<span fg={elapsedColor}>{elapsed(sess.startedAt)}</span>
-					{` │ Files: `}<span fg={C.fg}>{String(sess.changedFiles)}</span>
-					{` │ Commits: `}<span fg={C.fg}>{String(sess.commits)}</span>
-					{` │ Pending: `}<span fg={data.pendingFixesCount > 0 ? C.red : C.green}>{String(data.pendingFixesCount)}</span>
-					{` │ Directives: `}<span fg={C.fg}>{String(data.directiveCount)}</span>
+			{/* Session */}
+			<box style={{ height: 1, paddingX: 1 }}>
+				<text>
+					<span fg={C.dim}>Session: </span><span fg={minsColor}>{String(mins)}min</span>
+					<span fg={C.dim}> │ Files: </span><span fg={C.fg}>{String(sess.changedFiles)}</span>
+					<span fg={C.dim}> │ Commits: </span><span fg={C.fg}>{String(sess.commits)}</span>
+					<span fg={C.dim}> │ Pending: </span><span fg={data.pendingFixesCount > 0 ? C.red : C.green}>{String(data.pendingFixesCount)}</span>
+					<span fg={C.dim}> │ Directives: </span><span fg={C.fg}>{String(data.directiveCount)}</span>
 				</text>
 			</box>
 
 			{/* Footer */}
-			<box height={1}>
-				<text fg={C.dim}> [q] quit  [r] refresh</text>
+			<box style={{ height: 1, paddingX: 1 }}>
+				<text fg={C.dim}>[q] quit  [r] refresh</text>
 			</box>
 		</box>
 	);
