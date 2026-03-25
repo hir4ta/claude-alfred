@@ -1,10 +1,22 @@
 import { execFileSync } from "node:child_process";
 import type { HookEvent } from "./dispatcher.js";
 import { writeStateJSON } from "./state.js";
+import type { Store } from "../store/index.js";
 import { openDefaultCached } from "../store/index.js";
 import { resolveOrRegisterProject } from "../store/project.js";
 import { getSessionSummary, calculateQualityScore } from "../store/quality-events.js";
 import { hasPendingFixes } from "./pending-fixes.js";
+
+function findLatestSessionId(store: Store): string | null {
+	try {
+		const row = store.db
+			.prepare("SELECT DISTINCT session_id FROM quality_events ORDER BY created_at DESC LIMIT 1")
+			.get() as { session_id: string } | undefined;
+		return row?.session_id ?? null;
+	} catch {
+		return null;
+	}
+}
 
 /**
  * PreCompact handler: session learning extraction + quality summary + chapter memory.
@@ -25,7 +37,8 @@ function saveQualitySummary(cwd: string): void {
 	try {
 		const store = openDefaultCached();
 		const project = resolveOrRegisterProject(store, cwd);
-		const sessionId = `session-${Date.now()}`;
+		const sessionId = findLatestSessionId(store);
+		if (!sessionId) return;
 
 		const summary = getSessionSummary(store, sessionId);
 		const score = calculateQualityScore(store, sessionId);

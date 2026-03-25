@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Store, openDefaultCached } from "../store/index.js";
 import { resolveOrRegisterProject } from "../store/project.js";
-import { getRecentEvents, getSessionSummary, calculateQualityScore } from "../store/quality-events.js";
+import { getRecentEvents, getSessionSummary, calculateQualityScore, getGateBreakdown } from "../store/quality-events.js";
 import { countKnowledge } from "../store/knowledge.js";
 import { readPendingFixes, hasPendingFixes, type PendingFixes } from "../hooks/pending-fixes.js";
 import { readStateJSON } from "../hooks/state.js";
@@ -77,6 +77,7 @@ export function loadDashboardData(cwd: string): QualityDashboardData {
 
 		const summary = getSessionSummary(store, sessionId);
 		const score = calculateQualityScore(store, sessionId);
+		const gates = getGateBreakdown(store, sessionId);
 		const events = getRecentEvents(store, sessionId, 20);
 
 		// Previous session score
@@ -107,8 +108,8 @@ export function loadDashboardData(cwd: string): QualityDashboardData {
 			score,
 			previousScore,
 			gates: {
-				onWrite: { pass: summary.gate_pass ?? 0, fail: summary.gate_fail ?? 0 },
-				onCommit: { pass: summary.gate_pass ?? 0, fail: summary.gate_fail ?? 0 },
+				onWrite: { pass: gates.onWrite.pass, fail: gates.onWrite.fail },
+				onCommit: { pass: gates.onCommit.pass, fail: gates.onCommit.fail },
 				test: { pass: summary.test_pass ?? 0, fail: summary.test_fail ?? 0 },
 			},
 			knowledge: {

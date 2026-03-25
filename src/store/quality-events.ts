@@ -36,16 +36,54 @@ export function getSessionSummary(
 	return summary as Record<QualityEventType, number>;
 }
 
+export interface GateBreakdown {
+	onWrite: { pass: number; fail: number; total: number; rate: number };
+	onCommit: { pass: number; fail: number; total: number; rate: number };
+}
+
+/**
+ * Separate gate_pass/gate_fail events by group (on_write vs on_commit)
+ * by parsing the JSON data field.
+ */
+export function getGateBreakdown(store: Store, sessionId: string): GateBreakdown {
+	const rows = store.db
+		.prepare(`
+			SELECT event_type, data FROM quality_events
+			WHERE session_id = ? AND event_type IN ('gate_pass', 'gate_fail')
+		`)
+		.all(sessionId) as Array<{ event_type: string; data: string }>;
+
+	const result: GateBreakdown = {
+		onWrite: { pass: 0, fail: 0, total: 0, rate: 1 },
+		onCommit: { pass: 0, fail: 0, total: 0, rate: 1 },
+	};
+
+	for (const row of rows) {
+		let group = "on_write";
+		try {
+			const parsed = JSON.parse(row.data);
+			if (parsed.group) group = parsed.group;
+		} catch { /* default to on_write */ }
+
+		const bucket = group === "on_commit" ? result.onCommit : result.onWrite;
+		if (row.event_type === "gate_pass") bucket.pass++;
+		else bucket.fail++;
+	}
+
+	result.onWrite.total = result.onWrite.pass + result.onWrite.fail;
+	result.onWrite.rate = result.onWrite.total > 0 ? result.onWrite.pass / result.onWrite.total : 1;
+	result.onCommit.total = result.onCommit.pass + result.onCommit.fail;
+	result.onCommit.rate = result.onCommit.total > 0 ? result.onCommit.pass / result.onCommit.total : 1;
+
+	return result;
+}
+
 export function calculateQualityScore(
 	store: Store,
 	sessionId: string,
 ): QualityScore {
 	const summary = getSessionSummary(store, sessionId);
-
-	const gateWritePass = summary.gate_pass ?? 0;
-	const gateWriteFail = summary.gate_fail ?? 0;
-	const gateWriteTotal = gateWritePass + gateWriteFail;
-	const gateWriteRate = gateWriteTotal > 0 ? gateWritePass / gateWriteTotal : 1;
+	const gates = getGateBreakdown(store, sessionId);
 
 	const errorHit = summary.error_hit ?? 0;
 	const errorMiss = summary.error_miss ?? 0;
@@ -59,8 +97,8 @@ export function calculateQualityScore(
 
 	// Weighted score: gate_write 30%, gate_commit 20%, error_resolution 15%, convention 10%, base 25%
 	const score = Math.round(
-		gateWriteRate * 30 +
-		gateWriteRate * 20 + // on_commit uses same events for now
+		gates.onWrite.rate * 30 +
+		gates.onCommit.rate * 20 +
 		errorHitRate * 15 +
 		convRate * 10 +
 		25, // base score
@@ -69,8 +107,8 @@ export function calculateQualityScore(
 	return {
 		sessionScore: Math.min(100, Math.max(0, score)),
 		breakdown: {
-			gatePassRateWrite: { score: Math.round(gateWriteRate * 100), pass: gateWritePass, total: gateWriteTotal },
-			gatePassRateCommit: { score: Math.round(gateWriteRate * 100), pass: gateWritePass, total: gateWriteTotal },
+			gatePassRateWrite: { score: Math.round(gates.onWrite.rate * 100), pass: gates.onWrite.pass, total: gates.onWrite.total },
+			gatePassRateCommit: { score: Math.round(gates.onCommit.rate * 100), pass: gates.onCommit.pass, total: gates.onCommit.total },
 			errorResolutionHit: { score: Math.round(errorHitRate * 100), hit: errorHit, total: errorTotal },
 			conventionAdherence: { score: Math.round(convRate * 100), pass: convPass, total: convTotal },
 		},
@@ -119,10 +157,7 @@ function computeTrend(store: Store, currentScore: number): "improving" | "stable
 /** Raw score calculation without trend (avoids recursion). */
 function calculateQualityScoreRaw(store: Store, sessionId: string): number {
 	const summary = getSessionSummary(store, sessionId);
-	const gp = summary.gate_pass ?? 0;
-	const gf = summary.gate_fail ?? 0;
-	const gt = gp + gf;
-	const gRate = gt > 0 ? gp / gt : 1;
+	const gates = getGateBreakdown(store, sessionId);
 	const eh = summary.error_hit ?? 0;
 	const em = summary.error_miss ?? 0;
 	const et = eh + em;
@@ -131,7 +166,7 @@ function calculateQualityScoreRaw(store: Store, sessionId: string): number {
 	const cw = summary.convention_warn ?? 0;
 	const ct = cp + cw;
 	const cRate = ct > 0 ? cp / ct : 1;
-	return Math.min(100, Math.max(0, Math.round(gRate * 30 + gRate * 20 + eRate * 15 + cRate * 10 + 25)));
+	return Math.min(100, Math.max(0, Math.round(gates.onWrite.rate * 30 + gates.onCommit.rate * 20 + eRate * 15 + cRate * 10 + 25)));
 }
 
 export function getRecentEvents(

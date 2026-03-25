@@ -309,10 +309,6 @@ function recordGateEvents(cwd: string, group: string, results: GateResult[]): vo
 	} catch { /* fail-open */ }
 }
 
-function recordErrorEvent(cwd: string, type: "error_hit" | "error_miss", data: Record<string, unknown>): void {
-	recordQualityEventSafe(cwd, type, data);
-}
-
 function recordQualityEventSafe(
 	cwd: string,
 	eventType: import("../types.js").QualityEventType,
