@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import type { Embedder } from "../embedder/index.js";
 import type { Store } from "../store/index.js";
+import { handleAlfred } from "./alfred-tool.js";
 
 const SERVER_INSTRUCTIONS = `alfred is your quality butler for Claude Code.
 
@@ -66,19 +67,7 @@ Actions:
 			session_id: z.string().optional().describe("Session ID (for score, default: current)"),
 		},
 		async (params) => {
-			// TODO (Phase 1): Implement alfred tool handlers
-			switch (params.action) {
-				case "search":
-					return jsonResult({ status: "not_implemented", message: "Phase 1: search" });
-				case "save":
-					return jsonResult({ status: "not_implemented", message: "Phase 1: save" });
-				case "profile":
-					return jsonResult({ status: "not_implemented", message: "Phase 1: profile" });
-				case "score":
-					return jsonResult({ status: "not_implemented", message: "Phase 1: score" });
-				default:
-					return jsonResult({ error: `Unknown action: ${params.action}` });
-			}
+			return handleAlfred(store, emb, params);
 		},
 	);
 

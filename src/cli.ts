@@ -6,6 +6,17 @@ const main = defineCommand({
 		description: "Quality butler for Claude Code",
 	},
 	subCommands: {
+		init: defineCommand({
+			meta: { description: "Setup alfred (MCP, hooks, rules, skills, agents)" },
+			args: {
+				scan: { type: "boolean", default: false, description: "Also scan for conventions" },
+				force: { type: "boolean", default: false, description: "Overwrite existing config" },
+			},
+			async run({ args }) {
+				const { alfredInit } = await import("./init/index.js");
+				await alfredInit(process.cwd(), { scan: args.scan, force: args.force });
+			},
+		}),
 		serve: defineCommand({
 			meta: { description: "[internal] Start MCP server (stdio)" },
 			async run() {
@@ -127,6 +138,96 @@ const main = defineCommand({
 				// Gates
 				const gatesPath = join(cwd, ".alfred", "gates.json");
 				check(existsSync(gatesPath), "Gates: .alfred/gates.json", "run: alfred init");
+			},
+		}),
+		uninstall: defineCommand({
+			meta: { description: "Remove alfred from this system" },
+			args: {
+				"keep-data": { type: "boolean", default: false, description: "Keep ~/.alfred/ and .alfred/ data" },
+			},
+			async run({ args }) {
+				const { existsSync, rmSync, unlinkSync } = await import("node:fs");
+				const { readFileSync, writeFileSync } = await import("node:fs");
+				const { join } = await import("node:path");
+				const { homedir } = await import("node:os");
+				const home = homedir();
+				const claudeDir = join(home, ".claude");
+				const removed: string[] = [];
+
+				// Remove MCP entry
+				const mcpPath = join(claudeDir, ".mcp.json");
+				if (existsSync(mcpPath)) {
+					try {
+						const mcp = JSON.parse(readFileSync(mcpPath, "utf-8"));
+						if (mcp.mcpServers?.alfred) {
+							delete mcp.mcpServers.alfred;
+							writeFileSync(mcpPath, JSON.stringify(mcp, null, 2) + "\n");
+							removed.push("MCP: alfred entry");
+						}
+					} catch { /* ignore */ }
+				}
+
+				// Remove hooks from settings.json
+				const settingsPath = join(claudeDir, "settings.json");
+				if (existsSync(settingsPath)) {
+					try {
+						const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+						if (settings.hooks) {
+							let cleaned = 0;
+							for (const [event, handlers] of Object.entries(settings.hooks)) {
+								if (Array.isArray(handlers)) {
+									const filtered = (handlers as Array<Record<string, unknown>>).filter((h) => {
+										const hooks = h.hooks as Array<Record<string, unknown>> | undefined;
+										return !hooks?.some((hk) => typeof hk.command === "string" && (hk.command as string).startsWith("alfred "));
+									});
+									if (filtered.length !== (handlers as unknown[]).length) {
+										settings.hooks[event] = filtered.length > 0 ? filtered : undefined;
+										cleaned++;
+									}
+								}
+							}
+							// Clean up empty events
+							for (const key of Object.keys(settings.hooks)) {
+								if (!settings.hooks[key] || (Array.isArray(settings.hooks[key]) && settings.hooks[key].length === 0)) {
+									delete settings.hooks[key];
+								}
+							}
+							if (cleaned > 0) {
+								writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+								removed.push(`Hooks: ${cleaned} events`);
+							}
+						}
+					} catch { /* ignore */ }
+				}
+
+				// Remove rules, skills, agents
+				const toDelete = [
+					join(claudeDir, "rules", "alfred-quality.md"),
+					join(claudeDir, "agents", "alfred-reviewer.md"),
+				];
+				const dirsToDelete = [
+					join(claudeDir, "skills", "alfred-review"),
+					join(claudeDir, "skills", "alfred-conventions"),
+				];
+				for (const p of toDelete) {
+					if (existsSync(p)) { unlinkSync(p); removed.push(p); }
+				}
+				for (const d of dirsToDelete) {
+					if (existsSync(d)) { rmSync(d, { recursive: true }); removed.push(d); }
+				}
+
+				// Remove data
+				if (!args["keep-data"]) {
+					const alfredHome = join(home, ".alfred");
+					if (existsSync(alfredHome)) { rmSync(alfredHome, { recursive: true }); removed.push(alfredHome); }
+				}
+
+				if (removed.length === 0) {
+					console.log("Nothing to remove.");
+				} else {
+					for (const p of removed) console.log(`  ✓ removed: ${p}`);
+					console.log("\nalfred uninstalled.");
+				}
 			},
 		}),
 		"hook-internal": defineCommand({

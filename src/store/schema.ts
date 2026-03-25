@@ -1,6 +1,6 @@
 import type { DbDatabase } from "./db.js";
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 1;
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -12,113 +12,33 @@ CREATE TABLE IF NOT EXISTS projects (
     name            TEXT NOT NULL,
     remote          TEXT DEFAULT '',
     path            TEXT NOT NULL,
-    branch          TEXT DEFAULT '',
     registered_at   TEXT NOT NULL,
     last_seen_at    TEXT NOT NULL,
-    status          TEXT DEFAULT 'active',
-    metadata        TEXT DEFAULT '{}'
+    status          TEXT DEFAULT 'active'
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_remote_path
-    ON projects(remote, path);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_path ON projects(path);
 
 CREATE TABLE IF NOT EXISTS knowledge_index (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    file_path       TEXT NOT NULL,
-    content_hash    TEXT NOT NULL,
+    type            TEXT NOT NULL CHECK(type IN ('error_resolution','exemplar','convention')),
     title           TEXT NOT NULL,
     content         TEXT NOT NULL,
-    sub_type        TEXT NOT NULL DEFAULT 'decision',
-    branch          TEXT DEFAULT '',
+    tags            TEXT DEFAULT '',
     author          TEXT DEFAULT '',
-    created_at      TEXT NOT NULL,
-    updated_at      TEXT NOT NULL,
     hit_count       INTEGER DEFAULT 0,
     last_accessed   TEXT DEFAULT '',
     enabled         INTEGER DEFAULT 1,
-    UNIQUE(project_id, file_path)
-);
-
-CREATE INDEX IF NOT EXISTS idx_ki_project ON knowledge_index(project_id);
-CREATE INDEX IF NOT EXISTS idx_ki_sub_type ON knowledge_index(sub_type);
-CREATE INDEX IF NOT EXISTS idx_ki_updated ON knowledge_index(updated_at);
-CREATE INDEX IF NOT EXISTS idx_ki_author ON knowledge_index(author);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
-    title,
-    content,
-    sub_type,
-    content='knowledge_index',
-    content_rowid='id'
-);
-
-CREATE TRIGGER IF NOT EXISTS ki_fts_ai AFTER INSERT ON knowledge_index BEGIN
-    INSERT INTO knowledge_fts(rowid, title, content, sub_type)
-    VALUES (new.id, new.title, new.content, new.sub_type);
-END;
-CREATE TRIGGER IF NOT EXISTS ki_fts_ad AFTER DELETE ON knowledge_index BEGIN
-    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content, sub_type)
-    VALUES ('delete', old.id, old.title, old.content, old.sub_type);
-END;
-CREATE TRIGGER IF NOT EXISTS ki_fts_au AFTER UPDATE ON knowledge_index BEGIN
-    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content, sub_type)
-    VALUES ('delete', old.id, old.title, old.content, old.sub_type);
-    INSERT INTO knowledge_fts(rowid, title, content, sub_type)
-    VALUES (new.id, new.title, new.content, new.sub_type);
-END;
-
-CREATE TABLE IF NOT EXISTS spec_index (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    slug            TEXT NOT NULL,
-    file_name       TEXT NOT NULL,
-    content_hash    TEXT NOT NULL,
-    title           TEXT NOT NULL DEFAULT '',
-    content         TEXT NOT NULL,
-    size            TEXT NOT NULL DEFAULT 'M',
-    spec_type       TEXT NOT NULL DEFAULT 'feature',
-    status          TEXT NOT NULL DEFAULT 'active',
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
-    UNIQUE(project_id, slug, file_name)
+    UNIQUE(project_id, type, title)
 );
-
-CREATE INDEX IF NOT EXISTS idx_si_project ON spec_index(project_id);
-CREATE INDEX IF NOT EXISTS idx_si_slug ON spec_index(slug);
-CREATE INDEX IF NOT EXISTS idx_si_status ON spec_index(status);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS spec_fts USING fts5(
-    title,
-    content,
-    slug,
-    content='spec_index',
-    content_rowid='id'
-);
-
-CREATE TRIGGER IF NOT EXISTS si_fts_ai AFTER INSERT ON spec_index BEGIN
-    INSERT INTO spec_fts(rowid, title, content, slug)
-    VALUES (new.id, new.title, new.content, new.slug);
-END;
-CREATE TRIGGER IF NOT EXISTS si_fts_ad AFTER DELETE ON spec_index BEGIN
-    INSERT INTO spec_fts(spec_fts, rowid, title, content, slug)
-    VALUES ('delete', old.id, old.title, old.content, old.slug);
-END;
-CREATE TRIGGER IF NOT EXISTS si_fts_au AFTER UPDATE ON spec_index BEGIN
-    INSERT INTO spec_fts(spec_fts, rowid, title, content, slug)
-    VALUES ('delete', old.id, old.title, old.content, old.slug);
-    INSERT INTO spec_fts(rowid, title, content, slug)
-    VALUES (new.id, new.title, new.content, new.slug);
-END;
-
-CREATE TABLE IF NOT EXISTS tag_aliases (
-    tag   TEXT NOT NULL,
-    alias TEXT NOT NULL,
-    PRIMARY KEY (tag, alias)
-);
+CREATE INDEX IF NOT EXISTS idx_ki_project ON knowledge_index(project_id);
+CREATE INDEX IF NOT EXISTS idx_ki_type ON knowledge_index(type);
 
 CREATE TABLE IF NOT EXISTS embeddings (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    source     TEXT NOT NULL,
+    source     TEXT NOT NULL DEFAULT 'knowledge',
     source_id  INTEGER NOT NULL,
     model      TEXT NOT NULL,
     dims       INTEGER NOT NULL,
@@ -127,160 +47,68 @@ CREATE TABLE IF NOT EXISTS embeddings (
     UNIQUE (source, source_id)
 );
 
+CREATE TABLE IF NOT EXISTS quality_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    session_id  TEXT DEFAULT '',
+    event_type  TEXT NOT NULL CHECK(event_type IN (
+        'gate_pass','gate_fail',
+        'error_hit','error_miss',
+        'test_pass','test_fail',
+        'assertion_warning',
+        'convention_pass','convention_warn'
+    )),
+    data        TEXT DEFAULT '{}',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_qe_project ON quality_events(project_id);
+CREATE INDEX IF NOT EXISTS idx_qe_session ON quality_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_qe_type ON quality_events(event_type);
 `;
 
-const TAG_ALIASES: Record<string, string[]> = {
-	auth: ["authentication", "login", "認証", "ログイン"],
-	db: ["database", "sqlite", "データベース"],
-	api: ["endpoint", "rest", "graphql"],
-	test: ["testing", "テスト", "spec"],
-	security: ["セキュリティ", "vulnerability", "脆弱性"],
-	config: ["configuration", "settings", "設定"],
-	deploy: ["deployment", "デプロイ", "release"],
-	perf: ["performance", "パフォーマンス", "optimization", "最適化"],
-	error: ["エラー", "bug", "バグ", "failure"],
-	hook: ["hooks", "フック", "lifecycle"],
-	memory: ["メモリ", "knowledge", "ナレッジ"],
-	spec: ["specification", "仕様", "requirement"],
-	embed: ["embedding", "埋め込み", "vector", "ベクトル"],
-	search: ["検索", "query", "クエリ"],
-	refactor: ["リファクタ", "cleanup", "restructure"],
-	ci: ["ci/cd", "pipeline", "github actions"],
-};
-
-const LEGACY_TABLES = [
-	"records_fts",
-	"records",
-	"docs",
-	"docs_fts",
-	"crawl_meta",
-	"doc_feedback",
-	"instincts",
-	"patterns",
-	"pattern_tags",
-	"pattern_files",
-	"patterns_fts",
-	"alerts",
-	"alert_events",
-	"suggestion_outcomes",
-	"failure_solutions",
-	"solution_chains",
-	"learned_episodes",
-	"feedbacks",
-	"coaching_cache",
-	"snr_history",
-	"signal_outcomes",
-	"user_pattern_effectiveness",
-	"user_profile",
-	"user_preferences",
-	"adaptive_baselines",
-	"workflow_sequences",
-	"file_co_changes",
-	"live_session_phases",
-	"live_session_files",
-	"global_tool_sequences",
-	"global_tool_trigrams",
-	"tags",
-	"preferences",
-	"sessions",
-	"events",
-	"compact_events",
-	"decisions",
-	"tool_failures",
-];
-
-const LEGACY_TRIGGERS = [
-	"records_fts_ai",
-	"records_fts_ad",
-	"records_fts_au",
-	"patterns_fts_ai",
-	"patterns_fts_ad",
-	"patterns_fts_au",
-	"decisions_fts_ai",
-	"decisions_fts_ad",
-	"decisions_fts_au",
-	"docs_fts_ai",
-	"docs_fts_ad",
-	"docs_fts_au",
-	"ki_fts_ai",
-	"ki_fts_ad",
-	"ki_fts_au",
-	"si_fts_ai",
-	"si_fts_ad",
-	"si_fts_au",
-];
-
-const LEGACY_INDEXES = [
-	"idx_records_source_type",
-	"idx_records_crawled_at",
-	"idx_records_sub_type",
-	"idx_embeddings_source",
-	"idx_docs_source_type",
-	"idx_docs_crawled_at",
-	"idx_wseq_task",
-	"idx_cochange_a",
-	"idx_live_phases_session",
-	"idx_live_files_session",
-	"idx_gts_from",
-	"idx_gtt_t1t2",
-	"idx_decisions_session",
-	"idx_decisions_timestamp",
-	"idx_instincts_scope",
-	"idx_instincts_domain",
-	"idx_instincts_confidence",
-	"idx_ki_project",
-	"idx_ki_sub_type",
-	"idx_ki_updated",
-	"idx_si_project",
-	"idx_si_slug",
-	"idx_si_status",
-	"idx_projects_remote_path",
-];
-
-const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-
-function dropSafe(db: DbDatabase, kind: string, name: string): void {
-	if (!SAFE_IDENTIFIER.test(name)) {
-		throw new Error(`store: unsafe identifier in DROP ${kind}: "${name}"`);
-	}
-	db.exec(`DROP ${kind} IF EXISTS ${name}`);
-}
-
-function seedTagAliases(db: DbDatabase): void {
-	const stmt = db.prepare("INSERT OR IGNORE INTO tag_aliases (tag, alias) VALUES (?, ?)");
-	for (const [tag, aliases] of Object.entries(TAG_ALIASES)) {
-		for (const alias of aliases) {
-			stmt.run(tag, alias);
-		}
-	}
-}
-
+/**
+ * Drop everything and rebuild from scratch.
+ * V1 is a clean start — no migration from v0.x.
+ */
 function rebuildFromScratch(db: DbDatabase): void {
-	for (const trigger of LEGACY_TRIGGERS) {
-		dropSafe(db, "TRIGGER", trigger);
+	// Drop all known tables (v0.x legacy + v1)
+	const allTables = [
+		// v0.x legacy
+		"knowledge_fts", "spec_fts", "spec_index", "tag_aliases",
+		"session_links", "audit_log",
+		// v1
+		"quality_events", "embeddings", "knowledge_index", "projects", "schema_version",
+		// ancient legacy
+		"records_fts", "records", "docs", "docs_fts", "crawl_meta",
+		"doc_feedback", "instincts", "patterns", "pattern_tags",
+		"pattern_files", "patterns_fts", "alerts", "alert_events",
+		"suggestion_outcomes", "failure_solutions", "solution_chains",
+		"learned_episodes", "feedbacks", "coaching_cache", "snr_history",
+		"signal_outcomes", "user_pattern_effectiveness", "user_profile",
+		"user_preferences", "adaptive_baselines", "workflow_sequences",
+		"file_co_changes", "live_session_phases", "live_session_files",
+		"global_tool_sequences", "global_tool_trigrams", "tags",
+		"preferences", "sessions", "events", "compact_events",
+		"decisions", "tool_failures",
+	];
+
+	// Drop triggers first
+	const triggers = [
+		"ki_fts_ai", "ki_fts_ad", "ki_fts_au",
+		"si_fts_ai", "si_fts_ad", "si_fts_au",
+		"records_fts_ai", "records_fts_ad", "records_fts_au",
+		"patterns_fts_ai", "patterns_fts_ad", "patterns_fts_au",
+		"decisions_fts_ai", "decisions_fts_ad", "decisions_fts_au",
+		"docs_fts_ai", "docs_fts_ad", "docs_fts_au",
+	];
+	for (const t of triggers) {
+		db.exec(`DROP TRIGGER IF EXISTS ${t}`);
 	}
-	for (const table of LEGACY_TABLES) {
-		dropSafe(db, "TABLE", table);
+	for (const t of allTables) {
+		db.exec(`DROP TABLE IF EXISTS ${t}`);
 	}
-	for (const table of [
-		"audit_log",
-		"session_links",
-		"spec_fts",
-		"spec_index",
-		"knowledge_fts",
-		"knowledge_index",
-		"embeddings",
-		"projects",
-		"tag_aliases",
-		"schema_version",
-	]) {
-		dropSafe(db, "TABLE", table);
-	}
-	for (const idx of LEGACY_INDEXES) {
-		dropSafe(db, "INDEX", idx);
-	}
+
 	db.exec(DDL);
-	seedTagAliases(db);
 }
 
 function setSchemaVersion(db: DbDatabase, ver: number): void {
@@ -305,27 +133,5 @@ export function migrate(db: DbDatabase): void {
 			setSchemaVersion(db, SCHEMA_VERSION);
 		});
 		txn();
-	}
-
-	// Post-migration: add verification columns (idempotent ALTER TABLE).
-	addVerificationColumns(db);
-}
-
-/**
- * FR-1a (knowledge-lifecycle): Add verification columns to knowledge_index.
- * Uses ALTER TABLE ADD COLUMN (idempotent via try-catch) to avoid rebuildFromScratch.
- */
-function addVerificationColumns(db: DbDatabase): void {
-	const columns = [
-		"ALTER TABLE knowledge_index ADD COLUMN verification_due TEXT",
-		"ALTER TABLE knowledge_index ADD COLUMN last_verified TEXT",
-		"ALTER TABLE knowledge_index ADD COLUMN verification_count INTEGER DEFAULT 0",
-	];
-	for (const sql of columns) {
-		try {
-			db.exec(sql);
-		} catch {
-			// Column already exists — expected on subsequent runs.
-		}
 	}
 }

@@ -94,5 +94,5 @@ export function _setStoreForTest(s: Store | undefined): void {
 }
 
 export function defaultDBPath(): string {
-	return join(homedir(), ".claude-alfred", "alfred.db");
+	return join(homedir(), ".alfred", "alfred.db");
 }

@@ -340,33 +340,35 @@ alfred CLI バイナリ (bun build --compile)
 | Phase | 状態 | タスク数 | 完了 |
 |---|---|---|---|
 | Phase 0: Gut | **完了** | 9 | 9/9 |
-| Phase 1: Foundation | 未着手 | 7 | 0/7 |
+| Phase 1: Foundation | **��了** | 7 | 7/7 |
 | Phase 2: Walls | 未着手 | 6 | 0/6 |
 | Phase 3: Intelligence | 未着手 | 5 | 0/5 |
 | Phase 4: Polish | 未着手 | 7 | 0/7 |
-| **合計** | | **34** | **9/34** |
+| **合計** | | **34** | **16/34** |
 
 ---
 
 ## セッション引き継ぎノート
 
 ### 現在の状態 (2026-03-26)
-- **Phase 0 完了** — 全削除済み、tsc + build + vitest 全パス
+- **Phase 0 + Phase 1 完了** — tsc + build + vitest 全パス
 - 設計ドキュメントは `design/` に全て格納
 
-### Phase 0 完了サマリー
-- 削除: web/, src/api/, src/spec/, plugin/, src/mcp/dossier/, living-spec, review-gate, spec-guard, drift, knowledge-extractor, ledger, helpers, quality-gate, spec-sync
-- Hook 6本: v1骨格にリライト（TODO コメント付き）
-- MCP: dossier + ledger → `alfred` 1ツール4アクション（スタブ）
-- CLI: dashboard/specs/update 削除、tui/doctor v2化
-- TUI: スタブ化（Phase 4 で実装）
-- types.ts: v1型定義 + v1 互換型（Phase 1 で削除）
-- テスト: 28/28 パス（dispatcher, directives, state のみ残存）
-- ビルド: dist/cli.mjs 生成成功
+### Phase 1 完了サマリー
+- P1-1: DB Schema V1 (projects, knowledge_index, embeddings, quality_events) — FTS5完全削除、v0互換型削除
+- P1-2: Voyage only 検索パイプライン (`src/store/search.ts`) — vector search → rerank → recency → hit_count
+- P1-3: MCP ツール `alfred` 実装 (`src/mcp/alfred-tool.ts`) — search/save/profile/score の4アクション
+- P1-4: プロジェクトプロファイリング (`src/profile/detect.ts`) — 言語/テストFW/リンター/ビルドシステム自動検出
+- P1-5: gates.json フレームワーク (`src/gates/index.ts`) — load/run/detect + 自動検出
+- P1-6: `alfred init` (`src/init/index.ts`) — MCP/hooks/rules/skills/agents/gates/profile/DB 一括セットアップ
+- P1-7: `alfred uninstall` (CLI) — クリーンアンインストール
+- DB パス: `~/.alfred/alfred.db`
+- テスト: 28/28 パス
+- 新規ファイル: src/store/search.ts, src/store/quality-events.ts, src/mcp/alfred-tool.ts, src/profile/detect.ts, src/gates/index.ts, src/init/index.ts
 
 ### 次のアクション
-- Phase 1 (Foundation) から開始
-- P1-1 (DB Schema V1) から着手
+- Phase 2 (Walls) から開始
+- P2-1 (PostToolUse リライト) から着手 — 最重要 Hook
 
 ### 重要な設計判断（覚えておくべき）
 1. **Plugin 不要** — `alfred init` で ~/.claude/ に直接配置

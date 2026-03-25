@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DbDatabase } from "../store/db.js";
 import { Store } from "../store/index.js";
-import type { KnowledgeRowV1 as KnowledgeRow } from "../types.js";
+import type { KnowledgeType } from "../types.js";
 
 export const TEST_PROJECT_ID = "test-project-id";
 
-/** Insert a test project into the projects table. Accepts Store or raw Database. */
+/** Insert a test project into the projects table. */
 export function insertTestProject(
 	storeOrDb: Store | DbDatabase,
 	id = TEST_PROJECT_ID,
@@ -15,30 +15,28 @@ export function insertTestProject(
 ): string {
 	const db = "db" in storeOrDb ? storeOrDb.db : storeOrDb;
 	db.prepare(`
-		INSERT OR IGNORE INTO projects (id, name, remote, path, branch, registered_at, last_seen_at, status)
-		VALUES (?, 'test', '', ?, '', datetime('now'), datetime('now'), 'active')
+		INSERT OR IGNORE INTO projects (id, name, remote, path, registered_at, last_seen_at, status)
+		VALUES (?, 'test', '', ?, datetime('now'), datetime('now'), 'active')
 	`).run(id, path);
 	return id;
 }
 
-/** Build a KnowledgeRow with sensible defaults, overridable. */
-export function makeRow(overrides: Partial<KnowledgeRow> = {}): KnowledgeRow {
+/** Build a knowledge upsert input with sensible defaults. */
+export function makeKnowledgeInput(overrides: {
+	projectId?: string;
+	type?: KnowledgeType;
+	title?: string;
+	content?: string;
+	tags?: string;
+	author?: string;
+} = {}) {
 	return {
-		id: 0,
-		filePath: "decisions/test.json",
-		contentHash: "",
-		title: "Test Entry",
-		content: '{"id":"test","decision":"use X","reasoning":"because Y"}',
-		subType: "decision",
-		projectId: TEST_PROJECT_ID,
-		branch: "main",
-		createdAt: new Date().toISOString(),
-		updatedAt: "",
-		hitCount: 0,
-		lastAccessed: "",
-		enabled: true,
-		author: "",
-		...overrides,
+		projectId: overrides.projectId ?? TEST_PROJECT_ID,
+		type: overrides.type ?? ("error_resolution" as KnowledgeType),
+		title: overrides.title ?? "Test Entry",
+		content: overrides.content ?? '{"error_signature":"test","resolution":"fix it"}',
+		tags: overrides.tags ?? "",
+		author: overrides.author ?? "",
 	};
 }
 

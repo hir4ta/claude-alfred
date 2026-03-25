@@ -1,51 +1,4 @@
-// ===== v1 Compatibility (removed in Phase 1 when store is rewritten) =====
-
-/** @deprecated v1 compat — will be removed in Phase 1 */
-export interface KnowledgeRowV1 {
-	id: number;
-	projectId: string;
-	filePath: string;
-	contentHash: string;
-	title: string;
-	content: string;
-	subType: string;
-	branch: string;
-	author: string;
-	createdAt: string;
-	updatedAt: string;
-	hitCount: number;
-	lastAccessed: string;
-	enabled: boolean;
-	verificationDue?: string | null;
-	lastVerified?: string | null;
-	verificationCount?: number;
-}
-
-/** @deprecated v1 compat */
-export interface KnowledgeStats {
-	total: number;
-	bySubType: Record<string, number>;
-	avgHitCount: number;
-	topAccessed: KnowledgeRowV1[];
-}
-
-/** @deprecated v1 compat */
-export interface KnowledgeConflict {
-	a: KnowledgeRowV1;
-	b: KnowledgeRowV1;
-	similarity: number;
-	type: "potential_duplicate" | "potential_contradiction";
-}
-
-/** @deprecated v1 compat */
-export interface ProjectInfo {
-	remote: string;
-	path: string;
-	name: string;
-	branch: string;
-}
-
-// ===== v2 Knowledge Types =====
+// ===== Knowledge Types =====
 
 export type KnowledgeType = "error_resolution" | "exemplar" | "convention";
 export const KNOWLEDGE_TYPES: KnowledgeType[] = ["error_resolution", "exemplar", "convention"];
@@ -114,13 +67,9 @@ export interface ProjectRecord {
 	name: string;
 	remote: string;
 	path: string;
-	/** @deprecated v1 compat — removed in Phase 1 */
-	branch: string;
 	registeredAt: string;
 	lastSeenAt: string;
 	status: string;
-	/** @deprecated v1 compat — removed in Phase 1 */
-	metadata: string;
 }
 
 // ===== Vector Search =====
@@ -128,8 +77,6 @@ export interface ProjectRecord {
 export interface VectorMatch {
 	sourceId: number;
 	score: number;
-	/** @deprecated v1 compat — removed in Phase 1 */
-	source?: "knowledge" | "spec";
 }
 
 // ===== Quality Score =====
