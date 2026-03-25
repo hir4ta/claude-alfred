@@ -235,6 +235,96 @@ const main = defineCommand({
 				}
 			},
 		}),
+		status: defineCommand({
+			meta: { description: "Show current quality status" },
+			async run() {
+				const { existsSync } = await import("node:fs");
+				const { join } = await import("node:path");
+				const cwd = process.cwd();
+				const version = await resolveVersion();
+
+				console.log(`alfred status (v${version})\n`);
+
+				// --- Project ---
+				const alfredDir = join(cwd, ".alfred");
+				if (!existsSync(join(alfredDir, "gates.json"))) {
+					console.error("No .alfred/ found. Run: alfred init");
+					process.exit(1);
+				}
+
+				const { openDefaultCached } = await import("./store/index.js");
+				const { resolveOrRegisterProject } = await import("./store/project.js");
+				const { detectProjectProfile } = await import("./profile/detect.js");
+				const { calculateQualityScore, getLatestSessionId, getRecentEvents } = await import("./store/quality-events.js");
+				const { countKnowledge } = await import("./store/knowledge.js");
+
+				const store = openDefaultCached();
+				const project = resolveOrRegisterProject(store, cwd);
+				const profile = detectProjectProfile(cwd);
+
+				console.log(`Project: ${project.name}`);
+				console.log(`  Path:  ${project.path}`);
+				const stack = [
+					profile.languages.join(", ") || "unknown",
+					profile.runtime !== "unknown" ? `(${profile.runtime})` : "",
+					profile.testFramework !== "unknown" ? `/ ${profile.testFramework}` : "",
+					profile.linter !== "unknown" ? `/ ${profile.linter}` : "",
+				].filter(Boolean).join(" ");
+				console.log(`  Stack: ${stack}`);
+
+				// --- Quality Score ---
+				const sessionId = getLatestSessionId(store, project.id);
+				if (sessionId) {
+					const score = calculateQualityScore(store, sessionId);
+					const trendIcon = score.trend === "improving" ? "+" : score.trend === "declining" ? "-" : "=";
+					console.log(`\nQuality Score: ${score.sessionScore}/100 (${trendIcon} ${score.trend})`);
+					const b = score.breakdown;
+					if (b.gatePassRateWrite.total > 0) {
+						console.log(`  Gate Write:    ${b.gatePassRateWrite.score}% (${b.gatePassRateWrite.pass}/${b.gatePassRateWrite.total})`);
+					}
+					if (b.gatePassRateCommit.total > 0) {
+						console.log(`  Gate Commit:   ${b.gatePassRateCommit.score}% (${b.gatePassRateCommit.pass}/${b.gatePassRateCommit.total})`);
+					}
+					if (b.errorResolutionHit.total > 0) {
+						console.log(`  Error Cache:   ${b.errorResolutionHit.score}% (${b.errorResolutionHit.hit}/${b.errorResolutionHit.total})`);
+					}
+					if (b.conventionAdherence.total > 0) {
+						console.log(`  Conventions:   ${b.conventionAdherence.score}% (${b.conventionAdherence.pass}/${b.conventionAdherence.total})`);
+					}
+				} else {
+					console.log("\nQuality Score: no data (no sessions recorded)");
+				}
+
+				// --- Knowledge DB ---
+				const totalKnowledge = countKnowledge(store, project.id);
+				if (totalKnowledge > 0) {
+					const typeCounts = store.db
+						.prepare(`
+							SELECT type, COUNT(*) as cnt FROM knowledge_index
+							WHERE project_id = ? AND enabled = 1 GROUP BY type
+						`)
+						.all(project.id) as Array<{ type: string; cnt: number }>;
+					console.log(`\nKnowledge DB: ${totalKnowledge} entries`);
+					for (const tc of typeCounts) {
+						console.log(`  ${tc.type}: ${tc.cnt}`);
+					}
+				} else {
+					console.log("\nKnowledge DB: empty");
+				}
+
+				// --- Recent Events ---
+				if (sessionId) {
+					const events = getRecentEvents(store, sessionId, 5);
+					if (events.length > 0) {
+						console.log("\nRecent Events:");
+						for (const e of events) {
+							const time = e.createdAt.replace("T", " ").slice(0, 16);
+							console.log(`  ${e.eventType.padEnd(18)} ${time}`);
+						}
+					}
+				}
+			},
+		}),
 		uninstall: defineCommand({
 			meta: { description: "Remove alfred from this system" },
 			args: {

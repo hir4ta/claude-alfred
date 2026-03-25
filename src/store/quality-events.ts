@@ -169,6 +169,17 @@ function calculateQualityScoreRaw(store: Store, sessionId: string): number {
 	return Math.min(100, Math.max(0, Math.round(gates.onWrite.rate * 30 + gates.onCommit.rate * 20 + eRate * 15 + cRate * 10 + 25)));
 }
 
+export function getLatestSessionId(store: Store, projectId: string): string | null {
+	const row = store.db
+		.prepare(`
+			SELECT session_id FROM quality_events
+			WHERE project_id = ? AND session_id NOT LIKE 'session-%'
+			ORDER BY created_at DESC LIMIT 1
+		`)
+		.get(projectId) as { session_id: string } | null;
+	return row?.session_id ?? null;
+}
+
 export function getRecentEvents(
 	store: Store,
 	sessionId: string,
