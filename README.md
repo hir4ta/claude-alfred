@@ -37,6 +37,7 @@ User → Claude Code → (alfred hooks: monitor + inject + gate)
 # Build
 bun install
 bun build.ts
+bun link          # Makes 'alfred' command available globally
 
 # Setup (writes to ~/.claude/)
 alfred init
