@@ -125,10 +125,31 @@ const main = defineCommand({
 				// Skills
 				const reviewSkill = join(home, ".claude", "skills", "alfred-review", "SKILL.md");
 				check(existsSync(reviewSkill), "Skill: alfred-review", "not found — run: alfred init");
+				const convSkill = join(home, ".claude", "skills", "alfred-conventions", "SKILL.md");
+				check(existsSync(convSkill), "Skill: alfred-conventions", "not found — run: alfred init");
+
+				// Checklists
+				const checklistDir = join(home, ".claude", "skills", "alfred-review", "checklists");
+				const hasChecklists = existsSync(join(checklistDir, "security.md"))
+					&& existsSync(join(checklistDir, "logic.md"))
+					&& existsSync(join(checklistDir, "design.md"));
+				check(hasChecklists, "Checklists: security, logic, design", "not found — run: alfred init --force");
 
 				// Agent
 				const reviewerAgent = join(home, ".claude", "agents", "alfred-reviewer.md");
 				check(existsSync(reviewerAgent), "Agent: alfred-reviewer", "not found — run: alfred init");
+
+				// Voyage AI connectivity
+				if (hasVoyage) {
+					try {
+						const { Embedder } = await import("./embedder/index.js");
+						const emb = Embedder.create();
+						await emb.validate();
+						check(true, "Voyage AI: API reachable");
+					} catch (e) {
+						check(false, "Voyage AI: API unreachable", String(e));
+					}
+				}
 
 				// Project
 				const cwd = process.cwd();
@@ -138,6 +159,80 @@ const main = defineCommand({
 				// Gates
 				const gatesPath = join(cwd, ".alfred", "gates.json");
 				check(existsSync(gatesPath), "Gates: .alfred/gates.json", "run: alfred init");
+
+				// Knowledge
+				if (hasAlfred) {
+					const knowledgeDir = join(cwd, ".alfred", "knowledge");
+					const hasKnowledge = existsSync(join(knowledgeDir, "error_resolutions"))
+						&& existsSync(join(knowledgeDir, "exemplars"))
+						&& existsSync(join(knowledgeDir, "conventions"));
+					check(hasKnowledge, "Knowledge: directories exist", "run: alfred init");
+				}
+
+				// Conventions
+				const convPath = join(cwd, ".alfred", "conventions.json");
+				check(existsSync(convPath), "Conventions: .alfred/conventions.json", "run: /alfred:conventions to discover");
+			},
+		}),
+		scan: defineCommand({
+			meta: { description: "Run full quality scan (lint/type/test) and update score" },
+			async run() {
+				const { existsSync } = await import("node:fs");
+				const { join } = await import("node:path");
+				const cwd = process.cwd();
+
+				if (!existsSync(join(cwd, ".alfred", "gates.json"))) {
+					console.error("No .alfred/gates.json found. Run: alfred init");
+					process.exit(1);
+				}
+
+				const { loadGates, runGateGroup } = await import("./gates/index.js");
+				const gates = loadGates(cwd);
+				if (!gates) {
+					console.error("Failed to load gates.json");
+					process.exit(1);
+				}
+
+				console.log("alfred scan\n");
+
+				// Run on_write gates (project-wide, no {file} substitution)
+				if (Object.keys(gates.on_write).length > 0) {
+					console.log("── on_write gates ──");
+					const writeResults = runGateGroup(cwd, gates.on_write);
+					for (const r of writeResults) {
+						const icon = r.passed ? "✓" : "✗";
+						console.log(`  ${icon} ${r.name} (${r.duration}ms)`);
+						if (!r.passed && r.output) {
+							console.log(`    ${r.output.slice(0, 300)}`);
+						}
+					}
+				}
+
+				// Run on_commit gates
+				if (Object.keys(gates.on_commit).length > 0) {
+					console.log("── on_commit gates ──");
+					const commitResults = runGateGroup(cwd, gates.on_commit);
+					for (const r of commitResults) {
+						const icon = r.passed ? "✓" : "✗";
+						console.log(`  ${icon} ${r.name} (${r.duration}ms)`);
+						if (!r.passed && r.output) {
+							console.log(`    ${r.output.slice(0, 300)}`);
+						}
+					}
+				}
+
+				// Calculate and display score
+				try {
+					const { openDefaultCached } = await import("./store/index.js");
+					const { resolveOrRegisterProject } = await import("./store/project.js");
+					const { calculateQualityScore } = await import("./store/quality-events.js");
+					const store = openDefaultCached();
+					const project = resolveOrRegisterProject(store, cwd);
+					const score = calculateQualityScore(store, `session-${Date.now()}`);
+					console.log(`\nQuality Score: ${score.sessionScore}/100`);
+				} catch {
+					console.log("\nQuality Score: unavailable (no events recorded)");
+				}
 			},
 		}),
 		uninstall: defineCommand({

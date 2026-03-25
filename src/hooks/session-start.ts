@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { DirectiveItem } from "./directives.js";
 import { emitDirectives } from "./directives.js";
@@ -17,6 +17,9 @@ import { detectGates } from "../gates/index.js";
  */
 export async function sessionStart(ev: HookEvent, signal: AbortSignal): Promise<void> {
 	if (!ev.cwd) return;
+
+	// Zero-config: auto-create .alfred/ on first session
+	ensureAlfredDir(ev.cwd);
 
 	const items: DirectiveItem[] = [];
 
@@ -141,20 +144,36 @@ function readConventions(cwd: string): string[] {
 	}
 }
 
+// ── Zero-config: auto-create .alfred/ ────────────────────────────────
+
+function ensureAlfredDir(cwd: string): void {
+	const alfredDir = join(cwd, ".alfred");
+	if (existsSync(alfredDir)) return;
+
+	try {
+		mkdirSync(join(alfredDir, ".state"), { recursive: true });
+		for (const dir of ["error_resolutions", "exemplars", "conventions"]) {
+			mkdirSync(join(alfredDir, "knowledge", dir), { recursive: true });
+		}
+		// Auto-detect and write gates.json
+		const gates = detectGates(cwd);
+		writeFileSync(join(alfredDir, "gates.json"), JSON.stringify(gates, null, 2));
+	} catch {
+		/* best effort */
+	}
+}
+
 // ── Gates auto-generation ───────────────────────────────────────────
 
 function ensureGates(cwd: string): void {
 	const gatesPath = join(cwd, ".alfred", "gates.json");
 	if (existsSync(gatesPath)) return;
 
-	// Only auto-generate if .alfred/ dir exists
 	const alfredDir = join(cwd, ".alfred");
 	if (!existsSync(alfredDir)) return;
 
 	try {
 		const gates = detectGates(cwd);
-		const { writeFileSync, mkdirSync } = require("node:fs");
-		mkdirSync(alfredDir, { recursive: true });
 		writeFileSync(gatesPath, JSON.stringify(gates, null, 2));
 	} catch {
 		/* best effort */

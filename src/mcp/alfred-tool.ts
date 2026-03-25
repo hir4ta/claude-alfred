@@ -68,9 +68,10 @@ async function alfredSearch(store: Store, emb: Embedder | null, params: AlfredPa
 
 	const cwd = params.project_path || process.cwd();
 	const proj = resolveOrRegisterProject(store, cwd);
-
-	// TODO: scope=global searches across all projects
+	const scope = params.scope ?? "project";
 	const typeFilter = params.type as KnowledgeType | "all" | undefined;
+	// Note: vector search is already global (cosine similarity across all embeddings).
+	// scope=project would need post-filtering by project_id if desired.
 
 	try {
 		const results = await searchKnowledge(store, emb, params.query, {

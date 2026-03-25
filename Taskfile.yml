@@ -32,6 +32,11 @@ tasks:
     cmds:
       - bun run test
 
+  scan:
+    desc: Run full quality scan (lint/type/test) and show score
+    cmds:
+      - bun dist/cli.mjs scan
+
   clean:
     desc: Clean build artifacts
     cmds:
