@@ -342,16 +342,16 @@ alfred CLI バイナリ (bun build --compile)
 | Phase 0: Gut | **完了** | 9 | 9/9 |
 | Phase 1: Foundation | **完了** | 7 | 7/7 |
 | Phase 2: Walls | **完了** | 6 | 6/6 |
-| Phase 3: Intelligence | 未着手 | 5 | 0/5 |
+| Phase 3: Intelligence | **完了** | 5 | 5/5 |
 | Phase 4: Polish | 未着手 | 7 | 0/7 |
-| **合計** | | **34** | **22/34** |
+| **合計** | | **34** | **27/34** |
 
 ---
 
 ## セッション引き継ぎノート
 
 ### 現在の状態 (2026-03-26)
-- **Phase 0 + Phase 1 + Phase 2 完了** — tsc + build + vitest 全パス (116テスト)
+- **Phase 0〜3 完了** — tsc + build + vitest 全パス (202テスト)
 - 設計ドキュメントは `design/` に全て格納
 
 ### Phase 2 完了サマリー
@@ -375,9 +375,15 @@ alfred CLI バイナリ (bun build --compile)
 - P1-6: `alfred init` (`src/init/index.ts`) — MCP/hooks/rules/skills/agents/gates/profile/DB 一括セットアップ
 - P1-7: `alfred uninstall` (CLI) — クリーンアンインストール
 
+### Phase 3 完了サマリー
+- P3-1: error_resolution ベクトル検索 (`src/hooks/knowledge-search.ts`) — Voyage 検索→CONTEXT 注入、error_signature 正規化、error_hit/miss quality_event 記録
+- P3-2: exemplar 注入 — UserPromptSubmit で実装系プロンプト検出時に Voyage 検索→CONTEXT 注入 (research #8: 1-3件、HNSW が最適)
+- P3-3: /alfred:review スキル — HubSpot Judge 3基準 (Succinctness/Accuracy/Actionability) + 分離チェックリスト (security/logic/design)
+- P3-4: /alfred:conventions スキル — codebase-context 参考の採用率%・コンフリクト検出アプローチ
+- P3-5: 品質スコア接続 — Stop hook に最終品質サマリー保存追加、SessionStart→PreCompact→Stop の品質パイプライン完結
+
 ### 次のアクション
-- Phase 3 (Intelligence) から開始
-- P3-1 (error_resolution ベクトル検索 + 自動注入) から着手
+- Phase 4 (Polish) から開始
 
 ### 重要な設計判断（覚えておくべき）
 1. **Plugin 不要** — `alfred init` で ~/.claude/ に直接配置

@@ -159,97 +159,20 @@ function installSkills(claudeDir: string): void {
 	const reviewDir = join(claudeDir, "skills", "alfred-review");
 	mkdirSync(reviewDir, { recursive: true });
 
-	writeFileSync(join(reviewDir, "SKILL.md"), `---
-name: alfred-review
-description: >
-  Deep multi-agent code review with Judge filtering. Use when wanting
-  thorough review before a major commit, after a milestone, or when
-  wanting a second opinion. Spawns 3 parallel sub-reviewers (security,
-  logic, design), then filters findings for actionability.
-  NOT for everyday small edits (hooks handle that).
-user-invocable: true
-argument-hint: "[--staged | --commit SHA | --range BASE..HEAD]"
-allowed-tools: Read, Glob, Grep, Agent, Bash(git diff *, git log *, git show *, git status *)
-context: fork
----
+	writeFileSync(join(reviewDir, "SKILL.md"), REVIEW_SKILL_MD);
 
-# /alfred:review — Judge-Filtered Code Review
-
-## Phase 1: Gather Context
-
-1. Parse \`$ARGUMENTS\` for scope:
-   - \`--staged\` (default): \`git diff --cached\`
-   - \`--commit SHA\`: \`git show SHA\`
-   - \`--range BASE..HEAD\`: \`git diff BASE..HEAD\`
-2. If no args: use \`git diff\` (unstaged changes)
-3. Extract changed file paths and languages
-
-## Phase 2: Parallel Review (spawn 3 agents simultaneously)
-
-Launch all 3 agents in a single message with the diff:
-
-**Agent 1: security** — Injection, auth, secrets, input validation, TOCTOU
-**Agent 2: logic** — Correctness, edge cases, error handling, silent failures
-**Agent 3: design** — Naming, structure, duplication, complexity, conventions
-
-Each agent returns findings as structured text with severity and file:line.
-
-## Phase 3: Judge Filtering
-
-For each finding, evaluate:
-1. **Actionable?** — Can the developer fix this without ambiguity?
-2. **In scope?** — Is this in the current diff, not a pre-existing issue?
-3. **Real problem?** — Is this a genuine issue, not a style preference?
-
-Discard findings that fail any criterion.
-
-## Phase 4: Output
-
-Present findings sorted by severity (Critical → High → Medium).
-If 0 critical and 0 high: "Ready to commit."
-If any critical: "Fix critical issues before committing."
-`);
+	// Checklists
+	const checklistDir = join(reviewDir, "checklists");
+	mkdirSync(checklistDir, { recursive: true });
+	writeFileSync(join(checklistDir, "security.md"), CHECKLIST_SECURITY);
+	writeFileSync(join(checklistDir, "logic.md"), CHECKLIST_LOGIC);
+	writeFileSync(join(checklistDir, "design.md"), CHECKLIST_DESIGN);
 
 	// /alfred:conventions
 	const convDir = join(claudeDir, "skills", "alfred-conventions");
 	mkdirSync(convDir, { recursive: true });
 
-	writeFileSync(join(convDir, "SKILL.md"), `---
-name: alfred-conventions
-description: >
-  Scan the codebase and discover implicit coding conventions.
-  Use on first setup of a new project, after major refactors,
-  or when wanting to document existing patterns. Saves confirmed
-  conventions and generates rules for Claude Code.
-user-invocable: true
-allowed-tools: Read, Glob, Grep, Bash(wc *, head *, git log --oneline *)
----
-
-# /alfred:conventions — Convention Discovery
-
-## Step 1: Analyze
-
-Scan the codebase for patterns:
-1. **Import ordering** — Read 10 representative source files
-2. **Naming conventions** — Files, functions, types, constants
-3. **Error handling** — try/catch style, Result types, early returns
-4. **Test structure** — Co-located or separate? .test. or .spec.?
-5. **Directory structure** — Feature-based or layer-based?
-
-## Step 2: Present
-
-For each convention found, show:
-- Pattern description + 3 example files
-- Confidence: high (>80%) / medium (50-80%) / low (<50%)
-
-Ask user to confirm/reject each.
-
-## Step 3: Save
-
-For confirmed conventions:
-1. Call \`alfred save type=convention\` for each
-2. Report: "Saved N conventions."
-`);
+	writeFileSync(join(convDir, "SKILL.md"), CONVENTIONS_SKILL_MD);
 
 	console.log("  ✓ Skills: alfred-review, alfred-conventions → ~/.claude/skills/");
 }
@@ -318,3 +241,247 @@ function initDb(): void {
 	store.close();
 	console.log("  ✓ DB: ~/.alfred/alfred.db (Schema V1)");
 }
+
+// ── Skill/Agent templates ───────────────────────────────────────────
+
+const REVIEW_SKILL_MD = `---
+name: alfred-review
+description: >
+  Deep multi-agent code review with Judge filtering (HubSpot pattern).
+  Use when wanting thorough review before a major commit, after a milestone,
+  or when wanting a second opinion. Spawns 3 parallel sub-reviewers
+  (security, logic, design), then a Judge filters findings by 3 criteria:
+  Succinctness, Accuracy, Actionability (80%+ engineer approval rate).
+  NOT for everyday small edits (hooks handle that).
+user-invocable: true
+argument-hint: "[--staged | --commit SHA | --range BASE..HEAD]"
+allowed-tools: Read, Glob, Grep, Agent, Bash(git diff *, git log *, git show *, git status *)
+context: fork
+---
+
+# /alfred:review — Judge-Filtered Code Review
+
+## Phase 1: Gather Context
+
+1. Parse \`$ARGUMENTS\` for scope:
+   - \`--staged\` (default): \`git diff --cached\`
+   - \`--commit SHA\`: \`git show SHA\`
+   - \`--range BASE..HEAD\`: \`git diff BASE..HEAD\`
+2. If no args: use \`git diff\` (unstaged changes)
+3. Extract changed file paths and languages
+4. Read @checklists/security.md, @checklists/logic.md, @checklists/design.md
+
+## Phase 2: Parallel Review (spawn 3 agents simultaneously)
+
+Launch all 3 agents in a single message with the diff:
+
+**Agent 1: security** — @checklists/security.md
+Focus: injection, auth bypass, secrets exposure, input validation, TOCTOU
+
+**Agent 2: logic** — @checklists/logic.md
+Focus: correctness, edge cases, error handling, race conditions, silent failures
+
+**Agent 3: design** — @checklists/design.md
+Focus: naming, structure, duplication, complexity, convention adherence
+
+Each agent returns findings as:
+\`\`\`
+[severity:critical|high|medium|low] file:line — Description. Suggested fix.
+\`\`\`
+
+## Phase 3: Judge Filtering (HubSpot 3-Criteria Pattern)
+
+For each finding, evaluate against ALL 3 criteria:
+
+1. **Succinct?** — Is the feedback clear and to the point? (No vague "consider refactoring")
+2. **Accurate?** — Is it technically correct within THIS codebase's context?
+3. **Actionable?** — Can the fix be applied directly without ambiguity?
+
+Additionally check:
+4. **In scope?** — Is this in the current diff, not a pre-existing issue?
+
+**Discard** findings that fail ANY criterion. Log each discard with the failing criterion.
+
+## Phase 4: Output
+
+\`\`\`
+## Review: N findings (X critical, Y high)
+
+### Critical
+- [file:line] Description + suggested fix
+
+### High
+- [file:line] Description + suggested fix
+
+### Medium (informational)
+- [file:line] Description
+
+---
+Discarded: M findings (reasons: N not actionable, M out of scope, ...)
+\`\`\`
+
+If 0 critical and 0 high: "Ready to commit."
+If any critical: "Fix critical issues before committing."
+`;
+
+const CHECKLIST_SECURITY = `# Security Review Checklist
+
+Review the diff for these security concerns:
+
+## Input Validation
+- [ ] User input sanitized before use in queries, commands, file paths
+- [ ] No SQL injection (parameterized queries used)
+- [ ] No command injection (no shell interpolation of user input)
+- [ ] No path traversal (user input not used in file paths without validation)
+
+## Authentication & Authorization
+- [ ] Auth checks present where required
+- [ ] No auth bypass through error handling paths
+- [ ] Session/token handling is correct
+
+## Secrets & Data Exposure
+- [ ] No hardcoded secrets, API keys, passwords
+- [ ] No sensitive data in logs or error messages
+- [ ] No secrets in git (check for .env, credentials files)
+
+## TOCTOU & Race Conditions
+- [ ] File operations are atomic where needed
+- [ ] No check-then-act patterns with shared resources
+
+## XSS & Output Encoding
+- [ ] User-generated content escaped before rendering
+- [ ] No innerHTML with untrusted data
+`;
+
+const CHECKLIST_LOGIC = `# Logic Review Checklist
+
+Review the diff for these correctness concerns:
+
+## Edge Cases
+- [ ] Null/undefined handling (no unchecked access)
+- [ ] Empty arrays/strings handled
+- [ ] Boundary values (0, -1, MAX_INT, empty string)
+- [ ] Concurrent/parallel execution safety
+
+## Error Handling
+- [ ] Errors caught and handled appropriately (not silently swallowed)
+- [ ] Error messages are helpful for debugging
+- [ ] Resources cleaned up in error paths (files, connections, locks)
+- [ ] Async errors properly propagated (no unhandled rejections)
+
+## Silent Failures (most dangerous)
+- [ ] Could this produce wrong output WITHOUT crashing?
+- [ ] Are return values checked (not just try/catch)?
+- [ ] Assertions present for critical invariants
+
+## State Management
+- [ ] State transitions are valid
+- [ ] No stale data used after async operations
+- [ ] Side effects are intentional and documented
+`;
+
+const CHECKLIST_DESIGN = `# Design Review Checklist
+
+Review the diff for these design concerns:
+
+## Naming & Readability
+- [ ] Names clearly describe purpose (no generic "data", "result", "temp")
+- [ ] Consistent with existing codebase naming patterns
+- [ ] No misleading names (name matches behavior)
+
+## Structure & Complexity
+- [ ] Functions under 50 lines (ideally under 30)
+- [ ] No deeply nested conditionals (max 3 levels)
+- [ ] Single responsibility per function/module
+
+## Duplication
+- [ ] No copy-pasted code (DRY)
+- [ ] Common patterns extracted to helpers
+- [ ] But: 3 similar lines is better than a premature abstraction
+
+## Convention Adherence
+- [ ] Matches project's established patterns
+- [ ] Import ordering follows convention
+- [ ] Error handling style consistent with codebase
+- [ ] Test structure matches existing test files
+`;
+
+const CONVENTIONS_SKILL_MD = `---
+name: alfred-conventions
+description: >
+  Scan the codebase and discover implicit coding conventions with adoption rates.
+  Inspired by codebase-context's approach: detect patterns, measure adoption %,
+  identify conflicts. Use on first setup, after major refactors, or to document
+  existing patterns. Saves conventions to knowledge DB and generates rules.
+user-invocable: true
+allowed-tools: Read, Glob, Grep, Bash(wc *, head *, git log --oneline *, find * -name *)
+---
+
+# /alfred:conventions — Convention Discovery
+
+## Step 1: Project Scan
+
+Detect the project stack first:
+- Read package.json / go.mod / Cargo.toml / pyproject.toml
+- Check config files: tsconfig.json, biome.json, .eslintrc, .editorconfig
+
+## Step 2: Pattern Analysis
+
+For each category, scan 10-15 representative source files and measure adoption:
+
+### 2.1 Import Ordering
+- Read source files, categorize import groups
+- Detect pattern: stdlib first → external → internal? Alphabetical? Other?
+- Report adoption %
+
+### 2.2 Naming Conventions
+- Files: kebab-case? camelCase? snake_case? (glob + count)
+- Functions/methods: camelCase? snake_case? (grep for function/const declarations)
+- Types/interfaces: PascalCase?
+- Constants: UPPER_SNAKE_CASE?
+- Report adoption % per category
+
+### 2.3 Error Handling
+- Grep for try/catch, .catch, Result type, early return patterns
+- Dominant pattern and adoption %
+- Flag conflicts (e.g., both try-catch and Result used >20%)
+
+### 2.4 Test Structure
+- Co-located (src/foo.test.ts) or separate (__tests__/)?
+- .test. or .spec.?
+- Framework: describe/it/expect or test()?
+- Report adoption %
+
+### 2.5 Code Style
+- Check configured rules in biome.json / .eslintrc
+- Semicolons, quotes, indentation
+- Max line length
+
+### 2.6 Architecture
+- Directory structure: feature-based or layer-based?
+- Module pattern: barrel exports (index.ts)? Direct imports?
+
+## Step 3: Present Findings
+
+For each convention:
+\`\`\`
+[category] pattern — adoption X% (N/M files)
+  Examples: file1.ts, file2.ts, file3.ts
+  Conflicts: (if any competing pattern >20%)
+\`\`\`
+
+Confidence levels:
+- **High** (>80%): Strong convention, should be enforced
+- **Medium** (50-80%): Common but not universal
+- **Low** (<50%): Emerging or inconsistent
+
+Ask user to confirm/reject each convention.
+
+## Step 4: Save
+
+For confirmed conventions:
+1. Call \`alfred save type=convention\` for each with pattern, category, and example_files
+2. Generate \`.claude/rules/alfred-conventions.md\` with path-scoped rules
+3. Report: "Saved N conventions. Rules file generated."
+`;
+

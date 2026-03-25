@@ -1,6 +1,7 @@
 import type { DirectiveItem } from "./directives.js";
 import { emitDirectives } from "./directives.js";
 import type { HookEvent } from "./dispatcher.js";
+import { searchKnowledgeSafe, formatSearchHits } from "./knowledge-search.js";
 
 /**
  * UserPromptSubmit handler: Plan mode power-up + knowledge injection.
@@ -34,6 +35,22 @@ export async function userPromptSubmit(ev: HookEvent, signal: AbortSignal): Prom
 				"\"I'll add tests after\" — Post-hoc tests miss edge cases caught by test-first.",
 			],
 		});
+	}
+
+	// Exemplar + error_resolution injection (research #8: few-shot > rule list)
+	// Inject 1-3 relevant examples for implementation prompts
+	if (intent === "implementation") {
+		const hits = await searchKnowledgeSafe(prompt, {
+			limit: 3,
+			minScore: 0.75,
+		});
+		if (hits.length > 0) {
+			const formatted = formatSearchHits(hits);
+			items.push({
+				level: "CONTEXT",
+				message: `Relevant knowledge:\n${formatted}`,
+			});
+		}
 	}
 
 	if (isLargeTask(prompt)) {

@@ -23,6 +23,11 @@ import {
 	countAssertions,
 	extractCommandBase,
 } from "./detect.js";
+import {
+	searchKnowledgeSafe,
+	normalizeErrorSignature,
+	formatSearchHits,
+} from "./knowledge-search.js";
 
 // Re-export for backward compat (tests, etc.)
 export { isGitCommit, isTestCommand } from "./detect.js";
@@ -134,7 +139,7 @@ async function handleBash(
 
 	if (isTestCommand(command)) {
 		if (exitCode !== 0) {
-			handleTestFailure(cwd, stdout, stderr, items);
+			await handleTestFailure(cwd, stdout, stderr, items);
 			saveLastError(cwd, command, stderr || stdout);
 		} else {
 			handleTestSuccess(cwd, stdout, items);
@@ -145,7 +150,8 @@ async function handleBash(
 
 	if (exitCode !== 0 && (stderr || stdout)) {
 		saveLastError(cwd, command, stderr || stdout);
-		recordErrorEvent(cwd, "error_miss", { command, error: (stderr || stdout).slice(0, 500) });
+		// Search for previously resolved similar errors
+		await searchAndInjectErrorResolution(cwd, stderr || stdout, items);
 	} else if (exitCode === 0) {
 		handlePotentialResolution(cwd, command, stdout);
 	}
@@ -187,13 +193,15 @@ async function handleGitCommit(
 
 // ── Test result handlers ────────────────────────────────────────────
 
-function handleTestFailure(cwd: string, stdout: string, stderr: string, items: DirectiveItem[]): void {
+async function handleTestFailure(cwd: string, stdout: string, stderr: string, items: DirectiveItem[]): Promise<void> {
 	recordGateEvents(cwd, "test", [{ name: "test", passed: false, output: (stderr || stdout).slice(0, 500), duration: 0 }]);
 	const failSummary = extractTestFailures(stdout + "\n" + stderr);
 	items.push({
 		level: "DIRECTIVE",
 		message: `Test failed. Fix the failing tests before continuing:\n${failSummary}`,
 	});
+	// Search for previously resolved similar errors
+	await searchAndInjectErrorResolution(cwd, stderr || stdout, items);
 }
 
 function handleTestSuccess(cwd: string, stdout: string, items: DirectiveItem[]): void {
@@ -251,6 +259,34 @@ function handlePotentialResolution(cwd: string, successCommand: string, _stdout:
 	});
 
 	clearLastError(cwd);
+}
+
+// ── Voyage error_resolution search ──────────────────────────────────
+
+async function searchAndInjectErrorResolution(
+	cwd: string,
+	errorOutput: string,
+	items: DirectiveItem[],
+): Promise<void> {
+	const query = normalizeErrorSignature(errorOutput);
+	if (!query) return;
+
+	const hits = await searchKnowledgeSafe(query, {
+		type: "error_resolution",
+		limit: 2,
+		minScore: 0.75,
+	});
+
+	if (hits.length > 0) {
+		const formatted = formatSearchHits(hits);
+		items.push({
+			level: "CONTEXT",
+			message: `Similar error resolved before:\n${formatted}`,
+		});
+		recordQualityEventSafe(cwd, "error_hit", { query: query.slice(0, 200), hits: hits.length });
+	} else {
+		recordQualityEventSafe(cwd, "error_miss", { query: query.slice(0, 200) });
+	}
 }
 
 // ── Quality event recording (fail-open) ─────────────────────────────
