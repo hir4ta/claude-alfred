@@ -57,7 +57,7 @@ function App() {
 	const cwd = process.cwd();
 	const [data, setData] = useState<QualityDashboardData | null>(null);
 	const renderer = useRenderer();
-	const [width, height] = useTerminalDimensions();
+	const { width: termW, height: termH } = useTerminalDimensions();
 
 	useEffect(() => {
 		setData(loadDashboardData(cwd));
@@ -66,16 +66,15 @@ function App() {
 	}, []);
 
 	useKeyboard((key) => {
-		if (key === "q" || key === "escape") {
-			renderer.close();
-			process.exit(0);
+		if (key.name === "q" || key.name === "escape") {
+			renderer.destroy();
 		}
-		if (key === "r") setData(loadDashboardData(cwd));
+		if (key.name === "r") setData(loadDashboardData(cwd));
 	});
 
 	if (!data) {
 		return <box width="100%" height="100%" backgroundColor={C.bg}>
-			<text color={C.dim}>Loading...</text>
+			<text fg={C.dim}>Loading...</text>
 		</box>;
 	}
 
@@ -87,7 +86,7 @@ function App() {
 
 	const scoreDelta = data.previousScore != null ? s.sessionScore - data.previousScore : null;
 	const deltaStr = scoreDelta != null
-		? scoreDelta >= 0 ? `▲ (+${scoreDelta})` : `▼ (${scoreDelta})`
+		? scoreDelta >= 0 ? ` ▲ (+${scoreDelta})` : ` ▼ (${scoreDelta})`
 		: "";
 	const deltaColor = scoreDelta != null && scoreDelta >= 0 ? C.green : C.red;
 
@@ -98,94 +97,112 @@ function App() {
 	const convTotal = k.conventionPass + k.conventionWarn;
 
 	const elapsedMins = Math.floor((Date.now() - sess.startedAt) / 60000);
-	// Research #7: task time 2x = failure rate 4x. 35min threshold.
 	const elapsedColor = elapsedMins >= 35 ? C.red : elapsedMins >= 25 ? C.yellow : C.fg;
+
+	const eventsHeight = Math.max(termH - 24, 3);
 
 	return (
 		<box width="100%" height="100%" backgroundColor={C.bg} flexDirection="column">
-			{/* ── Header: Score ── */}
-			<box height={3} width="100%" borderStyle="single" borderColor={C.border}>
-				<text color={C.accent} bold> alfred </text>
-				<text color={C.dim}>│ </text>
-				<text color={C.fg}>{data.projectName}</text>
-				<text color={C.dim}> │ Quality Score: </text>
-				<text color={scoreColor(s.sessionScore)} bold>{s.sessionScore}/100</text>
-				<text color={C.dim}> </text>
-				{scoreDelta != null && <text color={deltaColor}>{deltaStr}</text>}
+			{/* Header: Score */}
+			<box height={3} border title=" alfred " style={{ borderStyle: "single" }} backgroundColor={C.bg}>
+				<text fg={C.fg}> {data.projectName}</text>
+				<text fg={C.dim}> │ Quality Score: </text>
+				<text fg={scoreColor(s.sessionScore)}><strong>{s.sessionScore}/100</strong></text>
+				{scoreDelta != null && <text fg={deltaColor}>{deltaStr}</text>}
+				<text fg={C.dim}> ({s.trend})</text>
 			</box>
 
-			{/* ── Gates ── */}
-			<box height={6} width="100%" borderStyle="single" borderColor={C.border}>
-				<box flexDirection="column" paddingLeft={1}>
-					<text color={C.accent} bold>Gates</text>
-					<text color={C.fg}>
-						{"  on_write   "}{pad(g.onWrite.pass, 3)} pass  {pad(g.onWrite.fail, 3)} fail  {rate(g.onWrite.pass, writeTotal).padStart(4)}  {bar(g.onWrite.pass, writeTotal, 10)}
+			{/* Gates */}
+			<box height={6} border title="Gates" backgroundColor={C.bg}>
+				<box flexDirection="column" padding={1}>
+					<text fg={C.fg}>
+						{`  on_write   ${pad(g.onWrite.pass, 3)} pass  ${pad(g.onWrite.fail, 3)} fail  ${rate(g.onWrite.pass, writeTotal).padStart(4)}  ${bar(g.onWrite.pass, writeTotal, 10)}`}
 					</text>
-					<text color={C.fg}>
-						{"  on_commit  "}{pad(g.onCommit.pass, 3)} pass  {pad(g.onCommit.fail, 3)} fail  {rate(g.onCommit.pass, commitTotal).padStart(4)}  {bar(g.onCommit.pass, commitTotal, 10)}
+					<text fg={C.fg}>
+						{`  on_commit  ${pad(g.onCommit.pass, 3)} pass  ${pad(g.onCommit.fail, 3)} fail  ${rate(g.onCommit.pass, commitTotal).padStart(4)}  ${bar(g.onCommit.pass, commitTotal, 10)}`}
 					</text>
-					<text color={C.fg}>
-						{"  test       "}{pad(g.test.pass, 3)} pass  {pad(g.test.fail, 3)} fail  {rate(g.test.pass, testTotal).padStart(4)}  {bar(g.test.pass, testTotal, 10)}
+					<text fg={C.fg}>
+						{`  test       ${pad(g.test.pass, 3)} pass  ${pad(g.test.fail, 3)} fail  ${rate(g.test.pass, testTotal).padStart(4)}  ${bar(g.test.pass, testTotal, 10)}`}
 					</text>
 				</box>
 			</box>
 
-			{/* ── Knowledge ── */}
-			<box height={6} width="100%" borderStyle="single" borderColor={C.border}>
-				<box flexDirection="column" paddingLeft={1}>
-					<text color={C.accent} bold>Knowledge</text>
-					<text color={C.fg}>
-						{"  error_resolution  hits: "}{k.errorHits}/{errorTotal} ({rate(k.errorHits, errorTotal)}){"  total: "}{kt.errorResolutions}
+			{/* Knowledge */}
+			<box height={6} border title="Knowledge" backgroundColor={C.bg}>
+				<box flexDirection="column" padding={1}>
+					<text fg={C.fg}>
+						{`  error_resolution  hits: ${k.errorHits}/${errorTotal} (${rate(k.errorHits, errorTotal)})  total: ${kt.errorResolutions}`}
 					</text>
-					<text color={C.fg}>
-						{"  exemplar          injected: "}{k.exemplarInjections}{"      total: "}{kt.exemplars}
+					<text fg={C.fg}>
+						{`  exemplar          injected: ${k.exemplarInjections}      total: ${kt.exemplars}`}
 					</text>
-					<text color={C.fg}>
-						{"  convention         adherence: "}{rate(k.conventionPass, convTotal)}{"   total: "}{kt.conventions}
+					<text fg={C.fg}>
+						{`  convention         adherence: ${rate(k.conventionPass, convTotal)}   total: ${kt.conventions}`}
 					</text>
 				</box>
 			</box>
 
-			{/* ── Recent Events ── */}
-			<box flexGrow={1} width="100%" borderStyle="single" borderColor={C.border}>
-				<box flexDirection="column" paddingLeft={1}>
-					<text color={C.accent} bold>Recent Events</text>
-					{data.recentEvents.slice(0, Math.max(height - 24, 3)).map((e, i) => {
+			{/* Recent Events */}
+			<box flexGrow={1} border title="Recent Events" backgroundColor={C.bg}>
+				<box flexDirection="column" padding={1}>
+					{data.recentEvents.slice(0, eventsHeight).map((e, i) => {
 						const icon = e.type.includes("pass") || e.type === "error_hit"
 							? "✓" : e.type.includes("fail") || e.type === "error_miss"
 							? "✗" : "●";
-						const color = icon === "✓" ? C.green : icon === "✗" ? C.red : C.yellow;
+						const iconColor = icon === "✓" ? C.green : icon === "✗" ? C.red : C.yellow;
 						return (
-							<text key={i} color={C.fg}>
-								<text color={C.dim}>{e.timestamp}</text>{"  "}<text color={color}>{icon}</text>{" "}{e.type.padEnd(18)}<text color={C.dim}>{e.detail}</text>
+							<text key={String(i)} fg={C.fg}>
+								{`  `}<span fg={C.dim}>{e.timestamp}</span>{`  `}<span fg={iconColor}>{icon}</span>{` ${e.type.padEnd(18)}`}<span fg={C.dim}>{e.detail}</span>
 							</text>
 						);
 					})}
-					{data.recentEvents.length === 0 && <text color={C.dim}>  No events recorded yet</text>}
+					{data.recentEvents.length === 0 && <text fg={C.dim}>  No events recorded yet</text>}
 				</box>
 			</box>
 
-			{/* ── Session Info ── */}
-			<box height={3} width="100%" borderStyle="single" borderColor={C.border}>
-				<text color={C.dim}>  Session: </text>
-				<text color={elapsedColor}>{elapsed(sess.startedAt)}</text>
-				<text color={C.dim}> │ Files: </text><text color={C.fg}>{sess.changedFiles}</text>
-				<text color={C.dim}> │ Commits: </text><text color={C.fg}>{sess.commits}</text>
-				<text color={C.dim}> │ Pending: </text>
-				<text color={data.pendingFixesCount > 0 ? C.red : C.green}>{data.pendingFixesCount}</text>
-				<text color={C.dim}> │ Directives: </text><text color={C.fg}>{data.directiveCount}</text>
+			{/* Session Info */}
+			<box height={3} border title="Session" backgroundColor={C.bg}>
+				<text fg={C.dim}>
+					{`  `}<span fg={elapsedColor}>{elapsed(sess.startedAt)}</span>
+					{` │ Files: `}<span fg={C.fg}>{String(sess.changedFiles)}</span>
+					{` │ Commits: `}<span fg={C.fg}>{String(sess.commits)}</span>
+					{` │ Pending: `}<span fg={data.pendingFixesCount > 0 ? C.red : C.green}>{String(data.pendingFixesCount)}</span>
+					{` │ Directives: `}<span fg={C.fg}>{String(data.directiveCount)}</span>
+				</text>
 			</box>
 
-			{/* ── Footer ── */}
-			<box height={1} width="100%">
-				<text color={C.dim}> [q] quit  [r] refresh</text>
+			{/* Footer */}
+			<box height={1}>
+				<text fg={C.dim}> [q] quit  [r] refresh</text>
 			</box>
 		</box>
 	);
 }
 
-export async function runTui(): Promise<void> {
-	const renderer = createCliRenderer();
-	const root = createRoot(renderer);
-	root.render(<App />);
+export function runTui(): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		createCliRenderer({
+			exitOnCtrlC: true,
+			onDestroy: () => {
+				process.stdout.write("\x1b[?1000l\x1b[?1003l\x1b[?1006l");
+				resolve();
+			},
+		}).then((renderer) => {
+			process.once("uncaughtException", (err) => {
+				renderer.destroy();
+				console.error(err);
+				process.exit(1);
+			});
+			process.once("unhandledRejection", (err) => {
+				renderer.destroy();
+				console.error(err);
+				process.exit(1);
+			});
+			createRoot(renderer).render(<App />);
+		}).catch(reject);
+	});
+}
+
+if (import.meta.main) {
+	runTui();
 }
