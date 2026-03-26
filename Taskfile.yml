@@ -11,11 +11,6 @@ tasks:
     cmds:
       - bun build.ts
 
-  tui:
-    desc: Show quality dashboard in terminal
-    cmds:
-      - bun src/tui/main.tsx
-
   check:
     desc: Run all checks (tsc + Biome lint)
     cmds:
@@ -23,7 +18,7 @@ tasks:
       - bun run lint
 
   fix:
-    desc: Auto-fix Biome lint/format issues (safe)
+    desc: Auto-fix Biome lint/format issues
     cmds:
       - bun run lint:fix
 
@@ -31,11 +26,6 @@ tasks:
     desc: Run vitest
     cmds:
       - bun run test
-
-  scan:
-    desc: Run full quality scan (lint/type/test) and show score
-    cmds:
-      - bun dist/cli.mjs scan
 
   clean:
     desc: Clean build artifacts

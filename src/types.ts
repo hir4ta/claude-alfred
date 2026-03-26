@@ -1,126 +1,63 @@
-// ===== Knowledge Types =====
-
-export type KnowledgeType = "error_resolution" | "fix_pattern" | "convention" | "decision";
-export const KNOWLEDGE_TYPES: KnowledgeType[] = [
-	"error_resolution",
-	"fix_pattern",
-	"convention",
-	"decision",
-];
-
-export interface KnowledgeRow {
-	id: number;
-	projectId: string;
-	type: KnowledgeType;
-	title: string;
-	content: string; // JSON (type-specific structure)
-	tags: string;
-	author: string;
-	hitCount: number;
-	lastAccessed: string;
-	enabled: boolean;
-	successCount: number;
-	failureCount: number;
-	utilityScore: number;
-	confidence: number;
-	source: string;
-	createdAt: string;
-	updatedAt: string;
+/** Hook event from Claude Code (stdin JSON) */
+export interface HookEvent {
+	hook_type: string;
+	session_id?: string;
+	permission_mode?: string;
+	stop_hook_active?: boolean;
+	tool_name?: string;
+	tool_input?: Record<string, unknown>;
+	tool_output?: string;
+	// UserPromptSubmit
+	prompt?: string;
+	// PermissionRequest
+	tool?: { name: string };
 }
 
-// Knowledge content JSON structures
-
-export interface ErrorResolutionContent {
-	error_signature: string;
-	resolution: string;
-	context?: string;
-}
-
-export interface FixPatternContent {
-	file_path: string;
-	error_type: "lint" | "type";
-	error_signature: string;
-	before: string;
-	after: string;
-	rule?: string;
-}
-
-export interface DecisionContent {
-	context: string;
-	decision: string;
-	rationale: string;
-	source: "plan" | "commit" | "design_discussion";
-}
-
-export interface ConventionContent {
-	pattern: string;
-	category: string; // naming | imports | error-handling | testing | architecture | style
-	example_files?: string[];
-}
-
-// ===== Quality Events =====
-
-export type QualityEventType =
-	| "gate_pass"
-	| "gate_fail"
-	| "error_hit"
-	| "error_miss"
-	| "test_pass"
-	| "test_fail"
-	| "assertion_warning"
-	| "convention_pass"
-	| "convention_warn"
-	| "plan_created"
-	| "knowledge_saved"
-	| "security_warn"
-	| "security_pass"
-	| "pace_warn"
-	| "pace_deny"
-	| "layer_warn"
-	| "layer_pass"
-	| "budget_trim"
-	| "injection_tracked"
-	| "plan_drift"
-	| "reflection_depth"
-	| "duplicate_warn";
-
-export interface QualityEvent {
-	id: number;
-	projectId: string;
-	sessionId: string;
-	eventType: QualityEventType;
-	data: string; // JSON
-	createdAt: string;
-}
-
-// ===== Project =====
-
-export interface ProjectRecord {
-	id: string;
-	name: string;
-	remote: string;
-	path: string;
-	registeredAt: string;
-	lastSeenAt: string;
-	status: string;
-}
-
-// ===== Vector Search =====
-
-export interface VectorMatch {
-	sourceId: number;
-	score: number;
-}
-
-// ===== Quality Score =====
-
-export interface QualityScore {
-	sessionScore: number; // 0-100
-	breakdown: {
-		gatePassRateWrite: { score: number; pass: number; total: number };
-		gatePassRateCommit: { score: number; pass: number; total: number };
-		errorResolutionHit: { score: number; hit: number; total: number };
-		conventionAdherence: { score: number; pass: number; total: number };
+/** Hook response written to stdout */
+export interface HookResponse {
+	hookSpecificOutput?: {
+		additionalContext?: string;
+		permissionDecision?: "allow" | "deny" | "ask";
+		permissionDecisionReason?: string;
+		decision?: "block";
+		reason?: string;
 	};
-	trend: "improving" | "stable" | "declining";
+}
+
+/** Pending fix entry stored in .alfred/.state/pending-fixes.json */
+export interface PendingFix {
+	file: string;
+	errors: string[];
+	gate: string;
+}
+
+/** Gate configuration in .alfred/gates.json */
+export interface GatesConfig {
+	on_write?: Record<string, GateDefinition>;
+	on_commit?: Record<string, GateDefinition>;
+}
+
+export interface GateDefinition {
+	command: string;
+	timeout?: number;
+	run_once_per_batch?: boolean;
+}
+
+/** Project profile in .alfred/.state/project-profile.json */
+export interface ProjectProfile {
+	language: string[];
+	runtime?: string;
+	test_framework?: string;
+	test_pattern?: string;
+	linter?: string;
+	detected_at: string;
+}
+
+/** Handoff state saved by PreCompact */
+export interface HandoffState {
+	summary: string;
+	changed_files: string[];
+	pending_fixes: boolean;
+	next_steps: string;
+	saved_at: string;
 }

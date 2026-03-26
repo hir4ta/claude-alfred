@@ -1,22 +1,7 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [
-    {
-      name: 'raw-tmpl',
-      transform(code, id) {
-        if (id.endsWith('.tmpl')) {
-          return { code: `export default ${JSON.stringify(code)}`, map: null };
-        }
-      },
-    },
-  ],
-  test: {
-    pool: 'forks',
-    coverage: {
-      provider: 'v8',
-      include: ['src/**/*.ts'],
-      exclude: ['src/**/__tests__/**', 'src/embedder/**', 'src/cli.ts', 'src/tui/**'],
-    },
-  },
+	test: {
+		pool: "forks",
+	},
 });
