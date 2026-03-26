@@ -27,7 +27,7 @@ export async function dispatch(event: string): Promise<void> {
 
 	let input: string;
 	try {
-		input = await new Response(process.stdin as unknown as ReadableStream).text();
+		input = await Bun.stdin.text();
 	} catch {
 		return; // fail-open: stdin read error
 	}
