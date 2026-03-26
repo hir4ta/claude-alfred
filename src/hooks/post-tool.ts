@@ -6,9 +6,11 @@ import { insertQualityEvent } from "../store/quality-events.js";
 import {
 	countAssertions,
 	extractCommandBase,
+	extractCommitMessage,
 	extractTestFailures,
 	guessTestFile,
 	isGitCommit,
+	isPlanFile,
 	isSourceFile,
 	isTestCommand,
 } from "./detect.js";
@@ -54,6 +56,11 @@ export async function postToolUse(ev: HookEvent, signal: AbortSignal): Promise<v
 
 	if (ev.tool_name === "Edit" || ev.tool_name === "Write") {
 		await handleEditWrite(ev.cwd, toolInput, items, signal);
+		// Auto-save plan files as decision knowledge
+		const filePath = (toolInput.file_path as string) ?? "";
+		if (ev.tool_name === "Write" && isPlanFile(filePath)) {
+			savePlanDecision(ev.cwd, filePath, toolInput);
+		}
 	} else if (ev.tool_name === "Bash") {
 		await handleBash(ev.cwd, toolInput, toolResponse, items, signal);
 	}
@@ -150,6 +157,9 @@ async function handleBash(
 
 	if (isGitCommit(stdout)) {
 		await handleGitCommit(cwd, items, signal);
+		// Auto-save non-trivial commit messages as decision knowledge
+		const commitMsg = extractCommitMessage(stdout);
+		if (commitMsg) saveCommitDecision(cwd, commitMsg);
 		return;
 	}
 
@@ -434,6 +444,94 @@ async function saveFixPatternKnowledge(cwd: string, ctx: FixContext, after: stri
 		}
 
 		recordQualityEventSafe(cwd, "knowledge_saved", { type: "fix_pattern", title });
+	} catch {
+		/* fail-open */
+	}
+}
+
+// ── decision auto-accumulation ───────────────────────────────────────
+
+async function savePlanDecision(
+	cwd: string,
+	filePath: string,
+	toolInput: Record<string, unknown>,
+): Promise<void> {
+	try {
+		const content = (toolInput.content as string) ?? "";
+		if (content.length < 50) return;
+
+		const { upsertKnowledge } = await import("../store/knowledge.js");
+		const { insertEmbedding } = await import("../store/vectors.js");
+		const store = openDefaultCached();
+		const project = resolveOrRegisterProject(store, cwd);
+
+		const fileName = filePath.split("/").pop() ?? "plan";
+		const title = `plan: ${fileName}`;
+		const decisionContent = JSON.stringify({
+			context: content.slice(0, 200),
+			decision: content.slice(0, 1000),
+			rationale: "",
+			source: "plan",
+		});
+
+		const { id, changed } = upsertKnowledge(store, {
+			projectId: project.id,
+			type: "decision",
+			title,
+			content: decisionContent,
+		});
+
+		if (changed) {
+			try {
+				const { Embedder } = await import("../embedder/index.js");
+				const emb = Embedder.create();
+				const vector = await emb.embedForStorage(`${title}\n${decisionContent}`);
+				insertEmbedding(store, id, emb.model, vector);
+			} catch {
+				/* embedding optional */
+			}
+		}
+
+		recordQualityEventSafe(cwd, "plan_created", { file: filePath });
+	} catch {
+		/* fail-open */
+	}
+}
+
+async function saveCommitDecision(cwd: string, commitMsg: string): Promise<void> {
+	try {
+		const { upsertKnowledge } = await import("../store/knowledge.js");
+		const { insertEmbedding } = await import("../store/vectors.js");
+		const store = openDefaultCached();
+		const project = resolveOrRegisterProject(store, cwd);
+
+		const title = `commit: ${commitMsg.slice(0, 80)}`;
+		const content = JSON.stringify({
+			context: "",
+			decision: commitMsg,
+			rationale: "",
+			source: "commit",
+		});
+
+		const { id, changed } = upsertKnowledge(store, {
+			projectId: project.id,
+			type: "decision",
+			title,
+			content,
+		});
+
+		if (changed) {
+			try {
+				const { Embedder } = await import("../embedder/index.js");
+				const emb = Embedder.create();
+				const vector = await emb.embedForStorage(`${title}\n${content}`);
+				insertEmbedding(store, id, emb.model, vector);
+			} catch {
+				/* embedding optional */
+			}
+		}
+
+		recordQualityEventSafe(cwd, "knowledge_saved", { type: "decision", title });
 	} catch {
 		/* fail-open */
 	}

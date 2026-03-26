@@ -26,7 +26,11 @@ export function isTestCommand(command: string): boolean {
 	if (!command) return false;
 
 	// Direct test runners
-	if (/\b(?:vitest|jest|mocha|ava|tap|nyc|c8|cypress\s+run|playwright\s+test|pytest|python\s+-m\s+(?:pytest|unittest)|go\s+test|cargo\s+test|dotnet\s+test|rspec|minitest|phpunit|mix\s+test|dart\s+test|flutter\s+test|swift\s+test|deno\s+test|bun\s+test)\b/.test(command)) {
+	if (
+		/\b(?:vitest|jest|mocha|ava|tap|nyc|c8|cypress\s+run|playwright\s+test|pytest|python\s+-m\s+(?:pytest|unittest)|go\s+test|cargo\s+test|dotnet\s+test|rspec|minitest|phpunit|mix\s+test|dart\s+test|flutter\s+test|swift\s+test|deno\s+test|bun\s+test)\b/.test(
+			command,
+		)
+	) {
 		return true;
 	}
 
@@ -41,7 +45,9 @@ export function isTestCommand(command: string): boolean {
 	}
 
 	// Wrapper prefixes
-	if (/\b(?:npx|bunx|pnpx)\s+(?:vitest|jest|mocha|ava|tap|c8|nyc|playwright|cypress)\b/.test(command)) {
+	if (
+		/\b(?:npx|bunx|pnpx)\s+(?:vitest|jest|mocha|ava|tap|c8|nyc|playwright|cypress)\b/.test(command)
+	) {
 		return true;
 	}
 
@@ -117,4 +123,20 @@ export function extractCommandBase(command: string): string {
 		return part;
 	}
 	return parts[0] ?? command;
+}
+
+/**
+ * Detect plan files (.claude/plans/*.md or plan*.md).
+ */
+export function isPlanFile(filePath: string): boolean {
+	return /\.claude\/plans\/.*\.md$/.test(filePath) || /\/plan[^/]*\.md$/i.test(filePath);
+}
+
+/**
+ * Extract commit message from git commit stdout (only if >50 chars).
+ */
+export function extractCommitMessage(stdout: string): string | null {
+	const match = stdout.match(/\[[\w./-]+ [0-9a-f]+\]\s+(.+)/);
+	if (match?.[1] && match[1].length > 50) return match[1];
+	return null;
 }
