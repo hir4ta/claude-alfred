@@ -11,8 +11,13 @@ node_modules/
 *.swo
 *~
 
-# alfred state (session-local, not tracked)
+# alfred state and generated files (not tracked)
 .alfred/.state/
+.alfred/conventions.json
+.alfred/layers.json
+
+# claude project settings (per-user)
+.claude/
 
 # Test
 coverage/
