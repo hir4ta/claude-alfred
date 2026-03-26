@@ -27,8 +27,7 @@ export async function dispatch(event: string): Promise<void> {
 
 	let input: string;
 	try {
-		const { readFileSync } = require("node:fs");
-		input = readFileSync("/dev/stdin", "utf-8");
+		input = await new Response(process.stdin as unknown as ReadableStream).text();
 	} catch {
 		return; // fail-open: stdin read error
 	}
