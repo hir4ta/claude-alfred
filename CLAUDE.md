@@ -56,6 +56,7 @@ src/
 │   ├── plan-status.ts      # Plan task status 解析
 │   ├── fail-count.ts       # 連続失敗カウント
 │   ├── context-budget.ts   # コンテキスト注入予算管理
+│   ├── gate-history.ts    # gate 結果トレンド + コミット間隔統計
 │   ├── gate-batch.ts       # run_once_per_batch 実行履歴
 │   ├── last-test-pass.ts  # テスト pass 記録 (commit 前強制)
 │   └── last-review.ts    # レビュー完了記録 (Stop 時強制)
@@ -107,6 +108,7 @@ task clean    # ビルド成果物削除
 - handoff.json — 構造化ハンドオフ (PreCompact/SessionEnd で保存)
 - fail-count.json — 連続失敗カウント
 - context-budget.json — コンテキスト注入予算 (session_id ベース, 2000 tok)
+- gate-history.json — gate 結果トレンド + コミット間隔 (50件 cap)
 - gate-batch.json — run_once_per_batch 実行履歴 (session_id ベース)
 - last-test-pass.json — テスト pass 記録 (commit 前に必須)
 - last-review.json — レビュー完了記録 (Plan 時 Stop 前に必須)

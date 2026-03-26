@@ -104,36 +104,21 @@ respond() に 2000 token 予算チェック。超過時は注入スキップ (fa
 
 ---
 
-## v0.5.0 — 学習と適応
+## v0.5.0 — 学習と適応 (完了)
 
-alfred がプロジェクトに適応する。
+alfred がプロジェクトの傾向を学習し事前に誘導する。
 
-### 5.1 gate 結果のトレンド分析
+### 5.1 gate トレンド分析 (完了)
+`gate-history.ts` で gate 結果を記録 (50件 cap)。SessionStart で上位3エラーを注入。
+context-budget 経由で予算管理。
 
-**問題:** 同じ lint エラーが毎回出る場合、additionalContext で「このプロジェクトで頻出するエラー」を注入すれば Claudeが事前に避けられる。
+### 5.2 Pace 適応的調整 (完了)
+コミット間隔統計から動的 red threshold (2x avg, min 10, max 60)。
+統計不足時は固定値 35min にフォールバック。
 
-**設計:**
-- `.alfred/.state/gate-history.json`: 直近N回の gate 結果を保存
-- SessionStart で頻出エラーパターンを additionalContext に注入
-- 例: 「このプロジェクトでは unused import エラーが最も多い。import 追加時に注意」
-
-### 5.2 Pace パラメータの適応的調整
-
-**問題:** 35分/5ファイルの閾値は固定。プロジェクトによって適切な値は異なる。
-
-**設計:**
-- gate-history からコミット間隔の平均を計算
-- 平均の 1.5x を yellow, 2x を red に動的設定
-- ファイル数閾値も同様に適応
-
-### 5.3 テスト結果からの自動 convention 生成
-
-**問題:** テストで頻繁に失敗するパターンがあれば、それを convention として rules に追加すべき。
-
-**設計:**
-- gate-history のエラーパターンを分析
-- 3回以上同じカテゴリのエラーが出たら、自動的に rules ファイルに追記
-- 例: 「biome: noUnusedImports が 5回検出 → ルール追加: import 追加時に使用箇所を確認」
+### 5.3 自動 convention 生成 (advisory に縮小)
+rules 自動追記は不正確なルールのリスクが高い。
+頻出エラーの SessionStart 注入 (5.1) で代替。rules への書き込みはしない。
 
 ---
 
