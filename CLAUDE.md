@@ -53,7 +53,8 @@ src/
 │   ├── pace.ts             # Pace 追跡
 │   ├── handoff.ts          # 構造化ハンドオフ
 │   ├── plan-status.ts      # Plan task status 解析
-│   └── fail-count.ts       # 連続失敗カウント
+│   ├── fail-count.ts       # 連続失敗カウント
+│   └── gate-batch.ts       # run_once_per_batch 実行履歴
 ├── templates/              # init が配置するファイル
 │   ├── skill-review.md     # /alfred:review skill
 │   ├── agent-reviewer.md   # reviewer agent
@@ -101,6 +102,7 @@ task clean    # ビルド成果物削除
 - session-pace.json — Pace 追跡 (最終コミット時刻, 変更ファイル数, ツール呼出数)
 - handoff.json — 構造化ハンドオフ (PreCompact/SessionEnd で保存)
 - fail-count.json — 連続失敗カウント
+- gate-batch.json — run_once_per_batch 実行履歴 (session_id ベース)
 
 ### シミュレーション必須
 - Hook や状態管理の変更後は `src/__tests__/simulation.test.ts` でE2Eシミュレーションを実行する
