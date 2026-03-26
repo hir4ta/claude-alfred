@@ -1,6 +1,7 @@
 import type { QualityEvent, QualityEventType, QualityScore } from "../types.js";
 import type { Store } from "./index.js";
 
+
 export function insertQualityEvent(
 	store: Store,
 	projectId: string,

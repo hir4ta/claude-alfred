@@ -1,13 +1,9 @@
 import { existsSync } from "node:fs";
+import { guessTestFile, isSourceFile } from "./detect.js";
 import type { DirectiveItem } from "./directives.js";
 import { emitDirectives } from "./directives.js";
 import type { HookEvent } from "./dispatcher.js";
-import {
-	formatPendingFixes,
-	hasPendingFixes,
-	readPendingFixes,
-} from "./pending-fixes.js";
-import { isSourceFile, guessTestFile } from "./detect.js";
+import { formatPendingFixes, hasPendingFixes, readPendingFixes } from "./pending-fixes.js";
 
 const BLOCKABLE_TOOLS = new Set(["Edit", "Write"]);
 
@@ -35,9 +31,7 @@ export async function preToolUse(ev: HookEvent): Promise<void> {
 		const formatted = formatPendingFixes(fixes);
 
 		// Exit code 2 = DENY
-		process.stderr.write(
-			`Fix lint/type errors before editing more files:\n${formatted}\n`,
-		);
+		process.stderr.write(`Fix lint/type errors before editing more files:\n${formatted}\n`);
 		process.exit(2);
 	}
 

@@ -48,7 +48,17 @@ export function extractSection(content: string, heading: string): string {
 	return result.join("\n").trim();
 }
 
-export async function runHook(event: string): Promise<void> {
+const EVENT_MAP: Record<string, string> = {
+	"session-start": "SessionStart",
+	"pre-compact": "PreCompact",
+	"user-prompt-submit": "UserPromptSubmit",
+	"post-tool-use": "PostToolUse",
+	"pre-tool-use": "PreToolUse",
+	stop: "Stop",
+};
+
+export async function runHook(rawEvent: string): Promise<void> {
+	const event = EVENT_MAP[rawEvent] ?? rawEvent;
 	// Read hook event from stdin.
 	const chunks: Buffer[] = [];
 	let totalLen = 0;

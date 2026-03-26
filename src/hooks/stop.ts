@@ -1,15 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import type { DirectiveItem } from "./directives.js";
-import { emitDirectives } from "./directives.js";
-import type { HookEvent } from "./dispatcher.js";
-import { hasPendingFixes, readPendingFixes, formatPendingFixes } from "./pending-fixes.js";
-import { guessTestFile, isSourceFile } from "./detect.js";
-import { writeStateJSON } from "./state.js";
 import type { Store } from "../store/index.js";
 import { openDefaultCached } from "../store/index.js";
 import { resolveOrRegisterProject } from "../store/project.js";
-import { getSessionSummary, calculateQualityScore } from "../store/quality-events.js";
+import { calculateQualityScore, getSessionSummary } from "../store/quality-events.js";
+import { guessTestFile, isSourceFile } from "./detect.js";
+import type { HookEvent } from "./dispatcher.js";
+import { formatPendingFixes, hasPendingFixes, readPendingFixes } from "./pending-fixes.js";
+import { writeStateJSON } from "./state.js";
 
 function findLatestSessionId(store: Store): string | null {
 	try {
@@ -28,7 +26,7 @@ function findLatestSessionId(store: Store): string | null {
 export async function stop(ev: HookEvent): Promise<void> {
 	if (!ev.cwd) return;
 
-	const items: DirectiveItem[] = [];
+	const items: Array<{ level: string; message: string }> = [];
 
 	// 1. Check pending-fixes → WARNING
 	if (hasPendingFixes(ev.cwd)) {
@@ -52,7 +50,13 @@ export async function stop(ev: HookEvent): Promise<void> {
 	// 3. Save final quality summary
 	saveFinalQualitySummary(ev.cwd);
 
-	emitDirectives("Stop", items);
+	// Stop hook does not support hookSpecificOutput in the official schema.
+	// Output warnings to stderr instead.
+	if (items.length > 0) {
+		for (const item of items) {
+			process.stderr.write(`[alfred] [${item.level}] ${item.message}\n`);
+		}
+	}
 }
 
 function findUntestedChanges(cwd: string): string[] {
@@ -86,7 +90,7 @@ function findUntestedChanges(cwd: string): string[] {
 function saveFinalQualitySummary(cwd: string): void {
 	try {
 		const store = openDefaultCached();
-		const project = resolveOrRegisterProject(store, cwd);
+		resolveOrRegisterProject(store, cwd);
 		const sessionId = findLatestSessionId(store);
 		if (!sessionId) return;
 

@@ -5,8 +5,8 @@
  * - on_write: after Edit/Write (lint, typecheck)
  * - on_commit: after git commit (test, typecheck)
  */
-import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export interface GateCheck {
@@ -59,11 +59,16 @@ export function runGate(
 	// Replace {file} placeholder
 	const command = file ? check.command.replace(/\{file\}/g, file) : check.command;
 
+	const env = { ...process.env };
+	// Ensure node_modules/.bin is in PATH so lint/typecheck tools are found
+	const binDir = join(cwd, "node_modules", ".bin");
+	env.PATH = env.PATH ? `${binDir}:${env.PATH}` : binDir;
+
 	const result = spawnSync("sh", ["-c", command], {
 		cwd,
 		timeout,
 		stdio: ["ignore", "pipe", "pipe"],
-		env: { ...process.env },
+		env,
 	});
 
 	const duration = Date.now() - start;
@@ -107,7 +112,9 @@ export function detectGates(cwd: string): GatesConfig {
 		try {
 			const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 			allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	}
 
 	// Linter
@@ -119,12 +126,19 @@ export function detectGates(cwd: string): GatesConfig {
 
 	// TypeScript
 	if (existsSync(join(cwd, "tsconfig.json"))) {
-		gates.on_write.typecheck = { command: "tsc --noEmit", timeout: 10000, run_once_per_batch: true };
+		gates.on_write.typecheck = {
+			command: "tsc --noEmit",
+			timeout: 10000,
+			run_once_per_batch: true,
+		};
 	}
 
 	// Test runner
 	if (allDeps.vitest) {
-		gates.on_commit.test_changed = { command: "vitest --changed --reporter=verbose", timeout: 30000 };
+		gates.on_commit.test_changed = {
+			command: "bunx --bun vitest --changed --reporter=verbose",
+			timeout: 30000,
+		};
 	} else if (allDeps.jest) {
 		gates.on_commit.test_changed = { command: "jest --changedSince=HEAD~1", timeout: 30000 };
 	} else if (existsSync(join(cwd, "go.mod"))) {
