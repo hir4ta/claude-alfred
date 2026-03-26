@@ -1,3 +1,4 @@
+import { recordReview } from "../state/last-review.ts";
 import type { HookEvent } from "../types.ts";
 import { block } from "./respond.ts";
 
@@ -17,6 +18,8 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 
 	if (agentType === "alfred-reviewer") {
 		validateReviewer(output);
+		// If we get here (no block), review passed — record it
+		recordReview();
 	} else if (agentType === "Plan") {
 		validatePlan(output);
 	}
