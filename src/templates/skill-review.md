@@ -1,35 +1,32 @@
 ---
 name: alfred-review
-description: "Multi-agent code review with 3 perspectives (correctness, design, security) and Judge filtering. Use when wanting thorough review before commit, after a milestone, or as a review gate in a plan."
+description: "Independent code review using a separate evaluator agent (HubSpot 2-stage pattern). Spawns alfred-reviewer to find issues, then filters findings by Succinctness/Accuracy/Actionability. Use when completing a milestone, before a major commit, or as a review gate in a plan. NOT for trivial changes (typo, rename, log line)."
 ---
 
 # /alfred:review
 
-Deep multi-agent code review. Spawns 3 parallel reviewers, then a Judge filters findings.
+Two-stage code review: independent Reviewer → Judge filter.
 
-## How to run
+## Stage 1: Reviewer (independent evaluator)
 
-1. Get the diff to review: `git diff` or `git diff HEAD~1`
-2. Spawn 3 alfred-reviewer agents in parallel, each with a different focus:
-   - **correctness**: logic errors, edge cases, missing tests, off-by-one, null handling
-   - **design**: simplicity, cohesion, coupling, naming, single responsibility
-   - **security**: input validation, injection, secrets, unsafe operations
-3. Collect all findings
-4. **Judge filter**: For each finding, check 3 criteria:
-   - **Succinctness**: Is it clear and to the point? (not vague or rambling)
-   - **Accuracy**: Is it technically correct in context? (not a false positive)
-   - **Actionability**: Does it include a concrete fix suggestion?
-5. Only report findings that pass all 3 criteria
+Spawn one `alfred-reviewer` agent with the diff to review.
+The reviewer evaluates correctness, design, and security in an independent context.
 
-## Output format
+## Stage 2: Judge filter
 
-For each finding that passes the Judge:
-- **[severity]** file:line — description
-- **Fix**: concrete suggestion
+For each finding returned by the reviewer, verify:
+- **Succinctness**: Clear and to the point? Not vague or rambling?
+- **Accuracy**: Technically correct in this codebase's context? Not a false positive?
+- **Actionability**: Includes a concrete fix? Not just "consider X"?
 
-Severity: critical > high > medium > low
+Discard findings that fail any criterion. Report only what passes all three.
 
-## When NOT to use
+## Output
 
-- Trivial changes (typo, log line, rename) — not worth the cost
-- Already reviewed by another tool — avoid duplicate work
+Summary line: `Review: N findings (X critical, Y high)` or `Review: 0 findings`
+
+Then for each passing finding:
+```
+[severity] file:line — description
+Fix: concrete suggestion
+```
