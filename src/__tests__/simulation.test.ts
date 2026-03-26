@@ -856,3 +856,57 @@ describe("Scenario 22: SessionEnd saves handoff on any exit", () => {
 		expect(handoff!.next_steps).toContain("wip.ts");
 	});
 });
+
+// ============================================================
+// Doctor integration scenario
+// ============================================================
+
+describe("Scenario 23: Init → Doctor reports all OK", () => {
+	it("doctor passes after valid init-like setup", async () => {
+		// Simulate what init does: create gates.json + .state
+		const gates = { on_write: { lint: { command: "echo ok", timeout: 3000 } } };
+		writeFileSync(join(ALFRED_DIR, "gates.json"), JSON.stringify(gates));
+
+		// Point HOME to test dir for doctor to find settings
+		const originalHome = process.env.HOME;
+		process.env.HOME = TEST_DIR;
+
+		try {
+			const claudeDir = join(TEST_DIR, ".claude");
+			mkdirSync(join(claudeDir, "skills", "alfred-review"), { recursive: true });
+			mkdirSync(join(claudeDir, "agents"), { recursive: true });
+			mkdirSync(join(claudeDir, "rules"), { recursive: true });
+			writeFileSync(join(claudeDir, "skills", "alfred-review", "SKILL.md"), "# skill");
+			writeFileSync(join(claudeDir, "agents", "alfred-reviewer.md"), "# agent");
+			writeFileSync(join(claudeDir, "rules", "alfred-quality.md"), "# rules");
+
+			// Write settings.json with all 13 hooks
+			const { ALFRED_HOOKS } = await import("../init.ts");
+			const hooks: Record<string, unknown> = {};
+			for (const event of Object.keys(ALFRED_HOOKS)) {
+				hooks[event] = ALFRED_HOOKS[event];
+			}
+			writeFileSync(join(claudeDir, "settings.json"), JSON.stringify({ hooks }));
+
+			// Run doctor
+			const { runChecks } = await import("../doctor.ts");
+			const results = runChecks();
+
+			expect(results).toHaveLength(8);
+
+			// All checks should be ok (except path which may be warn)
+			const failures = results.filter((r) => r.status === "fail");
+			expect(failures).toHaveLength(0);
+
+			// Verify key checks explicitly
+			const hooksCheck = results.find((r) => r.name === "hooks");
+			expect(hooksCheck!.status).toBe("ok");
+			expect(hooksCheck!.message).toContain("13");
+
+			const gatesCheck = results.find((r) => r.name === "gates");
+			expect(gatesCheck!.status).toBe("ok");
+		} finally {
+			process.env.HOME = originalHome;
+		}
+	});
+});
