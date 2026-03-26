@@ -231,7 +231,8 @@ describe("Scenario 6: Plan mode → template injected with review gates", () => 
 		await userPrompt({
 			hook_type: "UserPromptSubmit",
 			permission_mode: "plan",
-			prompt: "implement authentication",
+			prompt:
+				"implement authentication with JWT tokens, add login and signup endpoints, middleware for protected routes, password hashing with bcrypt, update user model with password fields, add rate limiting on auth endpoints, create integration tests for all auth flows, update API documentation with auth examples, add refresh token rotation logic",
 		});
 
 		const response = getResponse();
@@ -243,7 +244,7 @@ describe("Scenario 6: Plan mode → template injected with review gates", () => 
 		expect(context).toContain("1 file");
 		expect(context).toContain("15 lines");
 		expect(context).toContain("Verify");
-		// Must contain review gates
+		// Must contain review gates (full template for 300+ chars)
 		expect(context).toContain("Design Review");
 		expect(context).toContain("Phase Review");
 		expect(context).toContain("Final Review");
@@ -357,7 +358,8 @@ describe("Scenario 9: Full flow — plan mode → implement → gate → deny �
 		await userPrompt({
 			hook_type: "UserPromptSubmit",
 			permission_mode: "plan",
-			prompt: "add helper function",
+			prompt:
+				"add helper function for parsing dates, validating format, handling timezones, converting between formats, with comprehensive tests for edge cases including invalid inputs, null values, boundary dates across multiple calendar systems, leap year handling, DST transitions, ISO 8601 compliance with offset parsing and duration calculation support",
 		});
 		const planResponse = getResponse();
 		expect(planResponse).not.toBeNull();
@@ -646,13 +648,14 @@ describe("Scenario 17: Full E2E — plan → implement → status update → sto
 		await userPrompt({
 			hook_type: "UserPromptSubmit",
 			permission_mode: "plan",
-			prompt: "add logging",
+			prompt:
+				"add comprehensive logging with structured output, log levels, file rotation, request tracing, correlation IDs, error context capture, performance timing, integration with monitoring dashboard including alerts, custom metrics, distributed tracing spans, log aggregation pipeline, and retention policy configuration",
 		});
 		const planResponse = getResponse();
 		const template = (planResponse?.hookSpecificOutput as Record<string, string>)
 			?.additionalContext;
 		expect(template).toContain("[pending]");
-		expect(template).toContain("Update each task's status");
+		expect(template).toContain("Stop hook will block");
 
 		// Step 2: Claude creates plan with pending tasks
 		const planDir = join(TEST_DIR, ".claude", "plans");

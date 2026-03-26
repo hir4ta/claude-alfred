@@ -21,23 +21,57 @@ function getResponse(): Record<string, unknown> | null {
 }
 
 describe("userPrompt", () => {
-	it("injects plan template when permission_mode is plan", async () => {
+	it("injects full template for large plan prompt (300+ chars)", async () => {
+		const handler = (await import("../user-prompt.ts")).default;
+		const longPrompt =
+			"implement authentication with JWT tokens, add login endpoint, signup endpoint, " +
+			"middleware for protected routes, update user model, add password hashing, " +
+			"create refresh token logic, update the database schema, add tests for all endpoints, " +
+			"implement rate limiting, add CORS configuration, create API documentation";
+
+		await handler({
+			hook_type: "UserPromptSubmit",
+			permission_mode: "plan",
+			prompt: longPrompt,
+		});
+
+		const response = getResponse();
+		expect(response).not.toBeNull();
+		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
+		expect(context).toContain("## Tasks");
+		expect(context).toContain("Review Gates");
+	});
+
+	it("injects compact template for medium plan prompt (100-300 chars)", async () => {
+		const handler = (await import("../user-prompt.ts")).default;
+		// 100-300 chars
+		const mediumPrompt =
+			"add a helper function to parse dates and validate format, with tests for edge cases including invalid inputs and timezone handling";
+
+		await handler({
+			hook_type: "UserPromptSubmit",
+			permission_mode: "plan",
+			prompt: mediumPrompt,
+		});
+
+		const response = getResponse();
+		expect(response).not.toBeNull();
+		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
+		expect(context).toContain("## Tasks");
+		expect(context).not.toContain("Review Gates");
+	});
+
+	it("does not inject template for short plan prompt (< 100 chars)", async () => {
 		const handler = (await import("../user-prompt.ts")).default;
 
 		await handler({
 			hook_type: "UserPromptSubmit",
 			permission_mode: "plan",
-			prompt: "implement a new feature",
+			prompt: "fix the typo in README",
 		});
 
-		const response = getResponse();
-		expect(response).not.toBeNull();
-
-		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
-		expect(context).toBeDefined();
-		// Template should contain key sections
-		expect(context).toContain("Task");
-		expect(context).toContain("Review");
+		const output = stdoutCapture.join("");
+		expect(output).toBe("");
 	});
 
 	it("does not inject template in normal mode", async () => {
