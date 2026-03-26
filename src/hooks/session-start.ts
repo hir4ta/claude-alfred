@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { detectGates } from "../gates/detect.ts";
+import { getTopErrors } from "../state/gate-history.ts";
 import { clearHandoff, readHandoff } from "../state/handoff.ts";
 import type { HookEvent } from "../types.ts";
 import { respond } from "./respond.ts";
@@ -40,5 +41,12 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 
 		respond(lines.join("\n"));
 		clearHandoff();
+	}
+
+	// Inject frequent error trends
+	const topErrors = getTopErrors(3);
+	if (topErrors.length > 0) {
+		const errorLines = topErrors.map((e) => `- ${e.gate}: "${e.error}" (${e.count}x)`);
+		respond(`Frequent errors in this project:\n${errorLines.join("\n")}\nAvoid these patterns.`);
 	}
 }
