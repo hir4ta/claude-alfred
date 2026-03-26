@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { writeHandoff } from "../state/handoff.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import type { HookEvent } from "../types.ts";
@@ -22,16 +23,12 @@ export default async function preCompact(_ev: HookEvent): Promise<void> {
 /** Get list of changed files from git */
 function getChangedFiles(): string[] {
 	try {
-		const result = Bun.spawnSync(["git", "diff", "--name-only", "HEAD"], {
+		const output = execSync("git diff --name-only HEAD", {
 			cwd: process.cwd(),
 			timeout: 3000,
-			stdio: ["ignore", "pipe", "pipe"],
+			encoding: "utf-8",
 		});
-		if (result.exitCode !== 0) return [];
-		return result.stdout
-			.toString()
-			.split("\n")
-			.filter((line) => line.trim().length > 0);
+		return output.split("\n").filter((line) => line.trim().length > 0);
 	} catch {
 		return [];
 	}

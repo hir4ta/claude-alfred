@@ -901,7 +901,7 @@ describe("Scenario 23: Init → Doctor reports all OK", () => {
 			// Verify key checks explicitly
 			const hooksCheck = results.find((r) => r.name === "hooks");
 			expect(hooksCheck!.status).toBe("ok");
-			expect(hooksCheck!.message).toContain("13");
+			expect(hooksCheck!.message).toContain("14");
 
 			const gatesCheck = results.find((r) => r.name === "gates");
 			expect(gatesCheck!.status).toBe("ok");

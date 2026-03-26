@@ -7,6 +7,7 @@ const EVENT_MAP: Record<string, () => Promise<{ default: (ev: HookEvent) => Prom
 	"session-start": () => import("./session-start.ts"),
 	stop: () => import("./stop.ts"),
 	"pre-compact": () => import("./pre-compact.ts"),
+	"post-compact": () => import("./post-compact.ts"),
 	"permission-request": () => import("./permission-request.ts"),
 	"task-completed": () => import("./task-completed.ts"),
 	"subagent-start": () => import("./subagent-start.ts"),

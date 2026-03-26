@@ -54,6 +54,12 @@ export const ALFRED_HOOKS: Record<
 			hooks: [{ type: "command", command: "alfred hook pre-compact", timeout: 10000 }],
 		},
 	],
+	PostCompact: [
+		{
+			matcher: "",
+			hooks: [{ type: "command", command: "alfred hook post-compact", timeout: 5000 }],
+		},
+	],
 	PermissionRequest: [
 		{
 			matcher: "ExitPlanMode",
