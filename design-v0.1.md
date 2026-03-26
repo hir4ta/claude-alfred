@@ -261,6 +261,21 @@ src/
 ### ~/.claude/rules/alfred-quality.md
 品質ルール (20行以内)
 
+## v0.2 で追加予定
+
+### TaskCompleted hook — Plan とタスクの自動同期
+- Claude が TaskUpdate でタスク完了マーク → TaskCompleted 発火
+- Plan ファイルの該当タスクの status を [done] に自動書き換え
+- テストが通っていなければ exit 2 で完了を拒否
+- 調査結果: 単一エージェントセッションでも発火する (v2.1.33+)
+- Stop hook はフォールバック（タスクシステム未使用時のカバー）
+
+### doctor コマンド
+- hooks 登録確認、gates.json 存在確認、skill/agent/rules 存在確認
+
+### run_once_per_batch
+- typecheck gate の重複実行防止
+
 ## Phase 0 の実施手順
 
 1. `src/` 全削除
