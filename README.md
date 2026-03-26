@@ -4,11 +4,30 @@
 
 ## alfred が行うこと
 
-alfred は Claude Code の hooks として動作し、3つの柱で品質を強制する。
+alfred は Claude Code の 13 hooks として動作し、Claudeの行動を機械的に制御する。
 
-1. **壁** — ファイル編集後に lint/type チェック。エラーがあれば次の編集をブロック (DENY)
-2. **Plan 増幅** — Plan mode でタスク分解テンプレートとレビューゲートを注入
-3. **実行ループ** — Pace 制御、2回失敗検出、構造化ハンドオフ
+### 壁 — 壊れたコードを通さない
+- **PostToolUse**: ファイル編集後に lint/type チェック。エラーを pending-fixes に記録
+- **PreToolUse**: 未修正エラーがあれば他ファイルの編集を **DENY**。Pace red zone も DENY
+
+### Plan 増幅 — 設計の質を保証する
+- **UserPromptSubmit**: Plan mode でタスク分解テンプレート (1ファイル/15行/検証テスト + Review Gates) を注入
+- **PermissionRequest**: Plan に Review Gates がなければ **DENY**
+- **TaskCompleted**: Claude がタスクを完了マークすると Plan の status を自動同期
+
+### 実行ループ — 完了の質を保証する
+- **Stop**: pending-fixes 残存 or Plan 未完了タスク → **block**。Pace 警告
+- **PreCompact**: コンパクション前に構造化ハンドオフ保存
+- **SessionStart**: .alfred 自動作成 + gates 自動検出 + ハンドオフ復元
+- **SessionEnd**: 割り込み終了時もハンドオフ保存
+
+### サブエージェント制御 — 品質ルールを伝搬する
+- **SubagentStart**: 全サブエージェントに品質ルール + pending-fixes + conventions を注入
+- **SubagentStop**: サブエージェント完了検証 (拡張ポイント)
+
+### 防御 — ハーネス自体を守る
+- **PostToolUseFailure**: ツール失敗追跡。2回連続同じエラーで /clear 提案
+- **ConfigChange**: user_settings の変更を **DENY** (hook 削除防止)
 
 ## インストール
 
@@ -23,21 +42,15 @@ alfred init       # ~/.claude/ に hooks, skills, agents, rules を配置
 ## コマンド
 
 ```bash
-alfred init          # セットアップ
+alfred init          # セットアップ (13 hooks + skill + agent + rules + gates)
 alfred hook <event>  # Hook イベント処理 (Claude Code が呼び出す)
 alfred doctor        # ヘルスチェック
 ```
 
 ## Skills
 
-- `/alfred:review` — マルチエージェントコードレビュー (3視点 + Judge フィルタリング)
+- `/alfred:review` — マルチエージェントコードレビュー (correctness / design / security + Judge フィルタリング)
 
 ## スタック
 
 TypeScript (Bun 1.3+, ESM) / citty (CLI) / vitest (テスト) / Biome (lint)
-
-## 設計ドキュメント
-
-- `design-v0.1.md` — v0.1.0 全体設計
-- `research-harness-engineering-2026.md` — ハーネスエンジニアリング リサーチ
-- `research-claude-code-plugins-2026.md` — Claude Code Plugin 調査
