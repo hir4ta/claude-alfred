@@ -42,7 +42,7 @@ src/
 │   ├── post-compact.ts     # コンパクション後ハンドオフ復元
 │   ├── session-end.ts      # 割り込み終了時 handoff 保存
 │   ├── subagent-start.ts   # サブエージェントに品質ルール注入
-│   ├── subagent-stop.ts    # サブエージェント出力検証 (reviewer findings + Plan 構造)
+│   ├── subagent-stop.ts    # サブエージェント出力検証 + レビュー完了記録
 │   ├── post-tool-failure.ts # ツール失敗追跡 + 2回連続→/clear
 │   └── config-change.ts    # user_settings 変更 DENY
 ├── gates/
@@ -56,7 +56,8 @@ src/
 │   ├── plan-status.ts      # Plan task status 解析
 │   ├── fail-count.ts       # 連続失敗カウント
 │   ├── gate-batch.ts       # run_once_per_batch 実行履歴
-│   └── last-test-pass.ts  # テスト pass 記録 (commit 前強制)
+│   ├── last-test-pass.ts  # テスト pass 記録 (commit 前強制)
+│   └── last-review.ts    # レビュー完了記録 (Stop 時強制)
 ├── templates/              # init が配置するファイル
 │   ├── skill-review.md     # /alfred:review skill
 │   ├── agent-reviewer.md   # reviewer agent
@@ -106,6 +107,7 @@ task clean    # ビルド成果物削除
 - fail-count.json — 連続失敗カウント
 - gate-batch.json — run_once_per_batch 実行履歴 (session_id ベース)
 - last-test-pass.json — テスト pass 記録 (commit 前に必須)
+- last-review.json — レビュー完了記録 (Plan 時 Stop 前に必須)
 
 ### Phase Gate (各 Phase 完了時に必ず実行)
 1. `bun vitest run` — 全テスト pass

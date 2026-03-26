@@ -74,6 +74,15 @@ ExitPlanMode 時に File/Verify/Review Gates を検証して DENY。`findLatestP
 - on_commit gate 未設定プロジェクトは skip (fail-open)
 - rules-quality.md に「commit is blocked until tests pass」追記
 
+### 3.6 独立レビュー強制 + /alfred:review 再設計 (完了)
+自己評価は機能しない (Anthropic research)。独立評価者パターンに移行。
+- `/alfred:review` を HubSpot 2段階パターンに再設計: Reviewer (独立サブエージェント) → Judge (メインがフィルタリング)
+- 3並列 → 1エージェント統合 (Multi-Agent Scaling Laws: 逐次推論で複数エージェントは悪化)
+- `agent-reviewer.md`: allowed-tools, WHATベース指示, Judge内蔵
+- Stop hook: Plan 時にレビュー未実行 → block
+- SubagentStop: reviewer pass → `last-review.json` 記録
+- PostToolUse: commit → `clearReview()`
+
 ---
 
 ## v0.4.0 — コンテキスト最適化
