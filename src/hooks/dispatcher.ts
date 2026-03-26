@@ -48,7 +48,10 @@ export async function dispatch(event: string): Promise<void> {
 	try {
 		const handler = await loader();
 		await handler.default(ev);
-	} catch {
-		// fail-open: handler error → do nothing
+	} catch (err) {
+		// fail-open: handler error → log to stderr for debugging
+		if (err instanceof Error && !err.message.startsWith("process.exit")) {
+			process.stderr.write(`[alfred] ${event}: ${err.message}\n`);
+		}
 	}
 }
