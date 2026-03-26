@@ -100,7 +100,7 @@ function handleBash(ev: HookEvent): void {
 	}
 
 	// Detect Bash failure → track consecutive failures
-	const output = typeof ev.tool_output === "string" ? ev.tool_output : "";
+	const output = getToolOutput(ev);
 	const exitCodeMatch = output.match(/exit code (\d+)/i) ?? output.match(/exited with (\d+)/i);
 	const isError = exitCodeMatch ? Number(exitCodeMatch[1]) !== 0 : false;
 
@@ -115,6 +115,20 @@ function handleBash(ev: HookEvent): void {
 	} else if (output.length > 0) {
 		clearFailCount();
 	}
+}
+
+/** Extract tool output as string from tool_response (official) or tool_output (legacy) */
+function getToolOutput(ev: HookEvent): string {
+	// Official schema: tool_response is { stdout, stderr, ... } for Bash
+	if (ev.tool_response != null && typeof ev.tool_response === "object") {
+		const resp = ev.tool_response as Record<string, unknown>;
+		const stdout = typeof resp.stdout === "string" ? resp.stdout : "";
+		const stderr = typeof resp.stderr === "string" ? resp.stderr : "";
+		return (stdout + stderr).trim();
+	}
+	// Legacy fallback
+	if (typeof ev.tool_output === "string") return ev.tool_output;
+	return "";
 }
 
 function updatePace(): void {

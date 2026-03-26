@@ -1,11 +1,18 @@
 /** Hook event from Claude Code (stdin JSON) */
 export interface HookEvent {
-	hook_type: string;
+	// Common fields (all events)
+	hook_event_name?: string;
 	session_id?: string;
+	transcript_path?: string;
+	cwd?: string;
 	permission_mode?: string;
 	stop_hook_active?: boolean;
+	// PostToolUse / PreToolUse
 	tool_name?: string;
 	tool_input?: Record<string, unknown>;
+	tool_response?: unknown;
+	tool_use_id?: string;
+	/** @deprecated Use tool_response instead */
 	tool_output?: string;
 	// UserPromptSubmit
 	prompt?: string;
@@ -17,7 +24,10 @@ export interface HookEvent {
 	task_description?: string;
 	// SubagentStop
 	agent_type?: string;
+	agent_transcript_path?: string;
 	last_assistant_message?: string;
+	// Legacy compat
+	hook_type?: string;
 }
 
 /** Hook response written to stdout */
