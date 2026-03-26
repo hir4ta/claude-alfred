@@ -276,7 +276,54 @@ function handlePotentialResolution(cwd: string, successCommand: string, _stdout:
 		resolution_command: successCommand,
 	});
 
+	// Auto-save error_resolution to knowledge DB
+	saveErrorResolution(cwd, lastError, successCommand);
+
 	clearLastError(cwd);
+}
+
+/** Save error→fix pattern to knowledge DB with vector embedding (fail-open). */
+async function saveErrorResolution(
+	cwd: string,
+	lastError: LastError,
+	resolutionCommand: string,
+): Promise<void> {
+	try {
+		const { upsertKnowledge } = await import("../store/knowledge.js");
+		const { insertEmbedding } = await import("../store/vectors.js");
+		const store = openDefaultCached();
+		const project = resolveOrRegisterProject(store, cwd);
+
+		const errorSig = normalizeErrorSignature(lastError.error);
+		const title = `${extractCommandBase(lastError.command)}: ${errorSig.slice(0, 80)}`;
+		const content = JSON.stringify({
+			error_signature: errorSig,
+			resolution: `Run: ${resolutionCommand}`,
+			original_error: lastError.error.slice(0, 500),
+			original_command: lastError.command,
+		});
+
+		const { id, changed } = upsertKnowledge(store, {
+			projectId: project.id,
+			type: "error_resolution",
+			title,
+			content,
+		});
+
+		// Embed for vector search (fail-open)
+		if (changed) {
+			try {
+				const { Embedder } = await import("../embedder/index.js");
+				const emb = Embedder.create();
+				const vector = await emb.embedForStorage(`${title}\n${content}`);
+				insertEmbedding(store, id, emb.model, vector);
+			} catch {
+				/* embedding optional — knowledge saved for text match */
+			}
+		}
+	} catch {
+		/* fail-open */
+	}
 }
 
 // ── Long-task detection (research #7) ────────────────────────────────

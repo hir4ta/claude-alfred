@@ -44,7 +44,7 @@ const main = defineCommand({
 			meta: { description: "Show quality dashboard in terminal" },
 			async run() {
 				try {
-					// @ts-ignore — tui/main.tsx uses OpenTUI JSX (separate tsconfig)
+					// @ts-expect-error — tui/main.tsx uses OpenTUI JSX (separate tsconfig)
 					const { runTui } = await import("./tui/main.js");
 					await runTui();
 				} catch (err: unknown) {
@@ -130,10 +130,15 @@ const main = defineCommand({
 
 				// Checklists
 				const checklistDir = join(home, ".claude", "skills", "alfred-review", "checklists");
-				const hasChecklists = existsSync(join(checklistDir, "security.md"))
-					&& existsSync(join(checklistDir, "logic.md"))
-					&& existsSync(join(checklistDir, "design.md"));
-				check(hasChecklists, "Checklists: security, logic, design", "not found — run: alfred init --force");
+				const hasChecklists =
+					existsSync(join(checklistDir, "security.md")) &&
+					existsSync(join(checklistDir, "logic.md")) &&
+					existsSync(join(checklistDir, "design.md"));
+				check(
+					hasChecklists,
+					"Checklists: security, logic, design",
+					"not found — run: alfred init --force",
+				);
 
 				// Agent
 				const reviewerAgent = join(home, ".claude", "agents", "alfred-reviewer.md");
@@ -163,15 +168,20 @@ const main = defineCommand({
 				// Knowledge
 				if (hasAlfred) {
 					const knowledgeDir = join(cwd, ".alfred", "knowledge");
-					const hasKnowledge = existsSync(join(knowledgeDir, "error_resolutions"))
-						&& existsSync(join(knowledgeDir, "exemplars"))
-						&& existsSync(join(knowledgeDir, "conventions"));
+					const hasKnowledge =
+						existsSync(join(knowledgeDir, "error_resolutions")) &&
+						existsSync(join(knowledgeDir, "exemplars")) &&
+						existsSync(join(knowledgeDir, "conventions"));
 					check(hasKnowledge, "Knowledge: directories exist", "run: alfred init");
 				}
 
 				// Conventions
 				const convPath = join(cwd, ".alfred", "conventions.json");
-				check(existsSync(convPath), "Conventions: .alfred/conventions.json", "run: /alfred:conventions to discover");
+				check(
+					existsSync(convPath),
+					"Conventions: .alfred/conventions.json",
+					"run: /alfred:conventions to discover",
+				);
 			},
 		}),
 		scan: defineCommand({
@@ -255,7 +265,9 @@ const main = defineCommand({
 				const { openDefaultCached } = await import("./store/index.js");
 				const { resolveOrRegisterProject } = await import("./store/project.js");
 				const { detectProjectProfile } = await import("./profile/detect.js");
-				const { calculateQualityScore, getLatestSessionId, getRecentEvents } = await import("./store/quality-events.js");
+				const { calculateQualityScore, getLatestSessionId, getRecentEvents } = await import(
+					"./store/quality-events.js"
+				);
 				const { countKnowledge } = await import("./store/knowledge.js");
 
 				const store = openDefaultCached();
@@ -269,27 +281,38 @@ const main = defineCommand({
 					profile.runtime !== "unknown" ? `(${profile.runtime})` : "",
 					profile.testFramework !== "unknown" ? `/ ${profile.testFramework}` : "",
 					profile.linter !== "unknown" ? `/ ${profile.linter}` : "",
-				].filter(Boolean).join(" ");
+				]
+					.filter(Boolean)
+					.join(" ");
 				console.log(`  Stack: ${stack}`);
 
 				// --- Quality Score ---
 				const sessionId = getLatestSessionId(store, project.id);
 				if (sessionId) {
 					const score = calculateQualityScore(store, sessionId);
-					const trendIcon = score.trend === "improving" ? "+" : score.trend === "declining" ? "-" : "=";
+					const trendIcon =
+						score.trend === "improving" ? "+" : score.trend === "declining" ? "-" : "=";
 					console.log(`\nQuality Score: ${score.sessionScore}/100 (${trendIcon} ${score.trend})`);
 					const b = score.breakdown;
 					if (b.gatePassRateWrite.total > 0) {
-						console.log(`  Gate Write:    ${b.gatePassRateWrite.score}% (${b.gatePassRateWrite.pass}/${b.gatePassRateWrite.total})`);
+						console.log(
+							`  Gate Write:    ${b.gatePassRateWrite.score}% (${b.gatePassRateWrite.pass}/${b.gatePassRateWrite.total})`,
+						);
 					}
 					if (b.gatePassRateCommit.total > 0) {
-						console.log(`  Gate Commit:   ${b.gatePassRateCommit.score}% (${b.gatePassRateCommit.pass}/${b.gatePassRateCommit.total})`);
+						console.log(
+							`  Gate Commit:   ${b.gatePassRateCommit.score}% (${b.gatePassRateCommit.pass}/${b.gatePassRateCommit.total})`,
+						);
 					}
 					if (b.errorResolutionHit.total > 0) {
-						console.log(`  Error Cache:   ${b.errorResolutionHit.score}% (${b.errorResolutionHit.hit}/${b.errorResolutionHit.total})`);
+						console.log(
+							`  Error Cache:   ${b.errorResolutionHit.score}% (${b.errorResolutionHit.hit}/${b.errorResolutionHit.total})`,
+						);
 					}
 					if (b.conventionAdherence.total > 0) {
-						console.log(`  Conventions:   ${b.conventionAdherence.score}% (${b.conventionAdherence.pass}/${b.conventionAdherence.total})`);
+						console.log(
+							`  Conventions:   ${b.conventionAdherence.score}% (${b.conventionAdherence.pass}/${b.conventionAdherence.total})`,
+						);
 					}
 				} else {
 					console.log("\nQuality Score: no data (no sessions recorded)");
@@ -328,7 +351,11 @@ const main = defineCommand({
 		uninstall: defineCommand({
 			meta: { description: "Remove alfred from this system" },
 			args: {
-				"keep-data": { type: "boolean", default: false, description: "Keep ~/.alfred/ and .alfred/ data" },
+				"keep-data": {
+					type: "boolean",
+					default: false,
+					description: "Keep ~/.alfred/ and .alfred/ data",
+				},
 			},
 			async run({ args }) {
 				const { existsSync, rmSync, unlinkSync } = await import("node:fs");
@@ -349,7 +376,9 @@ const main = defineCommand({
 							writeFileSync(mcpPath, JSON.stringify(mcp, null, 2) + "\n");
 							removed.push("MCP: alfred entry");
 						}
-					} catch { /* ignore */ }
+					} catch {
+						/* ignore */
+					}
 				}
 
 				// Remove hooks from settings.json
@@ -363,7 +392,11 @@ const main = defineCommand({
 								if (Array.isArray(handlers)) {
 									const filtered = (handlers as Array<Record<string, unknown>>).filter((h) => {
 										const hooks = h.hooks as Array<Record<string, unknown>> | undefined;
-										return !hooks?.some((hk) => typeof hk.command === "string" && (hk.command as string).startsWith("alfred "));
+										return !hooks?.some(
+											(hk) =>
+												typeof hk.command === "string" &&
+												(hk.command as string).startsWith("alfred "),
+										);
 									});
 									if (filtered.length !== (handlers as unknown[]).length) {
 										settings.hooks[event] = filtered.length > 0 ? filtered : undefined;
@@ -373,7 +406,10 @@ const main = defineCommand({
 							}
 							// Clean up empty events
 							for (const key of Object.keys(settings.hooks)) {
-								if (!settings.hooks[key] || (Array.isArray(settings.hooks[key]) && settings.hooks[key].length === 0)) {
+								if (
+									!settings.hooks[key] ||
+									(Array.isArray(settings.hooks[key]) && settings.hooks[key].length === 0)
+								) {
 									delete settings.hooks[key];
 								}
 							}
@@ -382,7 +418,9 @@ const main = defineCommand({
 								removed.push(`Hooks: ${cleaned} events`);
 							}
 						}
-					} catch { /* ignore */ }
+					} catch {
+						/* ignore */
+					}
 				}
 
 				// Remove rules, skills, agents
@@ -395,16 +433,25 @@ const main = defineCommand({
 					join(claudeDir, "skills", "alfred-conventions"),
 				];
 				for (const p of toDelete) {
-					if (existsSync(p)) { unlinkSync(p); removed.push(p); }
+					if (existsSync(p)) {
+						unlinkSync(p);
+						removed.push(p);
+					}
 				}
 				for (const d of dirsToDelete) {
-					if (existsSync(d)) { rmSync(d, { recursive: true }); removed.push(d); }
+					if (existsSync(d)) {
+						rmSync(d, { recursive: true });
+						removed.push(d);
+					}
 				}
 
 				// Remove data
 				if (!args["keep-data"]) {
 					const alfredHome = join(home, ".alfred");
-					if (existsSync(alfredHome)) { rmSync(alfredHome, { recursive: true }); removed.push(alfredHome); }
+					if (existsSync(alfredHome)) {
+						rmSync(alfredHome, { recursive: true });
+						removed.push(alfredHome);
+					}
 				}
 
 				if (removed.length === 0) {
@@ -422,12 +469,48 @@ const main = defineCommand({
 					meta: { description: "Save an error resolution from PreCompact agent hook" },
 					args: {
 						title: { type: "string", required: true, description: "Title" },
-						error_signature: { type: "string", default: "", description: "Normalized error message" },
+						error_signature: {
+							type: "string",
+							default: "",
+							description: "Normalized error message",
+						},
 						resolution: { type: "string", default: "", description: "How to resolve" },
 					},
 					async run({ args }) {
-						// TODO (Phase 1): Implement save via v2 knowledge system
-						console.log(`[alfred] save-decision: ${args.title}`);
+						const { Store } = await import("./store/index.js");
+						const { resolveOrRegisterProject } = await import("./store/project.js");
+						const { upsertKnowledge } = await import("./store/knowledge.js");
+						const { insertEmbedding } = await import("./store/vectors.js");
+
+						const store = Store.openDefault();
+						const cwd = process.cwd();
+						const project = resolveOrRegisterProject(store, cwd);
+
+						const content = JSON.stringify({
+							error_signature: args.error_signature,
+							resolution: args.resolution,
+						});
+
+						const { id, changed } = upsertKnowledge(store, {
+							projectId: project.id,
+							type: "error_resolution",
+							title: args.title as string,
+							content,
+						});
+
+						if (changed) {
+							try {
+								const { Embedder } = await import("./embedder/index.js");
+								const emb = Embedder.create();
+								const vector = await emb.embedForStorage(`${args.title}\n${content}`);
+								insertEmbedding(store, id, emb.model, vector);
+							} catch {
+								/* embedding optional */
+							}
+						}
+
+						console.log(`[alfred] saved: ${args.title} (id=${id}, changed=${changed})`);
+						store.close();
 					},
 				}),
 			},
