@@ -2,14 +2,14 @@
  * MCP tool handler: `alfred` — 4 actions (search, save, profile, score)
  */
 import type { Embedder } from "../embedder/index.js";
-import type { KnowledgeType } from "../types.js";
+import { getGitUserName } from "../git/user.js";
 import type { Store } from "../store/index.js";
 import { upsertKnowledge } from "../store/knowledge.js";
-import { searchKnowledge } from "../store/search.js";
 import { resolveOrRegisterProject } from "../store/project.js";
 import { calculateQualityScore } from "../store/quality-events.js";
+import { searchKnowledge } from "../store/search.js";
 import { insertEmbedding } from "../store/vectors.js";
-import { getGitUserName } from "../git/user.js";
+import type { KnowledgeType } from "../types.js";
 
 interface AlfredParams {
 	action: string;
@@ -42,7 +42,10 @@ function jsonResult(data: unknown) {
 }
 
 function errorResult(msg: string) {
-	return { content: [{ type: "text" as const, text: JSON.stringify({ error: msg }) }], isError: true as const };
+	return {
+		content: [{ type: "text" as const, text: JSON.stringify({ error: msg }) }],
+		isError: true as const,
+	};
 }
 
 export async function handleAlfred(store: Store, emb: Embedder | null, params: AlfredParams) {
@@ -100,12 +103,17 @@ async function alfredSearch(store: Store, emb: Embedder | null, params: AlfredPa
 // ===== save =====
 
 async function alfredSave(store: Store, emb: Embedder | null, params: AlfredParams) {
-	if (!params.type) return errorResult("type is required for save (error_resolution, fix_pattern, convention, decision)");
+	if (!params.type)
+		return errorResult(
+			"type is required for save (error_resolution, fix_pattern, convention, decision)",
+		);
 	if (!params.title) return errorResult("title is required for save");
 
 	const knowledgeType = params.type as KnowledgeType;
 	if (!["error_resolution", "fix_pattern", "convention", "decision"].includes(knowledgeType)) {
-		return errorResult(`Invalid type: ${params.type}. Must be error_resolution, exemplar, or convention`);
+		return errorResult(
+			`Invalid type: ${params.type}. Must be error_resolution, exemplar, or convention`,
+		);
 	}
 
 	const cwd = params.project_path || process.cwd();
@@ -122,10 +130,22 @@ async function alfredSave(store: Store, emb: Embedder | null, params: AlfredPara
 			content = { error_signature: params.error_signature, resolution: params.resolution };
 			break;
 		case "fix_pattern":
-			if (!params.bad || !params.good || !params.explanation) {
-				return errorResult("bad, good, and explanation are required for fix_pattern");
-			}
-			content = { bad: params.bad, good: params.good, explanation: params.explanation };
+			content = {
+				file_path: params.error_signature ?? "",
+				error_type: "lint",
+				error_signature: params.error_signature ?? "",
+				before: params.bad ?? "",
+				after: params.good ?? "",
+				rule: params.explanation ?? "",
+			};
+			break;
+		case "decision":
+			content = {
+				context: params.error_signature ?? "",
+				decision: params.resolution ?? params.pattern ?? "",
+				rationale: params.explanation ?? "",
+				source: "design_discussion",
+			};
 			break;
 		case "convention":
 			if (!params.pattern) {
@@ -179,7 +199,9 @@ async function alfredProfile(store: Store, params: AlfredParams) {
 		try {
 			const profile = JSON.parse(readFileSync(profilePath, "utf-8"));
 			return jsonResult(profile);
-		} catch { /* fall through to detect */ }
+		} catch {
+			/* fall through to detect */
+		}
 	}
 
 	// Auto-detect project profile

@@ -30,7 +30,7 @@ export async function searchKnowledgeSafe(
 		const results = await searchKnowledge(store, emb, query, {
 			type: opts.type ?? "all",
 			limit: opts.limit ?? 3,
-			minScore: opts.minScore ?? 0.70,
+			minScore: opts.minScore ?? 0.7,
 			trackHits: true,
 		});
 
@@ -76,7 +76,10 @@ export function formatSearchHits(hits: SearchHit[]): string {
 					return `Previously resolved: "${parsed.error_signature}" → ${parsed.resolution}`;
 				}
 				if (h.type === "fix_pattern") {
-					return `Example: ${parsed.explanation}\nBad: ${parsed.bad}\nGood: ${parsed.good}`;
+					return `Fix pattern (${parsed.rule ?? parsed.error_type}): ${parsed.error_signature}\nBefore: ${parsed.before?.slice(0, 150)}\nAfter: ${parsed.after?.slice(0, 150)}`;
+				}
+				if (h.type === "decision") {
+					return `Decision: ${parsed.decision?.slice(0, 200)}${parsed.rationale ? `\nRationale: ${parsed.rationale}` : ""}`;
 				}
 				if (h.type === "convention") {
 					return `Convention: ${parsed.pattern}`;
