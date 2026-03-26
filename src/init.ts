@@ -85,6 +85,7 @@ const HOOK_EVENTS = {
 	Stop: { timeout: 5000 },
 	PreCompact: { timeout: 10000 },
 	PermissionRequest: { timeout: 5000, matcher: "ExitPlanMode" },
+	TaskCompleted: { timeout: 5000 },
 } as const;
 
 function writeHooks(settingsPath: string, force: boolean): void {
@@ -138,6 +139,7 @@ const EVENT_TO_ARG: Record<string, string> = {
 	Stop: "stop",
 	PreCompact: "pre-compact",
 	PermissionRequest: "permission-request",
+	TaskCompleted: "task-completed",
 };
 
 function eventToArg(event: string): string {

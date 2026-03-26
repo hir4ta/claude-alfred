@@ -11,6 +11,10 @@ export interface HookEvent {
 	prompt?: string;
 	// PermissionRequest
 	tool?: { name: string };
+	// TaskCompleted
+	task_id?: string;
+	task_subject?: string;
+	task_description?: string;
 }
 
 /** Hook response written to stdout */

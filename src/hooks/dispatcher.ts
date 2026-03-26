@@ -8,6 +8,7 @@ const EVENT_MAP: Record<string, () => Promise<{ default: (ev: HookEvent) => Prom
 	stop: () => import("./stop.ts"),
 	"pre-compact": () => import("./pre-compact.ts"),
 	"permission-request": () => import("./permission-request.ts"),
+	"task-completed": () => import("./task-completed.ts"),
 };
 
 export async function dispatch(event: string): Promise<void> {

@@ -695,3 +695,88 @@ describe("Scenario 17: Full E2E — plan → implement → status update → sto
 		expect(exitCode).toBeNull();
 	});
 });
+
+// ============================================================
+// TaskCompleted integration scenarios
+// ============================================================
+
+describe("Scenario 18: TaskCompleted auto-syncs plan status", () => {
+	it("completing a task updates plan and unblocks stop", async () => {
+		const taskCompleted = (await import("../hooks/task-completed.ts")).default;
+		const stop = (await import("../hooks/stop.ts")).default;
+
+		// Create plan with 2 pending tasks
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "feature.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add logger [pending]",
+				"- File: src/logger.ts",
+				"",
+				"### Task 2: Add tests [pending]",
+				"- File: src/__tests__/logger.test.ts",
+				"",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		// Stop should block (3 incomplete)
+		try {
+			await stop({ hook_type: "Stop" });
+		} catch {
+			// exit(2)
+		}
+		expect(exitCode).toBe(2);
+
+		// Claude completes Task 1 via TaskUpdate → TaskCompleted fires
+		stdoutCapture = [];
+		exitCode = null;
+		await taskCompleted({
+			hook_type: "TaskCompleted",
+			task_id: "1",
+			task_subject: "Add logger",
+		});
+		expect(exitCode).toBeNull();
+
+		// Verify plan was updated
+		const { readFileSync: rfs } = await import("node:fs");
+		const plan = rfs(join(planDir, "feature.md"), "utf-8");
+		expect(plan).toContain("Add logger [done]");
+		expect(plan).toContain("Add tests [pending]");
+
+		// Stop still blocks (Task 2 + Final Review pending)
+		stdoutCapture = [];
+		exitCode = null;
+		try {
+			await stop({ hook_type: "Stop" });
+		} catch {
+			// exit(2)
+		}
+		expect(exitCode).toBe(2);
+
+		// Claude completes Task 2
+		stdoutCapture = [];
+		exitCode = null;
+		await taskCompleted({
+			hook_type: "TaskCompleted",
+			task_id: "2",
+			task_subject: "Add tests",
+		});
+
+		// Manually check Final Review
+		const planContent = rfs(join(planDir, "feature.md"), "utf-8");
+		writeFileSync(
+			join(planDir, "feature.md"),
+			planContent.replace("- [ ] Final Review", "- [x] Final Review"),
+		);
+
+		// Now stop should allow
+		stdoutCapture = [];
+		exitCode = null;
+		await stop({ hook_type: "Stop" });
+		expect(exitCode).toBeNull();
+	});
+});
