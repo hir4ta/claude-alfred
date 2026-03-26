@@ -4,6 +4,7 @@ import { loadGates } from "../gates/load.ts";
 import { runGate } from "../gates/runner.ts";
 import { clearFailCount, recordFailure } from "../state/fail-count.ts";
 import { clearBatch, markRan, shouldSkip } from "../state/gate-batch.ts";
+import { recordCommit, recordGateResult } from "../state/gate-history.ts";
 import { clearReview } from "../state/last-review.ts";
 import { clearTestPass, recordTestPass } from "../state/last-test-pass.ts";
 import { readPace, writePace } from "../state/pace.ts";
@@ -55,6 +56,8 @@ function handleEditWrite(ev: HookEvent): void {
 				markRan(name, sessionId);
 			}
 
+			recordGateResult(name, result.passed, result.passed ? undefined : result.output);
+
 			if (!result.passed) {
 				newFixes.push({ file, errors: [result.output], gate: name });
 				messages.push(`[${name}] ${result.output.slice(0, 200)}`);
@@ -85,6 +88,7 @@ function handleBash(ev: HookEvent): void {
 		clearBatch();
 		clearTestPass();
 		clearReview();
+		recordCommit();
 
 		const gates = loadGates();
 		if (!gates?.on_commit) return;
