@@ -44,7 +44,7 @@ alfred init       # ~/.claude/ に hooks, skills, agents, rules を配置
 ```bash
 alfred init          # セットアップ (13 hooks + skill + agent + rules + gates)
 alfred hook <event>  # Hook イベント処理 (Claude Code が呼び出す)
-alfred doctor        # ヘルスチェック
+alfred doctor        # ヘルスチェック (8項目: bun, hooks, skill, agent, rules, gates, state, path)
 ```
 
 ## Skills
