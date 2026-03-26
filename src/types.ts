@@ -15,6 +15,9 @@ export interface HookEvent {
 	task_id?: string;
 	task_subject?: string;
 	task_description?: string;
+	// SubagentStop
+	agent_type?: string;
+	last_assistant_message?: string;
 }
 
 /** Hook response written to stdout */
