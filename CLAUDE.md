@@ -110,6 +110,7 @@ task clean    # ビルド成果物削除
 
 ## 設計ドキュメント
 
-- design-v0.1.md — v0.1.0 全体設計
+- design-v0.1.md — v0.1.0 全体設計 (v0.2 の詳細設計含む)
+- ROADMAP.md — v0.2〜v1.0 の全ロードマップ (詳細設計)
 - research-harness-engineering-2026.md — リサーチ結果
 - research-claude-code-plugins-2026.md — Plugin 調査結果

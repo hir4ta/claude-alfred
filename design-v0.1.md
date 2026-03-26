@@ -163,13 +163,83 @@ The Stop hook will block if any tasks remain [pending] or [in-progress].
 ### ~/.claude/agents/alfred-reviewer.md
 ### ~/.claude/rules/alfred-quality.md
 
-## v0.2 で追加予定
+## v0.2 設計
 
-### doctor コマンド
-- hooks 登録確認、gates.json 存在確認、skill/agent/rules 存在確認
+### 1. doctor コマンド
 
-### run_once_per_batch
-- typecheck gate の重複実行防止
+`alfred doctor` — セットアップの健全性チェック。
 
-### SubagentStop 検証強化
-- agent_transcript_path を読んでサブエージェント出力を検証
+**チェック項目:**
+1. Bun バージョン >= 1.3
+2. `~/.claude/settings.json` に 13 hooks 全てが登録されているか
+3. `~/.claude/skills/alfred-review/SKILL.md` が存在するか
+4. `~/.claude/agents/alfred-reviewer.md` が存在するか
+5. `~/.claude/rules/alfred-quality.md` が存在するか
+6. `.alfred/gates.json` が存在し、on_write に最低1つの gate があるか
+7. `.alfred/.state/` ディレクトリが存在するか
+8. `alfred` コマンドが PATH に存在するか
+
+**出力形式:**
+```
+[OK] Bun 1.3.11
+[OK] 13/13 hooks registered
+[OK] /alfred:review skill installed
+[OK] alfred-reviewer agent installed
+[OK] alfred-quality rules installed
+[OK] gates.json: 2 on_write, 1 on_commit
+[OK] .alfred/.state/ exists
+[WARN] run_once_per_batch not yet implemented
+```
+
+**実装箇所:** `src/doctor.ts` (現在 stub)
+
+### 2. run_once_per_batch
+
+**問題:** tsc は全ファイルを型チェックする。ファイルA を編集 → tsc 実行 (10s) → ファイルB を編集 → また tsc 実行 (10s)。同じバッチ（同一応答ターン内）で2回走るのは無駄。
+
+**設計:**
+- `.alfred/.state/gate-batch.json` に `{ "typecheck": { "last_run": "ISO timestamp", "batch_id": "session_id:turn" } }` を保存
+- PostToolUse の gate 実行時、`run_once_per_batch: true` のゲートは:
+  1. `gate-batch.json` を読む
+  2. 同じ `batch_id` で既に実行済みなら skip
+  3. 未実行なら実行して `batch_id` を記録
+- `batch_id` は `session_id` (HookEvent から取得) をキーにする。session_id が変わるとリセット。
+- git commit 時にもリセット
+
+**影響ファイル:**
+- `src/hooks/post-tool.ts` — gate 実行前に batch チェック追加
+- `src/state/gate-batch.ts` — 新規: batch state 管理
+- `src/gates/runner.ts` — 変更なし (runner は単純にコマンド実行するだけ)
+
+### 3. SubagentStop 検証強化
+
+**問題:** 現在の `subagent-stop.ts` は pass-through。サブエージェントが不完全な出力をしても素通りする。
+
+**設計:**
+- `agent_transcript_path` フィールド (SubagentStop の入力) からサブエージェントの会話ログを読む
+- `last_assistant_message` フィールドでサブエージェントの最終出力を取得
+- Plan subagent の場合: 最終出力に Plan テンプレートの必須セクション (## Tasks, ## Review Gates) が含まれるか検証
+- Review subagent の場合: 最終出力に findings 形式 (`[severity] file:line`) が含まれるか検証
+- 不合格なら `decision: "block"` で差し戻し
+
+**注意:** `agent_type` フィールドで Plan/Review を区別する必要がある。matcher を使って特定の agent_type のみフックすることも可能。
+
+**影響ファイル:**
+- `src/hooks/subagent-stop.ts` — 検証ロジック追加
+
+### 4. dogfooding で発見した問題の修正 (動的)
+
+v0.2 の実装を alfred 自身のハーネスで行う (dogfooding)。その過程で発見された問題を修正する。
+
+予想される問題:
+- ConfigChange が過剰に DENY する (settings 以外の変更も巻き込む等)
+- PostToolUse の gate が遅すぎてタイムアウトする
+- Plan テンプレートが長すぎて Claude が省略する
+- pending-fixes のパスマッチングが本番環境で一致しない
+- SubagentStart の品質ルール注入が重すぎてサブエージェントが無視する
+
+### 5. テスト・シミュレーション方針
+
+- 各機能にユニットテスト + シミュレーションシナリオを追加
+- dogfooding 中に発見した問題は再現テストを先に書いてから修正
+- 全テスト通過後にコミット
