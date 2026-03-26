@@ -20,7 +20,7 @@ description: alfred quality enforcement — fix errors first, small tasks, test-
 
 ## Before Commit
 - Run tests — commit is blocked until tests pass
-- Self-check: edge cases tested? silent failures? simpler approach?
+- Run /alfred:review — commit is blocked until independent review passes
 
 ## When Stuck
 - After 2 failed attempts, /clear and try a different approach

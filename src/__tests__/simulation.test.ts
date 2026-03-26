@@ -1050,10 +1050,24 @@ describe("Scenario 26: git commit DENIED without test pass", () => {
 		}
 		expect(exitCode).toBe(2);
 
-		// Record test pass
+		// Record test pass but no review → still DENY
 		recordTestPass("vitest run");
+		stdoutCapture = [];
+		exitCode = null;
+		try {
+			await preTool({
+				hook_type: "PreToolUse",
+				tool_name: "Bash",
+				tool_input: { command: "git commit -m 'test'" },
+			});
+		} catch {
+			// exit(2)
+		}
+		expect(exitCode).toBe(2);
 
-		// Commit after test pass → allow
+		// Record review → now allow
+		const { recordReview } = await import("../state/last-review.ts");
+		recordReview();
 		stdoutCapture = [];
 		exitCode = null;
 		await preTool({

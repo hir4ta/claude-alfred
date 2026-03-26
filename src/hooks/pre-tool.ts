@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
+import { readLastReview } from "../state/last-review.ts";
 import { readLastTestPass } from "../state/last-test-pass.ts";
 import { isPaceRed, readPace } from "../state/pace.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
@@ -8,7 +9,7 @@ import { deny } from "./respond.ts";
 
 const GIT_COMMIT_RE = /\bgit\s+commit\b/;
 
-/** PreToolUse: DENY pending-fixes edits, pace red, and commit without tests */
+/** PreToolUse: DENY pending-fixes edits, pace red, commit without tests/review */
 export default async function preTool(ev: HookEvent): Promise<void> {
 	const tool = ev.tool_name;
 
@@ -47,12 +48,17 @@ function checkBash(ev: HookEvent): void {
 	if (!command) return;
 	if (!GIT_COMMIT_RE.test(command)) return;
 
-	// Only enforce test pass if project has test gates configured
+	// Only enforce gates if project has them configured
 	const gates = loadGates();
 	if (!gates?.on_commit || Object.keys(gates.on_commit).length === 0) return;
 
-	const lastPass = readLastTestPass();
-	if (!lastPass) {
+	// Require tests to pass before commit
+	if (!readLastTestPass()) {
 		deny("Run tests before committing. No test pass recorded since last commit.");
+	}
+
+	// Require independent review before commit
+	if (!readLastReview()) {
+		deny("Run /alfred:review before committing. Independent review is required.");
 	}
 }
