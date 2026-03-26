@@ -1,6 +1,41 @@
-import type { HookEvent } from "../types.ts";
+import { existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { clearHandoff, readHandoff } from "../state/handoff.ts";
+import type { HookEvent, HookResponse } from "../types.ts";
 
-/** SessionStart: profile injection + handoff restore */
+/** SessionStart: ensure .alfred/ exists, inject handoff context */
 export default async function sessionStart(_ev: HookEvent): Promise<void> {
-	// TODO: Phase 3 — profile + handoff restore
+	// Ensure .alfred/.state/ exists (zero-config)
+	const stateDir = join(process.cwd(), ".alfred", ".state");
+	if (!existsSync(stateDir)) {
+		mkdirSync(stateDir, { recursive: true });
+	}
+
+	// Inject handoff from previous compaction
+	const handoff = readHandoff();
+	if (handoff) {
+		const lines = [
+			`Previous session state (saved ${handoff.saved_at}):`,
+			`Summary: ${handoff.summary}`,
+		];
+		if (handoff.changed_files.length > 0) {
+			lines.push(`Changed files: ${handoff.changed_files.join(", ")}`);
+		}
+		if (handoff.pending_fixes) {
+			lines.push("WARNING: There are pending lint/type fixes from the previous session.");
+		}
+		lines.push(`Next steps: ${handoff.next_steps}`);
+
+		respond(lines.join("\n"));
+		clearHandoff(); // consumed
+	}
+}
+
+function respond(context: string): void {
+	const response: HookResponse = {
+		hookSpecificOutput: {
+			additionalContext: context,
+		},
+	};
+	process.stdout.write(JSON.stringify(response));
 }

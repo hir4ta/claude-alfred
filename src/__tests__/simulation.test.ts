@@ -411,3 +411,100 @@ describe("Scenario 9: Full flow — plan mode → implement → gate → deny �
 		expect(exitCode).toBeNull(); // allowed
 	});
 });
+
+// ============================================================
+// Phase 3: Execution loop scenarios
+// ============================================================
+
+describe("Scenario 10: Stop hook blocks when pending fixes exist", () => {
+	it("prevents Claude from stopping with unfixed errors", async () => {
+		setupFailingLintGate();
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		const stop = (await import("../hooks/stop.ts")).default;
+
+		// Create pending fixes
+		await postTool({
+			hook_type: "PostToolUse",
+			tool_name: "Edit",
+			tool_input: { file_path: join(TEST_DIR, "src/foo.ts") },
+		});
+		expect(readPendingFixes().length).toBeGreaterThan(0);
+
+		// Stop hook should block
+		stdoutCapture = [];
+		exitCode = null;
+		try {
+			await stop({ hook_type: "Stop" });
+		} catch {
+			// process.exit(2)
+		}
+
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		expect((response?.hookSpecificOutput as Record<string, string>)?.decision).toBe("block");
+	});
+});
+
+describe("Scenario 11: Stop hook allows when clean", () => {
+	it("Claude can stop normally when no pending fixes", async () => {
+		const stop = (await import("../hooks/stop.ts")).default;
+
+		await stop({ hook_type: "Stop" });
+
+		expect(exitCode).toBeNull();
+	});
+});
+
+describe("Scenario 12: PreCompact → SessionStart handoff", () => {
+	it("state preserved across compaction", async () => {
+		const preCompact = (await import("../hooks/pre-compact.ts")).default;
+		const sessionStart = (await import("../hooks/session-start.ts")).default;
+		const { readHandoff } = await import("../state/handoff.ts");
+
+		// Create some pending fixes to capture in handoff
+		const { writePendingFixes: wpf } = await import("../state/pending-fixes.ts");
+		wpf([{ file: "src/broken.ts", errors: ["type error"], gate: "typecheck" }]);
+
+		// PreCompact saves handoff
+		await preCompact({ hook_type: "PreCompact" });
+		const handoff = readHandoff();
+		expect(handoff).not.toBeNull();
+		expect(handoff!.pending_fixes).toBe(true);
+		expect(handoff!.next_steps).toContain("broken.ts");
+
+		// SessionStart restores handoff
+		stdoutCapture = [];
+		await sessionStart({ hook_type: "SessionStart" });
+		const response = getResponse();
+		expect(response).not.toBeNull();
+		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
+		expect(context).toContain("pending");
+		expect(context).toContain("Next steps");
+
+		// Handoff should be consumed (cleared)
+		expect(readHandoff()).toBeNull();
+	});
+});
+
+describe("Scenario 13: Stop infinite loop prevention", () => {
+	it("stop_hook_active prevents re-blocking", async () => {
+		const { writePendingFixes: wpf } = await import("../state/pending-fixes.ts");
+		wpf([{ file: "src/foo.ts", errors: ["err"], gate: "lint" }]);
+
+		const stop = (await import("../hooks/stop.ts")).default;
+
+		// First stop → blocks
+		try {
+			await stop({ hook_type: "Stop" });
+		} catch {
+			// exit(2)
+		}
+		expect(exitCode).toBe(2);
+
+		// Second stop with stop_hook_active → does NOT block
+		stdoutCapture = [];
+		exitCode = null;
+		await stop({ hook_type: "Stop", stop_hook_active: true });
+		expect(exitCode).toBeNull();
+	});
+});
