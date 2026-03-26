@@ -7,8 +7,8 @@
 alfred は Claude Code の 14 hooks として動作し、Claudeの行動を機械的に制御する。
 
 ### 壁 — 壊れたコードを通さない
-- **PostToolUse**: ファイル編集後に lint/type チェック。エラーを pending-fixes に記録
-- **PreToolUse**: 未修正エラーがあれば他ファイルの編集を **DENY**。Pace red zone も DENY
+- **PostToolUse**: ファイル編集後に lint/type gate 実行。テスト pass を記録。commit 後にクリア
+- **PreToolUse**: pending-fixes 未修正で他ファイル Edit → **DENY**。Pace red zone → **DENY**。テスト未 pass で git commit → **DENY**
 
 ### Plan 増幅 — 設計の質を保証する
 - **UserPromptSubmit**: Plan mode でタスク分解テンプレート (1ファイル/15行/検証テスト + Review Gates) を注入

@@ -30,8 +30,8 @@ alfred CLI (init / hook / doctor)
 
 | Hook | 強制レベル | 役割 |
 |---|---|---|
-| **PostToolUse** | additionalContext | Edit/Write 後に lint/type gate 実行。失敗→pending-fixes 書込。Bash 失敗2回連続→/clear 提案。git commit 後に on_commit gate + pace リセット |
-| **PreToolUse** | **DENY (exit 2)** | pending-fixes 未修正で他ファイル Edit → DENY。Pace red zone → DENY |
+| **PostToolUse** | additionalContext | Edit/Write 後に lint/type gate 実行。テスト pass 記録。git commit 後に on_commit gate + pace リセット + test pass クリア |
+| **PreToolUse** | **DENY (exit 2)** | pending-fixes 未修正で他ファイル Edit → DENY。Pace red zone → DENY。テスト未 pass で git commit → DENY |
 
 ### Plan 増幅 (設計の質を保証)
 

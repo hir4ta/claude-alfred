@@ -66,6 +66,14 @@ ExitPlanMode 時に File/Verify/Review Gates を検証して DENY。`findLatestP
 ### 3.4 PostCompact hook (完了)
 コンパクション直後のハンドオフ復元。`post-compact.ts` 新規 + dispatcher/init 登録。pre-compact.ts の Bun 依存も除去。
 
+### 3.5 Phase Gate 全プロジェクト強制 (完了)
+テスト pass なしで git commit → PreToolUse DENY。全プロジェクトで hook 強制。
+- `src/state/last-test-pass.ts` — テスト pass 記録/クリア
+- PostToolUse: テスト成功 → 記録、commit → クリア
+- PreToolUse: git commit 検出 → last-test-pass 確認 → なければ DENY
+- on_commit gate 未設定プロジェクトは skip (fail-open)
+- rules-quality.md に「commit is blocked until tests pass」追記
+
 ---
 
 ## v0.4.0 — コンテキスト最適化
