@@ -133,31 +133,22 @@ The Stop hook will block if any tasks remain [pending] or [in-progress].
     ├── pending-fixes.json      # 未修正 lint/type エラー
     ├── session-pace.json       # Pace 追跡 (最終コミット時刻, 変更ファイル数)
     ├── handoff.json            # 構造化ハンドオフ
-    └── fail-count.json         # 連続失敗カウント
+    ├── fail-count.json         # 連続失敗カウント
+    └── gate-batch.json         # run_once_per_batch 実行履歴
 ```
 
 ## init が配置するファイル
 
-### ~/.claude/settings.json (13 hooks)
+### ~/.claude/settings.json (13 hooks, matcher+hooks ネスト構造)
 ```json
 {
   "hooks": {
-    "PostToolUse": [{"type": "command", "command": "alfred hook post-tool", "timeout": 5000}],
-    "PreToolUse": [{"type": "command", "command": "alfred hook pre-tool", "timeout": 3000}],
-    "UserPromptSubmit": [{"type": "command", "command": "alfred hook user-prompt", "timeout": 10000}],
-    "SessionStart": [{"type": "command", "command": "alfred hook session-start", "timeout": 5000}],
-    "Stop": [{"type": "command", "command": "alfred hook stop", "timeout": 5000}],
-    "PreCompact": [{"type": "command", "command": "alfred hook pre-compact", "timeout": 10000}],
-    "PermissionRequest": [{"type": "command", "command": "alfred hook permission-request", "timeout": 5000, "matcher": "ExitPlanMode"}],
-    "TaskCompleted": [{"type": "command", "command": "alfred hook task-completed", "timeout": 5000}],
-    "SubagentStart": [{"type": "command", "command": "alfred hook subagent-start", "timeout": 3000}],
-    "SubagentStop": [{"type": "command", "command": "alfred hook subagent-stop", "timeout": 5000}],
-    "PostToolUseFailure": [{"type": "command", "command": "alfred hook post-tool-failure", "timeout": 3000}],
-    "SessionEnd": [{"type": "command", "command": "alfred hook session-end", "timeout": 3000}],
-    "ConfigChange": [{"type": "command", "command": "alfred hook config-change", "timeout": 3000}]
+    "PostToolUse": [{ "matcher": "", "hooks": [{"type": "command", "command": "alfred hook post-tool", "timeout": 5000}] }],
+    "PermissionRequest": [{ "matcher": "ExitPlanMode", "hooks": [{"type": "command", "command": "alfred hook permission-request", "timeout": 5000}] }]
   }
 }
 ```
+(他 11 hooks も同形式。PermissionRequest のみ `matcher: "ExitPlanMode"`、他は `matcher: ""`)
 
 ### ~/.claude/skills/alfred-review/SKILL.md
 ### ~/.claude/agents/alfred-reviewer.md
@@ -170,23 +161,11 @@ The Stop hook will block if any tasks remain [pending] or [in-progress].
 `alfred doctor` — セットアップの健全性チェック。8項目を `runChecks()` で検証。
 `src/doctor.ts` に実装。17テスト + Scenario 23。
 
-### 2. run_once_per_batch
+### 2. run_once_per_batch (実装済み)
 
-**問題:** tsc は全ファイルを型チェックする。ファイルA を編集 → tsc 実行 (10s) → ファイルB を編集 → また tsc 実行 (10s)。同じバッチ（同一応答ターン内）で2回走るのは無駄。
-
-**設計:**
-- `.alfred/.state/gate-batch.json` に `{ "typecheck": { "last_run": "ISO timestamp", "batch_id": "session_id:turn" } }` を保存
-- PostToolUse の gate 実行時、`run_once_per_batch: true` のゲートは:
-  1. `gate-batch.json` を読む
-  2. 同じ `batch_id` で既に実行済みなら skip
-  3. 未実行なら実行して `batch_id` を記録
-- `batch_id` は `session_id` (HookEvent から取得) をキーにする。session_id が変わるとリセット。
-- git commit 時にもリセット
-
-**影響ファイル:**
-- `src/hooks/post-tool.ts` — gate 実行前に batch チェック追加
-- `src/state/gate-batch.ts` — 新規: batch state 管理
-- `src/gates/runner.ts` — 変更なし (runner は単純にコマンド実行するだけ)
+session_id ベースで `run_once_per_batch: true` のゲートを skip。
+`src/state/gate-batch.ts` + `src/hooks/post-tool.ts` に組み込み。
+6テスト + Scenario 24。git commit で batch リセット。
 
 ### 3. SubagentStop 検証強化
 
