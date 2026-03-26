@@ -1,57 +1,105 @@
 # alfred
 
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) の性能を倍増させる執事。
+Claude Code の **evaluator harness**。コードの下限を機械的に引き上げる。
 
-## alfred が行うこと
+> Claude は優秀だが、lint エラーを放置して次のファイルに行く。テストなしでコミットする。自分のコードを褒めてレビューを終える。
+> alfred はそれを **物理的に止める**。お願い (advisory) ではなく、exit 2 (DENY) で。
 
-alfred は Claude Code の 14 hooks として動作し、Claudeの行動を機械的に制御する。
+## なぜ evaluator harness か
 
-### 壁 — 壊れたコードを通さない
-- **PostToolUse**: ファイル編集後に lint/type gate 実行。テスト pass + gate 結果を記録。commit 後にクリア
-- **PreToolUse**: pending-fixes 未修正 → **DENY**。Pace red zone → **DENY**。テスト未 pass or レビュー未実行で git commit → **DENY**
+Anthropic の [Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) 記事が示した核心:
 
-### Plan 増幅 — 設計の質を保証する
-- **UserPromptSubmit**: Plan mode でタスク分解テンプレートを動的注入 (Short/Medium/Large)
-- **PermissionRequest**: Plan に File/Verify/Review Gates がなければ **DENY**
-- **TaskCompleted**: Claude がタスクを完了マークすると Plan の status を自動同期
+- **自己評価は機能しない** — Claude は自分の仕事の問題を見つけても「大したことない」と自分を説得する
+- **独立 evaluator が必須** — generator と evaluator を分離することで品質が跳ねる
+- **全コンポーネントは仮定** — 「モデルが単独でできないこと」を encode し、陳腐化したら捨てる
 
-### 実行ループ — 完了の質を保証する
-- **Stop**: pending-fixes → **block**。Plan 未完了 → **block**。レビュー未実行 → **block**。Pace 警告
-- **PreCompact**: コンパクション前に構造化ハンドオフ保存
-- **PostCompact**: コンパクション後にハンドオフ復元コンテキスト注入
-- **SessionStart**: .alfred 自動作成 + gates 自動検出 + ハンドオフ復元 + 頻出エラー注入
-- **SessionEnd**: 割り込み終了時もハンドオフ保存
+alfred は Claude Code の 14 hooks として動作し、**外部プロセス (biome/tsc/vitest) を evaluator として**、Claude の行動を機械的にゲートする。世の SDD ツールの大半は「お願い」。alfred は「壁」。
 
-### サブエージェント制御 — 品質ルールを伝搬する
-- **SubagentStart**: 全サブエージェントに品質ルール + pending-fixes 警告を注入
-- **SubagentStop**: サブエージェント出力検証 (reviewer findings + Plan 構造) + レビュー完了記録
+## 何を防ぐか
 
-### 防御 — ハーネス自体を守る
-- **PostToolUseFailure**: ツール失敗追跡。2回連続同じエラーで /clear 提案
-- **ConfigChange**: user_settings の変更を **DENY** (hook 削除防止)
+```
+Edit → biome check 失敗 → pending-fixes 記録
+  → 別ファイルを Edit しようとする → DENY (exit 2)
+  → 同じファイルを修正 → biome check 通過 → 解除
+```
+
+| 状況 | alfred の行動 |
+|---|---|
+| lint/type エラーを放置して別ファイルへ | **DENY** — 修正するまでブロック |
+| テスト未実行で git commit | **DENY** — テスト pass を要求 |
+| レビュー未実行で完了宣言 | **block** — /alfred:review を要求 |
+| Plan に Verify フィールドがない | **DENY** — 検証基準なしに実装させない |
+| 35分以上コミットなし + 5ファイル変更 | **DENY** — スコープ肥大を阻止 |
+| hook 設定を削除しようとする | **DENY** — 自己防衛 |
+
+## 14 Hooks
+
+**壁** — 壊れたコードを通さない
+- **PostToolUse**: 編集後に gate 実行 (lint/type/test)。失敗 → pending-fixes
+- **PreToolUse**: pending-fixes → DENY。Pace red → DENY。commit gates → DENY
+
+**Plan 増幅** — 設計の質を底上げ
+- **UserPromptSubmit**: Plan テンプレート動的注入 (1 file / 15 lines / Verify 必須)
+- **PermissionRequest**: ExitPlanMode 時に Plan 構造を検証
+- **TaskCompleted**: Plan 完了ステータスの自動同期
+
+**実行ループ** — 中途半端に終わらせない
+- **Stop**: 未修正エラー / Plan 未完了 / レビュー未実行 → block
+- **PreCompact / PostCompact**: コンテキスト圧縮前後の状態保存・復元
+- **SessionStart / SessionEnd**: セッション開始時の自動セットアップと終了時の状態保存
+
+**サブエージェント制御** — 品質ルールを伝搬
+- **SubagentStart**: サブエージェントに品質ルール注入
+- **SubagentStop**: reviewer 出力の検証 + レビュー完了記録
+
+**自己防衛** — harness 自体を守る
+- **PostToolUseFailure**: 2回連続失敗 → /clear 提案
+- **ConfigChange**: user_settings 変更 → DENY
+
+## 設計原則
+
+1. **壁 > 情報提示** — DENY (exit 2) で止める。additionalContext は無視される前提
+2. **リサーチ駆動** — 全設計判断に SWE-bench / Anthropic 記事 / Self-Refine 論文の裏付け
+3. **fail-open** — 全 hook は try-catch。alfred の障害で Claude を止めない
+4. **少ない方が強い** — コンテキスト注入は 2000 token 予算。指示は 20 行以内
+5. **dependencies ゼロ** — 全て devDependencies + bun build バンドル
 
 ## インストール
 
 ```bash
 bun install
 bun build.ts
-bun link          # 'alfred' コマンドをグローバルに利用可能にする
+bun link
 
-alfred init       # ~/.claude/ に hooks, skills, agents, rules を配置
-alfred doctor     # セットアップの健全性を確認
+alfred init       # ~/.claude/ に 14 hooks + skill + agent + rules を配置
+alfred doctor     # セットアップの健全性を確認 (8項目)
 ```
 
 ## コマンド
 
 ```bash
-alfred init          # セットアップ (14 hooks + skill + agent + rules + gates)
+alfred init          # セットアップ (14 hooks + skill + agent + rules + gates 自動検出)
 alfred hook <event>  # Hook イベント処理 (Claude Code が呼び出す)
-alfred doctor        # ヘルスチェック (8項目: bun, hooks, skill, agent, rules, gates, state, path)
+alfred doctor        # ヘルスチェック (bun, hooks, skill, agent, rules, gates, state, path)
 ```
 
 ## Skills
 
-- `/alfred:review` — 独立コードレビュー (HubSpot 2段階: Reviewer サブエージェント → Judge フィルタリング)
+- `/alfred:review` — 独立コードレビュー。HubSpot 2-stage pattern: Reviewer (独立サブエージェント) が findings を出し、Judge がフィルタリング。自己評価は機能しないため、必ず別エージェントで実行する
+
+## Gate 自動検出
+
+`alfred init` がプロジェクトの設定ファイルから lint/type/test gate を自動検出:
+
+| 検出元 | Gate |
+|---|---|
+| biome.json | `biome check {file}` |
+| .eslintrc* | `eslint {file}` |
+| tsconfig.json | `tsc --noEmit` |
+| vitest (devDeps) | `bunx --bun vitest --changed` |
+| jest (devDeps) | `jest --changedSince=HEAD~1` |
+| go.mod | `go test ./...` |
+| Cargo.toml | `cargo test` |
 
 ## スタック
 

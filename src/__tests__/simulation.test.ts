@@ -15,6 +15,7 @@ const ALFRED_DIR = join(TEST_DIR, ".alfred");
 const STATE_DIR = join(ALFRED_DIR, ".state");
 
 let stdoutCapture: string[] = [];
+let stderrCapture: string[] = [];
 let exitCode: number | null = null;
 const originalCwd = process.cwd();
 
@@ -40,10 +41,15 @@ beforeEach(() => {
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];
+	stderrCapture = [];
 	exitCode = null;
 
 	vi.spyOn(process.stdout, "write").mockImplementation((data) => {
 		stdoutCapture.push(typeof data === "string" ? data : data.toString());
+		return true;
+	});
+	vi.spyOn(process.stderr, "write").mockImplementation((data) => {
+		stderrCapture.push(typeof data === "string" ? data : data.toString());
 		return true;
 	});
 	vi.spyOn(process, "exit").mockImplementation((code) => {
@@ -474,14 +480,12 @@ describe("Scenario 12: PreCompact → SessionStart handoff", () => {
 		expect(handoff!.pending_fixes).toBe(true);
 		expect(handoff!.next_steps).toContain("broken.ts");
 
-		// SessionStart restores handoff
-		stdoutCapture = [];
+		// SessionStart restores handoff via stderr (SessionStart doesn't support hookSpecificOutput)
+		stderrCapture = [];
 		await sessionStart({ hook_type: "SessionStart" });
-		const response = getResponse();
-		expect(response).not.toBeNull();
-		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
-		expect(context).toContain("pending");
-		expect(context).toContain("Next steps");
+		const stderr = stderrCapture.join("");
+		expect(stderr).toContain("pending");
+		expect(stderr).toContain("Next steps");
 
 		// Handoff should be consumed (cleared)
 		expect(readHandoff()).toBeNull();

@@ -1,8 +1,15 @@
+import { mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const TEST_DIR = join(import.meta.dirname, ".tmp-user-prompt-test");
+const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
 let stdoutCapture: string[] = [];
+const originalCwd = process.cwd();
 
 beforeEach(() => {
+	mkdirSync(STATE_DIR, { recursive: true });
+	process.chdir(TEST_DIR);
 	stdoutCapture = [];
 	vi.spyOn(process.stdout, "write").mockImplementation((data) => {
 		stdoutCapture.push(typeof data === "string" ? data : data.toString());
@@ -12,6 +19,8 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+	process.chdir(originalCwd);
+	rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
 function getResponse(): Record<string, unknown> | null {

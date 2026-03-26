@@ -7,6 +7,7 @@ import { writePendingFixes } from "../../state/pending-fixes.ts";
 const TEST_DIR = join(import.meta.dirname, ".tmp-stop-test");
 const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
 let stdoutCapture: string[] = [];
+let stderrCapture: string[] = [];
 let exitCode: number | null = null;
 const originalCwd = process.cwd();
 
@@ -14,10 +15,15 @@ beforeEach(() => {
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];
+	stderrCapture = [];
 	exitCode = null;
 
 	vi.spyOn(process.stdout, "write").mockImplementation((data) => {
 		stdoutCapture.push(typeof data === "string" ? data : data.toString());
+		return true;
+	});
+	vi.spyOn(process.stderr, "write").mockImplementation((data) => {
+		stderrCapture.push(typeof data === "string" ? data : data.toString());
 		return true;
 	});
 	vi.spyOn(process, "exit").mockImplementation((code) => {
@@ -70,7 +76,7 @@ describe("stop hook", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("warns on pace yellow (20+ min)", async () => {
+	it("warns on pace yellow (20+ min) via stderr", async () => {
 		writePace({
 			last_commit_at: new Date(Date.now() - 25 * 60_000).toISOString(),
 			changed_files: 3,
@@ -80,10 +86,8 @@ describe("stop hook", () => {
 		const handler = (await import("../stop.ts")).default;
 		await handler({ hook_type: "Stop" });
 
-		const response = getResponse();
-		if (response) {
-			const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
-			expect(context).toContain("commit");
-		}
+		expect(exitCode).toBeNull();
+		const stderr = stderrCapture.join("");
+		expect(stderr).toContain("minutes since last commit");
 	});
 });

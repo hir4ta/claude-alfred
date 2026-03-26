@@ -4,7 +4,6 @@ import { detectGates } from "../gates/detect.ts";
 import { getTopErrors } from "../state/gate-history.ts";
 import { clearHandoff, readHandoff } from "../state/handoff.ts";
 import type { HookEvent } from "../types.ts";
-import { respond } from "./respond.ts";
 
 /** SessionStart: ensure .alfred/ exists, auto-detect gates, inject handoff context */
 export default async function sessionStart(_ev: HookEvent): Promise<void> {
@@ -25,6 +24,9 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 		}
 	}
 
+	// Collect all context into a single message (respond() must be called at most once)
+	const contextParts: string[] = [];
+
 	const handoff = readHandoff();
 	if (handoff) {
 		const lines = [
@@ -38,15 +40,22 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 			lines.push("WARNING: There are pending lint/type fixes from the previous session.");
 		}
 		lines.push(`Next steps: ${handoff.next_steps}`);
-
-		respond(lines.join("\n"));
+		contextParts.push(lines.join("\n"));
 		clearHandoff();
 	}
 
-	// Inject frequent error trends
+	// Frequent error trends
 	const topErrors = getTopErrors(3);
 	if (topErrors.length > 0) {
 		const errorLines = topErrors.map((e) => `- ${e.gate}: "${e.error}" (${e.count}x)`);
-		respond(`Frequent errors in this project:\n${errorLines.join("\n")}\nAvoid these patterns.`);
+		contextParts.push(
+			`Frequent errors in this project:\n${errorLines.join("\n")}\nAvoid these patterns.`,
+		);
+	}
+
+	// SessionStart does not support hookSpecificOutput.additionalContext,
+	// so we output context via stderr (advisory, non-blocking)
+	if (contextParts.length > 0) {
+		process.stderr.write(`[alfred] ${contextParts.join("\n\n")}\n`);
 	}
 }

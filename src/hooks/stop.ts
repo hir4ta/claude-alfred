@@ -3,7 +3,7 @@ import { readPace } from "../state/pace.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import { getActivePlan } from "../state/plan-status.ts";
 import type { HookEvent } from "../types.ts";
-import { block, respond } from "./respond.ts";
+import { block } from "./respond.ts";
 
 const PACE_YELLOW_MINUTES = 20;
 
@@ -37,15 +37,16 @@ export default async function stop(ev: HookEvent): Promise<void> {
 		}
 	}
 
-	// Pace warning (soft)
+	// Pace warning (soft) — Stop hook does not support additionalContext,
+	// so we use stderr for advisory messages (non-blocking)
 	const pace = readPace();
 	if (pace) {
 		const commitTime = new Date(pace.last_commit_at).getTime();
 		if (Number.isNaN(commitTime)) return;
 		const elapsed = (Date.now() - commitTime) / 60_000;
 		if (elapsed >= PACE_YELLOW_MINUTES) {
-			respond(
-				`${Math.round(elapsed)} minutes since last commit. Consider committing your current progress.`,
+			process.stderr.write(
+				`[alfred] ${Math.round(elapsed)} minutes since last commit. Consider committing your current progress.\n`,
 			);
 		}
 	}
