@@ -25,7 +25,7 @@ export const initCommand = defineCommand({
 });
 
 /** Alfred's hook definitions — the source of truth */
-const ALFRED_HOOKS: Record<
+export const ALFRED_HOOKS: Record<
 	string,
 	Array<{ matcher: string; hooks: Array<Record<string, unknown>> }>
 > = {
