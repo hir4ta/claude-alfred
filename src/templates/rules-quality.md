@@ -18,9 +18,9 @@ description: alfred quality enforcement — fix errors first, small tasks, test-
 - At least 2 meaningful assertions per test case
 - Do not mark implementation as complete until tests pass
 
-## Self-Check
-- Before completing a task: edge cases tested? silent failures? simpler approach?
+## Before Commit
+- Run tests — commit is blocked until tests pass
+- Self-check: edge cases tested? silent failures? simpler approach?
 
 ## When Stuck
 - After 2 failed attempts, /clear and try a different approach
-- Run /alfred:review before marking a milestone complete

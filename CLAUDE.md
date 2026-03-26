@@ -55,7 +55,8 @@ src/
 │   ├── handoff.ts          # 構造化ハンドオフ
 │   ├── plan-status.ts      # Plan task status 解析
 │   ├── fail-count.ts       # 連続失敗カウント
-│   └── gate-batch.ts       # run_once_per_batch 実行履歴
+│   ├── gate-batch.ts       # run_once_per_batch 実行履歴
+│   └── last-test-pass.ts  # テスト pass 記録 (commit 前強制)
 ├── templates/              # init が配置するファイル
 │   ├── skill-review.md     # /alfred:review skill
 │   ├── agent-reviewer.md   # reviewer agent
@@ -104,6 +105,7 @@ task clean    # ビルド成果物削除
 - handoff.json — 構造化ハンドオフ (PreCompact/SessionEnd で保存)
 - fail-count.json — 連続失敗カウント
 - gate-batch.json — run_once_per_batch 実行履歴 (session_id ベース)
+- last-test-pass.json — テスト pass 記録 (commit 前に必須)
 
 ### Phase Gate (各 Phase 完了時に必ず実行)
 1. `bun vitest run` — 全テスト pass
