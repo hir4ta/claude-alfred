@@ -1,0 +1,109 @@
+{
+  "layers": [
+    {
+      "name": "init",
+      "pattern": "^src/init"
+    },
+    {
+      "name": "gates",
+      "pattern": "^src/gates"
+    },
+    {
+      "name": "tui",
+      "pattern": "^src/tui"
+    },
+    {
+      "name": "embedder",
+      "pattern": "^src/embedder"
+    },
+    {
+      "name": "mcp",
+      "pattern": "^src/mcp"
+    },
+    {
+      "name": "__tests__",
+      "pattern": "^src/__tests__"
+    },
+    {
+      "name": "profile",
+      "pattern": "^src/profile"
+    },
+    {
+      "name": "hooks",
+      "pattern": "^src/hooks"
+    },
+    {
+      "name": "git",
+      "pattern": "^src/git"
+    },
+    {
+      "name": "store",
+      "pattern": "^src/store"
+    }
+  ],
+  "rules": [
+    {
+      "from": "init",
+      "deny": [
+        "tui"
+      ]
+    },
+    {
+      "from": "gates",
+      "deny": [
+        "profile",
+        "hooks",
+        "mcp",
+        "init",
+        "tui"
+      ]
+    },
+    {
+      "from": "embedder",
+      "deny": [
+        "gates",
+        "profile",
+        "hooks",
+        "mcp",
+        "init",
+        "tui"
+      ]
+    },
+    {
+      "from": "mcp",
+      "deny": [
+        "init",
+        "tui"
+      ]
+    },
+    {
+      "from": "profile",
+      "deny": [
+        "hooks",
+        "mcp",
+        "init",
+        "tui"
+      ]
+    },
+    {
+      "from": "hooks",
+      "deny": [
+        "mcp",
+        "init",
+        "tui"
+      ]
+    },
+    {
+      "from": "store",
+      "deny": [
+        "embedder",
+        "gates",
+        "profile",
+        "hooks",
+        "mcp",
+        "init",
+        "tui"
+      ]
+    }
+  ]
+}
