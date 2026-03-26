@@ -42,6 +42,7 @@ const HOOK_EVENTS = {
 	SessionStart: { timeout: 5000 },
 	Stop: { timeout: 5000 },
 	PreCompact: { timeout: 10000 },
+	PermissionRequest: { timeout: 5000, matcher: "ExitPlanMode" },
 } as const;
 
 function writeHooks(settingsPath: string, force: boolean): void {
@@ -61,11 +62,14 @@ function writeHooks(settingsPath: string, force: boolean): void {
 		const hasAlfred = existing?.some((h) => h.command?.includes("alfred hook"));
 
 		if (!hasAlfred || force) {
-			const hookEntry = {
+			const hookEntry: Record<string, unknown> = {
 				type: "command",
 				command: `alfred hook ${eventToArg(event)}`,
 				timeout: config.timeout,
 			};
+			if ("matcher" in config) {
+				hookEntry.matcher = config.matcher;
+			}
 
 			if (hasAlfred && force) {
 				hooks[event] = existing!.filter((h) => !h.command?.includes("alfred hook"));

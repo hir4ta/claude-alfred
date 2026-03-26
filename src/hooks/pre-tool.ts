@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { isPaceRed, readPace } from "../state/pace.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import type { HookEvent, HookResponse } from "../types.ts";
@@ -7,15 +8,14 @@ export default async function preTool(ev: HookEvent): Promise<void> {
 	const tool = ev.tool_name;
 	if (tool !== "Edit" && tool !== "Write") return;
 
-	const targetFile = ev.tool_input?.file_path as string | undefined;
+	const targetFile = typeof ev.tool_input?.file_path === "string" ? ev.tool_input.file_path : null;
 	if (!targetFile) return;
 
 	// Check pending fixes
 	const fixes = readPendingFixes();
 	if (fixes.length > 0) {
-		const isFixingPendingFile = fixes.some(
-			(f) => targetFile.endsWith(f.file) || f.file.endsWith(targetFile),
-		);
+		const resolvedTarget = resolve(targetFile);
+		const isFixingPendingFile = fixes.some((f) => resolve(f.file) === resolvedTarget);
 
 		if (!isFixingPendingFile) {
 			const fileList = fixes

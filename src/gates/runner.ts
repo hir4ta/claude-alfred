@@ -11,15 +11,20 @@ export function runGate(name: string, gate: GateDefinition, file?: string): Gate
 	const command = file ? gate.command.replace("{file}", file) : gate.command;
 	const timeout = gate.timeout ?? 10_000;
 
-	const result = Bun.spawnSync(["sh", "-c", command], {
-		cwd: process.cwd(),
-		timeout,
-		stdio: ["ignore", "pipe", "pipe"],
-		env: {
-			...process.env,
-			PATH: `${process.cwd()}/node_modules/.bin:${process.env.PATH}`,
-		},
-	});
+	let result: ReturnType<typeof Bun.spawnSync>;
+	try {
+		result = Bun.spawnSync(["sh", "-c", command], {
+			cwd: process.cwd(),
+			timeout,
+			stdio: ["ignore", "pipe", "pipe"],
+			env: {
+				...process.env,
+				PATH: `${process.cwd()}/node_modules/.bin:${process.env.PATH}`,
+			},
+		});
+	} catch {
+		return { name, passed: false, output: `Gate "${name}" failed to execute` };
+	}
 
 	const stdout = result.stdout?.toString() ?? "";
 	const stderr = result.stderr?.toString() ?? "";
@@ -28,6 +33,6 @@ export function runGate(name: string, gate: GateDefinition, file?: string): Gate
 	return {
 		name,
 		passed: result.exitCode === 0,
-		output,
+		output: output || (result.exitCode !== 0 ? `Exit code ${result.exitCode}` : ""),
 	};
 }

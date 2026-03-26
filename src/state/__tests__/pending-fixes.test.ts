@@ -52,13 +52,17 @@ describe("writePendingFixes", () => {
 		expect(result[0]!.gate).toBe("lint");
 	});
 
-	it("overwrites existing fixes", () => {
+	it("replaces entire content on each write (caller manages merge)", () => {
 		writePendingFixes([{ file: "a.ts", errors: ["err1"], gate: "lint" }]);
-		writePendingFixes([{ file: "b.ts", errors: ["err2"], gate: "typecheck" }]);
+		writePendingFixes([
+			{ file: "a.ts", errors: ["err1"], gate: "lint" },
+			{ file: "b.ts", errors: ["err2"], gate: "typecheck" },
+		]);
 
 		const result = readPendingFixes();
-		expect(result).toHaveLength(1);
-		expect(result[0]!.file).toBe("b.ts");
+		expect(result).toHaveLength(2);
+		expect(result.map((f) => f.file)).toContain("a.ts");
+		expect(result.map((f) => f.file)).toContain("b.ts");
 	});
 });
 

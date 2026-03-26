@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runGate } from "../gates/runner.ts";
-import { writePendingFixes } from "../state/pending-fixes.ts";
+import { writePace } from "../state/pace.ts";
+import { readPendingFixes, writePendingFixes } from "../state/pending-fixes.ts";
 import type { GatesConfig, HookEvent, HookResponse, PendingFix } from "../types.ts";
 
 /** PostToolUse: lint/type gate after Edit/Write, test gate after git commit */
@@ -10,20 +11,22 @@ export default async function postTool(ev: HookEvent): Promise<void> {
 	if (!tool) return;
 
 	if (tool === "Edit" || tool === "Write") {
-		await handleEditWrite(ev);
+		handleEditWrite(ev);
 	} else if (tool === "Bash") {
-		await handleBash(ev);
+		handleBash(ev);
 	}
 }
 
-async function handleEditWrite(ev: HookEvent): Promise<void> {
-	const file = ev.tool_input?.file_path as string | undefined;
+function handleEditWrite(ev: HookEvent): void {
+	const file = typeof ev.tool_input?.file_path === "string" ? ev.tool_input.file_path : null;
 	if (!file) return;
 
 	const gates = loadGates();
 	if (!gates?.on_write) return;
 
-	const fixes: PendingFix[] = [];
+	// Read existing fixes for OTHER files, merge with new results for THIS file
+	const existingFixes = readPendingFixes().filter((f) => f.file !== file);
+	const newFixes: PendingFix[] = [];
 	const messages: string[] = [];
 
 	for (const [name, gate] of Object.entries(gates.on_write)) {
@@ -31,26 +34,26 @@ async function handleEditWrite(ev: HookEvent): Promise<void> {
 		const result = runGate(name, gate, hasPlaceholder ? file : undefined);
 
 		if (!result.passed) {
-			fixes.push({ file, errors: [result.output], gate: name });
+			newFixes.push({ file, errors: [result.output], gate: name });
 			messages.push(`[${name}] ${result.output.slice(0, 200)}`);
 		}
 	}
 
-	if (fixes.length > 0) {
-		writePendingFixes(fixes);
+	writePendingFixes([...existingFixes, ...newFixes]);
+
+	if (newFixes.length > 0) {
 		respond(`Fix these errors before continuing:\n${messages.join("\n")}`);
-	} else {
-		// Clear fixes on success
-		writePendingFixes([]);
 	}
 }
 
-async function handleBash(ev: HookEvent): Promise<void> {
-	const command = ev.tool_input?.command as string | undefined;
+function handleBash(ev: HookEvent): void {
+	const command = typeof ev.tool_input?.command === "string" ? ev.tool_input.command : null;
 	if (!command) return;
 
-	// Detect git commit
+	// Detect git commit → reset pace
 	if (/\bgit\s+commit\b/.test(command)) {
+		writePace({ last_commit_at: new Date().toISOString(), changed_files: 0, tool_calls: 0 });
+
 		const gates = loadGates();
 		if (!gates?.on_commit) return;
 
