@@ -60,7 +60,7 @@ describe("markRan", () => {
 		const batch = readBatch();
 		expect(batch).not.toBeNull();
 		expect(batch!.typecheck).toBeDefined();
-		expect(batch!.typecheck.session_id).toBe("session-1");
-		expect(batch!.typecheck.ran_at).toBeDefined();
+		expect(batch!.typecheck!.session_id).toBe("session-1");
+		expect(batch!.typecheck!.ran_at).toBeDefined();
 	});
 });

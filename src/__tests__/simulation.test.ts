@@ -910,3 +910,62 @@ describe("Scenario 23: Init → Doctor reports all OK", () => {
 		}
 	});
 });
+
+// ============================================================
+// run_once_per_batch scenario
+// ============================================================
+
+describe("Scenario 24: run_once_per_batch skips typecheck on 2nd edit", () => {
+	it("typecheck runs once, clears on commit", async () => {
+		const gates = {
+			on_write: {
+				lint: { command: "echo lint-ok", timeout: 3000 },
+				typecheck: { command: "echo typecheck-ok", timeout: 3000, run_once_per_batch: true },
+			},
+		};
+		writeFileSync(join(ALFRED_DIR, "gates.json"), JSON.stringify(gates));
+
+		const { clearBatch, readBatch } = await import("../state/gate-batch.ts");
+		clearBatch();
+
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+
+		// First edit — both gates run, typecheck marked in batch
+		await postTool({
+			hook_type: "PostToolUse",
+			session_id: "test-session",
+			tool_name: "Edit",
+			tool_input: { file_path: join(TEST_DIR, "src/a.ts") },
+		});
+
+		const batch1 = readBatch();
+		expect(batch1).not.toBeNull();
+		expect(batch1!.typecheck).toBeDefined();
+		expect(batch1!.typecheck!.session_id).toBe("test-session");
+
+		// Second edit — typecheck skipped (batch hit), lint still runs
+		stdoutCapture = [];
+		await postTool({
+			hook_type: "PostToolUse",
+			session_id: "test-session",
+			tool_name: "Edit",
+			tool_input: { file_path: join(TEST_DIR, "src/b.ts") },
+		});
+
+		// Batch still has typecheck entry
+		const batch2 = readBatch();
+		expect(batch2!.typecheck!.session_id).toBe("test-session");
+
+		// Git commit — clears batch
+		stdoutCapture = [];
+		await postTool({
+			hook_type: "PostToolUse",
+			tool_name: "Bash",
+			tool_input: { command: "git commit -m 'test'" },
+		});
+
+		const batch3 = readBatch();
+		expect(batch3).not.toBeNull();
+		expect(batch3!.typecheck).toBeUndefined();
+	});
+});

@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
 import { runGate } from "../gates/runner.ts";
 import { clearFailCount, recordFailure } from "../state/fail-count.ts";
+import { clearBatch, markRan, shouldSkip } from "../state/gate-batch.ts";
 import { readPace, writePace } from "../state/pace.ts";
 import { readPendingFixes, writePendingFixes } from "../state/pending-fixes.ts";
 import type { HookEvent, PendingFix } from "../types.ts";
@@ -32,10 +33,21 @@ function handleEditWrite(ev: HookEvent): void {
 	const newFixes: PendingFix[] = [];
 	const messages: string[] = [];
 
+	const sessionId = ev.session_id;
+
 	for (const [name, gate] of Object.entries(gates.on_write)) {
 		try {
+			// Skip run_once_per_batch gates if already ran in this session
+			if (gate.run_once_per_batch && sessionId && shouldSkip(name, sessionId)) {
+				continue;
+			}
+
 			const hasPlaceholder = gate.command.includes("{file}");
 			const result = runGate(name, gate, hasPlaceholder ? file : undefined);
+
+			if (gate.run_once_per_batch && sessionId) {
+				markRan(name, sessionId);
+			}
 
 			if (!result.passed) {
 				newFixes.push({ file, errors: [result.output], gate: name });
@@ -64,6 +76,7 @@ function handleBash(ev: HookEvent): void {
 	if (/\bgit\s+commit\b/.test(command)) {
 		writePace({ last_commit_at: new Date().toISOString(), changed_files: 0, tool_calls: 0 });
 		clearFailCount();
+		clearBatch();
 
 		const gates = loadGates();
 		if (!gates?.on_commit) return;
