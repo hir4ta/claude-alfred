@@ -1,40 +1,80 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { getActivePlan } from "../state/plan-status.ts";
 import type { HookEvent } from "../types.ts";
 import { deny } from "./respond.ts";
 
-const REVIEW_GATE_PATTERN = /review/i;
+// Task header: ### Task N: name [status]
+const TASK_HEADER_RE = /^###\s+Task\s+\d+:/m;
+// Field patterns (with or without bold)
+const FILE_FIELD_RE = /^\s*-\s+\*{0,2}File\*{0,2}:/m;
+const VERIFY_FIELD_RE = /^\s*-\s+\*{0,2}Verify\*{0,2}:/m;
+const REVIEW_GATE_RE = /review.*gate/i;
 
 /** PermissionRequest: Validate plan structure on ExitPlanMode */
 export default async function permissionRequest(ev: HookEvent): Promise<void> {
 	if (ev.tool?.name !== "ExitPlanMode") return;
 
-	const planContent = findLatestPlan();
-	if (!planContent) return; // fail-open
+	const plan = getActivePlan();
+	if (!plan) return; // fail-open
 
-	if (!REVIEW_GATE_PATTERN.test(planContent)) {
-		deny(
-			"Plan is missing Review Gates. Add a '## Review Gates' section with Design Review, Phase Review, and Final Review checkboxes.",
-		);
+	const content = readFileSync(plan.path, "utf-8");
+	const problems = validatePlanStructure(content);
+
+	if (problems.length > 0) {
+		deny(`Plan structure issues:\n${problems.join("\n")}`);
 	}
 }
 
-function findLatestPlan(): string | null {
-	try {
-		const planDir = join(process.cwd(), ".claude", "plans");
-		if (!existsSync(planDir)) return null;
+function validatePlanStructure(content: string): string[] {
+	const problems: string[] = [];
 
-		const files = readdirSync(planDir)
-			.filter((f) => f.endsWith(".md"))
-			.map((f) => ({
-				name: f,
-				mtime: statSync(join(planDir, f)).mtimeMs,
-			}))
-			.sort((a, b) => b.mtime - a.mtime);
-
-		if (files.length === 0) return null;
-		return readFileSync(join(planDir, files[0]!.name), "utf-8");
-	} catch {
-		return null;
+	// Check Review Gates
+	if (!REVIEW_GATE_RE.test(content)) {
+		problems.push("- Missing Review Gates section");
 	}
+
+	// Check each task has File and Verify fields
+	const taskSections = splitTaskSections(content);
+	for (const section of taskSections) {
+		if (!FILE_FIELD_RE.test(section.body)) {
+			problems.push(`- Task "${section.name}": missing File field`);
+		}
+		if (!VERIFY_FIELD_RE.test(section.body)) {
+			problems.push(`- Task "${section.name}": missing Verify field`);
+		}
+	}
+
+	return problems;
+}
+
+interface TaskSection {
+	name: string;
+	body: string;
+}
+
+function splitTaskSections(content: string): TaskSection[] {
+	const sections: TaskSection[] = [];
+	const lines = content.split("\n");
+	let current: TaskSection | null = null;
+
+	for (const line of lines) {
+		const match = line.match(TASK_HEADER_RE);
+		if (match) {
+			if (current) sections.push(current);
+			// Extract task name from "### Task N: name [status]"
+			const nameMatch = line.match(/^###\s+Task\s+\d+:\s*(.+?)(?:\s*\[.+\])?\s*$/);
+			current = { name: nameMatch?.[1]?.trim() ?? "unknown", body: "" };
+		} else if (current) {
+			// Stop at next ## heading
+			if (/^##\s/.test(line)) {
+				sections.push(current);
+				current = null;
+			} else {
+				current.body += `${line}\n`;
+			}
+		}
+	}
+	if (current) sections.push(current);
+
+	return sections;
 }

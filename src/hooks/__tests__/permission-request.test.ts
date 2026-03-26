@@ -46,8 +46,9 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"## Context",
 				"Adding new feature",
 				"## Tasks",
-				"### Task 1: Add helper",
-				"- File: src/helper.ts",
+				"### Task 1: Add helper [pending]",
+				"- **File**: src/helper.ts",
+				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
 				"## Review Gates",
 				"- [ ] Design Review",
 				"- [ ] Final Review",
@@ -87,6 +88,82 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		const reason = (response?.hookSpecificOutput as Record<string, string>)
 			?.permissionDecisionReason;
 		expect(reason).toContain("Review");
+	});
+
+	it("denies plan with tasks missing File field", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add helper [pending]",
+				"- Verify: src/__tests__/helper.test.ts:testHelper",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		try {
+			await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		} catch {
+			// exit(2)
+		}
+
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		const reason = (response?.hookSpecificOutput as Record<string, string>)
+			?.permissionDecisionReason;
+		expect(reason).toContain("File");
+	});
+
+	it("denies plan with tasks missing Verify field", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add helper [pending]",
+				"- File: src/helper.ts",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		try {
+			await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		} catch {
+			// exit(2)
+		}
+
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		const reason = (response?.hookSpecificOutput as Record<string, string>)
+			?.permissionDecisionReason;
+		expect(reason).toContain("Verify");
+	});
+
+	it("allows well-structured plan with File + Verify + Review Gates", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add helper [pending]",
+				"- **File**: src/helper.ts",
+				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		expect(exitCode).toBeNull();
 	});
 
 	it("ignores non-ExitPlanMode events", async () => {
