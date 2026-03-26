@@ -1,80 +1,81 @@
 # alfred
 
-Quality butler for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Monitors Claude Code's actions, enforces quality gates, and learns from past sessions.
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) の品質バトラー。Claude Code の動作を監視し、品質ゲートを強制し、過去のセッションから学習する。
 
-**Invisible. Mechanical. Relentless.**
+**不可視。機械的。容赦なし。**
 
-## What alfred does
+## alfred が行うこと
 
-alfred runs as hooks + MCP server inside Claude Code. It watches every file edit, every bash command, every commit — and enforces quality through walls, not suggestions.
+alfred は Claude Code 内部で hooks + MCP サーバーとして動作する。すべてのファイル編集、bash コマンド、コミットを監視し、提案ではなく「壁」で品質を強制する。
 
-- **Lint/type gates**: PostToolUse runs lint and type checks after every file write. Errors become DIRECTIVE — Claude must fix before continuing
-- **Edit blocking**: PreToolUse blocks edits when pending lint/type errors exist (DENY)
-- **Test-first enforcement**: UserPromptSubmit detects implementation prompts and injects test-first DIRECTIVE
-- **Error resolution cache**: Bash errors are matched against past resolutions via Voyage AI vector search and injected as context
-- **Exemplar injection**: Relevant before/after code examples injected for implementation prompts (few-shot, research-backed)
-- **Convention enforcement**: Project-specific coding conventions injected at session start
-- **Quality scoring**: Every gate pass/fail, every error hit/miss is tracked and scored (0-100)
-- **Self-reflection**: Commit gate injects 4-point verification checklist (edge cases, silent failures, simplicity, conventions)
+- **Lint/型ゲート**: PostToolUse がファイル書き込み後に lint と型チェックを実行。エラーは DIRECTIVE として注入され、Claude は修正するまで先に進めない
+- **編集ブロック**: PreToolUse が未修正の lint/型エラーがある状態での編集をブロック (DENY)
+- **テスト先行強制**: UserPromptSubmit が実装系プロンプトを検出し、テスト先行 DIRECTIVE を注入
+- **エラー解決キャッシュ**: Bash エラーを Voyage AI ベクトル検索で過去の解決策とマッチし、コンテキストとして注入
+- **Exemplar 注入**: 実装プロンプトに対して関連する before/after コード例を注入 (Few-shot、研究に基づく)
+- **Convention 強制**: プロジェクト固有のコーディング規約をセッション開始時に注入
+- **品質スコアリング**: すべてのゲート pass/fail、エラー hit/miss を追跡しスコアリング (0-100)
+- **セルフリフレクション**: コミットゲートで4項目の検証チェックリストを注入 (エッジケース、サイレント障害、シンプルさ、規約)
 
-## Architecture
+## アーキテクチャ
 
 ```
-User → Claude Code → (alfred hooks: monitor + inject + gate)
-              ↓ when needed
-           alfred MCP (knowledge DB)
+User → Claude Code → (alfred hooks: 監視 + コンテキスト注入 + ゲート)
+              ↓ 必要な時だけ
+           alfred MCP (知識DB)
 ```
 
-| Component | Role | Weight |
+| コンポーネント | 役割 | 比重 |
 |---|---|---|
-| Hooks (6 events) | Monitor, inject context, enforce gates | 70% |
-| DB + Voyage AI | Knowledge storage, vector search | 20% |
-| MCP tool | Claude Code interface to knowledge | 10% |
+| Hooks (6 events) | 監視、コンテキスト注入、品質ゲート | 70% |
+| DB + Voyage AI | 知識蓄積、ベクトル検索 | 20% |
+| MCP tool | Claude Code → 知識DBインターフェース | 10% |
 
-## Install
+## インストール
 
 ```bash
-# Build
+# ビルド
 bun install
 bun build.ts
-bun link          # Makes 'alfred' command available globally
+bun link          # 'alfred' コマンドをグローバルに利用可能にする
 
-# Setup (writes to ~/.claude/)
+# セットアップ (~/.claude/ に設定を配置)
 alfred init
 ```
 
-Requires: `VOYAGE_API_KEY` environment variable (get at https://dash.voyageai.com/)
+必須: `VOYAGE_API_KEY` 環境変数 (https://dash.voyageai.com/ で取得)
 
-## Commands
+## コマンド
 
 ```bash
-alfred init          # Setup: MCP, hooks, rules, skills, agents, gates
-alfred serve         # Start MCP server (stdio, called by Claude Code)
-alfred hook <event>  # Handle hook event (called by Claude Code)
-alfred tui           # Quality dashboard in terminal
-alfred scan          # Full quality scan (lint/type/test + score)
-alfred doctor        # Check installation health
-alfred uninstall     # Remove alfred from system
-alfred version       # Show version
+alfred init          # セットアップ: MCP, hooks, rules, skills, agents, gates
+alfred serve         # MCP サーバー起動 (stdio, Claude Code が呼び出す)
+alfred hook <event>  # Hook イベント処理 (Claude Code が呼び出す)
+alfred status        # プロジェクトの品質状態を表示
+alfred tui           # ターミナル品質ダッシュボード
+alfred scan          # フル品質スキャン (lint/型/テスト + スコア)
+alfred doctor        # インストール健全性チェック
+alfred uninstall     # alfred をシステムから削除
+alfred version       # バージョン表示
 ```
 
 ## Skills
 
-- `/alfred:review` — Deep multi-agent code review with Judge filtering (HubSpot 3-criteria pattern)
-- `/alfred:conventions` — Scan codebase and discover coding conventions with adoption rates
+- `/alfred:review` — Judge フィルタリング付きマルチエージェントコードレビュー (HubSpot 3基準パターン)
+- `/alfred:conventions` — コードベースのコーディング規約を検出し、採用率を表示
 
-## TUI Dashboard
+## TUI ダッシュボード
 
 ```bash
 task tui   # or: bun src/tui/main.tsx
 ```
 
-Displays: Quality Score, Gates pass/fail, Knowledge hits, Recent Events stream, Session info. Press `?` for help (EN/JA toggle with Tab).
+表示内容: 品質スコア、ゲート pass/fail、知識ヒット、直近イベントストリーム、セッション情報。`?` でヘルプ (Tab で EN/JA 切替)。
 
-## Stack
+## スタック
 
 TypeScript (Bun 1.3+, ESM) / SQLite (bun:sqlite) / Voyage AI (voyage-4-large + rerank-2.5) / MCP SDK / TUI (OpenTUI)
 
-## Design docs
+## 設計ドキュメント
 
-See `design/` for architecture, detailed design, and research references.
+`design/` にアーキテクチャ、詳細設計、リサーチ参考文献を配置。
