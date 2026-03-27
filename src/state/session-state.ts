@@ -5,8 +5,8 @@ import { getCommitStats } from "./gate-history.ts";
 const STATE_DIR = ".alfred/.state";
 const FILE = "session-state.json";
 const BUDGET = 2000;
-const DEFAULT_RED_MINUTES = 60;
-const DEFAULT_FILES = 8;
+const DEFAULT_RED_MINUTES = 120;
+const DEFAULT_FILES = 15;
 
 export interface SessionState {
 	// Pace tracking
@@ -29,6 +29,8 @@ export interface SessionState {
 	session_deny_count: number;
 	session_block_count: number;
 	session_respond_count: number;
+	// First-pass tracking: files already counted (prevents re-counting on re-edit)
+	first_pass_recorded: string[];
 }
 
 function filePath(): string {
@@ -51,6 +53,7 @@ function defaultState(): SessionState {
 		session_deny_count: 0,
 		session_block_count: 0,
 		session_respond_count: 0,
+		first_pass_recorded: [],
 	};
 }
 
@@ -108,7 +111,7 @@ export function getRedThreshold(): number {
 	try {
 		const stats = getCommitStats();
 		if (stats && stats.count >= 3) {
-			return Math.max(10, Math.min(60, stats.avgMinutes * 2));
+			return Math.max(10, Math.min(DEFAULT_RED_MINUTES, stats.avgMinutes * 2));
 		}
 	} catch {
 		// fail-open
@@ -201,6 +204,22 @@ export function incrementActionCount(type: "deny" | "block" | "respond"): void {
 	if (type === "deny") state.session_deny_count++;
 	else if (type === "block") state.session_block_count++;
 	else state.session_respond_count++;
+	writeState(state);
+}
+
+// --- First-pass tracking ---
+
+/** Check if this file's first-pass has already been recorded. */
+export function isFirstPassRecorded(file: string): boolean {
+	const state = readSessionState();
+	return (state.first_pass_recorded ?? []).includes(file);
+}
+
+/** Mark a file's first-pass as recorded. */
+export function markFirstPassRecorded(file: string): void {
+	const state = readSessionState();
+	if (!state.first_pass_recorded) state.first_pass_recorded = [];
+	state.first_pass_recorded.push(file);
 	writeState(state);
 }
 

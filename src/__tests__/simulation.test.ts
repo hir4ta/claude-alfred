@@ -201,12 +201,12 @@ describe("Scenario 4: Git commit resets pace", () => {
 });
 
 describe("Scenario 5: Pace red zone blocks edits", () => {
-	it("60+ min without commit on 8+ files → DENY", async () => {
+	it("120+ min without commit on 15+ files → DENY", async () => {
 		setupPassingGates();
 		writePace({
-			last_commit_at: new Date(Date.now() - 65 * 60_000).toISOString(),
-			changed_files: 9,
-			tool_calls: 50,
+			last_commit_at: new Date(Date.now() - 125 * 60_000).toISOString(),
+			changed_files: 16,
+			tool_calls: 80,
 		});
 
 		const preTool = (await import("../hooks/pre-tool.ts")).default;
@@ -262,11 +262,10 @@ describe("Scenario 6: Plan mode → template injected with review gates", () => 
 	});
 });
 
-describe("Scenario 7: Normal mode large task → advisory to use plan mode", () => {
-	it("long prompt advises plan mode (no block)", async () => {
+describe("Scenario 7: Normal mode large task → no advisory (Opus 4.6)", () => {
+	it("long prompt in normal mode produces no output", async () => {
 		const userPrompt = (await import("../hooks/user-prompt.ts")).default;
 
-		// >800 chars to trigger advisory
 		const longPrompt =
 			"Implement a complete authentication system with JWT tokens, refresh tokens, " +
 			"login and signup endpoints, middleware for protected routes, password hashing with bcrypt, " +
@@ -284,11 +283,9 @@ describe("Scenario 7: Normal mode large task → advisory to use plan mode", () 
 			prompt: longPrompt,
 		});
 
-		expect(exitCode).toBeNull(); // no block
-		const response = getResponse();
-		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
-		expect(context).toBeDefined();
-		expect(context?.toLowerCase()).toContain("plan mode");
+		expect(exitCode).toBeNull();
+		const output = stdoutCapture.join("");
+		expect(output).toBe("");
 	});
 
 	it("short prompt does NOT trigger plan suggestion", async () => {

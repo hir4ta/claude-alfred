@@ -1,15 +1,23 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
 import { runGate } from "../gates/runner.ts";
 import { recordCommit, recordGateResult } from "../state/gate-history.ts";
-import { recordGateOutcome, recordResolution } from "../state/metrics.ts";
+import {
+	recordAction,
+	recordFirstPass,
+	recordGateOutcome,
+	recordResolution,
+} from "../state/metrics.ts";
 import { readPendingFixes, writePendingFixes } from "../state/pending-fixes.ts";
 import { getActivePlan, parseVerifyFields } from "../state/plan-status.ts";
 import {
 	clearFailCount,
 	clearOnCommit,
+	isFirstPassRecorded,
+	markFirstPassRecorded,
 	markGateRan,
+	readLastReview,
 	readPace,
 	recordFailure,
 	recordTestPass,
@@ -82,6 +90,17 @@ function handleEditWrite(ev: HookEvent): void {
 
 	writePendingFixes([...existingFixes, ...newFixes]);
 
+	// Record first-pass quality: did this file pass all gates on first write?
+	// Only count once per file per session to avoid inflating metrics on re-edits.
+	if (!hadFixesForFile && !isFirstPassRecorded(file)) {
+		try {
+			recordFirstPass(newFixes.length === 0);
+			markFirstPassRecorded(file);
+		} catch {
+			/* fail-open */
+		}
+	}
+
 	if (hadFixesForFile && newFixes.length === 0) {
 		try {
 			recordResolution("post-tool", `Fixed: ${file.split("/").pop()}`);
@@ -91,6 +110,14 @@ function handleEditWrite(ev: HookEvent): void {
 	}
 
 	if (newFixes.length > 0) {
+		// Calibration: if review already passed but new errors appear, reviewer missed them
+		if (readLastReview()) {
+			try {
+				recordAction("review", "miss", `Post-review gate fail: ${file.split("/").pop()}`);
+			} catch {
+				/* fail-open */
+			}
+		}
 		respond(`Fix these errors before continuing:\n${messages.join("\n")}`);
 	}
 
@@ -163,6 +190,8 @@ function handleBash(ev: HookEvent): void {
 	}
 }
 
+const ASSERT_RE = /\b(expect|assert|should|toBe|toEqual|toContain|toThrow|toHaveLength)\b/;
+
 function checkVerifyFields(output: string): void {
 	try {
 		const plan = getActivePlan();
@@ -172,12 +201,37 @@ function checkVerifyFields(output: string): void {
 		const verifies = parseVerifyFields(content);
 		if (verifies.length === 0) return;
 
-		// Failures only surface — passing output is swallowed (research: output filtering)
 		const messages: string[] = [];
 		for (const v of verifies) {
 			if (!v.testFunction) continue;
+
+			// Check 1: test function appears in output
 			if (!output.includes(v.testFunction)) {
 				messages.push(`[miss] Task "${v.taskName}" — ${v.testFunction} not found in test output`);
+				continue;
+			}
+
+			// Check 2: test file has real assertions (not empty test)
+			if (v.testFile) {
+				try {
+					const testPath = resolve(v.testFile);
+					if (existsSync(testPath)) {
+						const testContent = readFileSync(testPath, "utf-8");
+						// Find the test function block and check for assertions
+						const fnIndex = testContent.indexOf(v.testFunction);
+						if (fnIndex >= 0) {
+							// Check ~50 lines after the function name for assertions
+							const block = testContent.slice(fnIndex, fnIndex + 2000);
+							if (!ASSERT_RE.test(block)) {
+								messages.push(
+									`[weak] Task "${v.taskName}" — ${v.testFunction} has no assertions (expect/assert)`,
+								);
+							}
+						}
+					}
+				} catch {
+					// fail-open: can't read test file
+				}
 			}
 		}
 

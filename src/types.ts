@@ -70,6 +70,7 @@ export interface PendingFix {
 export interface GatesConfig {
 	on_write?: Record<string, GateDefinition>;
 	on_commit?: Record<string, GateDefinition>;
+	on_review?: Record<string, GateDefinition>;
 }
 
 export interface GateDefinition {

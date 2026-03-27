@@ -113,6 +113,23 @@ describe("subagentStop", () => {
 		expect(exitCode).toBeNull();
 	});
 
+	it("blocks alfred-reviewer with FAIL verdict (requires fix + re-review)", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "alfred-reviewer",
+				last_assistant_message:
+					"Review: FAIL\nScore: Correctness=2 Design=3 Security=4\n\n- [critical] src/foo.ts:10 — SQL injection\n  Fix: use parameterized query",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+		const output = stdoutCapture.join("");
+		expect(output).toContain("FAIL");
+	});
+
 	it("blocks alfred-reviewer with PASS verdict but no Score or findings", async () => {
 		const handler = (await import("../subagent-stop.ts")).default;
 		try {

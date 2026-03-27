@@ -67,12 +67,12 @@ describe("preTool: Edit/Write checks", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("DENY when pace is red (>60 min, 8+ files)", async () => {
+	it("DENY when pace is red (>120 min, 15+ files)", async () => {
 		const { writePace } = await import("../state/session-state.ts");
 		writePace({
-			last_commit_at: new Date(Date.now() - 65 * 60 * 1000).toISOString(),
-			changed_files: 9,
-			tool_calls: 50,
+			last_commit_at: new Date(Date.now() - 125 * 60 * 1000).toISOString(),
+			changed_files: 16,
+			tool_calls: 80,
 		});
 
 		const preTool = (await import("../hooks/pre-tool.ts")).default;

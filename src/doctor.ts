@@ -193,7 +193,12 @@ function showMetrics(): void {
 		}
 	}
 
-	if (summary.deny > 0 || summary.gatePassRate > 0) {
+	const hasEffectiveness =
+		summary.deny > 0 ||
+		summary.gatePassRate > 0 ||
+		summary.firstPassTotal > 0 ||
+		summary.reviewTotal > 0;
+	if (hasEffectiveness) {
 		console.log("\n  Effectiveness:");
 		if (summary.deny > 0) {
 			console.log(
@@ -202,6 +207,15 @@ function showMetrics(): void {
 		}
 		if (summary.gatePassRate > 0) {
 			console.log(`    Gate pass rate: ${summary.gatePassRate}%`);
+		}
+		if (summary.firstPassTotal > 0) {
+			console.log(`    First-pass clean: ${summary.firstPassRate}%`);
+		}
+		if (summary.reviewTotal > 0) {
+			console.log(`    Review pass rate: ${summary.reviewPassRate}%`);
+		}
+		if (summary.reviewMiss > 0) {
+			console.log(`    Review misses: ${summary.reviewMiss} (gate failures after review PASS)`);
 		}
 		if (summary.respondSkipped > 0) {
 			console.log(`    Advisory skipped (budget): ${summary.respondSkipped}`);

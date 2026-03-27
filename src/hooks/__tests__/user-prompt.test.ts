@@ -105,10 +105,9 @@ describe("userPrompt", () => {
 		}
 	});
 
-	it("advises plan mode for large tasks in normal mode (no block)", async () => {
+	it("does not advise in normal mode even for large tasks (Opus 4.6 handles autonomously)", async () => {
 		const handler = (await import("../user-prompt.ts")).default;
 
-		// Very long prompt (>800 chars) to trigger advisory
 		const longPrompt =
 			"implement authentication with JWT tokens, add login endpoint, signup endpoint, " +
 			"middleware for protected routes, update user model, add password hashing, " +
@@ -126,10 +125,7 @@ describe("userPrompt", () => {
 			prompt: longPrompt,
 		});
 
-		const response = getResponse();
-		expect(response).not.toBeNull();
-		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
-		expect(context).toBeDefined();
-		expect(context?.toLowerCase()).toContain("plan mode");
+		const output = stdoutCapture.join("");
+		expect(output).toBe("");
 	});
 });

@@ -35,10 +35,10 @@ function writeState(entries: MetricEntry[]): void {
 	}
 }
 
-/** Record a DENY/block/respond/respond-skipped action with event name and reason. */
+/** Record a DENY/block/respond/respond-skipped/miss action with event name and reason. */
 export function recordAction(
 	event: string,
-	type: "deny" | "block" | "respond" | "respond-skipped",
+	type: "deny" | "block" | "respond" | "respond-skipped" | "miss",
 	reason: string,
 ): void {
 	const entries = readState();
@@ -82,7 +82,43 @@ export function readMetrics(): MetricEntry[] {
 	return readState();
 }
 
-/** Get summary: counts by action type + top reasons. */
+/** Record a first-pass outcome (file passed all gates on first write without fixes). */
+export function recordFirstPass(passed: boolean): void {
+	try {
+		const entries = readState();
+		entries.push({
+			action: `first-pass:${passed ? "clean" : "dirty"}`,
+			reason: "",
+			at: new Date().toISOString(),
+		});
+		if (entries.length > MAX_ENTRIES) {
+			entries.splice(0, entries.length - MAX_ENTRIES);
+		}
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
+}
+
+/** Record a review outcome (PASS or FAIL from alfred-reviewer). */
+export function recordReviewOutcome(passed: boolean): void {
+	try {
+		const entries = readState();
+		entries.push({
+			action: `review:${passed ? "pass" : "fail"}`,
+			reason: "",
+			at: new Date().toISOString(),
+		});
+		if (entries.length > MAX_ENTRIES) {
+			entries.splice(0, entries.length - MAX_ENTRIES);
+		}
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
+}
+
+/** Get summary: counts by action type + top reasons + outcome metrics. */
 export function getMetricsSummary(): {
 	deny: number;
 	block: number;
@@ -91,6 +127,11 @@ export function getMetricsSummary(): {
 	resolution: number;
 	denyResolutionRate: number;
 	gatePassRate: number;
+	firstPassRate: number;
+	firstPassTotal: number;
+	reviewPassRate: number;
+	reviewTotal: number;
+	reviewMiss: number;
 	topReasons: { reason: string; count: number }[];
 } {
 	const entries = readState();
@@ -101,6 +142,11 @@ export function getMetricsSummary(): {
 	let resolution = 0;
 	let gatePass = 0;
 	let gateFail = 0;
+	let firstPassClean = 0;
+	let firstPassDirty = 0;
+	let reviewPass = 0;
+	let reviewFail = 0;
+	let reviewMiss = 0;
 	const reasonCounts = new Map<string, number>();
 
 	for (const e of entries) {
@@ -111,8 +157,15 @@ export function getMetricsSummary(): {
 		else if (e.action.endsWith(":resolution")) resolution++;
 		else if (e.action === "gate:pass") gatePass++;
 		else if (e.action === "gate:fail") gateFail++;
+		else if (e.action === "first-pass:clean") firstPassClean++;
+		else if (e.action === "first-pass:dirty") firstPassDirty++;
+		else if (e.action === "review:pass") reviewPass++;
+		else if (e.action === "review:fail") reviewFail++;
+		else if (e.action === "review:miss") reviewMiss++;
 
-		reasonCounts.set(e.reason, (reasonCounts.get(e.reason) ?? 0) + 1);
+		if (e.reason) {
+			reasonCounts.set(e.reason, (reasonCounts.get(e.reason) ?? 0) + 1);
+		}
 	}
 
 	const topReasons = [...reasonCounts.entries()]
@@ -121,6 +174,8 @@ export function getMetricsSummary(): {
 		.slice(0, 5);
 
 	const gateTotal = gatePass + gateFail;
+	const firstPassTotal = firstPassClean + firstPassDirty;
+	const reviewTotal = reviewPass + reviewFail;
 
 	return {
 		deny,
@@ -130,6 +185,11 @@ export function getMetricsSummary(): {
 		resolution,
 		denyResolutionRate: deny > 0 ? Math.min(100, Math.round((resolution / deny) * 100)) : 0,
 		gatePassRate: gateTotal > 0 ? Math.round((gatePass / gateTotal) * 100) : 0,
+		firstPassRate: firstPassTotal > 0 ? Math.round((firstPassClean / firstPassTotal) * 100) : 0,
+		firstPassTotal,
+		reviewPassRate: reviewTotal > 0 ? Math.round((reviewPass / reviewTotal) * 100) : 0,
+		reviewTotal,
+		reviewMiss,
 		topReasons,
 	};
 }

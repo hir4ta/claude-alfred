@@ -13,6 +13,9 @@ const VERIFY_SPECIFIC_RE =
 const SUCCESS_CRITERIA_RE = /success\s*criteria/i;
 // A concrete criterion references a command (backticks) or file path
 const CONCRETE_CRITERION_RE = /`[^`]+`|\.(ts|js|py|go|rs|tsx|jsx|rb|java|sh)\b/;
+// Generic/vague criteria that should be rejected
+const VAGUE_CRITERIA_RE =
+	/^\s*-\s+\[.\]\s*(tests?\s+pass|all\s+tests|code\s+works|it\s+works|everything\s+works|no\s+errors|lints?\s+clean|builds?\s+succeeds?)\s*$/i;
 
 /** PermissionRequest: Validate plan structure on ExitPlanMode */
 export default async function permissionRequest(ev: HookEvent): Promise<void> {
@@ -49,6 +52,13 @@ function validatePlanStructure(content: string): string[] {
 			if (criteriaLines.length === 0 || !criteriaLines.some((l) => CONCRETE_CRITERION_RE.test(l))) {
 				problems.push(
 					"- Success Criteria must include concrete, testable conditions (commands in backticks or specific file references)",
+				);
+			}
+			// Reject vague criteria: "tests pass", "code works", etc.
+			const vagueLines = criteriaLines.filter((l) => VAGUE_CRITERIA_RE.test(l));
+			if (vagueLines.length > 0) {
+				problems.push(
+					"- Success Criteria too vague. Replace generic items like 'tests pass' with behavioral descriptions (e.g., '`bun vitest run src/__tests__/auth.test.ts` — login returns JWT token')",
 				);
 			}
 		}

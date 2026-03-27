@@ -14,7 +14,7 @@ Anthropic の [Harness Design](https://www.anthropic.com/engineering/harness-des
 - **全コンポーネントは仮定** — 「モデルが単独でできないこと」を encode し、陳腐化したら捨てる
 - **simplest solution possible** — 必要な時だけ複雑性を追加。不要なものは削除
 
-alfred は Claude Code の 13 hooks として動作し、**外部プロセスを evaluator として**、Claude の行動を機械的にゲートする。TypeScript, Python, Go, Rust を自動検出。世の SDD ツールの大半は「お願い」。alfred は「壁」。
+alfred は Claude Code の 13 hooks として動作し、**Opus evaluator で**、Claude の行動を機械的にゲートする。TypeScript, Python, Go, Rust を自動検出。世の SDD ツールの大半は「お願い」。alfred は「壁」。
 
 ## 何を防ぐか
 
@@ -29,44 +29,59 @@ Edit → biome check 失敗 → pending-fixes 記録
 | lint/type エラーを放置して別ファイルへ | **DENY** — 修正するまでブロック |
 | テスト未実行で git commit | **DENY** — テスト pass を要求 |
 | レビュー未実行で完了宣言 | **block** — /alfred:review を要求 |
-| Plan (4+ tasks) に Success Criteria がない | **DENY** — 検証基準なしに実装させない |
+| レビュー FAIL で完了宣言 | **block** — 修正して再レビューを要求 |
+| Plan (4+ tasks) に曖昧な Success Criteria | **DENY** — 「tests pass」ではなく行動レベルの基準を要求 |
 | Plan (4+ tasks) に具体的な Verify がない | **DENY** — テスト名/コマンドを要求 |
-| 大タスクを Plan なしで直接実行 | **advisory** — Plan mode を提案 (block ではない) |
-| 60分以上コミットなし + 8ファイル変更 | **DENY** — スコープ肥大を阻止 (Plan ありは 90分/12ファイルまで猶予) |
+| 120分以上コミットなし + 15ファイル変更 | **DENY** — スコープ肥大を阻止 (Plan ありは 180分/23ファイルまで猶予) |
 | hook 設定を変更しようとする | **DENY** — 自己防衛 (非 hook 設定は許可) |
 
 ## 13 Hooks (6 enforcement + 7 advisory)
 
 **壁 (enforcement)** — 壊れたコードを通さない
-- **PostToolUse**: 編集後に gate 実行 (lint/type/test)。失敗 → pending-fixes + gate outcome 記録
-- **PreToolUse**: pending-fixes → DENY。Pace red → DENY (Plan 考慮)。commit gates → DENY
+- **PostToolUse** `[Edit/Write/Bash]`: 編集後に gate 実行。失敗 → pending-fixes + first-pass/gate outcome 記録
+- **PreToolUse** `[Edit/Write/Bash]`: pending-fixes → DENY。Pace red → DENY。commit without test/review → DENY
 
 **Plan 増幅 (enforcement)** — 設計の質を底上げ
-- **UserPromptSubmit**: Plan テンプレート動的注入 + 大タスク advisory (800+ / 400+)
-- **PermissionRequest**: ExitPlanMode 時に Plan 検証 (大Plan: Success Criteria + Verify 具体性必須)
+- **UserPromptSubmit**: Plan mode 時のみテンプレート注入 (非Plan advisory は Opus 4.6 で不要のため削除)
+- **PermissionRequest** `[ExitPlanMode]`: Plan 構造検証 + Success Criteria 質検証 (曖昧 criteria DENY)
 
 **実行ループ (enforcement + advisory)** — 中途半端に終わらせない
-- **Stop**: 未修正エラー → block / 大Plan 未完了 → block / 小Plan 未完了 → warn / レビュー未実行 → block
-- **PreCompact / PostCompact / SessionEnd**: pending-fixes reminder (stderr)
+- **Stop**: 未修正エラー/大Plan未完了/レビュー未実行 → block
+- **PostCompact**: pending-fixes + **Plan 進捗** reminder (compaction 後の再開支援)
+- **PreCompact / SessionEnd**: pending-fixes reminder (stderr)
 - **SessionStart**: 自動セットアップ + エラートレンド注入
 
 **サブエージェント制御 (enforcement + advisory)** — 品質ルールを伝搬
 - **SubagentStart**: サブエージェントに品質ルール注入
-- **SubagentStop**: reviewer PASS/FAIL + Score 検証 + レビュー完了記録
+- **SubagentStop**: reviewer PASS → review gate クリア / FAIL → block (修正+再レビュー要求)
 
 **自己防衛 (enforcement + advisory)** — harness 自体を守る
-- **PostToolUseFailure**: 2回連続失敗 → /clear 提案
-- **ConfigChange**: hook 設定変更 → DENY (非 hook 設定は許可)
+- **PostToolUseFailure** `[Bash]`: 2回連続失敗 → /clear 提案
+- **ConfigChange**: hook 設定変更 → DENY
 
 ## 設計原則
 
 1. **壁 > 情報提示** — DENY (exit 2) で止める。additionalContext は無視される前提
 2. **リサーチ駆動** — 全設計判断に SWE-bench / Anthropic 記事 / Self-Refine 論文の裏付け
 3. **fail-open** — 全 hook は try-catch。alfred の障害で Claude を止めない
-4. **タスクスコープ適応** — 計画なし: 1-2ファイル集中。計画あり: 計画の境界に従う
+4. **Opus 4.6 適応** — Pace 120分、非Plan advisory 削除、sprint 構造緩和
 5. **simplest solution** — 全コンポーネントは load-bearing 仮定を持つ。仮定が崩れたら捨てる
-6. **効果測定** — DENY resolution rate + gate pass rate + advisory skip 率で実効性を計測
+6. **効果測定** — first-pass clean rate + review pass/miss rate + gate pass rate で品質を計測
 7. **dependencies ゼロ** — 全て devDependencies + bun build バンドル
+
+## 効果測定
+
+```bash
+alfred doctor --metrics
+```
+
+| 指標 | 意味 |
+|------|------|
+| First-pass clean rate | ファイル編集時に全 gate を初回で通過した率 (品質の直接指標) |
+| Review pass rate | Opus evaluator のレビュー PASS 率 |
+| Review misses | レビュー PASS 後にゲート失敗が発生した回数 (evaluator calibration 指標) |
+| DENY resolution rate | DENY 発火後に修正された率 |
+| Gate pass rate | gate 実行の通過率 |
 
 ## インストール
 
@@ -76,48 +91,20 @@ bun build.ts
 bun link
 
 alfred init       # ~/.claude/ に 13 hooks + skill + agent + rules を配置
-alfred doctor     # セットアップの健全性を確認 (8項目 + state整合性検証)
-alfred doctor --fix  # 壊れた state ファイルを自動修復
+alfred doctor     # セットアップの健全性を確認
 ```
-
-## コマンド
-
-```bash
-alfred init              # セットアップ (13 hooks + skill + agent + rules + gates 自動検出)
-alfred hook <event>      # Hook イベント処理 (Claude Code が呼び出す)
-alfred doctor            # ヘルスチェック (bun, hooks, skill, agent, rules, gates, state, path)
-alfred doctor --metrics  # DENY/block/respond + gate pass rate + advisory skip 統計を表示
-alfred doctor --fix      # 壊れた state ファイルを自動修復 (既知ファイルのみ)
-alfred reset             # .alfred/.state/ を初期化 (--keep-history で履歴保持)
-```
-
-`alfred init` が配置するもの:
-- `~/.claude/settings.json` — 13 hooks を登録 (既存の hook は保持)
-- `~/.claude/skills/alfred-review/SKILL.md` — /alfred:review skill
-- `~/.claude/agents/alfred-reviewer.md` — 独立レビュー agent (PASS/FAIL + Score threshold)
-- `~/.claude/rules/alfred-quality.md` — 品質ルール (適応型タスクスコープ)
-- `.alfred/gates.json` — プロジェクトの lint/type/test gate を自動検出
-
-hooks は Claude Code が各イベントで自動呼び出し。手動操作は不要。
-
-## Skills
-
-- `/alfred:review` — 独立コードレビュー。HubSpot 2-stage pattern: Reviewer (独立サブエージェント) が全 findings を報告 (Review: PASS/FAIL + Score: Correctness/Design/Security 各1-5) → Judge が S/A/A でフィルタ → critical/high は修正後に再レビュー (最大2サイクル)
 
 ## Gate 自動検出
 
-`alfred init` がプロジェクトの設定ファイルから lint/type/test gate を自動検出:
+`alfred init` がプロジェクトの設定ファイルから gate を自動検出:
 
-| 言語 | 検出元 | on_write (lint/type) | on_commit (test) |
+| 言語 | on_write (lint/type) | on_commit (test) | on_review (e2e) |
 |---|---|---|---|
-| **TypeScript** | biome.json / .eslintrc* / tsconfig.json | `biome check {file}` / `eslint {file}` / `tsc --noEmit` | — |
-| **TypeScript** | vitest / jest (devDeps) | — | `vitest --changed` / `jest --changedSince` |
-| **Python** | pyproject.toml / uv.lock / ruff.toml | `[uv run] ruff check {file}` | `[uv run] pytest` |
-| **Python** | pyrightconfig.json / mypy.ini | `[uv run] pyright` / `[uv run] mypy .` | — |
-| **Go** | go.mod | `go vet ./...` | `go test ./...` |
-| **Rust** | Cargo.toml | `cargo clippy -- -D warnings` | `cargo test` |
-
-`uv.lock` 検出時は自動で `uv run` プレフィクスが付与されます。
+| **TypeScript** | `biome check` / `eslint` / `tsc --noEmit` | `vitest --changed` / `jest` | — |
+| **Python** | `ruff check` / `pyright` / `mypy` | `pytest` | — |
+| **Go** | `go vet` | `go test` | — |
+| **Rust** | `cargo clippy` | `cargo test` | — |
+| **Frontend** | — | — | `playwright test` / `cypress run` |
 
 ## スタック
 

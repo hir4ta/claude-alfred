@@ -1,3 +1,4 @@
+import { recordReviewOutcome } from "../state/metrics.ts";
 import { getLatestPlanContent } from "../state/plan-status.ts";
 import { recordReview } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
@@ -21,8 +22,21 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 	if (!agentType || !output) return;
 
 	if (agentType === "alfred-reviewer") {
+		const passed = REVIEW_PASS_RE.test(output);
+		const failed = REVIEW_FAIL_RE.test(output);
 		validateReviewer(output);
-		// If we get here (no block), review passed — record it
+		// Record outcome metric if verdict is present
+		if (passed || failed) {
+			try {
+				recordReviewOutcome(passed);
+			} catch {
+				/* fail-open */
+			}
+		}
+		// Only clear the review gate on PASS. FAIL requires fixes + re-review.
+		if (failed) {
+			block("Review: FAIL. Fix the issues found by the reviewer and run /alfred:review again.");
+		}
 		recordReview();
 	} else if (agentType === "Plan") {
 		validatePlan();

@@ -342,6 +342,40 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(exitCode).toBeNull();
 	});
 
+	it("denies large plan with vague Success Criteria like 'tests pass'", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "vague-plan.md"),
+			[
+				"## Context",
+				"Add auth",
+				"## Tasks",
+				"### Task 1: Add login [pending]",
+				"- **Verify**: src/__tests__/auth.test.ts:testLogin",
+				"### Task 2: Add signup [pending]",
+				"- **Verify**: src/__tests__/auth.test.ts:testSignup",
+				"### Task 3: Add middleware [pending]",
+				"- **Verify**: src/__tests__/middleware.test.ts:testAuth",
+				"### Task 4: Add rate limiting [pending]",
+				"- **Verify**: src/__tests__/rate.test.ts:testLimit",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` — all tests pass",
+				"- [ ] tests pass",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		try {
+			await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		} catch {
+			// exit(2)
+		}
+		expect(exitCode).toBe(2);
+		const output = stdoutCapture.join("");
+		expect(output).toContain("vague");
+	});
+
 	it("ignores non-ExitPlanMode events", async () => {
 		const handler = (await import("../permission-request.ts")).default;
 		await handler({

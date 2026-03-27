@@ -30,10 +30,32 @@ export const ALFRED_HOOKS: Record<
 	Array<{ matcher: string; hooks: Array<Record<string, unknown>> }>
 > = {
 	PostToolUse: [
-		{ matcher: "", hooks: [{ type: "command", command: "alfred hook post-tool", timeout: 5000 }] },
+		{
+			matcher: "Edit",
+			hooks: [{ type: "command", command: "alfred hook post-tool", timeout: 5000 }],
+		},
+		{
+			matcher: "Write",
+			hooks: [{ type: "command", command: "alfred hook post-tool", timeout: 5000 }],
+		},
+		{
+			matcher: "Bash",
+			hooks: [{ type: "command", command: "alfred hook post-tool", timeout: 5000 }],
+		},
 	],
 	PreToolUse: [
-		{ matcher: "", hooks: [{ type: "command", command: "alfred hook pre-tool", timeout: 3000 }] },
+		{
+			matcher: "Edit",
+			hooks: [{ type: "command", command: "alfred hook pre-tool", timeout: 3000 }],
+		},
+		{
+			matcher: "Write",
+			hooks: [{ type: "command", command: "alfred hook pre-tool", timeout: 3000 }],
+		},
+		{
+			matcher: "Bash",
+			hooks: [{ type: "command", command: "alfred hook pre-tool", timeout: 3000 }],
+		},
 	],
 	UserPromptSubmit: [
 		{
@@ -80,7 +102,7 @@ export const ALFRED_HOOKS: Record<
 	],
 	PostToolUseFailure: [
 		{
-			matcher: "",
+			matcher: "Bash",
 			hooks: [{ type: "command", command: "alfred hook post-tool-failure", timeout: 3000 }],
 		},
 	],

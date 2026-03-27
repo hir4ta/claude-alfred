@@ -42,9 +42,23 @@ describe("alfred init", () => {
 		expect(settings.hooks.Stop).toBeDefined();
 		expect(settings.hooks.PermissionRequest).toBeDefined();
 
-		// Verify new format: each entry has matcher + hooks array
+		// PostToolUse/PreToolUse have per-tool matchers (Edit, Write, Bash) to avoid unnecessary process spawns
+		const postToolMatchers = settings.hooks.PostToolUse.map(
+			(e: Record<string, unknown>) => e.matcher,
+		);
+		expect(postToolMatchers).toContain("Edit");
+		expect(postToolMatchers).toContain("Write");
+		expect(postToolMatchers).toContain("Bash");
+
+		const preToolMatchers = settings.hooks.PreToolUse.map(
+			(e: Record<string, unknown>) => e.matcher,
+		);
+		expect(preToolMatchers).toContain("Edit");
+		expect(preToolMatchers).toContain("Write");
+		expect(preToolMatchers).toContain("Bash");
+
+		// Each entry has matcher + hooks array
 		const postTool = settings.hooks.PostToolUse[0];
-		expect(postTool.matcher).toBeDefined();
 		expect(Array.isArray(postTool.hooks)).toBe(true);
 		expect(postTool.hooks[0].command).toContain("alfred hook post-tool");
 
@@ -112,7 +126,7 @@ describe("alfred init", () => {
 				hooks: {
 					PostToolUse: [
 						{
-							matcher: "",
+							matcher: "Edit",
 							hooks: [{ type: "command", command: "alfred hook post-tool", timeout: 5000 }],
 						},
 					],
@@ -124,7 +138,10 @@ describe("alfred init", () => {
 		await runInit(false);
 
 		const settings = JSON.parse(readFileSync(join(claudeDir, "settings.json"), "utf-8"));
-		// Should have existing + not duplicate
-		expect(settings.hooks.PostToolUse).toHaveLength(1);
+		// Should replace old alfred entries with new ones (Edit, Write, Bash matchers)
+		const alfredEntries = settings.hooks.PostToolUse.filter((e: Record<string, unknown>) =>
+			JSON.stringify(e).includes("alfred hook"),
+		);
+		expect(alfredEntries).toHaveLength(3);
 	});
 });

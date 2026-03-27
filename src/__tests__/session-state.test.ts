@@ -55,22 +55,22 @@ describe("session-state: isPaceRed", () => {
 		expect(isPaceRed(pace)).toBe(false);
 	});
 
-	it("returns true at 65 min with 9 files", () => {
+	it("returns true at 125 min with 16 files", () => {
 		const pace = {
-			last_commit_at: new Date(Date.now() - 65 * 60_000).toISOString(),
-			changed_files: 9,
+			last_commit_at: new Date(Date.now() - 125 * 60_000).toISOString(),
+			changed_files: 16,
 		};
 		expect(isPaceRed(pace)).toBe(true);
 	});
 
-	it("hasPlan gives more headroom (90 min / 12 files)", () => {
+	it("hasPlan gives more headroom (180 min / 23 files)", () => {
 		const pace = {
-			last_commit_at: new Date(Date.now() - 65 * 60_000).toISOString(),
-			changed_files: 9,
+			last_commit_at: new Date(Date.now() - 125 * 60_000).toISOString(),
+			changed_files: 16,
 		};
-		// Without plan: 65 min >= 60, 9 >= 8 → red
+		// Without plan: 125 min >= 120, 16 >= 15 → red
 		expect(isPaceRed(pace)).toBe(true);
-		// With plan: 65 min < 90, threshold not met → not red
+		// With plan: 125 min < 180, threshold not met → not red
 		expect(isPaceRed(pace, true)).toBe(false);
 	});
 });

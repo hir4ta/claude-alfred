@@ -89,4 +89,25 @@ describe("metrics", () => {
 		const summary = getMetricsSummary();
 		expect(summary.respondSkipped).toBe(2);
 	});
+
+	it("records first-pass outcomes and computes clean rate", async () => {
+		const { recordFirstPass, getMetricsSummary } = await import("../metrics.ts");
+		recordFirstPass(true);
+		recordFirstPass(true);
+		recordFirstPass(false);
+		recordFirstPass(true);
+
+		const summary = getMetricsSummary();
+		expect(summary.firstPassRate).toBe(75); // 3 clean / 4 total
+	});
+
+	it("records review outcomes and computes pass rate", async () => {
+		const { recordReviewOutcome, getMetricsSummary } = await import("../metrics.ts");
+		recordReviewOutcome(true);
+		recordReviewOutcome(false);
+		recordReviewOutcome(true);
+
+		const summary = getMetricsSummary();
+		expect(summary.reviewPassRate).toBe(67); // 2 pass / 3 total
+	});
 });

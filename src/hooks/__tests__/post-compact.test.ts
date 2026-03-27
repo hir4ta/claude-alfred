@@ -41,4 +41,22 @@ describe("postCompact", () => {
 
 		expect(stderrCapture.join("")).toBe("");
 	});
+
+	it("injects plan progress after compaction", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		const { writeFileSync } = await import("node:fs");
+		writeFileSync(
+			join(planDir, "plan.md"),
+			"## Tasks\n### Task 1: Setup [done]\n- done\n### Task 2: Implement [in-progress]\n- wip\n### Task 3: Test [pending]\n- todo",
+		);
+
+		const handler = (await import("../post-compact.ts")).default;
+		await handler({ hook_type: "PostCompact" });
+
+		const stderr = stderrCapture.join("");
+		expect(stderr).toContain("Plan progress");
+		expect(stderr).toContain("Done: Setup");
+		expect(stderr).toContain("Remaining: Test");
+	});
 });

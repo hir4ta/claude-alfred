@@ -30,13 +30,13 @@ alfred CLI (init / hook / doctor)
 | Stop | enforcement | block | pending-fixes, incomplete plan, no review |
 | PermissionRequest | enforcement | DENY | ExitPlanMode plan構造検証 |
 | ConfigChange | enforcement | DENY | hook削除防止 |
-| SubagentStop | enforcement | block | reviewer output検証 (PASS/FAIL) |
+| SubagentStop | enforcement | block | reviewer PASS→gate clear / FAIL→block (修正+再レビュー要求) |
 | SessionStart | advisory | respond | エラートレンド注入 |
-| UserPromptSubmit | advisory | respond | Planテンプレート注入 |
+| UserPromptSubmit | advisory | respond | Planテンプレート注入 (Plan mode のみ) |
 | SubagentStart | advisory | respond | 品質ルール注入 |
 | PostToolUseFailure | advisory | respond | /clear提案 |
 | PreCompact | advisory | stderr | pending-fixes reminder |
-| PostCompact | advisory | stderr | pending-fixes reminder |
+| PostCompact | advisory | stderr | pending-fixes + Plan進捗 reminder |
 | SessionEnd | advisory | stderr | pending-fixes log |
 
 ## 構造
@@ -52,12 +52,12 @@ src/
 │   ├── respond.ts          # 共通: respond / deny / block + metrics記録
 │   ├── post-tool.ts        # lint/type gate + pending-fixes + pace + batch + test-pass + verify
 │   ├── pre-tool.ts         # pending-fixes → DENY + pace red → DENY + commit without test → DENY
-│   ├── user-prompt.ts      # Plan テンプレート注入 + 大タスク advisory (800+ / 400+)
+│   ├── user-prompt.ts      # Plan テンプレート注入 (Plan mode のみ)
 │   ├── permission-request.ts # ExitPlanMode: 適応型検証 (大Plan: 厳格, 小Plan: 軽量)
 │   ├── session-start.ts    # .alfred作成 + gates自動検出 + エラートレンド注入
 │   ├── stop.ts             # pending-fixes block + 大Plan未完了block + 小Plan warn + レビュー強制
 │   ├── pre-compact.ts      # pending-fixes reminder (stderr)
-│   ├── post-compact.ts     # pending-fixes reminder (stderr)
+│   ├── post-compact.ts     # pending-fixes + Plan進捗 reminder (stderr)
 │   ├── session-end.ts      # pending-fixes log (stderr)
 │   ├── subagent-start.ts   # サブエージェントに品質ルール注入
 │   ├── subagent-stop.ts    # reviewer PASS/FAIL + Score検証 + レビュー完了記録
@@ -72,7 +72,7 @@ src/
 │   ├── session-state.ts    # 統合セッション状態 (pace, test, review, batch, fail, budget)
 │   ├── gate-history.ts     # gate 結果トレンド + コミット間隔統計
 │   ├── plan-status.ts      # Plan task status 解析
-│   └── metrics.ts          # DENY/block/respond/gate-outcome 記録 (50件 cap)
+│   └── metrics.ts          # DENY/block/respond/gate-outcome/first-pass/review-outcome/review-miss 記録 (50件 cap)
 ├── templates/              # init が配置するファイル
 │   ├── skill-review.md     # /alfred:review skill
 │   ├── agent-reviewer.md   # reviewer agent (PASS/FAIL threshold)
@@ -121,6 +121,11 @@ task clean    # ビルド成果物削除
   - block() (トップレベル decision/reason): Stop, UserPromptSubmit, SubagentStop
   - 出力なし (stderr で advisory): PostCompact, PreCompact, SessionEnd, ConfigChange
 
+### Gates
+- on_write: 編集時に実行 (lint, typecheck)
+- on_commit: コミット時に実行 (test)
+- on_review: レビュー時に reviewer が実行 (e2e — playwright/cypress 自動検出)
+
 ### 状態ファイル (.alfred/.state/)
 - pending-fixes.json — 未修正 lint/type エラー
 - session-state.json — 統合セッション状態 (pace, test pass, review, gate batch, fail count, budget, action counters)
@@ -132,23 +137,28 @@ task clean    # ビルド成果物削除
   - **小Plan (≤3 tasks)**: 構造要件なし。Verify あれば具体的であること
   - **大Plan (4+ tasks)**: Success Criteria (具体的) + Verify フィールド (具体的) 必須
   - Review Gates: Plan構造では不要。review は stop.ts/pre-tool.ts で機械的に強制
-- UserPromptSubmit: 大タスク (800+) は advisory (block ではない)
+- Success Criteria 質検証: 「tests pass」等の曖昧 criteria は DENY。行動レベルの具体的基準を要求
+- UserPromptSubmit: Plan mode のみテンプレート注入 (非Plan advisory は Opus 4.6 で不要のため削除)
 - Stop: 小Plan の未完了タスクは警告のみ (block ではない)
-- reviewer は全 findings を報告 + Review: PASS/FAIL + Score (Correctness/Design/Security 1-5)。Judge (skill) のみが S/A/A フィルタを適用
+- reviewer は Opus モデルで実行 (Generator と同等能力での評価)。全 findings を報告 + Review: PASS/FAIL + Score (Correctness/Design/Security 1-5)。Judge (skill) のみが S/A/A フィルタを適用
 - reviewer に few-shot 例 3つ + anti-self-persuasion 指示を配置
+- Verify フィールド検証: テスト名の出力一致 + テストファイル内のアサーション存在確認
 
 ### 効果測定
 - DENY 発火時に metrics.json へ記録。fix 後に resolution を記録
 - gate 実行結果 (pass/fail) を metrics.json へ記録
 - advisory skip (budget超過) を metrics.json へ記録
-- `doctor --metrics`: DENY resolution rate + gate pass rate + advisory skip数 を表示
+- First-pass clean rate: ファイル編集時に全 gate を初回で通過した率 (品質の直接指標)
+- Review outcome: レビュー PASS/FAIL 率 + review:miss (PASS後のgate fail = evaluator見逃し)
+- `doctor --metrics`: DENY resolution rate + gate pass rate + first-pass rate + review pass rate を表示
 - `doctor --fix`: 壊れた state ファイルをデフォルト値にリセット
 
-### Pace 制限 (適応型)
-- デフォルト: 60分 + 8ファイル = RED → DENY
-- コミット3回以上: 平均間隔 × 2 (10-60分の範囲)
-- Plan あり: threshold × 1.5 (90分 / 12ファイルまで許容)
+### Pace 制限 (適応型, Opus 4.6 対応)
+- デフォルト: 120分 + 15ファイル = RED → DENY (Opus 4.6 の長時間coherent作業に対応)
+- コミット3回以上: 平均間隔 × 2 (10-120分の範囲)
+- Plan あり: threshold × 1.5 (180分 / 23ファイルまで許容)
 - ConfigChange: hook設定のみ DENY。その他の user_settings 変更は許可
+- **Hook matcher 最適化**: PreToolUse/PostToolUse は Edit/Write/Bash のみ、PostToolUseFailure は Bash のみに matcher 設定。Read/Glob/Grep 等でプロセス起動しない
 
 ### Phase Gate (各コミット前に必ず実行)
 1. `bun vitest run` — 全テスト pass
@@ -170,7 +180,5 @@ task clean    # ビルド成果物削除
 
 ## 設計ドキュメント
 
-- design-v0.1.md — v0.1.0 全体設計 (v0.2 の詳細設計含む)
-- ROADMAP.md — v0.2〜v1.0 の全ロードマップ (詳細設計)
 - research-harness-engineering-2026.md — リサーチ結果
 - research-claude-code-plugins-2026.md — Plugin 調査結果

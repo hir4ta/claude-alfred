@@ -53,6 +53,30 @@ export function detectGates(projectRoot: string): GatesConfig {
 		}
 	}
 
+	// Runtime verification (on_review): browser tests, e2e
+	if (existsSync(pkgPath)) {
+		try {
+			const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+			const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+			if (deps["@playwright/test"] || deps.playwright) {
+				gates.on_review = gates.on_review ?? {};
+				gates.on_review.e2e = {
+					command: "npx playwright test --reporter=line",
+					timeout: 60000,
+				};
+			} else if (deps.cypress) {
+				gates.on_review = gates.on_review ?? {};
+				gates.on_review.e2e = {
+					command: "npx cypress run --reporter spec",
+					timeout: 60000,
+				};
+			}
+		} catch {
+			// ignore
+		}
+	}
+
 	// Python
 	const isPython =
 		existsSync(join(projectRoot, "pyproject.toml")) ||
