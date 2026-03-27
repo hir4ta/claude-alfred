@@ -86,11 +86,12 @@ task clean    # ビルド成果物削除
 - on_commit: コミット時に実行 (test)
 - on_review: レビュー時に reviewer が実行 (e2e — playwright/cypress 自動検出)
 
-### 状態ファイル (.qult/.state/)
-- pending-fixes.json — 未修正 lint/type エラー
-- session-state.json — 統合セッション状態 (pace, test pass, review, gate batch, fail count, budget, action counters, verified_fields, criteria_commands_run)
-- gate-history.json — gate 結果トレンド + コミット間隔 (50件 cap)
-- metrics.json — DENY/block/respond 発火記録 (50件 cap, `doctor --metrics` で表示)
+### 状態ファイル
+- `.qult/.state/pending-fixes.json` — 未修正 lint/type エラー
+- `.qult/.state/session-state.json` — 統合セッション状態 (pace, test pass, review, gate batch, fail count, budget, action counters, verified_fields, criteria_commands_run)
+- `.qult/metrics/YYYY-MM/YYYY-MM-DD.json` — DENY/block/respond 発火記録 (日次ローテーション, 上限なし)
+- `.qult/gate-history/YYYY-MM/YYYY-MM-DD.json` — gate 結果 + コミット履歴 (日次ローテーション, 上限なし)
+- 各エントリに session_id, project_id, branch, user を記録 (チーム開発 + TUI 対応)
 
 ### Sprint Contract (適応型)
 - Opus 4.6 で sprint construct を削除。qultも適応:
@@ -113,15 +114,19 @@ task clean    # ビルド成果物削除
 - レビュー強制条件: Plan active **OR** gated_files >= 5
 - gated_files: on_write gate がカバーする拡張子のファイルのみカウント (.md等は除外)
 - 小変更 (Plan なし + gated 5ファイル未満): レビュー任意 (stderr warn のみ)
-- スキップ時は `review:skipped` を metrics.json に記録
+- スキップ時は `review:skipped` を metrics に記録
 
 ### 効果測定
-- DENY 発火時に metrics.json へ記録。fix 後に resolution を記録
-- gate 実行結果 (pass/fail) を metrics.json へ記録
-- advisory skip (budget超過) を metrics.json へ記録
-- First-pass clean rate: ファイル編集時に全 gate を初回で通過した率 (品質の直接指標)
-- Review outcome: レビュー PASS/FAIL 率 + review:miss (PASS後のgate fail = evaluator見逃し) + review:skipped (閾値以下でスキップ)
-- `doctor --metrics`: DENY resolution rate + gate pass rate + first-pass rate + review pass rate + review findings (total, avg, severity) を表示
+- 全メトリクスは日次ローテーションファイルに記録 (`.qult/metrics/`, `.qult/gate-history/`)
+- 各エントリに session_id, project_id, branch, user を自動付与
+- DENY: defensive (config-change) vs actionable (lint/typecheck等) に分類。resolution rate は actionable のみ
+- Gate: 実行結果 (pass/fail) + 実行時間 (duration_ms) + gate 名別 pass rate
+- Fix effort: DENY→resolution 間の編集回数を追跡
+- First-pass clean rate: ファイル編集時に全 gate を初回で通過した率 + gate 別内訳
+- Review: PASS/FAIL 率 + findings (severity別) + review:miss (PASS後のgate fail)
+- Plans: permission-request の approve/deny 率
+- Commits: 間隔統計 (avg/median/min/max) + DENYs per commit
+- `doctor --metrics`: Actions / Top reasons (種別別) / Effectiveness / Gates / Review / Commits / Plans セクション表示
 - `doctor --fix`: 壊れた state ファイルをデフォルト値にリセット
 
 ### Pace 制限 (適応型, Opus 4.6 対応)

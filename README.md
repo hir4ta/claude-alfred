@@ -217,11 +217,15 @@ qult doctor     # セットアップの健全性を確認
 
 | 言語 | on_write (lint/type) | on_commit (test) | on_review (e2e) |
 |---|---|---|---|
-| **TypeScript** | `biome check {file}` / `eslint {file}` / `tsc --noEmit` | `vitest run` / `jest` | — |
+| **TypeScript/JS** | `biome check {file}` / `eslint {file}` / `tsc --noEmit` | `vitest run` / `jest` / `mocha` | — |
 | **Python** | `ruff check {file}` / `pyright` / `mypy` | `pytest` | — |
 | **Go** | `go vet ./...` | `go test ./...` | — |
-| **Rust** | `cargo clippy` | `cargo test` | — |
-| **Frontend** | — | — | `playwright test` / `cypress run` |
+| **Rust** | `cargo clippy` / `cargo check` | `cargo test` | — |
+| **Ruby** | `rubocop {file}` | `rspec` | — |
+| **Java/Kotlin** | `ktlint` / `detekt` | `gradle test` / `mvn test` | — |
+| **Elixir** | `credo` | `mix test` | — |
+| **Deno** | `deno lint {file}` | `deno test` | — |
+| **Frontend** | `stylelint {file}` | — | `playwright test` / `cypress run` / `wdio` |
 
 ## データストレージ
 
