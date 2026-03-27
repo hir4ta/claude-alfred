@@ -27,18 +27,42 @@ afterEach(() => {
 });
 
 describe("configChange", () => {
-	it("blocks changes to user_settings (protects hooks)", async () => {
+	it("blocks hook changes in user_settings", async () => {
 		const handler = (await import("../config-change.ts")).default;
 		try {
 			await handler({
 				hook_type: "ConfigChange",
-				tool_input: { source: "user_settings" },
+				tool_input: { source: "user_settings", key: "hooks" },
 			});
 		} catch {
 			// exit(2)
 		}
 
 		expect(exitCode).toBe(2);
+	});
+
+	it("blocks user_settings with hooks in content", async () => {
+		const handler = (await import("../config-change.ts")).default;
+		try {
+			await handler({
+				hook_type: "ConfigChange",
+				tool_input: { source: "user_settings", content: '{"hooks": {}}' },
+			});
+		} catch {
+			// exit(2)
+		}
+
+		expect(exitCode).toBe(2);
+	});
+
+	it("allows non-hook user_settings changes", async () => {
+		const handler = (await import("../config-change.ts")).default;
+		await handler({
+			hook_type: "ConfigChange",
+			tool_input: { source: "user_settings", key: "model" },
+		});
+
+		expect(exitCode).toBeNull();
 	});
 
 	it("allows changes to project_settings", async () => {

@@ -10,6 +10,57 @@
 | v0.4.0 | コンテキスト最適化 | 2000トークン予算, 動的 Plan テンプレート (Short/Medium/Large) |
 | v0.5.0 | 学習と適応 | gate トレンド分析, Pace 適応閾値, 頻出エラー注入 |
 | v0.8.0 | Simplification + Proof | 14→13 hooks, 7→4 state files, hook分類, reviewer PASS/FAIL, Plan閾値引上げ, 重要hook専用テスト |
+| v0.9.0 | 記事準拠改善 | タスクスコープ適応化, Evaluator Score追加, Pace緩和+Plan考慮, メトリクス強化, Plan検証簡素化, ConfigChange精密化 |
+
+---
+
+## v0.9.0 — 記事準拠改善 (2026-03-27)
+
+Anthropic記事 "Harness design for long-running application development" との突き合わせ評価 (68/100) に基づく改善。
+記事の核心原則「モデルが改善されたら制約を外す」「evaluator チューニングが本質」「全コンポーネントは仮定」に従い、7つの弱みを解消。
+
+### 改善内容
+
+#### 1. タスクスコープ適応化 (68→80+ の最大要因)
+- **rules-quality.md**: "1 file, under 15 lines" → 適応型 ("Quick fix: 1-2 files / Planned: follow plan")
+- **user-prompt.ts**: Plan テンプレートから 15LOC ハードリミット削除。Review Gates 構造を「ハーネスが自動強制」の注記に置換
+- **subagent-start.ts**: "under 15 lines" → "Keep changes focused"
+- **根拠**: 記事は Opus 4.6 で sprint construct を完全削除。SWE-bench の 15LOC は bug-fix ドメイン固有であり、アプリケーション開発には過剰制約
+
+#### 2. Evaluator 構造化スコアリング
+- **agent-reviewer.md**: Correctness/Design/Security の 1-5 スコア必須化。FAIL 条件: any dimension ≤ 2 or critical finding
+- **subagent-stop.ts**: PASS/FAIL verdict のみ (findings なし) の場合、Score 行 (`Score: Correctness=N Design=N Security=N`) を必須に。findings ありは後方互換で Score 任意
+- **few-shot 例追加**: medium severity の例 + "the existing code already handles this" anti-self-persuasion パターン
+- **根拠**: 記事「Out of the box, Claude is a poor QA agent」「4 grading criteria with scores」
+
+#### 3. Pace 制限適正化
+- **session-state.ts**: DEFAULT_RED_MINUTES: 35→60, DEFAULT_FILES: 5→8
+- **isPaceRed(pace, hasPlan)**: Plan 存在時は threshold × 1.5 (90分/12ファイルまで猶予)
+- **pre-tool.ts**: `getActivePlan()` の結果を isPaceRed に伝達
+- **根拠**: 記事は Opus 4.6 の 2時間超の連続コーディングが成功。35分は保守的すぎた
+
+#### 4. アウトカムメトリクス
+- **metrics.ts**: `recordGateOutcome(gate, passed)` 追加。`getMetricsSummary` に `gatePassRate` + `respondSkipped` フィールド
+- **post-tool.ts**: gate 実行後に outcome を metrics に記録
+- **respond.ts**: budget 超過で advisory skip 時に `respond-skipped` を記録
+- **doctor.ts**: gate pass rate + advisory skip 数を `--metrics` に表示
+- **根拠**: 記事は sprint 前後の品質スコア推移を測定。DENY count だけでは「alfredが実際に品質を上げたか」が分からない
+
+#### 5. Plan 検証簡素化
+- **permission-request.ts**: File フィールド必須チェック削除 (モデルは自然にパスを含む)。Review Gates 必須チェック削除 (review は stop.ts/pre-tool.ts で機械的に強制)
+- **subagent-stop.ts**: Plan の Review Gates チェック削除。`## Tasks` セクションのみ必須に
+- 残存チェック: Success Criteria (大Plan) + Verify specificity (大Plan)
+- **根拠**: 記事「over-specifying implementation too early」。検証すべきは構造ではなくアウトカム
+
+#### 6. ConfigChange 精密化
+- **config-change.ts**: user_settings 全ブロック → hook 関連変更 (`key === "hooks"` or content に `"hooks"` 含む) のみ DENY。theme/model/permissions 等は許可
+- **根拠**: 過度な防御はユーザー体験を損なう。守るべきは hook 設定のみ
+
+### 結果
+- 176→186 テスト (+10)
+- 型チェック + lint clean
+- 全テスト pass
+- 評価スコア: 68→推定 80+
 
 ---
 

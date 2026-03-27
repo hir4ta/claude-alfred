@@ -12,7 +12,7 @@ const COMPACT_TEMPLATE = `Structure your plan:
 Why this change is needed.
 
 ## Tasks
-Each task: 1 file, under 15 lines, with a Verify field.
+Each task should be focused (1-2 files) with a Verify field.
 
 ### Task N: <name> [pending]
 - **File**: <path>
@@ -27,12 +27,7 @@ Update status to [done] as you complete each task.`;
 
 const FULL_TEMPLATE = `${COMPACT_TEMPLATE}
 
-## Review Gates
-- [ ] Design Review: run /alfred:review on this plan
-- [ ] Phase Review: after every 3 tasks, run /alfred:review on the diff
-- [ ] Final Review: after all tasks, run /alfred:review on all changes
-
-The Stop hook will block if tasks remain incomplete or Review Gates are unchecked.`;
+Note: Independent review (/alfred:review) is automatically required before each commit. You don't need to plan for it — it's enforced by the harness.`;
 
 /** UserPromptSubmit: dynamic Plan template injection + large task detection */
 export default async function userPrompt(ev: HookEvent): Promise<void> {

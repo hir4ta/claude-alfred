@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
 import { runGate } from "../gates/runner.ts";
 import { recordCommit, recordGateResult } from "../state/gate-history.ts";
-import { recordResolution } from "../state/metrics.ts";
+import { recordGateOutcome, recordResolution } from "../state/metrics.ts";
 import { readPendingFixes, writePendingFixes } from "../state/pending-fixes.ts";
 import { getActivePlan, parseVerifyFields } from "../state/plan-status.ts";
 import {
@@ -65,6 +65,11 @@ function handleEditWrite(ev: HookEvent): void {
 			}
 
 			recordGateResult(name, result.passed, result.passed ? undefined : result.output);
+			try {
+				recordGateOutcome(name, result.passed);
+			} catch {
+				/* fail-open */
+			}
 
 			if (!result.passed) {
 				newFixes.push({ file, errors: [result.output], gate: name });

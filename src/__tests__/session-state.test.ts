@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	checkBudget,
 	clearOnCommit,
+	isPaceRed,
 	markGateRan,
 	readPace,
 	readSessionState,
@@ -42,6 +43,35 @@ describe("session-state: pace tracking", () => {
 		expect(pace).not.toBeNull();
 		expect(pace!.changed_files).toBe(3);
 		expect(pace!.tool_calls).toBe(5);
+	});
+});
+
+describe("session-state: isPaceRed", () => {
+	it("returns false at 50 min with 7 files (below new default)", () => {
+		const pace = {
+			last_commit_at: new Date(Date.now() - 50 * 60_000).toISOString(),
+			changed_files: 7,
+		};
+		expect(isPaceRed(pace)).toBe(false);
+	});
+
+	it("returns true at 65 min with 9 files", () => {
+		const pace = {
+			last_commit_at: new Date(Date.now() - 65 * 60_000).toISOString(),
+			changed_files: 9,
+		};
+		expect(isPaceRed(pace)).toBe(true);
+	});
+
+	it("hasPlan gives more headroom (90 min / 12 files)", () => {
+		const pace = {
+			last_commit_at: new Date(Date.now() - 65 * 60_000).toISOString(),
+			changed_files: 9,
+		};
+		// Without plan: 65 min >= 60, 9 >= 8 → red
+		expect(isPaceRed(pace)).toBe(true);
+		// With plan: 65 min < 90, threshold not met → not red
+		expect(isPaceRed(pace, true)).toBe(false);
 	});
 });
 

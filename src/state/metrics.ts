@@ -35,10 +35,10 @@ function writeState(entries: MetricEntry[]): void {
 	}
 }
 
-/** Record a DENY/block/respond action with event name and reason. */
+/** Record a DENY/block/respond/respond-skipped action with event name and reason. */
 export function recordAction(
 	event: string,
-	type: "deny" | "block" | "respond",
+	type: "deny" | "block" | "respond" | "respond-skipped",
 	reason: string,
 ): void {
 	const entries = readState();
@@ -47,6 +47,24 @@ export function recordAction(
 		entries.splice(0, entries.length - MAX_ENTRIES);
 	}
 	writeState(entries);
+}
+
+/** Record a gate execution outcome (pass/fail). */
+export function recordGateOutcome(gate: string, passed: boolean): void {
+	try {
+		const entries = readState();
+		entries.push({
+			action: `gate:${passed ? "pass" : "fail"}`,
+			reason: gate,
+			at: new Date().toISOString(),
+		});
+		if (entries.length > MAX_ENTRIES) {
+			entries.splice(0, entries.length - MAX_ENTRIES);
+		}
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
 }
 
 /** Record a DENY resolution (pending-fix cleared after DENY). */
@@ -69,22 +87,30 @@ export function getMetricsSummary(): {
 	deny: number;
 	block: number;
 	respond: number;
+	respondSkipped: number;
 	resolution: number;
 	denyResolutionRate: number;
+	gatePassRate: number;
 	topReasons: { reason: string; count: number }[];
 } {
 	const entries = readState();
 	let deny = 0;
 	let block = 0;
 	let respond = 0;
+	let respondSkipped = 0;
 	let resolution = 0;
+	let gatePass = 0;
+	let gateFail = 0;
 	const reasonCounts = new Map<string, number>();
 
 	for (const e of entries) {
 		if (e.action.endsWith(":deny")) deny++;
 		else if (e.action.endsWith(":block")) block++;
 		else if (e.action.endsWith(":respond")) respond++;
+		else if (e.action.endsWith(":respond-skipped")) respondSkipped++;
 		else if (e.action.endsWith(":resolution")) resolution++;
+		else if (e.action === "gate:pass") gatePass++;
+		else if (e.action === "gate:fail") gateFail++;
 
 		reasonCounts.set(e.reason, (reasonCounts.get(e.reason) ?? 0) + 1);
 	}
@@ -94,12 +120,16 @@ export function getMetricsSummary(): {
 		.sort((a, b) => b.count - a.count)
 		.slice(0, 5);
 
+	const gateTotal = gatePass + gateFail;
+
 	return {
 		deny,
 		block,
 		respond,
+		respondSkipped,
 		resolution,
 		denyResolutionRate: deny > 0 ? Math.min(100, Math.round((resolution / deny) * 100)) : 0,
+		gatePassRate: gateTotal > 0 ? Math.round((gatePass / gateTotal) * 100) : 0,
 		topReasons,
 	};
 }

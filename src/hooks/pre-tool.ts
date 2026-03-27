@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
+import { getActivePlan } from "../state/plan-status.ts";
 import { isPaceRed, readLastReview, readLastTestPass, readPace } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { deny } from "./respond.ts";
@@ -36,8 +37,11 @@ function checkEditWrite(ev: HookEvent): void {
 	}
 
 	const pace = readPace();
-	if (isPaceRed(pace)) {
-		deny("35+ minutes without commit on 5+ files. Commit your current changes before continuing.");
+	const hasPlan = getActivePlan() !== null;
+	if (isPaceRed(pace, hasPlan)) {
+		deny(
+			"Long time without commit on many changed files. Commit your current changes before continuing.",
+		);
 	}
 }
 

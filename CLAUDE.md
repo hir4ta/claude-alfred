@@ -60,9 +60,9 @@ src/
 │   ├── post-compact.ts     # pending-fixes reminder (stderr)
 │   ├── session-end.ts      # pending-fixes log (stderr)
 │   ├── subagent-start.ts   # サブエージェントに品質ルール注入
-│   ├── subagent-stop.ts    # reviewer PASS/FAIL検証 + レビュー完了記録
+│   ├── subagent-stop.ts    # reviewer PASS/FAIL + Score検証 + レビュー完了記録
 │   ├── post-tool-failure.ts # ツール失敗追跡 + 2回連続→/clear
-│   └── config-change.ts    # user_settings 変更 DENY
+│   └── config-change.ts    # hook設定 変更 DENY (非hook設定は許可)
 ├── gates/
 │   ├── runner.ts           # gate コマンド実行
 │   ├── load.ts             # gates.json 読み込み
@@ -72,11 +72,11 @@ src/
 │   ├── session-state.ts    # 統合セッション状態 (pace, test, review, batch, fail, budget)
 │   ├── gate-history.ts     # gate 結果トレンド + コミット間隔統計
 │   ├── plan-status.ts      # Plan task status 解析
-│   └── metrics.ts          # DENY/block/respond 発火記録 (50件 cap)
+│   └── metrics.ts          # DENY/block/respond/gate-outcome 記録 (50件 cap)
 ├── templates/              # init が配置するファイル
 │   ├── skill-review.md     # /alfred:review skill
 │   ├── agent-reviewer.md   # reviewer agent (PASS/FAIL threshold)
-│   └── rules-quality.md    # 品質ルール
+│   └── rules-quality.md    # 品質ルール (適応型タスクスコープ)
 └── types.ts
 ```
 
@@ -97,7 +97,7 @@ task clean    # ビルド成果物削除
 1. **リサーチ駆動** — 効果が実証された手法のみ実装 (research-harness-engineering-2026.md)
 2. **壁 > 情報提示** — DENY (exit 2) > additionalContext
 3. **少ない方が強い** — コンテキスト注入は最小限。指示は20行以内
-4. **タスクサイズ制御** — 15 LOC以下・単一ファイル (SWE-bench: 80%+ 成功率)
+4. **タスクスコープ適応** — 計画なし: 1-2ファイル集中。計画あり: 計画の境界に従う
 5. **検証 > 指示** — 「何を検証すべきか」を伝える。HOW ではなく WHAT
 6. **fail-open** — 全 hook は try-catch で握りつぶす。alfred の障害で Claude を止めない
 7. **simplest solution** — 全コンポーネントは load-bearing 仮定を持つ。仮定が崩れたら削除
@@ -129,17 +129,26 @@ task clean    # ビルド成果物削除
 
 ### Sprint Contract (適応型)
 - Anthropic記事 (2026-03-24) では Opus 4.6 で sprint construct を削除。alfredも適応:
-  - **小Plan (≤3 tasks)**: File フィールドのみ必須。Success Criteria/Review Gates は任意
-  - **大Plan (4+ tasks)**: Success Criteria + Review Gates + Verify フィールド必須
+  - **小Plan (≤3 tasks)**: 構造要件なし。Verify あれば具体的であること
+  - **大Plan (4+ tasks)**: Success Criteria (具体的) + Verify フィールド (具体的) 必須
+  - Review Gates: Plan構造では不要。review は stop.ts/pre-tool.ts で機械的に強制
 - UserPromptSubmit: 大タスク (800+) は advisory (block ではない)
 - Stop: 小Plan の未完了タスクは警告のみ (block ではない)
-- reviewer は全 findings を報告 + Review: PASS/FAIL threshold。Judge (skill) のみが S/A/A フィルタを適用
-- reviewer に few-shot 例 + anti-self-persuasion 指示を配置
+- reviewer は全 findings を報告 + Review: PASS/FAIL + Score (Correctness/Design/Security 1-5)。Judge (skill) のみが S/A/A フィルタを適用
+- reviewer に few-shot 例 3つ + anti-self-persuasion 指示を配置
 
 ### 効果測定
 - DENY 発火時に metrics.json へ記録。fix 後に resolution を記録
-- `doctor --metrics`: DENY resolution rate (解決率) を表示
+- gate 実行結果 (pass/fail) を metrics.json へ記録
+- advisory skip (budget超過) を metrics.json へ記録
+- `doctor --metrics`: DENY resolution rate + gate pass rate + advisory skip数 を表示
 - `doctor --fix`: 壊れた state ファイルをデフォルト値にリセット
+
+### Pace 制限 (適応型)
+- デフォルト: 60分 + 8ファイル = RED → DENY
+- コミット3回以上: 平均間隔 × 2 (10-60分の範囲)
+- Plan あり: threshold × 1.5 (90分 / 12ファイルまで許容)
+- ConfigChange: hook設定のみ DENY。その他の user_settings 変更は許可
 
 ### Phase Gate (各コミット前に必ず実行)
 1. `bun vitest run` — 全テスト pass

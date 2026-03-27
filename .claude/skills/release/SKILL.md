@@ -67,9 +67,22 @@ Monitor:
 2. `gh run watch <run-id>` — watch until completion
 3. If CI fails → fix the issue, delete the tag (`git tag -d v<VERSION> && git push origin :refs/tags/v<VERSION>`), and re-release
 
+## Post-Release: Build & Install
+
+After CI succeeds, rebuild and install locally:
+
+```
+bun build.ts
+alfred init --force
+bun link
+alfred doctor
+```
+
+All 4 commands must succeed. `alfred doctor` must show all `[OK]`.
+
 ## Verify Release
 
-After CI succeeds:
+After post-release install:
 ```
 gh release view v<VERSION>
 ```

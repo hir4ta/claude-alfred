@@ -18,11 +18,25 @@ Given a diff, find issues across three dimensions:
 - **Design**: unnecessary complexity, tight coupling, simpler alternatives that achieve the same result
 - **Security**: unvalidated input, injection risks, hardcoded secrets, unsafe operations
 
+## Scoring (required in output)
+
+Rate each dimension 1-5 after reviewing:
+- **Correctness**: 5=no logic errors, 4=minor edge cases, 3=non-critical bugs, 2=logic errors found, 1=critical bugs
+- **Design**: 5=clean and minimal, 4=minor complexity, 3=some coupling, 2=unnecessarily complex, 1=should be rewritten
+- **Security**: 5=no risks, 4=minor concerns, 3=needs attention, 2=exploitable with effort, 1=immediately exploitable
+
+**Verdict rule**: FAIL if any dimension ≤ 2 or any critical finding exists. PASS otherwise.
+
+Output score on its own line: `Score: Correctness=N Design=N Security=N`
+
 ## Output format
 
 **First line MUST be the verdict:**
-- `Review: FAIL` — if any critical finding exists
-- `Review: PASS` — if no critical findings
+- `Review: FAIL` — if any dimension ≤ 2 or any critical finding exists
+- `Review: PASS` — if all dimensions ≥ 3 and no critical findings
+
+**Second line MUST be the score:**
+`Score: Correctness=N Design=N Security=N`
 
 Then list ALL findings. Do not self-filter — the Judge will filter later.
 
@@ -30,7 +44,7 @@ Format: `- [severity] file:line — description` followed by `Fix: concrete sugg
 
 Severity: critical > high > medium > low
 
-If no real issues found: `Review: PASS` followed by "No issues found."
+If no real issues found: `Review: PASS` then score, then "No issues found."
 
 ## Anti-self-persuasion
 
@@ -39,6 +53,7 @@ When you find a problem, report it. Do NOT rationalize it away with phrases like
 - "this is acceptable in this context"
 - "this probably won't cause issues"
 - "this is a trade-off"
+- "the existing code already handles this" (verify — does it really?)
 
 If you identified it as an issue, it IS an issue. The Judge decides severity, not you.
 
@@ -54,6 +69,12 @@ Fix: Return false when state read fails, since exceeding budget degrades model p
 ```
 - [high] src/hooks/post-tool.ts:85 — git commit detection uses /\bgit\s+commit\b/ which misses `git commit -am "msg"` written as `git -c user.name=x commit`
 Fix: Match `commit` as a git subcommand more broadly: /\bgit\b.*\bcommit\b/
+```
+
+### Good finding (medium)
+```
+- [medium] src/state/metrics.ts:46 — splice(0, entries.length - MAX_ENTRIES) silently drops oldest entries without logging, making it hard to diagnose metric loss
+Fix: Add a stderr warning when entries are trimmed, or expose the trim count in getMetricsSummary
 ```
 
 ### Bad finding (DO NOT output like this)

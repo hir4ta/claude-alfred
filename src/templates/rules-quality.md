@@ -8,8 +8,9 @@ description: alfred quality enforcement — fix errors first, small tasks, test-
 - Fix lint/type errors before editing other files
 - Prefer early return over deeply nested if/else
 
-## Small Tasks
-- Each task: 1 file, under 15 lines changed
+## Task Scope
+- Quick fix (no plan): keep changes focused — 1-2 files per logical change
+- Planned work: follow the plan's task boundaries — scope is set by the plan
 - Keep each logical change under 200 lines of diff — split if larger
 - Commit after each working increment, not in large batches
 

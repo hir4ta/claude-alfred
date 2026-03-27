@@ -37,8 +37,8 @@ describe("subagentStart", () => {
 
 		const context = getContext();
 		expect(context).toBeDefined();
-		expect(context).toContain("task");
-		expect(context).toContain("15");
+		expect(context).toContain("focused");
+		expect(context).toContain("Commit");
 	});
 
 	it("injects pending-fixes warning when fixes exist", async () => {

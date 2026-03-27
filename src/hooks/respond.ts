@@ -17,7 +17,14 @@ function estimateTokens(text: string): number {
  * Only valid for: PostToolUse, UserPromptSubmit, SessionStart, SubagentStart, PostToolUseFailure */
 export function respond(context: string): void {
 	const tokens = estimateTokens(context);
-	if (!checkBudget(tokens)) return; // budget exceeded → skip (fail-open)
+	if (!checkBudget(tokens)) {
+		try {
+			recordAction(_currentEvent, "respond-skipped", context.slice(0, 100));
+		} catch {
+			/* fail-open */
+		}
+		return;
+	}
 
 	recordInjection(tokens);
 	try {

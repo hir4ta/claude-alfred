@@ -51,7 +51,8 @@ describe("userPrompt", () => {
 		expect(response).not.toBeNull();
 		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
 		expect(context).toContain("## Tasks");
-		expect(context).toContain("Review Gates");
+		expect(context).toContain("enforced by the harness");
+		expect(context).not.toContain("Review Gates");
 	});
 
 	it("injects compact template for medium plan prompt (200-500 chars)", async () => {

@@ -5,8 +5,8 @@ import { getCommitStats } from "./gate-history.ts";
 const STATE_DIR = ".alfred/.state";
 const FILE = "session-state.json";
 const BUDGET = 2000;
-const DEFAULT_RED_MINUTES = 35;
-const DEFAULT_FILES = 5;
+const DEFAULT_RED_MINUTES = 60;
+const DEFAULT_FILES = 8;
 
 export interface SessionState {
 	// Pace tracking
@@ -116,12 +116,16 @@ export function getRedThreshold(): number {
 	return DEFAULT_RED_MINUTES;
 }
 
-export function isPaceRed(pace: { last_commit_at: string; changed_files: number } | null): boolean {
+export function isPaceRed(
+	pace: { last_commit_at: string; changed_files: number } | null,
+	hasPlan = false,
+): boolean {
 	if (!pace) return false;
 	const elapsed = Date.now() - new Date(pace.last_commit_at).getTime();
 	const minutes = elapsed / 60_000;
-	const threshold = getRedThreshold();
-	return minutes >= threshold && pace.changed_files >= DEFAULT_FILES;
+	const threshold = hasPlan ? getRedThreshold() * 1.5 : getRedThreshold();
+	const fileThreshold = hasPlan ? Math.ceil(DEFAULT_FILES * 1.5) : DEFAULT_FILES;
+	return minutes >= threshold && pace.changed_files >= fileThreshold;
 }
 
 // --- Test pass ---

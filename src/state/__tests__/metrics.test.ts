@@ -65,6 +65,28 @@ describe("metrics", () => {
 		expect(summary.deny).toBe(0);
 		expect(summary.block).toBe(0);
 		expect(summary.respond).toBe(0);
+		expect(summary.gatePassRate).toBe(0);
+		expect(summary.respondSkipped).toBe(0);
 		expect(summary.topReasons).toHaveLength(0);
+	});
+
+	it("records gate outcomes and computes pass rate", async () => {
+		const { recordGateOutcome, getMetricsSummary } = await import("../metrics.ts");
+		recordGateOutcome("lint", true);
+		recordGateOutcome("typecheck", true);
+		recordGateOutcome("lint", false);
+		recordGateOutcome("lint", true);
+
+		const summary = getMetricsSummary();
+		expect(summary.gatePassRate).toBe(75); // 3 pass / 4 total
+	});
+
+	it("tracks respond-skipped in summary", async () => {
+		const { recordAction, getMetricsSummary } = await import("../metrics.ts");
+		recordAction("post-tool", "respond-skipped", "budget exceeded");
+		recordAction("session-start", "respond-skipped", "budget exceeded");
+
+		const summary = getMetricsSummary();
+		expect(summary.respondSkipped).toBe(2);
 	});
 });

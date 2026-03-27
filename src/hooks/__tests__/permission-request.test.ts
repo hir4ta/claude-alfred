@@ -67,7 +67,7 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("denies large plan without review gates", async () => {
+	it("allows large plan without review gates (review is enforced mechanically)", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
@@ -94,20 +94,12 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		);
 
 		const handler = (await import("../permission-request.ts")).default;
-		try {
-			await handler({
-				hook_type: "PermissionRequest",
-				tool: { name: "ExitPlanMode" },
-			});
-		} catch {
-			// process.exit(2)
-		}
+		await handler({
+			hook_type: "PermissionRequest",
+			tool: { name: "ExitPlanMode" },
+		});
 
-		expect(exitCode).toBe(2);
-		const response = getResponse();
-		const reason = (response?.hookSpecificOutput as Record<string, string>)
-			?.permissionDecisionReason;
-		expect(reason).toContain("Review");
+		expect(exitCode).toBeNull();
 	});
 
 	it("allows small plan without review gates or success criteria", async () => {
@@ -133,7 +125,7 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("denies plan with tasks missing File field", async () => {
+	it("allows plan without explicit File field (models include paths naturally)", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
@@ -142,23 +134,13 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"## Tasks",
 				"### Task 1: Add helper [pending]",
 				"- Verify: src/__tests__/helper.test.ts:testHelper",
-				"## Review Gates",
-				"- [ ] Final Review",
 			].join("\n"),
 		);
 
 		const handler = (await import("../permission-request.ts")).default;
-		try {
-			await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
-		} catch {
-			// exit(2)
-		}
+		await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
 
-		expect(exitCode).toBe(2);
-		const response = getResponse();
-		const reason = (response?.hookSpecificOutput as Record<string, string>)
-			?.permissionDecisionReason;
-		expect(reason).toContain("File");
+		expect(exitCode).toBeNull();
 	});
 
 	it("denies large plan with tasks missing Verify field", async () => {

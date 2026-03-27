@@ -6,12 +6,10 @@ import { deny } from "./respond.ts";
 // Task header: ### Task N: name [status]
 const TASK_HEADER_RE = /^###\s+Task\s+\d+:/m;
 // Field patterns (with or without bold)
-const FILE_FIELD_RE = /^\s*-\s+\*{0,2}File\*{0,2}:/m;
 const VERIFY_FIELD_RE = /^\s*-\s+\*{0,2}Verify\*{0,2}:/m;
 // Verify field must contain a specific file path or command, not just generic text
 const VERIFY_SPECIFIC_RE =
 	/^\s*-\s+\*{0,2}Verify\*{0,2}:\s*\S+.*\.(ts|tsx|js|jsx|py|go|rs|rb|java|kt|swift|c|cpp|h|test|spec|json|toml|yaml|yml|sh)\b/m;
-const REVIEW_GATE_RE = /review.*gate/i;
 const SUCCESS_CRITERIA_RE = /success\s*criteria/i;
 // A concrete criterion references a command (backticks) or file path
 const CONCRETE_CRITERION_RE = /`[^`]+`|\.(ts|js|py|go|rs|tsx|jsx|rb|java|sh)\b/;
@@ -55,17 +53,12 @@ function validatePlanStructure(content: string): string[] {
 			}
 		}
 
-		// Large plans: check Review Gates
-		if (!REVIEW_GATE_RE.test(content)) {
-			problems.push("- Missing Review Gates section");
-		}
+		// Review Gates: no longer required — review is enforced mechanically by stop.ts and pre-tool.ts
 	}
 
 	// Check each task has required fields
 	for (const section of taskSections) {
-		if (!FILE_FIELD_RE.test(section.body)) {
-			problems.push(`- Task "${section.name}": missing File field`);
-		}
+		// File field: no longer required — models naturally include file paths
 		if (!isSmallPlan) {
 			// Large plans: require Verify field with specificity
 			if (!VERIFY_FIELD_RE.test(section.body)) {

@@ -10,7 +10,7 @@ export default async function subagentStart(_ev: HookEvent): Promise<void> {
 
 	// Core quality rules
 	lines.push(
-		"Quality rules: Each task should change 1 file, under 15 lines. Verify with tests. Commit after each working increment.",
+		"Quality rules: Keep changes focused. Verify with tests. Commit after each working increment.",
 	);
 
 	// Pending fixes warning

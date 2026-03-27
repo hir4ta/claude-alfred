@@ -193,11 +193,19 @@ function showMetrics(): void {
 		}
 	}
 
-	if (summary.deny > 0) {
+	if (summary.deny > 0 || summary.gatePassRate > 0) {
 		console.log("\n  Effectiveness:");
-		console.log(
-			`    DENY resolution: ${summary.resolution}/${summary.deny} (${summary.denyResolutionRate}%)`,
-		);
+		if (summary.deny > 0) {
+			console.log(
+				`    DENY resolution: ${summary.resolution}/${summary.deny} (${summary.denyResolutionRate}%)`,
+			);
+		}
+		if (summary.gatePassRate > 0) {
+			console.log(`    Gate pass rate: ${summary.gatePassRate}%`);
+		}
+		if (summary.respondSkipped > 0) {
+			console.log(`    Advisory skipped (budget): ${summary.respondSkipped}`);
+		}
 	}
 }
 

@@ -8,6 +8,7 @@ const FINDING_RE = /\[(critical|high|medium|low)\]/i;
 const NO_ISSUES_RE = /no issues found/i;
 const REVIEW_PASS_RE = /^Review:\s*PASS/im;
 const REVIEW_FAIL_RE = /^Review:\s*FAIL/im;
+const SCORE_RE = /Score:\s*Correctness=\d\s+Design=\d\s+Security=\d/i;
 
 /** SubagentStop: verify subagent output quality */
 export default async function subagentStop(ev: HookEvent): Promise<void> {
@@ -30,12 +31,16 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 }
 
 function validateReviewer(output: string): void {
-	// Accept structured output: Review: PASS/FAIL, findings, or "No issues found"
 	const hasVerdict = REVIEW_PASS_RE.test(output) || REVIEW_FAIL_RE.test(output);
 	const hasFindings = FINDING_RE.test(output) || NO_ISSUES_RE.test(output);
-	if (hasVerdict || hasFindings) return;
+	const hasScore = SCORE_RE.test(output);
+
+	// Accept if: findings present (backward compat) OR verdict + score
+	if (hasFindings) return;
+	if (hasVerdict && hasScore) return;
+
 	block(
-		"Reviewer output must start with 'Review: PASS' or 'Review: FAIL', contain findings ([severity] file:line), or 'No issues found'. Rerun the review with structured output.",
+		"Reviewer output must include: (1) 'Review: PASS' or 'Review: FAIL', (2) 'Score: Correctness=N Design=N Security=N', and (3) findings ([severity] file:line) or 'No issues found'. Rerun the review.",
 	);
 }
 
@@ -44,11 +49,8 @@ function validatePlan(): void {
 	if (!content) return; // fail-open: no plan file found
 
 	const hasTasks = content.includes("## Tasks");
-	const hasReview = /review/i.test(content) && /gates?/i.test(content);
-	if (hasTasks && hasReview) return;
+	if (hasTasks) return;
 
-	const missing: string[] = [];
-	if (!hasTasks) missing.push("## Tasks");
-	if (!hasReview) missing.push("Review Gates");
-	block(`Plan is missing required sections: ${missing.join(", ")}. Add them before exiting.`);
+	// Review Gates no longer required — review is enforced mechanically by stop.ts and pre-tool.ts
+	block("Plan is missing required section: ## Tasks. Add it before exiting.");
 }

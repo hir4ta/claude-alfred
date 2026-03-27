@@ -201,11 +201,11 @@ describe("Scenario 4: Git commit resets pace", () => {
 });
 
 describe("Scenario 5: Pace red zone blocks edits", () => {
-	it("35+ min without commit on 5+ files → DENY", async () => {
+	it("60+ min without commit on 8+ files → DENY", async () => {
 		setupPassingGates();
 		writePace({
-			last_commit_at: new Date(Date.now() - 40 * 60_000).toISOString(),
-			changed_files: 8,
+			last_commit_at: new Date(Date.now() - 65 * 60_000).toISOString(),
+			changed_files: 9,
 			tool_calls: 50,
 		});
 
@@ -252,15 +252,12 @@ describe("Scenario 6: Plan mode → template injected with review gates", () => 
 		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
 		expect(context).toBeDefined();
 		// Must contain task structure guidance
-		expect(context).toContain("1 file");
-		expect(context).toContain("15 lines");
+		expect(context).toContain("focused");
 		expect(context).toContain("Verify");
 		// Must contain success criteria
 		expect(context).toContain("Success Criteria");
-		// Must contain review gates (full template for 500+ chars)
-		expect(context).toContain("Design Review");
-		expect(context).toContain("Phase Review");
-		expect(context).toContain("Final Review");
+		// Full template: automatic review enforcement note
+		expect(context).toContain("enforced by the harness");
 		expect(context).toContain("/alfred:review");
 	});
 });
@@ -308,44 +305,43 @@ describe("Scenario 7: Normal mode large task → advisory to use plan mode", () 
 	});
 });
 
-describe("Scenario 8: ExitPlanMode → plan without File field is DENIED", () => {
-	it("plan with File field passes, plan without is denied", async () => {
+describe("Scenario 8: ExitPlanMode → small plan passes, vague Verify in large plan is DENIED", () => {
+	it("small plan passes without File field; large plan with vague Verify is denied", async () => {
 		const permReq = (await import("../hooks/permission-request.ts")).default;
 
-		// Create plan directory with a plan that HAS review gates
+		// Create plan directory with a small plan (no File field — should pass)
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 
 		writeFileSync(
-			join(planDir, "good-plan.md"),
-			[
-				"## Context",
-				"Adding auth feature",
-				"",
-				"## Tasks",
-				"### Task 1: Add auth middleware",
-				"- File: src/middleware.ts",
-				"- Verify: src/__tests__/middleware.test.ts:authMiddleware",
-				"",
-				"## Success Criteria",
-				"- [ ] `bun vitest run` all tests pass",
-				"## Review Gates",
-				"- [ ] Design Review: /alfred:review",
-				"- [ ] Final Review: /alfred:review",
-			].join("\n"),
+			join(planDir, "small-plan.md"),
+			["## Context", "Quick fix", "", "## Tasks", "### Task 1: Fix bug"].join("\n"),
 		);
 
-		// ExitPlanMode — should pass
+		// ExitPlanMode — small plan should pass
 		await permReq({
 			hook_type: "PermissionRequest",
 			tool: { name: "ExitPlanMode" },
 		});
 		expect(exitCode).toBeNull();
 
-		// Now replace with a plan that has NO review gates
+		// Now replace with a large plan that has vague Verify fields
 		writeFileSync(
-			join(planDir, "good-plan.md"),
-			["## Context", "Quick fix", "", "## Tasks", "### Task 1: Fix bug"].join("\n"),
+			join(planDir, "small-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add feature",
+				"- Verify: check it works",
+				"### Task 2: Add tests",
+				"- Verify: run tests",
+				"### Task 3: Update docs",
+				"- Verify: looks good",
+				"### Task 4: Final cleanup",
+				"- Verify: all done",
+				"",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
+			].join("\n"),
 		);
 
 		stdoutCapture = [];
@@ -364,7 +360,7 @@ describe("Scenario 8: ExitPlanMode → plan without File field is DENIED", () =>
 		const response = getResponse();
 		const reason = (response?.hookSpecificOutput as Record<string, string>)
 			?.permissionDecisionReason;
-		expect(reason).toContain("File");
+		expect(reason).toContain("Verify");
 	});
 });
 
@@ -457,7 +453,7 @@ describe("Scenario 9: Full flow — plan mode → implement → gate → deny �
 		expect(planResponse).not.toBeNull();
 		expect(
 			(planResponse?.hookSpecificOutput as Record<string, string>)?.additionalContext,
-		).toContain("Review Gates");
+		).toContain("enforced by the harness");
 
 		// Step 2: Claude implements (edit) → lint fails → pending-fixes
 		stdoutCapture = [];
@@ -859,7 +855,7 @@ describe("Scenario 19: SubagentStart injects quality context", () => {
 		const response = getResponse();
 		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
 		expect(context).toBeDefined();
-		expect(context).toContain("15 lines");
+		expect(context).toContain("focused");
 		expect(context).toContain("broken.ts");
 		expect(context).toContain("pending");
 	});
@@ -889,18 +885,27 @@ describe("Scenario 20: PostToolUseFailure tracks consecutive errors", () => {
 	});
 });
 
-describe("Scenario 21: ConfigChange blocks user_settings modification", () => {
+describe("Scenario 21: ConfigChange blocks hook modification", () => {
 	it("prevents Claude from removing hooks", async () => {
 		const configChange = (await import("../hooks/config-change.ts")).default;
 		try {
 			await configChange({
 				hook_type: "ConfigChange",
-				tool_input: { source: "user_settings" },
+				tool_input: { source: "user_settings", key: "hooks" },
 			});
 		} catch {
 			// exit(2)
 		}
 		expect(exitCode).toBe(2);
+	});
+
+	it("allows non-hook user_settings changes", async () => {
+		const configChange = (await import("../hooks/config-change.ts")).default;
+		await configChange({
+			hook_type: "ConfigChange",
+			tool_input: { source: "user_settings", key: "model" },
+		});
+		expect(exitCode).toBeNull();
 	});
 });
 

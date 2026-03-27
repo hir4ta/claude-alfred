@@ -1,5 +1,7 @@
 # alfred v0.1.0 設計書
 
+> **注意**: これは v0.1.0 時点の設計書です。v0.9.0 以降、タスクサイズ制限 (15 LOC / 単一ファイル) は適応型に変更、Review Gates は Plan 構造要件から削除、Pace デフォルトは 60分/8ファイルに緩和されています。最新の設計は CLAUDE.md と ROADMAP.md を参照してください。
+
 Claude Code の性能を倍増させる執事。13 Hooks + Skill + Agent。
 
 ## 思想

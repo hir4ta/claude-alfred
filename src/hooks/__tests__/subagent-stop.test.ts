@@ -102,6 +102,31 @@ describe("subagentStop", () => {
 		expect(exitCode).toBeNull();
 	});
 
+	it("allows alfred-reviewer with PASS verdict + Score line", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		await handler({
+			hook_type: "SubagentStop",
+			agent_type: "alfred-reviewer",
+			last_assistant_message:
+				"Review: PASS\nScore: Correctness=5 Design=4 Security=5\n\nNo major issues.",
+		});
+		expect(exitCode).toBeNull();
+	});
+
+	it("blocks alfred-reviewer with PASS verdict but no Score or findings", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "alfred-reviewer",
+				last_assistant_message: "Review: PASS\n\nThe code looks good overall.",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+	});
+
 	it("blocks Plan agent when plan file lacks required sections", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
@@ -120,12 +145,12 @@ describe("subagentStop", () => {
 		expect(exitCode).toBe(2);
 	});
 
-	it("allows Plan agent when plan file has Tasks and Review Gates", async () => {
+	it("allows Plan agent when plan file has Tasks section", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
 			join(planDir, "good-plan.md"),
-			"## Context\nAdding auth\n\n## Tasks\n### Task 1: Add middleware [pending]\n\n## Review Gates\n- [ ] Final Review",
+			"## Context\nAdding auth\n\n## Tasks\n### Task 1: Add middleware [pending]",
 		);
 
 		const handler = (await import("../subagent-stop.ts")).default;
