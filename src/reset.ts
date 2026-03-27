@@ -2,7 +2,7 @@ import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 
-const KEEP_ON_HISTORY = ["gate-history.json", "metrics.json"];
+const KEEP_ON_HISTORY = ["gate-history.json", "metrics.json", "session-outcomes.json"];
 
 export function runReset(keepHistory: boolean): { deleted: number; kept: number } {
 	const stateDir = join(process.cwd(), ".alfred", ".state");

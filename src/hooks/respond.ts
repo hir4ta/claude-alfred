@@ -1,5 +1,5 @@
-import { checkBudget, recordInjection } from "../state/context-budget.ts";
 import { recordAction } from "../state/metrics.ts";
+import { checkBudget, incrementActionCount, recordInjection } from "../state/session-state.ts";
 import type { HookResponse } from "../types.ts";
 
 /** Current hook event name, set by dispatcher before calling handler */
@@ -22,6 +22,7 @@ export function respond(context: string): void {
 	recordInjection(tokens);
 	try {
 		recordAction(_currentEvent, "respond", context.slice(0, 100));
+		incrementActionCount("respond");
 	} catch {
 		/* fail-open */
 	}
@@ -38,6 +39,7 @@ export function respond(context: string): void {
 export function deny(reason: string): never {
 	try {
 		recordAction(_currentEvent, "deny", reason.slice(0, 100));
+		incrementActionCount("deny");
 	} catch {
 		/* fail-open */
 	}
@@ -58,6 +60,7 @@ export function deny(reason: string): never {
 export function block(reason: string): never {
 	try {
 		recordAction(_currentEvent, "block", reason.slice(0, 100));
+		incrementActionCount("block");
 	} catch {
 		/* fail-open */
 	}

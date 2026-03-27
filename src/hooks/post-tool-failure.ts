@@ -1,4 +1,4 @@
-import { recordFailure } from "../state/fail-count.ts";
+import { recordFailure } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { respond } from "./respond.ts";
 

@@ -67,7 +67,7 @@ function validatePlanStructure(content: string): string[] {
 			problems.push(`- Task "${section.name}": missing Verify field`);
 		} else if (!VERIFY_SPECIFIC_RE.test(section.body)) {
 			problems.push(
-				`- Task "${section.name}": Verify field must reference a specific file or command (e.g., "Verify: bun vitest run src/__tests__/foo.test.ts")`,
+				`- Task "${section.name}": Verify field must reference a specific file or command (e.g., "Verify: src/__tests__/foo.test.ts:testFunction")`,
 			);
 		}
 	}

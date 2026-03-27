@@ -1,4 +1,4 @@
-import { resetBudget } from "../state/context-budget.ts";
+import { resetBudget } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { setCurrentEvent } from "./respond.ts";
 

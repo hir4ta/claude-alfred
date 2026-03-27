@@ -1,9 +1,7 @@
 import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
-import { readLastReview } from "../state/last-review.ts";
-import { readLastTestPass } from "../state/last-test-pass.ts";
-import { isPaceRed, readPace } from "../state/pace.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
+import { isPaceRed, readLastReview, readLastTestPass, readPace } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { deny } from "./respond.ts";
 

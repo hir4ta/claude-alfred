@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { defineCommand } from "citty";
 import { ALFRED_HOOKS } from "./init.ts";
 import { getMetricsSummary, readMetrics } from "./state/metrics.ts";
+import { getOutcomeSummary } from "./state/session-outcomes.ts";
 import type { GatesConfig } from "./types.ts";
 
 export type CheckStatus = "ok" | "fail" | "warn";
@@ -98,15 +99,11 @@ function checkGates(): CheckResult {
 
 const KNOWN_STATE_FILES = new Set([
 	"pending-fixes.json",
-	"session-pace.json",
-	"gate-batch.json",
+	"session-state.json",
 	"gate-history.json",
-	"context-budget.json",
-	"fail-count.json",
 	"handoff.json",
-	"last-test-pass.json",
-	"last-review.json",
 	"metrics.json",
+	"session-outcomes.json",
 ]);
 
 function checkStateDir(): CheckResult {
@@ -197,6 +194,15 @@ function showMetrics(): void {
 		for (const r of summary.topReasons) {
 			console.log(`    ${r.count}x  ${r.reason}`);
 		}
+	}
+
+	const outcomes = getOutcomeSummary();
+	if (outcomes) {
+		console.log(`\n--- Session Outcomes (last ${outcomes.total}) ---`);
+		console.log(`  Clean exits: ${outcomes.cleanRate}% (${outcomes.clean}/${outcomes.total})`);
+		console.log(
+			`  Avg pending: ${outcomes.avgStartingPending} at start → ${outcomes.avgEndingPending} at end`,
+		);
 	}
 }
 

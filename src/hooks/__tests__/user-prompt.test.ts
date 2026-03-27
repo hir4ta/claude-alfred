@@ -99,26 +99,37 @@ describe("userPrompt", () => {
 		}
 	});
 
-	it("suggests plan mode for large tasks in normal mode", async () => {
+	it("blocks large tasks in normal mode with plan mode suggestion", async () => {
+		let exitCode: number | null = null;
+		vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		vi.spyOn(process, "exit").mockImplementation((code) => {
+			exitCode = code as number;
+			throw new Error(`process.exit(${code})`);
+		});
+
 		const handler = (await import("../user-prompt.ts")).default;
 
-		// Long prompt with multiple files mentioned
+		// Very long prompt (>500 chars) to trigger block
 		const longPrompt =
 			"implement authentication with JWT tokens, add login endpoint, signup endpoint, " +
 			"middleware for protected routes, update user model, add password hashing, " +
-			"create refresh token logic, update the database schema, add tests for all endpoints";
+			"create refresh token logic, update the database schema, add tests for all endpoints, " +
+			"implement rate limiting on all auth endpoints with sliding window algorithm, " +
+			"add CORS configuration for frontend origin, create API documentation with OpenAPI spec, " +
+			"set up email verification flow with confirmation links, add two-factor authentication support, " +
+			"implement password reset with secure token generation and expiry";
 
-		await handler({
-			hook_type: "UserPromptSubmit",
-			prompt: longPrompt,
-		});
-
-		const response = getResponse();
-		if (response) {
-			const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
-			if (context) {
-				expect(context.toLowerCase()).toContain("plan");
-			}
+		try {
+			await handler({
+				hook_type: "UserPromptSubmit",
+				prompt: longPrompt,
+			});
+		} catch {
+			// process.exit(2)
 		}
+
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		expect((response as Record<string, string>)?.reason?.toLowerCase()).toContain("plan");
 	});
 });

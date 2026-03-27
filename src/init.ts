@@ -168,6 +168,19 @@ export async function runInit(force: boolean): Promise<void> {
 	const pendingPath = join(alfredDir, ".state", "pending-fixes.json");
 	writeFileSync(pendingPath, "[]");
 
+	// 5. Add .alfred/ to .gitignore if not already present
+	const gitignorePath = join(process.cwd(), ".gitignore");
+	try {
+		const gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+		if (!gitignore.includes(".alfred/") && !gitignore.includes(".alfred\n")) {
+			const newline = gitignore.length > 0 && !gitignore.endsWith("\n") ? "\n" : "";
+			writeFileSync(gitignorePath, `${gitignore}${newline}.alfred/\n`);
+			console.log("  + .alfred/ added to .gitignore");
+		}
+	} catch {
+		// fail-open
+	}
+
 	console.log("\nalfred init complete.");
 }
 

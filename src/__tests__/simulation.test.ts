@@ -1,8 +1,8 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readPace, writePace } from "../state/pace.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
+import { readPace, writePace } from "../state/session-state.ts";
 import type { GatesConfig } from "../types.ts";
 
 /**
@@ -260,27 +260,32 @@ describe("Scenario 6: Plan mode → template injected with review gates", () => 
 	});
 });
 
-describe("Scenario 7: Normal mode large task → plan mode suggestion", () => {
-	it("long prompt triggers plan suggestion", async () => {
+describe("Scenario 7: Normal mode large task → blocked with plan mode requirement", () => {
+	it("long prompt blocks with plan mode requirement", async () => {
 		const userPrompt = (await import("../hooks/user-prompt.ts")).default;
 
+		// >500 chars to trigger block
 		const longPrompt =
 			"Implement a complete authentication system with JWT tokens, refresh tokens, " +
 			"login and signup endpoints, middleware for protected routes, password hashing with bcrypt, " +
 			"update the user model to include password fields, add rate limiting on auth endpoints, " +
-			"create integration tests for all auth flows, update the API documentation";
+			"create integration tests for all auth flows, update the API documentation, " +
+			"implement CORS configuration, add email verification with confirmation links, " +
+			"set up two-factor authentication support, add password reset with secure tokens, " +
+			"implement session management with Redis-backed token storage and sliding expiry";
 
-		await userPrompt({
-			hook_type: "UserPromptSubmit",
-			prompt: longPrompt,
-		});
+		try {
+			await userPrompt({
+				hook_type: "UserPromptSubmit",
+				prompt: longPrompt,
+			});
+		} catch {
+			// process.exit(2)
+		}
 
+		expect(exitCode).toBe(2);
 		const response = getResponse();
-		expect(response).not.toBeNull();
-
-		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
-		expect(context).toBeDefined();
-		expect(context!.toLowerCase()).toContain("plan");
+		expect((response as Record<string, string>)?.reason?.toLowerCase()).toContain("plan");
 	});
 
 	it("short prompt does NOT trigger plan suggestion", async () => {
@@ -695,7 +700,7 @@ describe("Scenario 16: Plan status tracking — Stop blocks on incomplete plan",
 				"- [x] Final Review",
 			].join("\n"),
 		);
-		const { recordReview: rr16 } = await import("../state/last-review.ts");
+		const { recordReview: rr16 } = await import("../state/session-state.ts");
 		rr16();
 
 		stdoutCapture = [];
@@ -762,7 +767,7 @@ describe("Scenario 17: Full E2E — plan → implement → status update → sto
 		);
 
 		// Step 5: Record review + Stop should allow
-		const { recordReview: rr17 } = await import("../state/last-review.ts");
+		const { recordReview: rr17 } = await import("../state/session-state.ts");
 		rr17();
 		stdoutCapture = [];
 		exitCode = null;
@@ -849,7 +854,7 @@ describe("Scenario 18: TaskCompleted auto-syncs plan status", () => {
 		);
 
 		// Record review + Now stop should allow
-		const { recordReview: rr18 } = await import("../state/last-review.ts");
+		const { recordReview: rr18 } = await import("../state/session-state.ts");
 		rr18();
 		stdoutCapture = [];
 		exitCode = null;
@@ -1002,8 +1007,8 @@ describe("Scenario 24: run_once_per_batch skips typecheck on 2nd edit", () => {
 		};
 		writeFileSync(join(ALFRED_DIR, "gates.json"), JSON.stringify(gates));
 
-		const { clearBatch, readBatch } = await import("../state/gate-batch.ts");
-		clearBatch();
+		const { clearOnCommit, readSessionState } = await import("../state/session-state.ts");
+		clearOnCommit();
 
 		const postTool = (await import("../hooks/post-tool.ts")).default;
 
@@ -1015,10 +1020,9 @@ describe("Scenario 24: run_once_per_batch skips typecheck on 2nd edit", () => {
 			tool_input: { file_path: join(TEST_DIR, "src/a.ts") },
 		});
 
-		const batch1 = readBatch();
-		expect(batch1).not.toBeNull();
-		expect(batch1!.typecheck).toBeDefined();
-		expect(batch1!.typecheck!.session_id).toBe("test-session");
+		const state1 = readSessionState();
+		expect(state1.ran_gates.typecheck).toBeDefined();
+		expect(state1.ran_gates.typecheck!.session_id).toBe("test-session");
 
 		// Second edit — typecheck skipped (batch hit), lint still runs
 		stdoutCapture = [];
@@ -1030,8 +1034,8 @@ describe("Scenario 24: run_once_per_batch skips typecheck on 2nd edit", () => {
 		});
 
 		// Batch still has typecheck entry
-		const batch2 = readBatch();
-		expect(batch2!.typecheck!.session_id).toBe("test-session");
+		const state2 = readSessionState();
+		expect(state2.ran_gates.typecheck!.session_id).toBe("test-session");
 
 		// Git commit — clears batch
 		stdoutCapture = [];
@@ -1041,9 +1045,8 @@ describe("Scenario 24: run_once_per_batch skips typecheck on 2nd edit", () => {
 			tool_input: { command: "git commit -m 'test'" },
 		});
 
-		const batch3 = readBatch();
-		expect(batch3).not.toBeNull();
-		expect(batch3!.typecheck).toBeUndefined();
+		const state3 = readSessionState();
+		expect(state3.ran_gates.typecheck).toBeUndefined();
 	});
 });
 
@@ -1101,8 +1104,8 @@ describe("Scenario 26: git commit DENIED without test pass", () => {
 			on_commit: { test: { command: "echo 'OK' && exit 0", timeout: 3000 } },
 		};
 		writeFileSync(join(ALFRED_DIR, "gates.json"), JSON.stringify(gates));
-		const { clearTestPass, recordTestPass } = await import("../state/last-test-pass.ts");
-		clearTestPass();
+		const { clearOnCommit, recordTestPass } = await import("../state/session-state.ts");
+		clearOnCommit();
 
 		const preTool = (await import("../hooks/pre-tool.ts")).default;
 
@@ -1134,7 +1137,7 @@ describe("Scenario 26: git commit DENIED without test pass", () => {
 		expect(exitCode).toBe(2);
 
 		// Record review → now allow
-		const { recordReview } = await import("../state/last-review.ts");
+		const { recordReview, readLastTestPass } = await import("../state/session-state.ts");
 		recordReview();
 		stdoutCapture = [];
 		exitCode = null;
@@ -1154,7 +1157,6 @@ describe("Scenario 26: git commit DENIED without test pass", () => {
 			tool_input: { command: "git commit -m 'done'" },
 		});
 
-		const { readLastTestPass } = await import("../state/last-test-pass.ts");
 		expect(readLastTestPass()).toBeNull();
 	});
 });
@@ -1180,8 +1182,10 @@ describe("Scenario 27: Stop blocks without review when plan exists", () => {
 			].join("\n"),
 		);
 
-		const { clearReview, recordReview } = await import("../state/last-review.ts");
-		clearReview();
+		const { clearOnCommit: clearReview27, recordReview } = await import(
+			"../state/session-state.ts"
+		);
+		clearReview27();
 
 		const stop = (await import("../hooks/stop.ts")).default;
 

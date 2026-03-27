@@ -76,8 +76,8 @@ export function parseVerifyFields(content: string): VerifyField[] {
 	return verifies;
 }
 
-/** Find and parse the latest plan file. Returns null if no plan found. */
-export function getActivePlan(): { tasks: PlanTask[]; path: string } | null {
+/** Get the path of the latest plan file (by mtime). Returns null if none found. */
+function getLatestPlanPath(): string | null {
 	try {
 		const planDir = join(process.cwd(), ".claude", "plans");
 		if (!existsSync(planDir)) return null;
@@ -91,14 +91,35 @@ export function getActivePlan(): { tasks: PlanTask[]; path: string } | null {
 			.sort((a, b) => b.mtime - a.mtime);
 
 		if (files.length === 0) return null;
+		return join(planDir, files[0]!.name);
+	} catch {
+		return null;
+	}
+}
 
-		const path = join(planDir, files[0]!.name);
+/** Find and parse the latest plan file. Returns null if no plan found or no tasks. */
+export function getActivePlan(): { tasks: PlanTask[]; path: string } | null {
+	const path = getLatestPlanPath();
+	if (!path) return null;
+
+	try {
 		const content = readFileSync(path, "utf-8");
 		const tasks = parsePlanTasks(content);
-
 		if (tasks.length === 0) return null;
 		return { tasks, path };
 	} catch {
 		return null; // fail-open
+	}
+}
+
+/** Get the content of the latest plan file. Returns null if no plan found. */
+export function getLatestPlanContent(): string | null {
+	const path = getLatestPlanPath();
+	if (!path) return null;
+
+	try {
+		return readFileSync(path, "utf-8");
+	} catch {
+		return null;
 	}
 }

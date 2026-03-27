@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -102,13 +102,17 @@ describe("subagentStop", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("blocks Plan agent without required sections", async () => {
+	it("blocks Plan agent when plan file lacks required sections", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(join(planDir, "bad-plan.md"), "## Context\n- Do stuff\n- Do more stuff");
+
 		const handler = (await import("../subagent-stop.ts")).default;
 		try {
 			await handler({
 				hook_type: "SubagentStop",
 				agent_type: "Plan",
-				last_assistant_message: "Here is my plan:\n- Do stuff\n- Do more stuff",
+				last_assistant_message: "I created a plan.",
 			});
 		} catch {
 			// process.exit(2)
@@ -116,13 +120,29 @@ describe("subagentStop", () => {
 		expect(exitCode).toBe(2);
 	});
 
-	it("allows Plan agent with Tasks and Review Gates", async () => {
+	it("allows Plan agent when plan file has Tasks and Review Gates", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "good-plan.md"),
+			"## Context\nAdding auth\n\n## Tasks\n### Task 1: Add middleware [pending]\n\n## Review Gates\n- [ ] Final Review",
+		);
+
 		const handler = (await import("../subagent-stop.ts")).default;
 		await handler({
 			hook_type: "SubagentStop",
 			agent_type: "Plan",
-			last_assistant_message:
-				"## Context\nAdding auth\n\n## Tasks\n### Task 1: Add middleware [pending]\n\n## Review Gates\n- [ ] Final Review",
+			last_assistant_message: "I created a plan with tasks and review gates.",
+		});
+		expect(exitCode).toBeNull();
+	});
+
+	it("allows Plan agent when no plan file exists (fail-open)", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		await handler({
+			hook_type: "SubagentStop",
+			agent_type: "Plan",
+			last_assistant_message: "I created a plan.",
 		});
 		expect(exitCode).toBeNull();
 	});

@@ -1,4 +1,5 @@
-import { recordReview } from "../state/last-review.ts";
+import { getLatestPlanContent } from "../state/plan-status.ts";
+import { recordReview } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { block } from "./respond.ts";
 
@@ -21,7 +22,7 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 		// If we get here (no block), review passed — record it
 		recordReview();
 	} else if (agentType === "Plan") {
-		validatePlan(output);
+		validatePlan();
 	}
 	// Unknown agent_type → allow (fail-open)
 }
@@ -33,9 +34,12 @@ function validateReviewer(output: string): void {
 	);
 }
 
-function validatePlan(output: string): void {
-	const hasTasks = output.includes("## Tasks");
-	const hasReview = /review/i.test(output) && /gates?/i.test(output);
+function validatePlan(): void {
+	const content = getLatestPlanContent();
+	if (!content) return; // fail-open: no plan file found
+
+	const hasTasks = content.includes("## Tasks");
+	const hasReview = /review/i.test(content) && /gates?/i.test(content);
 	if (hasTasks && hasReview) return;
 
 	const missing: string[] = [];

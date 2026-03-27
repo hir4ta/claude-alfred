@@ -1,0 +1,246 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { getCommitStats } from "./gate-history.ts";
+
+const STATE_DIR = ".alfred/.state";
+const FILE = "session-state.json";
+const BUDGET = 2000;
+const DEFAULT_RED_MINUTES = 35;
+const DEFAULT_FILES = 5;
+
+export interface SessionState {
+	// Pace tracking
+	last_commit_at: string;
+	changed_files: number;
+	tool_calls: number;
+	// Gate clearance
+	test_passed_at: string | null;
+	test_command: string | null;
+	review_completed_at: string | null;
+	// Gate batch (run_once_per_batch)
+	ran_gates: Record<string, { session_id: string; ran_at: string }>;
+	// Failure tracking
+	last_error_signature: string;
+	consecutive_error_count: number;
+	// Context budget
+	context_session_id: string;
+	context_used: number;
+	// Per-session action counters (for outcome tracking)
+	session_deny_count: number;
+	session_block_count: number;
+	session_respond_count: number;
+}
+
+function filePath(): string {
+	return join(process.cwd(), STATE_DIR, FILE);
+}
+
+function defaultState(): SessionState {
+	return {
+		last_commit_at: new Date().toISOString(),
+		changed_files: 0,
+		tool_calls: 0,
+		test_passed_at: null,
+		test_command: null,
+		review_completed_at: null,
+		ran_gates: {},
+		last_error_signature: "",
+		consecutive_error_count: 0,
+		context_session_id: "",
+		context_used: 0,
+		session_deny_count: 0,
+		session_block_count: 0,
+		session_respond_count: 0,
+	};
+}
+
+/** Read session state. Returns defaults on error (fail-open). */
+export function readSessionState(): SessionState {
+	try {
+		const path = filePath();
+		if (!existsSync(path)) return defaultState();
+		const raw = JSON.parse(readFileSync(path, "utf-8"));
+		return { ...defaultState(), ...raw };
+	} catch {
+		return defaultState();
+	}
+}
+
+function writeState(state: SessionState): void {
+	try {
+		const dir = join(process.cwd(), STATE_DIR);
+		if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+		writeFileSync(filePath(), JSON.stringify(state, null, 2));
+	} catch {
+		// fail-open
+	}
+}
+
+// --- Pace ---
+
+export function readPace(): {
+	last_commit_at: string;
+	changed_files: number;
+	tool_calls: number;
+} | null {
+	if (!existsSync(filePath())) return null;
+	const state = readSessionState();
+	return {
+		last_commit_at: state.last_commit_at,
+		changed_files: state.changed_files,
+		tool_calls: state.tool_calls,
+	};
+}
+
+export function writePace(pace: {
+	last_commit_at: string;
+	changed_files: number;
+	tool_calls: number;
+}): void {
+	const state = readSessionState();
+	state.last_commit_at = pace.last_commit_at;
+	state.changed_files = pace.changed_files;
+	state.tool_calls = pace.tool_calls;
+	writeState(state);
+}
+
+export function getRedThreshold(): number {
+	try {
+		const stats = getCommitStats();
+		if (stats && stats.count >= 3) {
+			return Math.max(10, Math.min(60, stats.avgMinutes * 2));
+		}
+	} catch {
+		// fail-open
+	}
+	return DEFAULT_RED_MINUTES;
+}
+
+export function isPaceRed(pace: { last_commit_at: string; changed_files: number } | null): boolean {
+	if (!pace) return false;
+	const elapsed = Date.now() - new Date(pace.last_commit_at).getTime();
+	const minutes = elapsed / 60_000;
+	const threshold = getRedThreshold();
+	return minutes >= threshold && pace.changed_files >= DEFAULT_FILES;
+}
+
+// --- Test pass ---
+
+export function readLastTestPass(): { passed_at: string; command: string } | null {
+	const state = readSessionState();
+	if (!state.test_passed_at) return null;
+	return { passed_at: state.test_passed_at, command: state.test_command ?? "" };
+}
+
+export function recordTestPass(command: string): void {
+	const state = readSessionState();
+	state.test_passed_at = new Date().toISOString();
+	state.test_command = command;
+	writeState(state);
+}
+
+// --- Review ---
+
+export function readLastReview(): { reviewed_at: string } | null {
+	const state = readSessionState();
+	if (!state.review_completed_at) return null;
+	return { reviewed_at: state.review_completed_at };
+}
+
+export function recordReview(): void {
+	const state = readSessionState();
+	state.review_completed_at = new Date().toISOString();
+	writeState(state);
+}
+
+// --- Gate batch ---
+
+export function shouldSkipGate(gateName: string, sessionId: string): boolean {
+	const state = readSessionState();
+	const entry = state.ran_gates[gateName];
+	if (!entry) return false;
+	return entry.session_id === sessionId;
+}
+
+export function markGateRan(gateName: string, sessionId: string): void {
+	const state = readSessionState();
+	state.ran_gates[gateName] = { session_id: sessionId, ran_at: new Date().toISOString() };
+	writeState(state);
+}
+
+// --- Fail count ---
+
+export function recordFailure(signature: string): number {
+	try {
+		const state = readSessionState();
+		const count = state.last_error_signature === signature ? state.consecutive_error_count + 1 : 1;
+		state.last_error_signature = signature;
+		state.consecutive_error_count = count;
+		writeState(state);
+		return count;
+	} catch {
+		return 1;
+	}
+}
+
+export function clearFailCount(): void {
+	const state = readSessionState();
+	state.last_error_signature = "";
+	state.consecutive_error_count = 0;
+	writeState(state);
+}
+
+// --- Action counters ---
+
+export function incrementActionCount(type: "deny" | "block" | "respond"): void {
+	const state = readSessionState();
+	if (type === "deny") state.session_deny_count++;
+	else if (type === "block") state.session_block_count++;
+	else state.session_respond_count++;
+	writeState(state);
+}
+
+// --- Context budget ---
+
+export function resetBudget(sessionId: string): void {
+	const state = readSessionState();
+	if (state.context_session_id === sessionId) return;
+	state.context_session_id = sessionId;
+	state.context_used = 0;
+	writeState(state);
+}
+
+export function checkBudget(tokens: number): boolean {
+	const state = readSessionState();
+	if (!state.context_session_id) return true; // fail-open
+	return state.context_used + tokens <= BUDGET;
+}
+
+export function recordInjection(tokens: number): void {
+	const state = readSessionState();
+	state.context_used += tokens;
+	writeState(state);
+}
+
+// --- Commit reset ---
+
+/** Clear per-commit fields. Preserves budget. Optionally resets pace atomically. */
+export function clearOnCommit(paceReset?: {
+	last_commit_at: string;
+	changed_files: number;
+	tool_calls: number;
+}): void {
+	const state = readSessionState();
+	state.test_passed_at = null;
+	state.test_command = null;
+	state.review_completed_at = null;
+	state.ran_gates = {};
+	state.last_error_signature = "";
+	state.consecutive_error_count = 0;
+	if (paceReset) {
+		state.last_commit_at = paceReset.last_commit_at;
+		state.changed_files = paceReset.changed_files;
+		state.tool_calls = paceReset.tool_calls;
+	}
+	writeState(state);
+}

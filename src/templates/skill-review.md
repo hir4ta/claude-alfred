@@ -21,6 +21,15 @@ For each finding returned by the reviewer, verify:
 
 Discard findings that fail any criterion. Report only what passes all three.
 
+## Stage 3: Fix cycle (if critical/high findings)
+
+If Stage 2 outputs any critical or high findings:
+1. Fix all critical and high issues immediately
+2. Re-spawn `alfred-reviewer` on the updated diff
+3. Re-apply Judge filter on new findings
+
+Maximum 2 fix cycles. After 2 cycles, report any remaining findings without further iteration.
+
 ## Output
 
 Summary line: `Review: N findings (X critical, Y high)` or `Review: 0 findings`

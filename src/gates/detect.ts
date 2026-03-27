@@ -53,15 +53,76 @@ export function detectGates(projectRoot: string): GatesConfig {
 		}
 	}
 
+	// Python
+	const isPython =
+		existsSync(join(projectRoot, "pyproject.toml")) ||
+		existsSync(join(projectRoot, "uv.lock")) ||
+		existsSync(join(projectRoot, "setup.py"));
+	if (isPython) {
+		const hasUv = existsSync(join(projectRoot, "uv.lock"));
+		const prefix = hasUv ? "uv run " : "";
+
+		// Linter: ruff (fast, Astral)
+		if (!gates.on_write!.lint) {
+			if (existsSync(join(projectRoot, "ruff.toml")) || hasPyprojectKey(projectRoot, "ruff")) {
+				gates.on_write!.lint = { command: `${prefix}ruff check {file}`, timeout: 3000 };
+			}
+		}
+		// Type checker: pyright (fast) > mypy
+		if (
+			hasPyprojectKey(projectRoot, "pyright") ||
+			existsSync(join(projectRoot, "pyrightconfig.json"))
+		) {
+			gates.on_write!.typecheck = {
+				command: `${prefix}pyright`,
+				timeout: 30000,
+				run_once_per_batch: true,
+			};
+		} else if (existsSync(join(projectRoot, "mypy.ini")) || hasPyprojectKey(projectRoot, "mypy")) {
+			gates.on_write!.typecheck = {
+				command: `${prefix}mypy .`,
+				timeout: 30000,
+				run_once_per_batch: true,
+			};
+		}
+		// Test: pytest
+		if (!gates.on_commit!.test) {
+			gates.on_commit!.test = { command: `${prefix}pytest`, timeout: 30000 };
+		}
+	}
+
 	// Go
 	if (existsSync(join(projectRoot, "go.mod"))) {
-		gates.on_commit!.test = { command: "go test ./...", timeout: 30000 };
+		if (!gates.on_write!.lint) {
+			gates.on_write!.lint = { command: "go vet ./...", timeout: 5000, run_once_per_batch: true };
+		}
+		if (!gates.on_commit!.test) {
+			gates.on_commit!.test = { command: "go test ./...", timeout: 30000 };
+		}
 	}
 
 	// Rust
 	if (existsSync(join(projectRoot, "Cargo.toml"))) {
-		gates.on_commit!.test = { command: "cargo test", timeout: 60000 };
+		if (!gates.on_write!.lint) {
+			gates.on_write!.lint = {
+				command: "cargo clippy -- -D warnings",
+				timeout: 30000,
+				run_once_per_batch: true,
+			};
+		}
+		if (!gates.on_commit!.test) {
+			gates.on_commit!.test = { command: "cargo test", timeout: 60000 };
+		}
 	}
 
 	return gates;
+}
+
+function hasPyprojectKey(root: string, key: string): boolean {
+	try {
+		const content = readFileSync(join(root, "pyproject.toml"), "utf-8");
+		return content.includes(`[tool.${key}]`);
+	} catch {
+		return false;
+	}
 }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { detectGates } from "../gates/detect.ts";
 import { getTopErrors } from "../state/gate-history.ts";
 import { clearHandoff, readHandoff } from "../state/handoff.ts";
+import { readPendingFixes } from "../state/pending-fixes.ts";
 import type { HookEvent } from "../types.ts";
 import { respond } from "./respond.ts";
 
@@ -65,5 +66,21 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 
 	if (contextParts.length > 0) {
 		respond(contextParts.join("\n\n"));
+	}
+
+	// Snapshot starting pending-fixes count for session outcome tracking
+	try {
+		const startingPending = readPendingFixes().length;
+		const sessionFile = join(stateDir, "_session-start.json");
+		writeFileSync(
+			sessionFile,
+			JSON.stringify({
+				started_at: new Date().toISOString(),
+				starting_pending: startingPending,
+				session_id: _ev.session_id ?? "",
+			}),
+		);
+	} catch {
+		// fail-open
 	}
 }

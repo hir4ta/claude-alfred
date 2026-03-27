@@ -1,7 +1,6 @@
-import { readLastReview } from "../state/last-review.ts";
-import { readPace } from "../state/pace.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import { getActivePlan } from "../state/plan-status.ts";
+import { readLastReview, readPace } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { block } from "./respond.ts";
 

@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFailCount } from "../../state/fail-count.ts";
+import { readSessionState } from "../../state/session-state.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-post-tool-failure-test");
 let stdoutCapture: string[] = [];
@@ -41,8 +41,8 @@ describe("postToolUseFailure", () => {
 			tool_output: "Error: test failed",
 		});
 
-		let fc = readFailCount();
-		expect(fc?.count).toBe(1);
+		let state = readSessionState();
+		expect(state.consecutive_error_count).toBe(1);
 
 		// Second failure with same signature
 		stdoutCapture = [];
@@ -53,8 +53,8 @@ describe("postToolUseFailure", () => {
 			tool_output: "Error: test failed",
 		});
 
-		fc = readFailCount();
-		expect(fc?.count).toBe(2);
+		state = readSessionState();
+		expect(state.consecutive_error_count).toBe(2);
 		const context = getContext();
 		expect(context).toContain("/clear");
 	});
@@ -77,7 +77,7 @@ describe("postToolUseFailure", () => {
 			tool_output: "Error: type B",
 		});
 
-		const fc = readFailCount();
-		expect(fc?.count).toBe(1); // reset because different error
+		const state = readSessionState();
+		expect(state.consecutive_error_count).toBe(1); // reset because different error
 	});
 });

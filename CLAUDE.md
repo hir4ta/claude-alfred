@@ -1,6 +1,6 @@
 # claude-alfred
 
-Claude Code の性能を倍増させる執事。14 Hooks + Skill + Agent。
+Claude Code の暴走を止める執事。14 Hooks + Skill + Agent で品質の下限を守る。
 
 ## スタック
 
@@ -34,14 +34,14 @@ src/
 │   ├── respond.ts          # 共通: respond / deny / block + metrics記録
 │   ├── post-tool.ts        # lint/type gate + pending-fixes + pace + batch + test-pass + verify
 │   ├── pre-tool.ts         # pending-fixes → DENY + pace red → DENY + commit without test → DENY
-│   ├── user-prompt.ts      # Plan テンプレート注入 + 大タスク検出
+│   ├── user-prompt.ts      # Plan テンプレート注入 + 大タスク block (500+) / advisory (200+)
 │   ├── permission-request.ts # ExitPlanMode: Review Gates + Success Criteria 検証
 │   ├── task-completed.ts   # Plan task status 自動同期
 │   ├── session-start.ts    # .alfred作成 + gates自動検出 + handoff復元
 │   ├── stop.ts             # pending-fixes block + Plan未完了block + レビュー強制 + pace警告
 │   ├── pre-compact.ts      # 構造化ハンドオフ保存
 │   ├── post-compact.ts     # コンパクション後ハンドオフ復元
-│   ├── session-end.ts      # 割り込み終了時 handoff 保存
+│   ├── session-end.ts      # handoff 保存 + セッション成果記録
 │   ├── subagent-start.ts   # サブエージェントに品質ルール注入
 │   ├── subagent-stop.ts    # サブエージェント出力検証 + レビュー完了記録
 │   ├── post-tool-failure.ts # ツール失敗追跡 + 2回連続→/clear
@@ -49,19 +49,15 @@ src/
 ├── gates/
 │   ├── runner.ts           # gate コマンド実行
 │   ├── load.ts             # gates.json 読み込み
-│   └── detect.ts           # package.json → gates.json 自動検出
+│   └── detect.ts           # プロジェクト設定 → gates.json 自動検出 (TS/Python/Go/Rust)
 ├── state/
 │   ├── pending-fixes.ts    # 未修正 lint/type エラー
-│   ├── pace.ts             # Pace 追跡
+│   ├── session-state.ts    # 統合セッション状態 (pace, test, review, batch, fail, budget)
+│   ├── gate-history.ts     # gate 結果トレンド + コミット間隔統計
 │   ├── handoff.ts          # 構造化ハンドオフ
 │   ├── plan-status.ts      # Plan task status 解析
-│   ├── fail-count.ts       # 連続失敗カウント
-│   ├── context-budget.ts   # コンテキスト注入予算管理
-│   ├── gate-history.ts    # gate 結果トレンド + コミット間隔統計
-│   ├── gate-batch.ts       # run_once_per_batch 実行履歴
-│   ├── last-test-pass.ts  # テスト pass 記録 (commit 前強制)
-│   ├── last-review.ts    # レビュー完了記録 (Stop 時強制)
-│   └── metrics.ts         # DENY/block/respond 発火記録 (50件 cap)
+│   ├── metrics.ts          # DENY/block/respond 発火記録 (50件 cap)
+│   └── session-outcomes.ts # セッション成果追跡 (50件 cap)
 ├── templates/              # init が配置するファイル
 │   ├── skill-review.md     # /alfred:review skill
 │   ├── agent-reviewer.md   # reviewer agent
@@ -104,22 +100,18 @@ task clean    # ビルド成果物削除
 - PostToolUse 検出 → PreToolUse ブロックの二段構え
 - SubagentStart でサブエージェントにも品質ルールを伝搬
 - **Hook 出力スキーマ対応表** (https://code.claude.com/docs/en/hooks 準拠):
-  - respond() (hookSpecificOutput.additionalContext): SessionStart, UserPromptSubmit, PostToolUse, PostToolUseFailure, SubagentStart
+  - respond() (hookSpecificOutput.additionalContext): SessionStart, PostToolUse, PostToolUseFailure, SubagentStart
   - deny() (hookSpecificOutput.permissionDecision): PreToolUse, PermissionRequest
-  - block() (トップレベル decision/reason): Stop, UserPromptSubmit
-  - 出力なし (stderr で advisory): PostCompact, TaskCompleted, PreCompact, SessionEnd, ConfigChange, SubagentStop
+  - block() (トップレベル decision/reason): Stop, UserPromptSubmit, SubagentStop
+  - 出力なし (stderr で advisory): PostCompact, TaskCompleted, PreCompact, SessionEnd, ConfigChange
 
 ### 状態ファイル (.alfred/.state/)
 - pending-fixes.json — 未修正 lint/type エラー
-- session-pace.json — Pace 追跡 (最終コミット時刻, 変更ファイル数, ツール呼出数)
-- handoff.json — 構造化ハンドオフ (Plan context + gate errors 含む)
-- fail-count.json — 連続失敗カウント
-- context-budget.json — コンテキスト注入予算 (session_id ベース, 2000 tok)
+- session-state.json — 統合セッション状態 (pace, test pass, review, gate batch, fail count, budget, action counters)
 - gate-history.json — gate 結果トレンド + コミット間隔 (50件 cap)
-- gate-batch.json — run_once_per_batch 実行履歴 (session_id ベース)
-- last-test-pass.json — テスト pass 記録 (commit 前に必須)
-- last-review.json — レビュー完了記録 (Plan 時 Stop 前に必須)
+- handoff.json — 構造化ハンドオフ (Plan context + gate errors 含む)
 - metrics.json — DENY/block/respond 発火記録 (50件 cap, `doctor --metrics` で表示)
+- session-outcomes.json — セッション成果追跡 (clean exit率, pending推移, 50件 cap)
 
 ### Sprint Contract (Anthropic記事準拠)
 - Plan テンプレートに Success Criteria セクションを必須化

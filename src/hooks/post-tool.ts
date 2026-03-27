@@ -2,14 +2,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
 import { runGate } from "../gates/runner.ts";
-import { clearFailCount, recordFailure } from "../state/fail-count.ts";
-import { clearBatch, markRan, shouldSkip } from "../state/gate-batch.ts";
 import { recordCommit, recordGateResult } from "../state/gate-history.ts";
-import { clearReview } from "../state/last-review.ts";
-import { clearTestPass, recordTestPass } from "../state/last-test-pass.ts";
-import { readPace, writePace } from "../state/pace.ts";
 import { readPendingFixes, writePendingFixes } from "../state/pending-fixes.ts";
 import { getActivePlan, parseVerifyFields } from "../state/plan-status.ts";
+import {
+	clearFailCount,
+	clearOnCommit,
+	markGateRan,
+	readPace,
+	recordFailure,
+	recordTestPass,
+	shouldSkipGate,
+	writePace,
+} from "../state/session-state.ts";
 import type { HookEvent, PendingFix } from "../types.ts";
 import { respond } from "./respond.ts";
 
@@ -45,7 +50,7 @@ function handleEditWrite(ev: HookEvent): void {
 	for (const [name, gate] of Object.entries(gates.on_write)) {
 		try {
 			// Skip run_once_per_batch gates if already ran in this session
-			if (gate.run_once_per_batch && sessionId && shouldSkip(name, sessionId)) {
+			if (gate.run_once_per_batch && sessionId && shouldSkipGate(name, sessionId)) {
 				continue;
 			}
 
@@ -53,7 +58,7 @@ function handleEditWrite(ev: HookEvent): void {
 			const result = runGate(name, gate, hasPlaceholder ? file : undefined);
 
 			if (gate.run_once_per_batch && sessionId) {
-				markRan(name, sessionId);
+				markGateRan(name, sessionId);
 			}
 
 			recordGateResult(name, result.passed, result.passed ? undefined : result.output);
@@ -83,11 +88,7 @@ function handleBash(ev: HookEvent): void {
 
 	// Detect git commit → reset pace + run on_commit gates
 	if (/\bgit\s+commit\b/.test(command)) {
-		writePace({ last_commit_at: new Date().toISOString(), changed_files: 0, tool_calls: 0 });
-		clearFailCount();
-		clearBatch();
-		clearTestPass();
-		clearReview();
+		clearOnCommit({ last_commit_at: new Date().toISOString(), changed_files: 0, tool_calls: 0 });
 		recordCommit();
 
 		const gates = loadGates();
@@ -109,6 +110,15 @@ function handleBash(ev: HookEvent): void {
 			respond(`Tests failed after commit:\n${messages.join("\n")}`);
 		}
 		return;
+	}
+
+	// Detect lint fix command → re-validate pending fixes
+	if (
+		/\b(biome\s+check.*--fix|biome\s+format|eslint.*--fix|prettier.*--write|ruff\s+check.*--fix|ruff\s+format|gofmt|go\s+fmt|cargo\s+fmt|autopep8|black)\b/.test(
+			command,
+		)
+	) {
+		revalidatePendingFixes();
 	}
 
 	// Detect Bash failure → track consecutive failures
@@ -187,6 +197,35 @@ function updatePace(): void {
 		pace.changed_files++;
 		pace.tool_calls++;
 		writePace(pace);
+	} catch {
+		// fail-open
+	}
+}
+
+/** Re-run on_write gates on files with pending fixes. Clear fixes for files that now pass. */
+function revalidatePendingFixes(): void {
+	try {
+		const fixes = readPendingFixes();
+		if (fixes.length === 0) return;
+
+		const gates = loadGates();
+		if (!gates?.on_write) return;
+
+		const remaining = fixes.filter((fix) => {
+			for (const [name, gate] of Object.entries(gates.on_write!)) {
+				const hasPlaceholder = gate.command.includes("{file}");
+				if (!hasPlaceholder) continue;
+				try {
+					const result = runGate(name, gate, fix.file);
+					if (!result.passed) return true; // still failing
+				} catch {
+					return true; // fail-open: keep the fix
+				}
+			}
+			return false; // all gates passed
+		});
+
+		writePendingFixes(remaining);
 	} catch {
 		// fail-open
 	}
