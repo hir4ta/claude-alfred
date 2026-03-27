@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { clearFixesForFile, readPendingFixes, writePendingFixes } from "../pending-fixes.ts";
+import { readPendingFixes, writePendingFixes } from "../pending-fixes.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-pf-test");
 const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
@@ -63,30 +63,5 @@ describe("writePendingFixes", () => {
 		expect(result).toHaveLength(2);
 		expect(result.map((f) => f.file)).toContain("a.ts");
 		expect(result.map((f) => f.file)).toContain("b.ts");
-	});
-});
-
-describe("clearFixesForFile", () => {
-	it("removes fixes for a specific file", () => {
-		writePendingFixes([
-			{ file: "a.ts", errors: ["err1"], gate: "lint" },
-			{ file: "b.ts", errors: ["err2"], gate: "typecheck" },
-		]);
-
-		clearFixesForFile("a.ts");
-
-		const result = readPendingFixes();
-		expect(result).toHaveLength(1);
-		expect(result[0]!.file).toBe("b.ts");
-	});
-
-	it("does nothing when file not in fixes", () => {
-		writePendingFixes([{ file: "a.ts", errors: ["err1"], gate: "lint" }]);
-
-		clearFixesForFile("nonexistent.ts");
-
-		const result = readPendingFixes();
-		expect(result).toHaveLength(1);
-		expect(result[0]!.file).toBe("a.ts");
 	});
 });

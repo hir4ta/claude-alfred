@@ -74,8 +74,8 @@ export function readSessionState(): SessionState {
 function writeState(state: SessionState): void {
 	try {
 		atomicWriteJson(filePath(), state);
-	} catch {
-		// fail-open
+	} catch (e) {
+		if (e instanceof Error) process.stderr.write(`[alfred] state write error: ${e.message}\n`);
 	}
 }
 

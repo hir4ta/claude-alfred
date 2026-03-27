@@ -39,6 +39,7 @@ describe("configChange", () => {
 		}
 
 		expect(exitCode).toBe(2);
+		expect(stderrCapture.join("")).toContain("hook");
 	});
 
 	it("blocks user_settings with hooks in content", async () => {
@@ -53,6 +54,7 @@ describe("configChange", () => {
 		}
 
 		expect(exitCode).toBe(2);
+		expect(stderrCapture.join("")).toContain("hook");
 	});
 
 	it("allows non-hook user_settings changes", async () => {
@@ -63,6 +65,7 @@ describe("configChange", () => {
 		});
 
 		expect(exitCode).toBeNull();
+		expect(stdoutCapture.join("")).toBe("");
 	});
 
 	it("allows changes to project_settings", async () => {
@@ -73,6 +76,7 @@ describe("configChange", () => {
 		});
 
 		expect(exitCode).toBeNull();
+		expect(stdoutCapture.join("")).toBe("");
 	});
 
 	it("allows changes to skills", async () => {
@@ -83,5 +87,6 @@ describe("configChange", () => {
 		});
 
 		expect(exitCode).toBeNull();
+		expect(stdoutCapture.join("")).toBe("");
 	});
 });

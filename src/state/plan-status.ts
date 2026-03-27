@@ -7,7 +7,7 @@ export interface PlanTask {
 }
 
 // ### Task N: <name> [status]
-const TASK_RE = /^###\s+Task\s+\d+:\s*(.+?)(?:\s*\[(done|pending|in-progress)\])?\s*$/;
+export const TASK_RE = /^###\s+Task\s+\d+:\s*(.+?)(?:\s*\[(done|pending|in-progress)\])?\s*$/;
 
 // - [x] or - [ ] checkbox (Review Gates)
 const CHECKBOX_RE = /^-\s+\[([ xX])\]\s*(.+)$/;

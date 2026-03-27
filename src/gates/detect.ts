@@ -35,7 +35,7 @@ export function detectGates(projectRoot: string): GatesConfig {
 	if (existsSync(pkgPath)) {
 		try {
 			const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-			const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+			const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
 
 			if (deps.vitest) {
 				gates.on_commit!.test = {
@@ -57,7 +57,7 @@ export function detectGates(projectRoot: string): GatesConfig {
 	if (existsSync(pkgPath)) {
 		try {
 			const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-			const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+			const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
 
 			if (deps["@playwright/test"] || deps.playwright) {
 				gates.on_review = gates.on_review ?? {};

@@ -1,10 +1,8 @@
 import { readFileSync } from "node:fs";
-import { getActivePlan } from "../state/plan-status.ts";
+import { getActivePlan, TASK_RE } from "../state/plan-status.ts";
 import type { HookEvent } from "../types.ts";
 import { deny } from "./respond.ts";
 
-// Task header: ### Task N: name [status]
-const TASK_HEADER_RE = /^###\s+Task\s+\d+:/m;
 // Field patterns (with or without bold)
 const VERIFY_FIELD_RE = /^\s*-\s+\*{0,2}Verify\*{0,2}:/m;
 // Verify field must contain a specific file path or command, not just generic text
@@ -100,7 +98,7 @@ function splitTaskSections(content: string): TaskSection[] {
 	let current: TaskSection | null = null;
 
 	for (const line of lines) {
-		const match = line.match(TASK_HEADER_RE);
+		const match = line.match(TASK_RE);
 		if (match) {
 			if (current) sections.push(current);
 			// Extract task name from "### Task N: name [status]"

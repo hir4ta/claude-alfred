@@ -26,14 +26,7 @@ export function readPendingFixes(): PendingFix[] {
 export function writePendingFixes(fixes: PendingFix[]): void {
 	try {
 		atomicWriteJson(fixesPath(), fixes);
-	} catch {
-		// fail-open
+	} catch (e) {
+		if (e instanceof Error) process.stderr.write(`[alfred] write error: ${e.message}\n`);
 	}
-}
-
-/** Remove all fixes for a specific file. */
-export function clearFixesForFile(file: string): void {
-	const fixes = readPendingFixes();
-	const filtered = fixes.filter((f) => f.file !== file);
-	writePendingFixes(filtered);
 }

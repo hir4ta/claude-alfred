@@ -1,0 +1,92 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const TEST_DIR = join(import.meta.dirname, ".tmp-status");
+const ALFRED_DIR = join(TEST_DIR, ".alfred");
+const STATE_DIR = join(ALFRED_DIR, ".state");
+
+let stdoutCapture: string[] = [];
+const originalCwd = process.cwd();
+
+beforeEach(() => {
+	mkdirSync(STATE_DIR, { recursive: true });
+	process.chdir(TEST_DIR);
+	stdoutCapture = [];
+
+	vi.spyOn(process.stdout, "write").mockImplementation((data) => {
+		stdoutCapture.push(typeof data === "string" ? data : data.toString());
+		return true;
+	});
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	process.chdir(originalCwd);
+	rmSync(TEST_DIR, { recursive: true, force: true });
+});
+
+function getOutput(): string {
+	return stdoutCapture.join("");
+}
+
+describe("alfred status", () => {
+	it("shows clean state when no blockers", async () => {
+		writeFileSync(
+			join(ALFRED_DIR, "gates.json"),
+			JSON.stringify({ on_write: { lint: { command: "biome check {file}", timeout: 3000 } } }),
+		);
+		const { runStatus } = await import("../status.ts");
+		runStatus();
+		const output = getOutput();
+		expect(output).toContain("Pending fixes");
+		expect(output).toContain("0");
+	});
+
+	it("shows pending fixes as blockers", async () => {
+		writeFileSync(join(ALFRED_DIR, "gates.json"), JSON.stringify({}));
+		writeFileSync(
+			join(STATE_DIR, "pending-fixes.json"),
+			JSON.stringify([{ file: "src/foo.ts", errors: ["unused import"], gate: "lint" }]),
+		);
+		const { runStatus } = await import("../status.ts");
+		runStatus();
+		const output = getOutput();
+		expect(output).toContain("src/foo.ts");
+		expect(output).toContain("lint");
+	});
+
+	it("shows pace and review status", async () => {
+		writeFileSync(join(ALFRED_DIR, "gates.json"), JSON.stringify({}));
+		writeFileSync(
+			join(STATE_DIR, "session-state.json"),
+			JSON.stringify({
+				last_commit_at: new Date(Date.now() - 30 * 60_000).toISOString(),
+				changed_files: 7,
+				tool_calls: 20,
+				review_completed_at: null,
+				test_passed_at: null,
+			}),
+		);
+		const { runStatus } = await import("../status.ts");
+		runStatus();
+		const output = getOutput();
+		expect(output).toContain("7");
+		expect(output).toContain("Review");
+	});
+
+	it("shows plan progress when plan exists", async () => {
+		writeFileSync(join(ALFRED_DIR, "gates.json"), JSON.stringify({}));
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			"## Tasks\n### Task 1: Add feature [done]\n### Task 2: Add tests [pending]\n### Task 3: Update docs [in-progress]\n",
+		);
+		const { runStatus } = await import("../status.ts");
+		runStatus();
+		const output = getOutput();
+		expect(output).toContain("1/3");
+		expect(output).toContain("Plan");
+	});
+});

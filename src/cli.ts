@@ -13,6 +13,7 @@ const main = defineCommand({
 		init: () => import("./init.ts").then((m) => m.initCommand),
 		doctor: () => import("./doctor.ts").then((m) => m.doctorCommand),
 		reset: () => import("./reset.ts").then((m) => m.resetCommand),
+		status: () => import("./status.ts").then((m) => m.statusCommand),
 		hook: defineCommand({
 			meta: { description: "Run a hook handler" },
 			args: {

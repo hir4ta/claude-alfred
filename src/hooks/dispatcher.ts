@@ -66,10 +66,14 @@ export async function dispatch(event: string): Promise<void> {
 		resetBudget(ev.session_id);
 	}
 
+	const debug = !!process.env.ALFRED_DEBUG;
 	setCurrentEvent(event);
 	try {
+		if (debug) process.stderr.write(`[alfred:debug] event=${event} input=${input.length}b\n`);
+		const start = Date.now();
 		const handler = await loader();
 		await handler.default(ev);
+		if (debug) process.stderr.write(`[alfred:debug] ${event} done in ${Date.now() - start}ms\n`);
 	} catch (err) {
 		if (err instanceof Error && !err.message.startsWith("process.exit")) {
 			process.stderr.write(`[alfred] ${event}: ${err.message}\n`);

@@ -1,19 +1,18 @@
 import { readFileSync } from "node:fs";
 import { recordAction } from "../state/metrics.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
-import { getActivePlan } from "../state/plan-status.ts";
+import { getActivePlan, TASK_RE } from "../state/plan-status.ts";
 import { isReviewRequired, readLastReview, readPace } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { block } from "./respond.ts";
 
 const PACE_YELLOW_MINUTES = 20;
-const TASK_HEADER_RE = /^###\s+Task\s+\d+:/m;
 
 /** Count only ### Task N: headers in plan content (excludes Review Gate checkboxes) */
 function countTaskHeaders(planPath: string): number {
 	try {
 		const content = readFileSync(planPath, "utf-8");
-		return (content.match(new RegExp(TASK_HEADER_RE.source, "gm")) ?? []).length;
+		return (content.match(new RegExp(TASK_RE.source, "gm")) ?? []).length;
 	} catch {
 		return 0;
 	}

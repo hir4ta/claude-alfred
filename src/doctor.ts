@@ -74,6 +74,27 @@ function checkFileExists(name: string, path: string, label: string): CheckResult
 	return { name, status: "fail", message: `${label} not found (${path})` };
 }
 
+/** Extract the executable name from a gate command string */
+function extractExecutable(command: string): string | null {
+	// Strip env vars (any case) and leading whitespace, get first word
+	const match = command.replace(/^[A-Za-z_][A-Za-z0-9_]*=\S+\s+/g, "").match(/^(\S+)/);
+	return match?.[1] ?? null;
+}
+
+/** Check if an executable is reachable via PATH or node_modules/.bin */
+function isExecutableReachable(exe: string): boolean {
+	if (!exe || !/^[a-zA-Z0-9._-]+$/.test(exe)) return false;
+	const nodeModulesBin = join(process.cwd(), "node_modules", ".bin", exe);
+	if (existsSync(nodeModulesBin)) return true;
+	try {
+		const { execFileSync } = require("node:child_process");
+		execFileSync("which", [exe], { encoding: "utf-8", stdio: "pipe" });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function checkGates(): CheckResult {
 	const gatesPath = join(process.cwd(), ".alfred", "gates.json");
 	if (!existsSync(gatesPath)) {
@@ -85,6 +106,26 @@ function checkGates(): CheckResult {
 		const onCommitCount = Object.keys(gates.on_commit ?? {}).length;
 		if (onWriteCount === 0) {
 			return { name: "gates", status: "fail", message: "gates.json has no on_write gates" };
+		}
+
+		// Validate gate executables are reachable
+		const missing: string[] = [];
+		for (const [, gateMap] of Object.entries(gates)) {
+			if (!gateMap || typeof gateMap !== "object") continue;
+			for (const [name, gate] of Object.entries(gateMap as Record<string, { command: string }>)) {
+				const exe = extractExecutable(gate.command);
+				if (exe && !isExecutableReachable(exe)) {
+					missing.push(`${name}: ${exe}`);
+				}
+			}
+		}
+
+		if (missing.length > 0) {
+			return {
+				name: "gates",
+				status: "warn",
+				message: `gates.json: ${onWriteCount} on_write, ${onCommitCount} on_commit (missing executables: ${missing.join(", ")})`,
+			};
 		}
 		return {
 			name: "gates",

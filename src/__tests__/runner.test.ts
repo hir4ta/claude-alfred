@@ -50,6 +50,7 @@ describe("runGate", () => {
 	it("handles timeout", () => {
 		const result = runGate("slow-gate", { command: "sleep 10", timeout: 100 });
 		expect(result.passed).toBe(false);
+		expect(result.name).toBe("slow-gate");
 	});
 
 	it("truncates output to 1000 chars", () => {

@@ -22,26 +22,34 @@ afterEach(() => {
 });
 
 describe("alfred reset", () => {
-	it("deletes all state files", () => {
+	it("deletes all state files and returns file names", () => {
 		const result = runReset(false);
-		expect(result.deleted).toBe(4);
-		expect(result.kept).toBe(0);
+		expect(result.deleted).toHaveLength(4);
+		expect(result.kept).toHaveLength(0);
 		expect(readdirSync(STATE_DIR)).toHaveLength(0);
 	});
 
 	it("keeps gate-history and metrics with --keep-history", () => {
 		const result = runReset(true);
-		expect(result.deleted).toBe(2);
-		expect(result.kept).toBe(2);
+		expect(result.deleted).toHaveLength(2);
+		expect(result.kept).toHaveLength(2);
+		expect(result.kept).toContain("gate-history.json");
+		expect(result.kept).toContain("metrics.json");
 		const remaining = readdirSync(STATE_DIR);
 		expect(remaining).toContain("gate-history.json");
-		expect(remaining).toContain("metrics.json");
 		expect(remaining).not.toContain("pending-fixes.json");
 	});
 
 	it("handles missing .alfred/.state gracefully", () => {
 		rmSync(STATE_DIR, { recursive: true, force: true });
 		const result = runReset(false);
-		expect(result.deleted).toBe(0);
+		expect(result.deleted).toHaveLength(0);
+	});
+
+	it("dry-run shows files without deleting", () => {
+		const result = runReset(false, true);
+		expect(result.deleted).toHaveLength(4);
+		// Files should still exist after dry-run
+		expect(readdirSync(STATE_DIR)).toHaveLength(4);
 	});
 });
