@@ -178,7 +178,10 @@ export async function runInit(force: boolean): Promise<void> {
 	const pendingPath = join(alfredDir, ".state", "pending-fixes.json");
 	writeFileSync(pendingPath, "[]");
 
-	// 5. Add .alfred/ to .gitignore if not already present
+	// 5. Register project in central registry (~/.alfred/registry.json)
+	registerProject(home, process.cwd());
+
+	// 6. Add .alfred/ to .gitignore if not already present
 	const gitignorePath = join(process.cwd(), ".gitignore");
 	try {
 		const gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
@@ -192,6 +195,38 @@ export async function runInit(force: boolean): Promise<void> {
 	}
 
 	console.log("\nalfred init complete.");
+}
+
+interface RegistryEntry {
+	path: string;
+	registered_at: string;
+}
+
+function registerProject(home: string, projectPath: string): void {
+	try {
+		const registryDir = join(home, ".alfred");
+		mkdirSync(registryDir, { recursive: true });
+		const registryPath = join(registryDir, "registry.json");
+
+		let entries: RegistryEntry[] = [];
+		if (existsSync(registryPath)) {
+			entries = JSON.parse(readFileSync(registryPath, "utf-8"));
+		}
+
+		// Update existing or add new entry
+		const existing = entries.findIndex((e) => e.path === projectPath);
+		const entry: RegistryEntry = { path: projectPath, registered_at: new Date().toISOString() };
+		if (existing >= 0) {
+			entries[existing] = entry;
+		} else {
+			entries.push(entry);
+		}
+
+		writeFileSync(registryPath, JSON.stringify(entries, null, 2));
+		console.log(`  + registered in ~/.alfred/registry.json`);
+	} catch {
+		// fail-open
+	}
 }
 
 function writeFile(path: string, content: string, force: boolean): void {

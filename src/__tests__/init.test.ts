@@ -116,6 +116,29 @@ describe("alfred init", () => {
 		expect(content.split("\n").length).toBeLessThanOrEqual(30);
 	});
 
+	it("registers project in ~/.alfred/registry.json", async () => {
+		const { runInit } = await import("../init.ts");
+		await runInit(false);
+
+		const registryPath = join(TEST_HOME, ".alfred", "registry.json");
+		expect(existsSync(registryPath)).toBe(true);
+
+		const entries = JSON.parse(readFileSync(registryPath, "utf-8"));
+		expect(entries).toHaveLength(1);
+		expect(entries[0].path).toBe(TEST_PROJECT);
+		expect(entries[0].registered_at).toBeDefined();
+	});
+
+	it("updates existing registry entry on re-init", async () => {
+		const { runInit } = await import("../init.ts");
+		await runInit(false);
+		await runInit(true);
+
+		const registryPath = join(TEST_HOME, ".alfred", "registry.json");
+		const entries = JSON.parse(readFileSync(registryPath, "utf-8"));
+		expect(entries).toHaveLength(1);
+	});
+
 	it("does not overwrite existing hooks without --force", async () => {
 		const claudeDir = join(TEST_HOME, ".claude");
 		mkdirSync(claudeDir, { recursive: true });
