@@ -1,10 +1,10 @@
 import type { HookEvent } from "../types.ts";
-import { block, respond } from "./respond.ts";
+import { respond } from "./respond.ts";
 
 const SHORT_THRESHOLD = 100;
 const LARGE_TASK_ADVISORY = 200;
 const FULL_TEMPLATE_THRESHOLD = 300;
-const LARGE_TASK_BLOCK = 500;
+const LARGE_TASK_THRESHOLD = 500;
 
 const COMPACT_TEMPLATE = `Structure your plan:
 
@@ -48,9 +48,9 @@ export default async function userPrompt(ev: HookEvent): Promise<void> {
 		return;
 	}
 
-	if (prompt.length > LARGE_TASK_BLOCK) {
-		block(
-			"This task is too large for direct execution. Use Plan mode (Shift+Tab twice) to break it into small, verified tasks before implementing.",
+	if (prompt.length > LARGE_TASK_THRESHOLD) {
+		respond(
+			"Large task detected. Consider using Plan mode (Shift+Tab twice) to break it into small, verified tasks.",
 		);
 	} else if (prompt.length > LARGE_TASK_ADVISORY) {
 		respond(

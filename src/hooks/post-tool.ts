@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
 import { runGate } from "../gates/runner.ts";
 import { recordCommit, recordGateResult } from "../state/gate-history.ts";
+import { recordResolution } from "../state/metrics.ts";
 import { readPendingFixes, writePendingFixes } from "../state/pending-fixes.ts";
 import { getActivePlan, parseVerifyFields } from "../state/plan-status.ts";
 import {
@@ -40,8 +41,10 @@ function handleEditWrite(ev: HookEvent): void {
 	const gates = loadGates();
 	if (!gates?.on_write) return;
 
-	// Read existing fixes for OTHER files
-	const existingFixes = readPendingFixes().filter((f) => f.file !== file);
+	// Read existing fixes once — compute both "other files" and "had fixes for this file"
+	const before = readPendingFixes();
+	const hadFixesForFile = before.some((f) => f.file === file);
+	const existingFixes = before.filter((f) => f.file !== file);
 	const newFixes: PendingFix[] = [];
 	const messages: string[] = [];
 
@@ -73,6 +76,14 @@ function handleEditWrite(ev: HookEvent): void {
 	}
 
 	writePendingFixes([...existingFixes, ...newFixes]);
+
+	if (hadFixesForFile && newFixes.length === 0) {
+		try {
+			recordResolution("post-tool", `Fixed: ${file.split("/").pop()}`);
+		} catch {
+			/* fail-open */
+		}
+	}
 
 	if (newFixes.length > 0) {
 		respond(`Fix these errors before continuing:\n${messages.join("\n")}`);

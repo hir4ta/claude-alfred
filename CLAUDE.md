@@ -34,11 +34,11 @@ src/
 │   ├── respond.ts          # 共通: respond / deny / block + metrics記録
 │   ├── post-tool.ts        # lint/type gate + pending-fixes + pace + batch + test-pass + verify
 │   ├── pre-tool.ts         # pending-fixes → DENY + pace red → DENY + commit without test → DENY
-│   ├── user-prompt.ts      # Plan テンプレート注入 + 大タスク block (500+) / advisory (200+)
-│   ├── permission-request.ts # ExitPlanMode: Review Gates + Success Criteria 検証
+│   ├── user-prompt.ts      # Plan テンプレート注入 + 大タスク advisory (500+ / 200+)
+│   ├── permission-request.ts # ExitPlanMode: 適応型検証 (大Plan: 厳格, 小Plan: 軽量)
 │   ├── task-completed.ts   # Plan task status 自動同期
 │   ├── session-start.ts    # .alfred作成 + gates自動検出 + handoff復元
-│   ├── stop.ts             # pending-fixes block + Plan未完了block + レビュー強制 + pace警告
+│   ├── stop.ts             # pending-fixes block + 大Plan未完了block + 小Plan warn + レビュー強制
 │   ├── pre-compact.ts      # 構造化ハンドオフ保存
 │   ├── post-compact.ts     # コンパクション後ハンドオフ復元
 │   ├── session-end.ts      # handoff 保存 + セッション成果記録
@@ -113,11 +113,19 @@ task clean    # ビルド成果物削除
 - metrics.json — DENY/block/respond 発火記録 (50件 cap, `doctor --metrics` で表示)
 - session-outcomes.json — セッション成果追跡 (clean exit率, pending推移, 50件 cap)
 
-### Sprint Contract (Anthropic記事準拠)
-- Plan テンプレートに Success Criteria セクションを必須化
-- ExitPlanMode 時に Success Criteria の具体性を検証 (コマンド or ファイル参照)
+### Sprint Contract (適応型)
+- Anthropic記事 (2026-03-24) では Opus 4.6 で sprint construct を削除。alfredも適応:
+  - **小Plan (≤3 tasks)**: File フィールドのみ必須。Success Criteria/Review Gates は任意
+  - **大Plan (4+ tasks)**: Success Criteria + Review Gates + Verify フィールド必須
+- UserPromptSubmit: 大タスク (500+) は advisory (block ではない)
+- Stop: 小Plan の未完了タスクは警告のみ (block ではない)
 - reviewer は全 findings を報告。Judge (skill) のみが S/A/A フィルタを適用
 - reviewer に few-shot 例 + anti-self-persuasion 指示を配置
+
+### 効果測定
+- DENY 発火時に metrics.json へ記録。fix 後に resolution を記録
+- `doctor --metrics`: DENY resolution rate (解決率) を表示
+- `doctor --fix`: 壊れた state ファイルをデフォルト値にリセット
 
 ### Phase Gate (各コミット前に必ず実行)
 1. `bun vitest run` — 全テスト pass
@@ -129,6 +137,13 @@ task clean    # ビルド成果物削除
 ### シミュレーション
 - Hook や状態管理の変更後は simulation.test.ts にシナリオを追加する
 - シミュレーションは本番フロー (Edit→gate→pending-fixes→DENY) を再現する統合テスト
+
+## 評価・分析の誠実性
+
+- 主張には裏付けの強さを明示: **事実** (一次ソース引用可能) / **推測** (根拠はあるが直接証拠なし) / **意見** (自分の解釈)
+- 一次ソースを確認せずに「記事によると」「研究では」と断言しない
+- 裏付けが取れていない主張を、取れているかのように提示しない。未検証なら「未検証」と明記
+- 自己検証を後回しにしない。主張する前にソースを確認する
 
 ## 設計ドキュメント
 

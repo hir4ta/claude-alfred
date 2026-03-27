@@ -260,11 +260,11 @@ describe("Scenario 6: Plan mode → template injected with review gates", () => 
 	});
 });
 
-describe("Scenario 7: Normal mode large task → blocked with plan mode requirement", () => {
-	it("long prompt blocks with plan mode requirement", async () => {
+describe("Scenario 7: Normal mode large task → advisory to use plan mode", () => {
+	it("long prompt advises plan mode (no block)", async () => {
 		const userPrompt = (await import("../hooks/user-prompt.ts")).default;
 
-		// >500 chars to trigger block
+		// >500 chars to trigger advisory
 		const longPrompt =
 			"Implement a complete authentication system with JWT tokens, refresh tokens, " +
 			"login and signup endpoints, middleware for protected routes, password hashing with bcrypt, " +
@@ -274,18 +274,16 @@ describe("Scenario 7: Normal mode large task → blocked with plan mode requirem
 			"set up two-factor authentication support, add password reset with secure tokens, " +
 			"implement session management with Redis-backed token storage and sliding expiry";
 
-		try {
-			await userPrompt({
-				hook_type: "UserPromptSubmit",
-				prompt: longPrompt,
-			});
-		} catch {
-			// process.exit(2)
-		}
+		await userPrompt({
+			hook_type: "UserPromptSubmit",
+			prompt: longPrompt,
+		});
 
-		expect(exitCode).toBe(2);
+		expect(exitCode).toBeNull(); // no block
 		const response = getResponse();
-		expect((response as Record<string, string>)?.reason?.toLowerCase()).toContain("plan");
+		const context = (response?.hookSpecificOutput as Record<string, string>)?.additionalContext;
+		expect(context).toBeDefined();
+		expect(context?.toLowerCase()).toContain("plan mode");
 	});
 
 	it("short prompt does NOT trigger plan suggestion", async () => {
@@ -302,8 +300,8 @@ describe("Scenario 7: Normal mode large task → blocked with plan mode requirem
 	});
 });
 
-describe("Scenario 8: ExitPlanMode → plan without review gates is DENIED", () => {
-	it("plan with review gates passes, plan without is denied", async () => {
+describe("Scenario 8: ExitPlanMode → plan without File field is DENIED", () => {
+	it("plan with File field passes, plan without is denied", async () => {
 		const permReq = (await import("../hooks/permission-request.ts")).default;
 
 		// Create plan directory with a plan that HAS review gates
@@ -358,12 +356,12 @@ describe("Scenario 8: ExitPlanMode → plan without review gates is DENIED", () 
 		const response = getResponse();
 		const reason = (response?.hookSpecificOutput as Record<string, string>)
 			?.permissionDecisionReason;
-		expect(reason).toContain("Review");
+		expect(reason).toContain("File");
 	});
 });
 
-describe("Scenario 9: ExitPlanMode → Success Criteria validation", () => {
-	it("plan without Success Criteria is DENIED", async () => {
+describe("Scenario 9: ExitPlanMode → Success Criteria validation (large plan)", () => {
+	it("large plan without Success Criteria is DENIED", async () => {
 		const permReq = (await import("../hooks/permission-request.ts")).default;
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
@@ -375,6 +373,15 @@ describe("Scenario 9: ExitPlanMode → Success Criteria validation", () => {
 				"### Task 1: Add feature",
 				"- File: src/feature.ts",
 				"- Verify: src/__tests__/feature.test.ts:testFeature",
+				"### Task 2: Add model",
+				"- File: src/model.ts",
+				"- Verify: src/__tests__/model.test.ts:testModel",
+				"### Task 3: Add service",
+				"- File: src/service.ts",
+				"- Verify: src/__tests__/service.test.ts:testService",
+				"### Task 4: Add controller",
+				"- File: src/controller.ts",
+				"- Verify: src/__tests__/controller.test.ts:testController",
 				"## Review Gates",
 				"- [ ] Final Review",
 			].join("\n"),
@@ -674,7 +681,7 @@ describe("Scenario 16: Plan status tracking — Stop blocks on incomplete plan",
 			].join("\n"),
 		);
 
-		// Stop should block — Task 2 and Final Review are incomplete
+		// Stop should block — no review has been run (small plan: incomplete tasks only warn)
 		try {
 			await stop({ hook_type: "Stop" });
 		} catch {
@@ -684,9 +691,7 @@ describe("Scenario 16: Plan status tracking — Stop blocks on incomplete plan",
 		expect(exitCode).toBe(2);
 		const response = getResponse();
 		const reason = (response as Record<string, string>)?.reason;
-		expect(reason).toContain("2 incomplete");
-		expect(reason).toContain("Add tests");
-		expect(reason).toContain("Final Review");
+		expect(reason).toContain("review");
 
 		// Now mark all as done + record review
 		writeFileSync(
@@ -1205,5 +1210,115 @@ describe("Scenario 27: Stop blocks without review when plan exists", () => {
 		exitCode = null;
 		await stop({ hook_type: "Stop" });
 		expect(exitCode).toBeNull();
+	});
+});
+
+describe("Scenario 28: DENY effectiveness — resolution tracked when fix clears pending", () => {
+	it("records resolution after DENY followed by fix", async () => {
+		setupFailingLintGate();
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		const preTool = (await import("../hooks/pre-tool.ts")).default;
+		const { readMetrics } = await import("../state/metrics.ts");
+
+		// Step 1: Edit file A → lint fails → pending-fixes created
+		await postTool({
+			tool_name: "Edit",
+			tool_input: { file_path: join(TEST_DIR, "a.ts") },
+			session_id: "s1",
+		});
+		const fixes = readPendingFixes();
+		expect(fixes.length).toBe(1);
+
+		// Step 2: Try to edit file B → DENY
+		stdoutCapture = [];
+		try {
+			await preTool({
+				tool_name: "Edit",
+				tool_input: { file_path: join(TEST_DIR, "b.ts") },
+			});
+		} catch {
+			// exit(2)
+		}
+		expect(exitCode).toBe(2);
+
+		// Step 3: Fix file A (switch to passing gates)
+		setupPassingGates();
+		exitCode = null;
+		stdoutCapture = [];
+		await postTool({
+			tool_name: "Edit",
+			tool_input: { file_path: join(TEST_DIR, "a.ts") },
+			session_id: "s1",
+		});
+
+		// Pending-fixes should be empty now
+		expect(readPendingFixes().length).toBe(0);
+
+		// Metrics should contain both a deny and a resolution
+		const metrics = readMetrics();
+		const denies = metrics.filter((m) => m.action.endsWith(":deny"));
+		const resolutions = metrics.filter((m) => m.action.endsWith(":resolution"));
+		expect(denies.length).toBeGreaterThanOrEqual(1);
+		expect(resolutions.length).toBeGreaterThanOrEqual(1);
+	});
+});
+
+// ============================================================
+// Adaptive Sprint contract scenarios
+// ============================================================
+
+describe("Scenario 29: Small plan (≤3 tasks) — ExitPlanMode allows without Success Criteria", () => {
+	it("small plan passes without Success Criteria", async () => {
+		const plansDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(plansDir, { recursive: true });
+		writeFileSync(
+			join(plansDir, "plan.md"),
+			[
+				"## Context",
+				"Fix two small bugs.",
+				"",
+				"### Task 1: Fix typo [pending]",
+				"- **File**: src/foo.ts",
+				"- **Change**: Fix typo",
+				"",
+				"### Task 2: Fix import [pending]",
+				"- **File**: src/bar.ts",
+				"- **Change**: Fix import",
+				"",
+				"## Review Gates",
+				"- [ ] Final Review: run /alfred:review",
+			].join("\n"),
+		);
+
+		const permissionRequest = (await import("../hooks/permission-request.ts")).default;
+		await permissionRequest({
+			tool: { name: "ExitPlanMode" },
+		});
+
+		// Should NOT exit with code 2 — small plan doesn't need Success Criteria
+		expect(exitCode).toBeNull();
+	});
+});
+
+describe("Scenario 30: Small plan — Stop warns instead of blocking for incomplete tasks", () => {
+	it("small plan with incomplete tasks warns via stderr, does not block", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "small-plan.md"),
+			["## Tasks", "### Task 1: Fix typo [done]", "### Task 2: Fix import [pending]"].join("\n"),
+		);
+
+		// Record review so review check doesn't block
+		const { recordReview } = await import("../state/session-state.ts");
+		recordReview();
+
+		const stop = (await import("../hooks/stop.ts")).default;
+		await stop({ hook_type: "Stop" });
+
+		// Small plan (2 tasks + 0 checkboxes = 2 items ≤ 3): warn only, no block
+		expect(exitCode).toBeNull();
+		const stderr = stderrCapture.join("");
+		expect(stderr).toContain("incomplete");
 	});
 });

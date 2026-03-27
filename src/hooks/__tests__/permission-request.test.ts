@@ -67,12 +67,30 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("denies plan without review gates", async () => {
+	it("denies large plan without review gates", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
 			join(planDir, "test-plan.md"),
-			["## Context", "Adding new feature", "## Tasks", "### Task 1: Add helper"].join("\n"),
+			[
+				"## Context",
+				"Adding new feature",
+				"## Tasks",
+				"### Task 1: Add helper",
+				"- File: src/a.ts",
+				"- Verify: src/__tests__/a.test.ts:test",
+				"### Task 2: Add model",
+				"- File: src/b.ts",
+				"- Verify: src/__tests__/b.test.ts:test",
+				"### Task 3: Add service",
+				"- File: src/c.ts",
+				"- Verify: src/__tests__/c.test.ts:test",
+				"### Task 4: Add controller",
+				"- File: src/d.ts",
+				"- Verify: src/__tests__/d.test.ts:test",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
+			].join("\n"),
 		);
 
 		const handler = (await import("../permission-request.ts")).default;
@@ -90,6 +108,29 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		const reason = (response?.hookSpecificOutput as Record<string, string>)
 			?.permissionDecisionReason;
 		expect(reason).toContain("Review");
+	});
+
+	it("allows small plan without review gates or success criteria", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Context",
+				"Quick fix",
+				"## Tasks",
+				"### Task 1: Add helper",
+				"- File: src/helper.ts",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		await handler({
+			hook_type: "PermissionRequest",
+			tool: { name: "ExitPlanMode" },
+		});
+
+		expect(exitCode).toBeNull();
 	});
 
 	it("denies plan with tasks missing File field", async () => {
@@ -120,7 +161,7 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(reason).toContain("File");
 	});
 
-	it("denies plan with tasks missing Verify field", async () => {
+	it("denies large plan with tasks missing Verify field", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
@@ -129,6 +170,14 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"## Tasks",
 				"### Task 1: Add helper [pending]",
 				"- File: src/helper.ts",
+				"### Task 2: Add model [pending]",
+				"- File: src/model.ts",
+				"### Task 3: Add service [pending]",
+				"- File: src/service.ts",
+				"### Task 4: Add controller [pending]",
+				"- File: src/controller.ts",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
 				"## Review Gates",
 				"- [ ] Final Review",
 			].join("\n"),
@@ -170,7 +219,7 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("denies plan with generic Verify field (no specific file)", async () => {
+	it("denies large plan with generic Verify field (no specific file)", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
@@ -180,6 +229,17 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"### Task 1: Add helper [pending]",
 				"- **File**: src/helper.ts",
 				"- **Verify**: テストが通ること",
+				"### Task 2: Add model [pending]",
+				"- **File**: src/model.ts",
+				"- **Verify**: src/__tests__/model.test.ts:test",
+				"### Task 3: Add service [pending]",
+				"- **File**: src/service.ts",
+				"- **Verify**: src/__tests__/service.test.ts:test",
+				"### Task 4: Add controller [pending]",
+				"- **File**: src/controller.ts",
+				"- **Verify**: src/__tests__/controller.test.ts:test",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
 				"## Review Gates",
 				"- [ ] Final Review",
 			].join("\n"),
@@ -199,7 +259,7 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(reason).toContain("specific file or command");
 	});
 
-	it("denies plan without Success Criteria section", async () => {
+	it("denies large plan without Success Criteria section", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
@@ -209,6 +269,15 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"### Task 1: Add helper [pending]",
 				"- **File**: src/helper.ts",
 				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"### Task 2: Add model [pending]",
+				"- **File**: src/model.ts",
+				"- **Verify**: src/__tests__/model.test.ts:test",
+				"### Task 3: Add service [pending]",
+				"- **File**: src/service.ts",
+				"- **Verify**: src/__tests__/service.test.ts:test",
+				"### Task 4: Add controller [pending]",
+				"- **File**: src/controller.ts",
+				"- **Verify**: src/__tests__/controller.test.ts:test",
 				"## Review Gates",
 				"- [ ] Final Review",
 			].join("\n"),
@@ -228,7 +297,7 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(reason).toContain("Success Criteria");
 	});
 
-	it("denies plan with generic Success Criteria", async () => {
+	it("denies large plan with generic Success Criteria", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
@@ -238,6 +307,15 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"### Task 1: Add helper [pending]",
 				"- **File**: src/helper.ts",
 				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"### Task 2: Add model [pending]",
+				"- **File**: src/model.ts",
+				"- **Verify**: src/__tests__/model.test.ts:test",
+				"### Task 3: Add service [pending]",
+				"- **File**: src/service.ts",
+				"- **Verify**: src/__tests__/service.test.ts:test",
+				"### Task 4: Add controller [pending]",
+				"- **File**: src/controller.ts",
+				"- **Verify**: src/__tests__/controller.test.ts:test",
 				"## Success Criteria",
 				"- [ ] テストが通る",
 				"## Review Gates",

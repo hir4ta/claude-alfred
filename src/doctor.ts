@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import { ALFRED_HOOKS } from "./init.ts";
@@ -196,6 +196,13 @@ function showMetrics(): void {
 		}
 	}
 
+	if (summary.deny > 0) {
+		console.log("\n  Effectiveness:");
+		console.log(
+			`    DENY resolution: ${summary.resolution}/${summary.deny} (${summary.denyResolutionRate}%)`,
+		);
+	}
+
 	const outcomes = getOutcomeSummary();
 	if (outcomes) {
 		console.log(`\n--- Session Outcomes (last ${outcomes.total}) ---`);
@@ -206,10 +213,44 @@ function showMetrics(): void {
 	}
 }
 
+const STATE_DEFAULTS: Record<string, string> = {
+	"pending-fixes.json": "[]",
+	"session-state.json": "{}",
+	"gate-history.json": '{"gates":[],"commits":[]}',
+	"metrics.json": "[]",
+	"session-outcomes.json": "[]",
+};
+
+/** Scan .alfred/.state/ for corrupt JSON and replace with defaults. */
+export function repairState(): string[] {
+	const stateDir = join(process.cwd(), ".alfred", ".state");
+	if (!existsSync(stateDir)) return [];
+
+	const repaired: string[] = [];
+	try {
+		const files = readdirSync(stateDir);
+		for (const file of files) {
+			if (!file.endsWith(".json")) continue;
+			const filePath = join(stateDir, file);
+			try {
+				JSON.parse(readFileSync(filePath, "utf-8"));
+			} catch {
+				if (!(file in STATE_DEFAULTS)) continue; // skip unknown files
+				writeFileSync(filePath, STATE_DEFAULTS[file]!);
+				repaired.push(file);
+			}
+		}
+	} catch {
+		// fail-open
+	}
+	return repaired;
+}
+
 export const doctorCommand = defineCommand({
 	meta: { description: "Check alfred health" },
 	args: {
 		metrics: { type: "boolean", description: "Show action metrics", default: false },
+		fix: { type: "boolean", description: "Repair corrupted state files", default: false },
 	},
 	async run({ args }) {
 		const results = runChecks();
@@ -220,6 +261,15 @@ export const doctorCommand = defineCommand({
 
 		if (args.metrics) {
 			showMetrics();
+		}
+
+		if (args.fix) {
+			const repaired = repairState();
+			if (repaired.length > 0) {
+				console.log(`\nRepaired ${repaired.length} state file(s): ${repaired.join(", ")}`);
+			} else {
+				console.log("\nNo state files needed repair.");
+			}
 		}
 
 		const hasFail = results.some((r) => r.status === "fail");

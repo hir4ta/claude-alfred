@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { CheckResult } from "../doctor.ts";
@@ -248,5 +248,43 @@ describe("doctor: overall", () => {
 		// Only PATH check might not be ok (warn is acceptable)
 		const realFailures = failures.filter((r) => r.name !== "path");
 		expect(realFailures).toHaveLength(0);
+	});
+});
+
+describe("doctor --fix repairs corrupted state", () => {
+	it("resets corrupt JSON files to valid defaults", async () => {
+		setupValidEnv();
+
+		// Write corrupt JSON to state files
+		const stateDir = join(TEST_PROJECT, ".alfred", ".state");
+		writeFileSync(join(stateDir, "pending-fixes.json"), "{broken json");
+		writeFileSync(join(stateDir, "session-state.json"), "not json at all");
+		writeFileSync(join(stateDir, "metrics.json"), "{{{{");
+
+		// Import and run repair
+		const { repairState } = await import("../doctor.ts");
+		const repaired = repairState();
+
+		expect(repaired.length).toBeGreaterThanOrEqual(3);
+
+		// Verify files are now valid JSON
+		for (const file of ["pending-fixes.json", "session-state.json", "metrics.json"]) {
+			const content = readFileSync(join(stateDir, file), "utf-8");
+			expect(() => JSON.parse(content)).not.toThrow();
+		}
+	});
+
+	it("does nothing when state is healthy", async () => {
+		setupValidEnv();
+
+		// Write valid state
+		const stateDir = join(TEST_PROJECT, ".alfred", ".state");
+		writeFileSync(join(stateDir, "pending-fixes.json"), "[]");
+		writeFileSync(join(stateDir, "metrics.json"), "[]");
+
+		const { repairState } = await import("../doctor.ts");
+		const repaired = repairState();
+
+		expect(repaired.length).toBe(0);
 	});
 });

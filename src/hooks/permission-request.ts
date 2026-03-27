@@ -33,41 +33,52 @@ export default async function permissionRequest(ev: HookEvent): Promise<void> {
 
 function validatePlanStructure(content: string): string[] {
 	const problems: string[] = [];
+	const taskSections = splitTaskSections(content);
+	const isSmallPlan = taskSections.length <= 3;
 
-	// Check Success Criteria
-	if (!SUCCESS_CRITERIA_RE.test(content)) {
-		problems.push("- Missing Success Criteria section");
-	} else {
-		// Extract criteria lines (checkboxes after Success Criteria heading)
-		const match = SUCCESS_CRITERIA_RE.exec(content);
-		const criteriaSection = match ? content.slice(match.index + match[0].length) : "";
-		const criteriaEnd = criteriaSection.search(/^##\s/m);
-		const criteriaBlock =
-			criteriaEnd >= 0 ? criteriaSection.slice(0, criteriaEnd) : criteriaSection;
-		const criteriaLines = criteriaBlock.split("\n").filter((l) => /^\s*-\s+\[/.test(l));
-		if (criteriaLines.length === 0 || !criteriaLines.some((l) => CONCRETE_CRITERION_RE.test(l))) {
-			problems.push(
-				"- Success Criteria must include concrete, testable conditions (commands in backticks or specific file references)",
-			);
+	// Large plans: check Success Criteria
+	if (!isSmallPlan) {
+		if (!SUCCESS_CRITERIA_RE.test(content)) {
+			problems.push("- Missing Success Criteria section");
+		} else {
+			// Extract criteria lines (checkboxes after Success Criteria heading)
+			const match = SUCCESS_CRITERIA_RE.exec(content);
+			const criteriaSection = match ? content.slice(match.index + match[0].length) : "";
+			const criteriaEnd = criteriaSection.search(/^##\s/m);
+			const criteriaBlock =
+				criteriaEnd >= 0 ? criteriaSection.slice(0, criteriaEnd) : criteriaSection;
+			const criteriaLines = criteriaBlock.split("\n").filter((l) => /^\s*-\s+\[/.test(l));
+			if (criteriaLines.length === 0 || !criteriaLines.some((l) => CONCRETE_CRITERION_RE.test(l))) {
+				problems.push(
+					"- Success Criteria must include concrete, testable conditions (commands in backticks or specific file references)",
+				);
+			}
+		}
+
+		// Large plans: check Review Gates
+		if (!REVIEW_GATE_RE.test(content)) {
+			problems.push("- Missing Review Gates section");
 		}
 	}
 
-	// Check Review Gates
-	if (!REVIEW_GATE_RE.test(content)) {
-		problems.push("- Missing Review Gates section");
-	}
-
-	// Check each task has File and Verify fields
-	const taskSections = splitTaskSections(content);
+	// Check each task has required fields
 	for (const section of taskSections) {
 		if (!FILE_FIELD_RE.test(section.body)) {
 			problems.push(`- Task "${section.name}": missing File field`);
 		}
-		if (!VERIFY_FIELD_RE.test(section.body)) {
-			problems.push(`- Task "${section.name}": missing Verify field`);
-		} else if (!VERIFY_SPECIFIC_RE.test(section.body)) {
+		if (!isSmallPlan) {
+			// Large plans: require Verify field with specificity
+			if (!VERIFY_FIELD_RE.test(section.body)) {
+				problems.push(`- Task "${section.name}": missing Verify field`);
+			} else if (!VERIFY_SPECIFIC_RE.test(section.body)) {
+				problems.push(
+					`- Task "${section.name}": Verify field must reference a specific file or command (e.g., "Verify: src/__tests__/foo.test.ts:testFunction")`,
+				);
+			}
+		} else if (VERIFY_FIELD_RE.test(section.body) && !VERIFY_SPECIFIC_RE.test(section.body)) {
+			// Small plans: Verify field optional, but if present must be specific
 			problems.push(
-				`- Task "${section.name}": Verify field must reference a specific file or command (e.g., "Verify: src/__tests__/foo.test.ts:testFunction")`,
+				`- Task "${section.name}": Verify field must reference a specific file or command`,
 			);
 		}
 	}

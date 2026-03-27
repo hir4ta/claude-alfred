@@ -49,6 +49,16 @@ export function recordAction(
 	writeState(entries);
 }
 
+/** Record a DENY resolution (pending-fix cleared after DENY). */
+export function recordResolution(event: string, reason: string): void {
+	const entries = readState();
+	entries.push({ action: `${event}:resolution`, reason, at: new Date().toISOString() });
+	if (entries.length > MAX_ENTRIES) {
+		entries.splice(0, entries.length - MAX_ENTRIES);
+	}
+	writeState(entries);
+}
+
 /** Read all recorded metrics (up to 50). */
 export function readMetrics(): MetricEntry[] {
 	return readState();
@@ -59,18 +69,22 @@ export function getMetricsSummary(): {
 	deny: number;
 	block: number;
 	respond: number;
+	resolution: number;
+	denyResolutionRate: number;
 	topReasons: { reason: string; count: number }[];
 } {
 	const entries = readState();
 	let deny = 0;
 	let block = 0;
 	let respond = 0;
+	let resolution = 0;
 	const reasonCounts = new Map<string, number>();
 
 	for (const e of entries) {
 		if (e.action.endsWith(":deny")) deny++;
 		else if (e.action.endsWith(":block")) block++;
 		else if (e.action.endsWith(":respond")) respond++;
+		else if (e.action.endsWith(":resolution")) resolution++;
 
 		reasonCounts.set(e.reason, (reasonCounts.get(e.reason) ?? 0) + 1);
 	}
@@ -80,5 +94,12 @@ export function getMetricsSummary(): {
 		.sort((a, b) => b.count - a.count)
 		.slice(0, 5);
 
-	return { deny, block, respond, topReasons };
+	return {
+		deny,
+		block,
+		respond,
+		resolution,
+		denyResolutionRate: deny > 0 ? Math.min(100, Math.round((resolution / deny) * 100)) : 0,
+		topReasons,
+	};
 }
