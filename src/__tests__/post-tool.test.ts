@@ -81,6 +81,45 @@ describe("postTool: Edit/Write gate execution", () => {
 	});
 });
 
+describe("postTool: .qult/ file skip", () => {
+	it("skips gate execution for files inside .qult/", async () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_write: { lint: { command: "echo 'lint error' && exit 1", timeout: 3000 } },
+			}),
+		);
+
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		await postTool({
+			tool_name: "Write",
+			tool_input: { file_path: join(TEST_DIR, ".qult", "gates.json") },
+		});
+
+		const { readPendingFixes } = await import("../state/pending-fixes.ts");
+		expect(readPendingFixes().length).toBe(0);
+		expect(stdoutCapture.join("")).toBe("");
+	});
+
+	it("skips gate execution for .qult/.state/ files", async () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_write: { lint: { command: "echo 'lint error' && exit 1", timeout: 3000 } },
+			}),
+		);
+
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		await postTool({
+			tool_name: "Edit",
+			tool_input: { file_path: join(TEST_DIR, ".qult", ".state", "pending-fixes.json") },
+		});
+
+		const { readPendingFixes } = await import("../state/pending-fixes.ts");
+		expect(readPendingFixes().length).toBe(0);
+	});
+});
+
 describe("postTool: Bash handling", () => {
 	it("resets pace on git commit", async () => {
 		writeFileSync(

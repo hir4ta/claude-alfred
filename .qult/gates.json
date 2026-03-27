@@ -1,19 +1,9 @@
 {
   "on_write": {
-    "lint": {
-      "command": "biome check {file} --no-errors-on-unmatched",
-      "timeout": 3000
-    },
-    "typecheck": {
-      "command": "tsc --noEmit",
-      "timeout": 10000,
-      "run_once_per_batch": true
-    }
+    "lint": { "command": "biome check {file}", "timeout": 3000 },
+    "typecheck": { "command": "bun tsc --noEmit", "timeout": 10000, "run_once_per_batch": true }
   },
   "on_commit": {
-    "test": {
-      "command": "bunx --bun vitest --changed --reporter=verbose",
-      "timeout": 30000
-    }
+    "test": { "command": "bun vitest run", "timeout": 30000 }
   }
 }

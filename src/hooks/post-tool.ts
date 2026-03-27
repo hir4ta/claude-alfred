@@ -49,6 +49,10 @@ function handleEditWrite(ev: HookEvent): void {
 	if (!rawFile) return;
 	const file = resolve(rawFile);
 
+	// Skip qult's own state/config files
+	const qultDir = resolve(process.cwd(), ".qult");
+	if (file.startsWith(`${qultDir}/`) || file === qultDir) return;
+
 	const gates = loadGates();
 	if (!gates?.on_write) return;
 

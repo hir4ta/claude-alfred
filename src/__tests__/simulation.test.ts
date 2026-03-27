@@ -741,6 +741,21 @@ describe("Scenario 15: Init creates empty gates, session-start prompts detection
 	});
 });
 
+describe("Scenario 15b: Edit .qult/ files does not trigger gates", () => {
+	it("skips gate execution when editing .qult/gates.json", async () => {
+		setupFailingLintGate();
+
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		await postTool({
+			tool_name: "Write",
+			tool_input: { file_path: join(QULT_DIR, "gates.json") },
+		});
+
+		expect(readPendingFixes()).toHaveLength(0);
+		expect(stdoutCapture.join("")).not.toContain("lint error");
+	});
+});
+
 describe("Scenario 16: Plan status tracking — Stop blocks on incomplete plan", () => {
 	it("blocks when plan has pending tasks, allows when all done", async () => {
 		const stop = (await import("../hooks/stop.ts")).default;
