@@ -190,7 +190,19 @@ Hook スキーマバグ修正 + ドキュメント刷新。
 
 ---
 
-## v0.6.0 — Evaluator 強化 + 効果測定
+## v0.6.0 — Evaluator 強化 + 効果測定 ✅ (2026-03-27)
+
+Anthropic記事 "Harness Design for Long-Running Apps" 基準で全カテゴリ80+を達成。
+
+**実装済み:**
+- metrics.ts — DENY/block/respond 発火記録 (50件 cap) + `doctor --metrics`
+- reviewer calibration — S/A/A self-check 削除、few-shot 3例、anti-self-persuasion
+- Sprint contract — Plan template に Success Criteria 必須化、ExitPlanMode 検証
+- alfred reset — 状態リセット (--keep-history)、doctor state 整合性チェック
+- Handoff 強化 — current_task, gate_errors, plan_path 追加
+- dead code 削除 — 10 orphaned state files + ProjectProfile 型
+- テスト — 実 biome 統合テスト + Sprint contract シミュレーション (163 tests)
+- Verify regex 拡張 — .tsx/.jsx/.rb/.java/.kt/.swift/.c/.cpp/.h 追加
 
 v0.5 までの「構造は正しいが効果が不明」を解消する。記事の 2 つの原則に集中:
 1. **Evaluator チューニング** — 「素の Claude は QA が下手」→ calibration
