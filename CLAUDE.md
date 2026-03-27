@@ -1,6 +1,6 @@
 # qult
 
-Claude Code の暴走を止める執事。12 Hooks + Skill + Agent で品質の下限を守る。
+Claude Code の品質を構造で守る evaluator harness。12 Hooks + Skill + Agent で品質の下限を機械的に担保。
 
 ## スタック
 

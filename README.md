@@ -1,6 +1,6 @@
 # qult
 
-Claude Code の暴走を止める執事。品質の下限を機械的に守る **evaluator harness**。
+Claude Code の品質を構造で守る **evaluator harness**。quality + cult = qult。
 
 > Claude は優秀だが、lint エラーを放置して次のファイルに行く。テストなしでコミットする。自分のコードを褒めてレビューを終える。
 > qult はそれを **物理的に止める**。お願い (advisory) ではなく、exit 2 (DENY) で。
