@@ -250,6 +250,8 @@ describe("Scenario 6: Plan mode → template injected with review gates", () => 
 		expect(context).toContain("1 file");
 		expect(context).toContain("15 lines");
 		expect(context).toContain("Verify");
+		// Must contain success criteria
+		expect(context).toContain("Success Criteria");
 		// Must contain review gates (full template for 300+ chars)
 		expect(context).toContain("Design Review");
 		expect(context).toContain("Phase Review");
@@ -314,6 +316,8 @@ describe("Scenario 8: ExitPlanMode → plan without review gates is DENIED", () 
 				"- File: src/middleware.ts",
 				"- Verify: src/__tests__/middleware.test.ts:authMiddleware",
 				"",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
 				"## Review Gates",
 				"- [ ] Design Review: /alfred:review",
 				"- [ ] Final Review: /alfred:review",
@@ -350,6 +354,64 @@ describe("Scenario 8: ExitPlanMode → plan without review gates is DENIED", () 
 		const reason = (response?.hookSpecificOutput as Record<string, string>)
 			?.permissionDecisionReason;
 		expect(reason).toContain("Review");
+	});
+});
+
+describe("Scenario 9: ExitPlanMode → Success Criteria validation", () => {
+	it("plan without Success Criteria is DENIED", async () => {
+		const permReq = (await import("../hooks/permission-request.ts")).default;
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+
+		writeFileSync(
+			join(planDir, "no-criteria.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add feature",
+				"- File: src/feature.ts",
+				"- Verify: src/__tests__/feature.test.ts:testFeature",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		try {
+			await permReq({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		} catch {
+			// exit(2)
+		}
+
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		const reason = (response?.hookSpecificOutput as Record<string, string>)
+			?.permissionDecisionReason;
+		expect(reason).toContain("Success Criteria");
+	});
+});
+
+describe("Scenario 10: ExitPlanMode → concrete Success Criteria passes", () => {
+	it("plan with concrete Success Criteria is allowed", async () => {
+		const permReq = (await import("../hooks/permission-request.ts")).default;
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+
+		writeFileSync(
+			join(planDir, "good-criteria.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add feature",
+				"- File: src/feature.ts",
+				"- Verify: src/__tests__/feature.test.ts:testFeature",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
+				"- [ ] `bun tsc --noEmit` no type errors",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		await permReq({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		expect(exitCode).toBeNull();
 	});
 });
 

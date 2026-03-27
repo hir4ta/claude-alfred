@@ -1,0 +1,70 @@
+import { mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+const TEST_DIR = join(import.meta.dirname, ".tmp-metrics-test");
+const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
+const originalCwd = process.cwd();
+
+beforeEach(() => {
+	mkdirSync(STATE_DIR, { recursive: true });
+	process.chdir(TEST_DIR);
+});
+
+afterEach(() => {
+	process.chdir(originalCwd);
+	rmSync(TEST_DIR, { recursive: true, force: true });
+});
+
+describe("metrics", () => {
+	it("records actions and reads them back", async () => {
+		const { recordAction, readMetrics } = await import("../metrics.ts");
+		recordAction("pre-tool", "deny", "pending-fixes exist");
+		recordAction("stop", "block", "plan incomplete");
+		recordAction("post-tool", "respond", "lint errors found");
+
+		const entries = readMetrics();
+		expect(entries).toHaveLength(3);
+		expect(entries[0]!.action).toBe("pre-tool:deny");
+		expect(entries[0]!.reason).toBe("pending-fixes exist");
+		expect(entries[2]!.action).toBe("post-tool:respond");
+	});
+
+	it("caps at 50 entries", async () => {
+		const { recordAction, readMetrics } = await import("../metrics.ts");
+		for (let i = 0; i < 60; i++) {
+			recordAction("post-tool", "respond", `error-${i}`);
+		}
+
+		const entries = readMetrics();
+		expect(entries).toHaveLength(50);
+		// Oldest entries should be trimmed
+		expect(entries[0]!.reason).toBe("error-10");
+	});
+
+	it("returns summary counts by action", async () => {
+		const { recordAction, getMetricsSummary } = await import("../metrics.ts");
+		recordAction("pre-tool", "deny", "pending-fixes");
+		recordAction("pre-tool", "deny", "pace red");
+		recordAction("pre-tool", "deny", "pending-fixes");
+		recordAction("stop", "block", "plan incomplete");
+		recordAction("post-tool", "respond", "lint errors");
+
+		const summary = getMetricsSummary();
+		expect(summary.deny).toBe(3);
+		expect(summary.block).toBe(1);
+		expect(summary.respond).toBe(1);
+		expect(summary.topReasons).toHaveLength(4);
+		expect(summary.topReasons[0]!.reason).toBe("pending-fixes");
+		expect(summary.topReasons[0]!.count).toBe(2);
+	});
+
+	it("returns empty summary when no metrics", async () => {
+		const { getMetricsSummary } = await import("../metrics.ts");
+		const summary = getMetricsSummary();
+		expect(summary.deny).toBe(0);
+		expect(summary.block).toBe(0);
+		expect(summary.respond).toBe(0);
+		expect(summary.topReasons).toHaveLength(0);
+	});
+});

@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import { ALFRED_HOOKS } from "./init.ts";
+import { getMetricsSummary, readMetrics } from "./state/metrics.ts";
 import type { GatesConfig } from "./types.ts";
 
 export type CheckStatus = "ok" | "fail" | "warn";
@@ -95,12 +96,57 @@ function checkGates(): CheckResult {
 	}
 }
 
+const KNOWN_STATE_FILES = new Set([
+	"pending-fixes.json",
+	"session-pace.json",
+	"gate-batch.json",
+	"gate-history.json",
+	"context-budget.json",
+	"fail-count.json",
+	"handoff.json",
+	"last-test-pass.json",
+	"last-review.json",
+	"metrics.json",
+]);
+
 function checkStateDir(): CheckResult {
 	const stateDir = join(process.cwd(), ".alfred", ".state");
-	if (existsSync(stateDir)) {
-		return { name: "state", status: "ok", message: ".alfred/.state/ exists" };
+	if (!existsSync(stateDir)) {
+		return {
+			name: "state",
+			status: "fail",
+			message: ".alfred/.state/ not found (run alfred init)",
+		};
 	}
-	return { name: "state", status: "fail", message: ".alfred/.state/ not found (run alfred init)" };
+
+	const warnings: string[] = [];
+	try {
+		const files = readdirSync(stateDir);
+		for (const file of files) {
+			if (!file.endsWith(".json")) continue;
+			// Check for unknown files
+			if (!KNOWN_STATE_FILES.has(file)) {
+				warnings.push(`unknown: ${file}`);
+			}
+			// Check JSON parsability
+			try {
+				JSON.parse(readFileSync(join(stateDir, file), "utf-8"));
+			} catch {
+				warnings.push(`corrupt: ${file}`);
+			}
+		}
+	} catch {
+		// fail-open
+	}
+
+	if (warnings.length > 0) {
+		return {
+			name: "state",
+			status: "warn",
+			message: `.alfred/.state/ issues: ${warnings.join(", ")}`,
+		};
+	}
+	return { name: "state", status: "ok", message: ".alfred/.state/ exists" };
 }
 
 function checkPath(): CheckResult {
@@ -137,14 +183,39 @@ export function runChecks(): CheckResult[] {
 	];
 }
 
+function showMetrics(): void {
+	const summary = getMetricsSummary();
+	const entries = readMetrics();
+
+	console.log(`\n--- Metrics (last ${entries.length} events) ---`);
+	console.log(`  DENY:    ${summary.deny}`);
+	console.log(`  block:   ${summary.block}`);
+	console.log(`  respond: ${summary.respond}`);
+
+	if (summary.topReasons.length > 0) {
+		console.log("\n  Top reasons:");
+		for (const r of summary.topReasons) {
+			console.log(`    ${r.count}x  ${r.reason}`);
+		}
+	}
+}
+
 export const doctorCommand = defineCommand({
 	meta: { description: "Check alfred health" },
-	async run() {
+	args: {
+		metrics: { type: "boolean", description: "Show action metrics", default: false },
+	},
+	async run({ args }) {
 		const results = runChecks();
 		for (const r of results) {
 			const tag = r.status === "ok" ? "[OK]" : r.status === "fail" ? "[FAIL]" : "[WARN]";
 			console.log(`${tag} ${r.message}`);
 		}
+
+		if (args.metrics) {
+			showMetrics();
+		}
+
 		const hasFail = results.some((r) => r.status === "fail");
 		if (hasFail) process.exit(1);
 	},

@@ -1,5 +1,6 @@
 import { resetBudget } from "../state/context-budget.ts";
 import type { HookEvent } from "../types.ts";
+import { setCurrentEvent } from "./respond.ts";
 
 const EVENT_MAP: Record<string, () => Promise<{ default: (ev: HookEvent) => Promise<void> }>> = {
 	"post-tool": () => import("./post-tool.ts"),
@@ -44,6 +45,7 @@ export async function dispatch(event: string): Promise<void> {
 		resetBudget(ev.session_id);
 	}
 
+	setCurrentEvent(event);
 	try {
 		const handler = await loader();
 		await handler.default(ev);
@@ -51,5 +53,7 @@ export async function dispatch(event: string): Promise<void> {
 		if (err instanceof Error && !err.message.startsWith("process.exit")) {
 			process.stderr.write(`[alfred] ${event}: ${err.message}\n`);
 		}
+	} finally {
+		setCurrentEvent("unknown");
 	}
 }

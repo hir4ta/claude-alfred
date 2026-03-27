@@ -40,6 +40,15 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 		if (handoff.pending_fixes) {
 			lines.push("WARNING: There are pending lint/type fixes from the previous session.");
 		}
+		if (handoff.current_task) {
+			lines.push(`In progress: ${handoff.current_task}`);
+		}
+		if (handoff.plan_path) {
+			lines.push(`Plan: ${handoff.plan_path}`);
+		}
+		if (handoff.gate_errors && handoff.gate_errors.length > 0) {
+			lines.push(`Recent gate errors: ${handoff.gate_errors.join("; ")}`);
+		}
 		lines.push(`Next steps: ${handoff.next_steps}`);
 		contextParts.push(lines.join("\n"));
 		clearHandoff();

@@ -25,16 +25,17 @@ alfred CLI (init / hook / doctor)
 
 ```
 src/
-├── cli.ts                  # citty: init / hook / doctor
+├── cli.ts                  # citty: init / hook / doctor / reset
 ├── init.ts                 # セットアップ (14 hooks + skill + agent + rules + gates)
-├── doctor.ts               # ヘルスチェック (8項目: bun, hooks, skill, agent, rules, gates, state, path)
+├── doctor.ts               # ヘルスチェック (8項目 + --metrics) + state整合性検証
+├── reset.ts                # 状態リセット (--keep-history で履歴保持)
 ├── hooks/
 │   ├── dispatcher.ts       # event → handler ルーティング (14 events)
-│   ├── respond.ts          # 共通: respond / deny / block
+│   ├── respond.ts          # 共通: respond / deny / block + metrics記録
 │   ├── post-tool.ts        # lint/type gate + pending-fixes + pace + batch + test-pass + verify
 │   ├── pre-tool.ts         # pending-fixes → DENY + pace red → DENY + commit without test → DENY
 │   ├── user-prompt.ts      # Plan テンプレート注入 + 大タスク検出
-│   ├── permission-request.ts # ExitPlanMode: Review Gates 検証
+│   ├── permission-request.ts # ExitPlanMode: Review Gates + Success Criteria 検証
 │   ├── task-completed.ts   # Plan task status 自動同期
 │   ├── session-start.ts    # .alfred作成 + gates自動検出 + handoff復元
 │   ├── stop.ts             # pending-fixes block + Plan未完了block + レビュー強制 + pace警告
@@ -59,7 +60,8 @@ src/
 │   ├── gate-history.ts    # gate 結果トレンド + コミット間隔統計
 │   ├── gate-batch.ts       # run_once_per_batch 実行履歴
 │   ├── last-test-pass.ts  # テスト pass 記録 (commit 前強制)
-│   └── last-review.ts    # レビュー完了記録 (Stop 時強制)
+│   ├── last-review.ts    # レビュー完了記録 (Stop 時強制)
+│   └── metrics.ts         # DENY/block/respond 発火記録 (50件 cap)
 ├── templates/              # init が配置するファイル
 │   ├── skill-review.md     # /alfred:review skill
 │   ├── agent-reviewer.md   # reviewer agent
@@ -110,13 +112,20 @@ task clean    # ビルド成果物削除
 ### 状態ファイル (.alfred/.state/)
 - pending-fixes.json — 未修正 lint/type エラー
 - session-pace.json — Pace 追跡 (最終コミット時刻, 変更ファイル数, ツール呼出数)
-- handoff.json — 構造化ハンドオフ (PreCompact/SessionEnd で保存)
+- handoff.json — 構造化ハンドオフ (Plan context + gate errors 含む)
 - fail-count.json — 連続失敗カウント
 - context-budget.json — コンテキスト注入予算 (session_id ベース, 2000 tok)
 - gate-history.json — gate 結果トレンド + コミット間隔 (50件 cap)
 - gate-batch.json — run_once_per_batch 実行履歴 (session_id ベース)
 - last-test-pass.json — テスト pass 記録 (commit 前に必須)
 - last-review.json — レビュー完了記録 (Plan 時 Stop 前に必須)
+- metrics.json — DENY/block/respond 発火記録 (50件 cap, `doctor --metrics` で表示)
+
+### Sprint Contract (Anthropic記事準拠)
+- Plan テンプレートに Success Criteria セクションを必須化
+- ExitPlanMode 時に Success Criteria の具体性を検証 (コマンド or ファイル参照)
+- reviewer は全 findings を報告。Judge (skill) のみが S/A/A フィルタを適用
+- reviewer に few-shot 例 + anti-self-persuasion 指示を配置
 
 ### Phase Gate (各コミット前に必ず実行)
 1. `bun vitest run` — 全テスト pass

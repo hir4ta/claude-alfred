@@ -78,16 +78,6 @@ export interface GateDefinition {
 	run_once_per_batch?: boolean;
 }
 
-/** Project profile in .alfred/.state/project-profile.json */
-export interface ProjectProfile {
-	language: string[];
-	runtime?: string;
-	test_framework?: string;
-	test_pattern?: string;
-	linter?: string;
-	detected_at: string;
-}
-
 /** Handoff state saved by PreCompact */
 export interface HandoffState {
 	summary: string;
@@ -95,4 +85,7 @@ export interface HandoffState {
 	pending_fixes: boolean;
 	next_steps: string;
 	saved_at: string;
+	current_task?: string;
+	gate_errors?: string[];
+	plan_path?: string;
 }

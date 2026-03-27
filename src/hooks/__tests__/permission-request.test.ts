@@ -49,6 +49,8 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"### Task 1: Add helper [pending]",
 				"- **File**: src/helper.ts",
 				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
 				"## Review Gates",
 				"- [ ] Design Review",
 				"- [ ] Final Review",
@@ -146,7 +148,7 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		expect(reason).toContain("Verify");
 	});
 
-	it("allows well-structured plan with File + Verify + Review Gates", async () => {
+	it("allows well-structured plan with File + Verify + Success Criteria + Review Gates", async () => {
 		const planDir = join(TEST_DIR, ".claude", "plans");
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
@@ -156,6 +158,8 @@ describe("permissionRequest (ExitPlanMode)", () => {
 				"### Task 1: Add helper [pending]",
 				"- **File**: src/helper.ts",
 				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"## Success Criteria",
+				"- [ ] `bun tsc --noEmit` no type errors",
 				"## Review Gates",
 				"- [ ] Final Review",
 			].join("\n"),
@@ -193,6 +197,89 @@ describe("permissionRequest (ExitPlanMode)", () => {
 		const reason = (response?.hookSpecificOutput as Record<string, string>)
 			?.permissionDecisionReason;
 		expect(reason).toContain("specific file or command");
+	});
+
+	it("denies plan without Success Criteria section", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add helper [pending]",
+				"- **File**: src/helper.ts",
+				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		try {
+			await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		} catch {
+			// exit(2)
+		}
+
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		const reason = (response?.hookSpecificOutput as Record<string, string>)
+			?.permissionDecisionReason;
+		expect(reason).toContain("Success Criteria");
+	});
+
+	it("denies plan with generic Success Criteria", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add helper [pending]",
+				"- **File**: src/helper.ts",
+				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"## Success Criteria",
+				"- [ ] テストが通る",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		try {
+			await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		} catch {
+			// exit(2)
+		}
+
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		const reason = (response?.hookSpecificOutput as Record<string, string>)
+			?.permissionDecisionReason;
+		expect(reason).toContain("Success Criteria");
+	});
+
+	it("allows plan with concrete Success Criteria", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add helper [pending]",
+				"- **File**: src/helper.ts",
+				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` all tests pass",
+				"- [ ] `bun tsc --noEmit` no type errors",
+				"## Review Gates",
+				"- [ ] Final Review",
+			].join("\n"),
+		);
+
+		const handler = (await import("../permission-request.ts")).default;
+		await handler({ hook_type: "PermissionRequest", tool: { name: "ExitPlanMode" } });
+		expect(exitCode).toBeNull();
 	});
 
 	it("ignores non-ExitPlanMode events", async () => {

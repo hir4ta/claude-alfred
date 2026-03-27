@@ -18,6 +18,10 @@ Each task: 1 file, under 15 lines, with a Verify field.
 - **Change**: <what to do>
 - **Verify**: <test file : test function>
 
+## Success Criteria
+Concrete, testable conditions that define "done" for this plan.
+- [ ] \`<specific command>\` — expected outcome
+
 Update status to [done] as you complete each task.`;
 
 const FULL_TEMPLATE = `${COMPACT_TEMPLATE}
