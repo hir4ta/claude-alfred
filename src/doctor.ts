@@ -2,7 +2,14 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import { QULT_HOOKS } from "./init.ts";
+import {
+	getAvgGateDuration,
+	getCommitStats,
+	getGatePassRates,
+	getTopErrorPatterns,
+} from "./state/gate-history.ts";
 import { getMetricsSummary, readMetrics } from "./state/metrics.ts";
+import { readSessionState } from "./state/session-state.ts";
 import type { GatesConfig } from "./types.ts";
 
 export type CheckStatus = "ok" | "fail" | "warn";
@@ -213,57 +220,143 @@ export function runChecks(): CheckResult[] {
 }
 
 function showMetrics(): void {
-	const summary = getMetricsSummary();
+	const sessionState = readSessionState();
+	const commitStats = getCommitStats();
+	const summary = getMetricsSummary(
+		sessionState.peak_consecutive_error_count ?? 0,
+		commitStats?.count ?? 0,
+	);
 	const entries = readMetrics();
 
 	console.log(`\n--- Metrics (last ${entries.length} events) ---`);
-	console.log(`  DENY:    ${summary.deny}`);
-	console.log(`  block:   ${summary.block}`);
-	console.log(`  respond: ${summary.respond}`);
 
-	if (summary.topReasons.length > 0) {
-		console.log("\n  Top reasons:");
-		for (const r of summary.topReasons) {
-			console.log(`    ${r.count}x  ${r.reason}`);
-		}
+	// --- Actions ---
+	console.log("\n  Actions:");
+	const denyDetail =
+		summary.deny > 0
+			? `  (${summary.denyActionable} actionable, ${summary.denyDefensive} defensive)`
+			: "";
+	console.log(`    DENY:            ${summary.deny}${denyDetail}`);
+	console.log(`    block:           ${summary.block}`);
+	console.log(`    respond:         ${summary.respond}`);
+	if (summary.respondSkipped > 0) {
+		console.log(`    respond-skipped: ${summary.respondSkipped}  (budget exceeded)`);
+	}
+	if (summary.reviewMiss > 0) {
+		console.log(`    review:miss:     ${summary.reviewMiss}`);
 	}
 
+	// --- Top reasons by type ---
+	const showReasons = (label: string, reasons: { reason: string; count: number }[]) => {
+		if (reasons.length === 0) return;
+		console.log(`\n  ${label}:`);
+		for (const r of reasons) {
+			console.log(`    ${r.count}x  ${r.reason}`);
+		}
+	};
+	showReasons("Top DENY reasons (actionable)", summary.topDenyReasons);
+	showReasons("Top block reasons", summary.topBlockReasons);
+
+	// --- Gate error patterns ---
+	try {
+		const patterns = getTopErrorPatterns(5);
+		if (patterns.length > 0) {
+			console.log("\n  Top gate failures:");
+			for (const p of patterns) {
+				console.log(`    ${p.count}x  ${p.gate}: ${p.pattern}`);
+			}
+		}
+	} catch {
+		/* fail-open */
+	}
+
+	// --- Effectiveness ---
 	const hasEffectiveness =
-		summary.deny > 0 ||
-		summary.gatePassRate > 0 ||
-		summary.firstPassTotal > 0 ||
-		summary.reviewTotal > 0;
+		summary.denyActionable > 0 || summary.gatePassRate > 0 || summary.firstPassTotal > 0;
 	if (hasEffectiveness) {
 		console.log("\n  Effectiveness:");
-		if (summary.deny > 0) {
+		if (summary.denyActionable > 0) {
 			console.log(
-				`    DENY resolution: ${summary.resolution}/${summary.deny} (${summary.denyResolutionRate}%)`,
+				`    DENY resolution (actionable): ${summary.resolution}/${summary.denyActionable} (${summary.actionableDenyResolutionRate}%)`,
 			);
+		}
+		if (summary.fixEffortTotal > 0) {
+			console.log(`    Avg fix effort: ${summary.avgFixEffort} edits/resolution`);
 		}
 		if (summary.gatePassRate > 0) {
 			console.log(`    Gate pass rate: ${summary.gatePassRate}%`);
 		}
 		if (summary.firstPassTotal > 0) {
-			console.log(`    First-pass clean: ${summary.firstPassRate}%`);
+			const recent =
+				summary.firstPassRateRecent > 0 ? ` (recent: ${summary.firstPassRateRecent}%)` : "";
+			console.log(`    First-pass clean: ${summary.firstPassRate}%${recent}`);
 		}
-		if (summary.reviewTotal > 0) {
-			console.log(`    Review pass rate: ${summary.reviewPassRate}%`);
-			console.log(
-				`    Review findings: ${summary.reviewFindingsTotal} total (avg ${summary.reviewAvgFindings}/review)`,
-			);
-			if (summary.reviewFindingsTotal > 0) {
-				const s = summary.reviewFindingsBySeverity;
-				console.log(
-					`    Severity: ${s.critical} critical, ${s.high} high, ${s.medium} medium, ${s.low} low`,
-				);
+		if (summary.denysPerCommit > 0) {
+			console.log(`    DENYs per commit: ${summary.denysPerCommit}`);
+		}
+		if (summary.peakConsecutiveErrors > 0) {
+			console.log(`    Peak consecutive errors: ${summary.peakConsecutiveErrors}`);
+		}
+	}
+
+	// --- Gates ---
+	try {
+		const gateRates = getGatePassRates();
+		const gateDurations = getAvgGateDuration();
+		if (gateRates.length > 0) {
+			console.log("\n  Gates:");
+			const durationMap = new Map(gateDurations.map((d) => [d.gate, d.avgMs]));
+			for (const g of gateRates) {
+				const dur = durationMap.get(g.gate);
+				const durStr = dur !== undefined ? `, avg ${dur}ms` : "";
+				console.log(`    ${g.gate.padEnd(12)} pass ${g.passRate}%${durStr}`);
 			}
 		}
+	} catch {
+		/* fail-open */
+	}
+
+	// --- Gate-specific first-pass ---
+	if (summary.gateFirstPassRates.length > 0) {
+		console.log("\n  First-pass by gate:");
+		for (const g of summary.gateFirstPassRates) {
+			console.log(`    ${g.gate.padEnd(12)} ${g.rate}% (${g.total} failures)`);
+		}
+	}
+
+	// --- Review ---
+	if (summary.reviewTotal > 0) {
+		console.log("\n  Review:");
+		console.log(`    Pass rate: ${summary.reviewPassRate}% (${summary.reviewTotal} reviews)`);
+		console.log(
+			`    Findings: ${summary.reviewFindingsTotal} total (avg ${summary.reviewAvgFindings}/review)`,
+		);
+		if (summary.reviewFindingsTotal > 0) {
+			const s = summary.reviewFindingsBySeverity;
+			console.log(
+				`    Severity: ${s.critical} crit, ${s.high} high, ${s.medium} med, ${s.low} low`,
+			);
+		}
 		if (summary.reviewMiss > 0) {
-			console.log(`    Review misses: ${summary.reviewMiss} (gate failures after review PASS)`);
+			console.log(`    Misses: ${summary.reviewMiss}`);
 		}
-		if (summary.respondSkipped > 0) {
-			console.log(`    Advisory skipped (budget): ${summary.respondSkipped}`);
-		}
+	}
+
+	// --- Commits ---
+	if (commitStats) {
+		console.log("\n  Commits:");
+		console.log(
+			`    ${commitStats.count} commits, avg ${commitStats.avgMinutes}m, med ${commitStats.medianMinutes}m, range ${commitStats.minMinutes}-${commitStats.maxMinutes}m`,
+		);
+	}
+
+	// --- Plans ---
+	const permTotal = summary.permissionAllow + summary.permissionDeny;
+	if (permTotal > 0) {
+		console.log("\n  Plans:");
+		console.log(
+			`    Approved: ${summary.permissionAllow}, Rejected: ${summary.permissionDeny} (${summary.planSuccessRate}% pass)`,
+		);
 	}
 }
 

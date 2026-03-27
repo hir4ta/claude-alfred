@@ -1,4 +1,6 @@
+import { basename } from "node:path";
 import { flushAll } from "../state/flush.ts";
+import { setMetricsContext } from "../state/metrics.ts";
 import { resetBudget } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { setCurrentEvent } from "./respond.ts";
@@ -69,6 +71,7 @@ export async function dispatch(event: string): Promise<void> {
 
 	const debug = !!process.env.QULT_DEBUG;
 	setCurrentEvent(event);
+	setMetricsContext(ev.session_id, basename(ev.cwd || process.cwd()));
 	try {
 		if (debug) process.stderr.write(`[qult:debug] event=${event} input=${input.length}b\n`);
 		const start = Date.now();

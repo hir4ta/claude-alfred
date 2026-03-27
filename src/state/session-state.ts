@@ -43,6 +43,10 @@ export interface SessionState {
 	// Plan contract tracking (cumulative across session, not reset on commit)
 	verified_fields: string[];
 	criteria_commands_run: string[];
+	// Peak consecutive error tracking
+	peak_consecutive_error_count: number;
+	// Fix effort: edits between DENY and resolution
+	deny_edits_before_resolution: number;
 }
 
 function filePath(): string {
@@ -69,6 +73,8 @@ function defaultState(): SessionState {
 		changed_file_paths: [],
 		verified_fields: [],
 		criteria_commands_run: [],
+		peak_consecutive_error_count: 0,
+		deny_edits_before_resolution: 0,
 	};
 }
 
@@ -305,6 +311,9 @@ export function recordFailure(signature: string): number {
 		const count = state.last_error_signature === signature ? state.consecutive_error_count + 1 : 1;
 		state.last_error_signature = signature;
 		state.consecutive_error_count = count;
+		if (count > (state.peak_consecutive_error_count ?? 0)) {
+			state.peak_consecutive_error_count = count;
+		}
 		writeState(state);
 		return count;
 	} catch {
@@ -317,6 +326,32 @@ export function clearFailCount(): void {
 	state.last_error_signature = "";
 	state.consecutive_error_count = 0;
 	writeState(state);
+}
+
+// --- Fix effort tracking ---
+
+/** Increment edit counter for fix effort (editing a file that has pending fixes). */
+export function recordEditTowardsFix(): void {
+	try {
+		const state = readSessionState();
+		state.deny_edits_before_resolution = (state.deny_edits_before_resolution ?? 0) + 1;
+		writeState(state);
+	} catch {
+		/* fail-open */
+	}
+}
+
+/** Reset fix effort counter and return the count (called on resolution). */
+export function resetFixEffort(): number {
+	try {
+		const state = readSessionState();
+		const count = state.deny_edits_before_resolution ?? 0;
+		state.deny_edits_before_resolution = 0;
+		writeState(state);
+		return count;
+	} catch {
+		return 0;
+	}
 }
 
 // --- Action counters ---

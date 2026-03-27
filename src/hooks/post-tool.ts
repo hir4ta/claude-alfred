@@ -6,6 +6,7 @@ import { recordCommit, recordGateResult } from "../state/gate-history.ts";
 import {
 	recordAction,
 	recordFirstPass,
+	recordFixEffort,
 	recordGateOutcome,
 	recordResolution,
 } from "../state/metrics.ts";
@@ -22,9 +23,11 @@ import {
 	readPace,
 	recordChangedFile,
 	recordCriteriaCommand,
+	recordEditTowardsFix,
 	recordFailure,
 	recordTestPass,
 	recordVerifiedField,
+	resetFixEffort,
 	shouldSkipGate,
 	writePace,
 } from "../state/session-state.ts";
@@ -90,7 +93,12 @@ function handleEditWrite(ev: HookEvent): void {
 				markGateRan(name, sessionId);
 			}
 
-			recordGateResult(name, result.passed, result.passed ? undefined : result.output);
+			recordGateResult(
+				name,
+				result.passed,
+				result.passed ? undefined : result.output,
+				result.duration_ms,
+			);
 			try {
 				recordGateOutcome(name, result.passed);
 			} catch {
@@ -112,8 +120,18 @@ function handleEditWrite(ev: HookEvent): void {
 	// Only count once per file per session to avoid inflating metrics on re-edits.
 	if (!hadFixesForFile && !isFirstPassRecorded(file)) {
 		try {
-			recordFirstPass(newFixes.length === 0);
+			const firstFailGate = newFixes.length > 0 ? newFixes[0]!.gate : undefined;
+			recordFirstPass(newFixes.length === 0, firstFailGate);
 			markFirstPassRecorded(file);
+		} catch {
+			/* fail-open */
+		}
+	}
+
+	// Track fix effort: editing a file that has pending fixes counts as an edit toward fix
+	if (hadFixesForFile) {
+		try {
+			recordEditTowardsFix();
 		} catch {
 			/* fail-open */
 		}
@@ -121,7 +139,9 @@ function handleEditWrite(ev: HookEvent): void {
 
 	if (hadFixesForFile && newFixes.length === 0) {
 		try {
+			const edits = resetFixEffort();
 			recordResolution("post-tool", `Fixed: ${file.split("/").pop()}`);
+			if (edits > 0) recordFixEffort(edits);
 		} catch {
 			/* fail-open */
 		}

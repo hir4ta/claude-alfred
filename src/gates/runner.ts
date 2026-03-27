@@ -5,12 +5,14 @@ export interface GateResult {
 	name: string;
 	passed: boolean;
 	output: string;
+	duration_ms: number;
 }
 
-/** Run a single gate command. Returns pass/fail + output. */
+/** Run a single gate command. Returns pass/fail + output + duration. */
 export function runGate(name: string, gate: GateDefinition, file?: string): GateResult {
 	const command = file ? gate.command.replace("{file}", file) : gate.command;
 	const timeout = gate.timeout ?? 10_000;
+	const start = Date.now();
 
 	try {
 		const stdout = execSync(command, {
@@ -24,8 +26,9 @@ export function runGate(name: string, gate: GateDefinition, file?: string): Gate
 			encoding: "utf-8",
 		});
 		const output = (stdout ?? "").slice(0, 1000);
-		return { name, passed: true, output };
+		return { name, passed: true, output, duration_ms: Date.now() - start };
 	} catch (err: unknown) {
+		const duration_ms = Date.now() - start;
 		const e = err as { stdout?: string; stderr?: string; status?: number };
 		const stdout = typeof e.stdout === "string" ? e.stdout : "";
 		const stderr = typeof e.stderr === "string" ? e.stderr : "";
@@ -34,6 +37,7 @@ export function runGate(name: string, gate: GateDefinition, file?: string): Gate
 			name,
 			passed: false,
 			output: output || `Exit code ${e.status ?? 1}`,
+			duration_ms,
 		};
 	}
 }

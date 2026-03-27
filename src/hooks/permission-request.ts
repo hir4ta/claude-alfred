@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { recordAction } from "../state/metrics.ts";
 import { getActivePlan, TASK_RE } from "../state/plan-status.ts";
 import type { HookEvent } from "../types.ts";
 import { deny } from "./respond.ts";
@@ -30,6 +31,13 @@ export default async function permissionRequest(ev: HookEvent): Promise<void> {
 
 	if (problems.length > 0) {
 		deny(`Plan structure issues:\n${problems.join("\n")}`);
+	}
+
+	// Plan validation passed — record success (deny case is recorded by respond.ts)
+	try {
+		recordAction("permission-request", "respond", "plan approved");
+	} catch {
+		/* fail-open */
 	}
 }
 

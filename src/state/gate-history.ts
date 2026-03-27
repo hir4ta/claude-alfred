@@ -15,6 +15,7 @@ interface GateEntry {
 	passed: boolean;
 	error?: string;
 	at: string;
+	duration_ms?: number;
 }
 
 interface CommitEntry {
@@ -69,9 +70,16 @@ export function resetCache(): void {
 }
 
 /** Record a gate execution result. */
-export function recordGateResult(gate: string, passed: boolean, error?: string): void {
+export function recordGateResult(
+	gate: string,
+	passed: boolean,
+	error?: string,
+	duration_ms?: number,
+): void {
 	const history = readHistory();
-	history.gates.push({ gate, passed, error, at: new Date().toISOString() });
+	const entry: GateEntry = { gate, passed, error, at: new Date().toISOString() };
+	if (duration_ms !== undefined) entry.duration_ms = duration_ms;
+	history.gates.push(entry);
 	if (history.gates.length > MAX_ENTRIES) {
 		history.gates = history.gates.slice(-MAX_ENTRIES);
 	}
@@ -107,16 +115,108 @@ export function recordCommit(): void {
 	writeHistory(history);
 }
 
-/** Get average commit interval in minutes. Returns null if < 2 commits. */
-export function getCommitStats(): { avgMinutes: number; count: number } | null {
+/** Get commit interval statistics. Returns null if < 2 commits. */
+export function getCommitStats(): {
+	avgMinutes: number;
+	medianMinutes: number;
+	minMinutes: number;
+	maxMinutes: number;
+	count: number;
+} | null {
 	const history = readHistory();
 	if (history.commits.length < 2) return null;
 
 	const times = history.commits.map((c) => new Date(c.at).getTime()).sort((a, b) => a - b);
-	let totalInterval = 0;
+	const intervals: number[] = [];
 	for (let i = 1; i < times.length; i++) {
-		totalInterval += times[i]! - times[i - 1]!;
+		intervals.push(times[i]! - times[i - 1]!);
 	}
-	const avgMs = totalInterval / (times.length - 1);
-	return { avgMinutes: avgMs / 60_000, count: history.commits.length };
+	intervals.sort((a, b) => a - b);
+
+	const sum = intervals.reduce((a, b) => a + b, 0);
+	const mid = Math.floor(intervals.length / 2);
+	const median =
+		intervals.length % 2 === 0 ? (intervals[mid - 1]! + intervals[mid]!) / 2 : intervals[mid]!;
+
+	return {
+		avgMinutes: Math.round(sum / intervals.length / 60_000),
+		medianMinutes: Math.round(median / 60_000),
+		minMinutes: Math.round(intervals[0]! / 60_000),
+		maxMinutes: Math.round(intervals[intervals.length - 1]! / 60_000),
+		count: history.commits.length,
+	};
+}
+
+/** Get pass rate per gate name. */
+export function getGatePassRates(): { gate: string; passRate: number; total: number }[] {
+	const history = readHistory();
+	const stats = new Map<string, { pass: number; total: number }>();
+	for (const e of history.gates) {
+		const s = stats.get(e.gate) ?? { pass: 0, total: 0 };
+		s.total++;
+		if (e.passed) s.pass++;
+		stats.set(e.gate, s);
+	}
+	return [...stats.entries()]
+		.map(([gate, s]) => ({ gate, passRate: Math.round((s.pass / s.total) * 100), total: s.total }))
+		.sort((a, b) => a.passRate - b.passRate);
+}
+
+/** Get average gate execution duration per gate name. */
+export function getAvgGateDuration(): { gate: string; avgMs: number; count: number }[] {
+	const history = readHistory();
+	const stats = new Map<string, { sum: number; count: number }>();
+	for (const e of history.gates) {
+		if (e.duration_ms === undefined) continue;
+		const s = stats.get(e.gate) ?? { sum: 0, count: 0 };
+		s.sum += e.duration_ms;
+		s.count++;
+		stats.set(e.gate, s);
+	}
+	return [...stats.entries()]
+		.map(([gate, s]) => ({ gate, avgMs: Math.round(s.sum / s.count), count: s.count }))
+		.sort((a, b) => b.avgMs - a.avgMs);
+}
+
+// Patterns to extract specific error codes from gate output
+// Biome: lint/category/ruleName, format/category/ruleName, assist/category/ruleName (exactly 3 segments)
+const BIOME_RULE_RE = /(?:lint|format|assist)\/\w+\/\w+/g;
+const TS_ERROR_RE = /TS\d{4,5}/g;
+// ESLint: @scope/rule-name or no-something (must have hyphen to distinguish from paths)
+const ESLINT_RULE_RE = /@[\w-]+\/[\w-]+|no-[\w-]+/g;
+
+/** Extract specific error patterns from gate failure output. */
+export function getTopErrorPatterns(n: number): { gate: string; pattern: string; count: number }[] {
+	const history = readHistory();
+	const counts = new Map<string, { gate: string; pattern: string; count: number }>();
+
+	for (const e of history.gates) {
+		if (e.passed || !e.error) continue;
+
+		const patterns: string[] = [];
+		// Try biome rules first
+		const biomeMatches = e.error.match(BIOME_RULE_RE);
+		if (biomeMatches) patterns.push(...biomeMatches);
+		// Try TS errors
+		const tsMatches = e.error.match(TS_ERROR_RE);
+		if (tsMatches) patterns.push(...tsMatches);
+		// Try eslint rules
+		if (patterns.length === 0) {
+			const eslintMatches = e.error.match(ESLINT_RULE_RE);
+			if (eslintMatches) patterns.push(...eslintMatches);
+		}
+
+		// Deduplicate within a single error
+		for (const p of new Set(patterns)) {
+			const key = `${e.gate}:${p}`;
+			const existing = counts.get(key);
+			if (existing) {
+				existing.count++;
+			} else {
+				counts.set(key, { gate: e.gate, pattern: p, count: 1 });
+			}
+		}
+	}
+
+	return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, n);
 }
