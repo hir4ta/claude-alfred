@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAllCaches } from "../../state/flush.ts";
 import { writePendingFixes } from "../../state/pending-fixes.ts";
 import { recordReview, writePace } from "../../state/session-state.ts";
 
@@ -12,6 +13,7 @@ let exitCode: number | null = null;
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];

@@ -4,7 +4,11 @@ import { atomicWriteJson } from "./atomic-write.ts";
 
 const STATE_DIR = ".alfred/.state";
 const FILE = "metrics.json";
-const MAX_ENTRIES = 50;
+const MAX_ENTRIES = 500;
+
+// Process-scoped cache
+let _cache: MetricEntry[] | null = null;
+let _dirty = false;
 
 interface MetricEntry {
 	action: string; // "event:type" e.g. "pre-tool:deny"
@@ -18,21 +22,41 @@ function filePath(): string {
 }
 
 function readState(): MetricEntry[] {
+	if (_cache) return _cache;
 	try {
 		const path = filePath();
-		if (!existsSync(path)) return [];
-		return JSON.parse(readFileSync(path, "utf-8"));
+		if (!existsSync(path)) {
+			_cache = [];
+			return _cache;
+		}
+		_cache = JSON.parse(readFileSync(path, "utf-8"));
+		return _cache!;
 	} catch {
-		return [];
+		_cache = [];
+		return _cache;
 	}
 }
 
 function writeState(entries: MetricEntry[]): void {
+	_cache = entries;
+	_dirty = true;
+}
+
+/** Flush cached metrics to disk if dirty. */
+export function flush(): void {
+	if (!_dirty || !_cache) return;
 	try {
-		atomicWriteJson(filePath(), entries);
+		atomicWriteJson(filePath(), _cache);
 	} catch {
 		// fail-open
 	}
+	_dirty = false;
+}
+
+/** Reset cache (for tests). */
+export function resetCache(): void {
+	_cache = null;
+	_dirty = false;
 }
 
 /** Record a DENY/block/respond/respond-skipped/miss action with event name and reason. */
@@ -77,9 +101,9 @@ export function recordResolution(event: string, reason: string): void {
 	writeState(entries);
 }
 
-/** Read all recorded metrics (up to 50). */
+/** Read all recorded metrics (up to 500). Returns a copy to prevent external mutation of cache. */
 export function readMetrics(): MetricEntry[] {
-	return readState();
+	return [...readState()];
 }
 
 /** Record a first-pass outcome (file passed all gates on first write without fixes). */

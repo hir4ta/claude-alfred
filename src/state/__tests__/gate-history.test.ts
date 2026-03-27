@@ -1,12 +1,14 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetAllCaches } from "../flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-gate-history-test");
 const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 });
@@ -58,9 +60,9 @@ describe("gate results", () => {
 		expect(top[0]!.gate).toBe("lint");
 	});
 
-	it("caps at 50 entries", async () => {
+	it("caps at 200 entries", async () => {
 		const { recordGateResult, getTopErrors } = await import("../gate-history.ts");
-		for (let i = 0; i < 60; i++) {
+		for (let i = 0; i < 210; i++) {
 			recordGateResult("lint", false, `error-${i}`);
 		}
 

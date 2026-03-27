@@ -1,12 +1,14 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetAllCaches } from "../flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-metrics-test");
 const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 });
@@ -30,14 +32,14 @@ describe("metrics", () => {
 		expect(entries[2]!.action).toBe("post-tool:respond");
 	});
 
-	it("caps at 50 entries", async () => {
+	it("caps at 500 entries", async () => {
 		const { recordAction, readMetrics } = await import("../metrics.ts");
-		for (let i = 0; i < 60; i++) {
+		for (let i = 0; i < 510; i++) {
 			recordAction("post-tool", "respond", `error-${i}`);
 		}
 
 		const entries = readMetrics();
-		expect(entries).toHaveLength(50);
+		expect(entries).toHaveLength(500);
 		// Oldest entries should be trimmed
 		expect(entries[0]!.reason).toBe("error-10");
 	});

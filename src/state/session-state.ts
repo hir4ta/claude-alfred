@@ -11,6 +11,10 @@ const BUDGET = 2000;
 const DEFAULT_RED_MINUTES = 120;
 const DEFAULT_FILES = 15;
 
+// Process-scoped cache: read once from disk, flush once at end
+let _cache: SessionState | null = null;
+let _dirty = false;
+
 export interface SessionState {
 	// Pace tracking
 	last_commit_at: string;
@@ -70,22 +74,43 @@ function defaultState(): SessionState {
 
 /** Read session state. Returns defaults on error (fail-open). */
 export function readSessionState(): SessionState {
+	if (_cache) return _cache;
 	try {
 		const path = filePath();
-		if (!existsSync(path)) return defaultState();
+		if (!existsSync(path)) {
+			_cache = defaultState();
+			return _cache;
+		}
 		const raw = JSON.parse(readFileSync(path, "utf-8"));
-		return { ...defaultState(), ...raw };
+		const state = { ...defaultState(), ...raw };
+		_cache = state;
+		return state;
 	} catch {
-		return defaultState();
+		_cache = defaultState();
+		return _cache;
 	}
 }
 
 function writeState(state: SessionState): void {
+	_cache = state;
+	_dirty = true;
+}
+
+/** Flush cached state to disk if dirty. */
+export function flush(): void {
+	if (!_dirty || !_cache) return;
 	try {
-		atomicWriteJson(filePath(), state);
+		atomicWriteJson(filePath(), _cache);
 	} catch (e) {
 		if (e instanceof Error) process.stderr.write(`[alfred] state write error: ${e.message}\n`);
 	}
+	_dirty = false;
+}
+
+/** Reset cache (for tests). */
+export function resetCache(): void {
+	_cache = null;
+	_dirty = false;
 }
 
 // --- Pace ---
@@ -95,7 +120,8 @@ export function readPace(): {
 	changed_files: number;
 	tool_calls: number;
 } | null {
-	if (!existsSync(filePath())) return null;
+	// Return null only when both cache and disk are empty (no tracking data yet)
+	if (!_cache && !existsSync(filePath())) return null;
 	const state = readSessionState();
 	return {
 		last_commit_at: state.last_commit_at,

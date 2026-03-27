@@ -4,7 +4,11 @@ import { atomicWriteJson } from "./atomic-write.ts";
 
 const STATE_DIR = ".alfred/.state";
 const FILE = "gate-history.json";
-const MAX_ENTRIES = 50;
+const MAX_ENTRIES = 200;
+
+// Process-scoped cache
+let _cache: HistoryState | null = null;
+let _dirty = false;
 
 interface GateEntry {
 	gate: string;
@@ -27,21 +31,41 @@ function filePath(): string {
 }
 
 function readHistory(): HistoryState {
+	if (_cache) return _cache;
 	try {
 		const path = filePath();
-		if (!existsSync(path)) return { gates: [], commits: [] };
-		return JSON.parse(readFileSync(path, "utf-8"));
+		if (!existsSync(path)) {
+			_cache = { gates: [], commits: [] };
+			return _cache;
+		}
+		_cache = JSON.parse(readFileSync(path, "utf-8"));
+		return _cache!;
 	} catch {
-		return { gates: [], commits: [] };
+		_cache = { gates: [], commits: [] };
+		return _cache;
 	}
 }
 
 function writeHistory(state: HistoryState): void {
+	_cache = state;
+	_dirty = true;
+}
+
+/** Flush cached history to disk if dirty. */
+export function flush(): void {
+	if (!_dirty || !_cache) return;
 	try {
-		atomicWriteJson(filePath(), state);
+		atomicWriteJson(filePath(), _cache);
 	} catch {
 		// fail-open
 	}
+	_dirty = false;
+}
+
+/** Reset cache (for tests). */
+export function resetCache(): void {
+	_cache = null;
+	_dirty = false;
 }
 
 /** Record a gate execution result. */

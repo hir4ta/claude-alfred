@@ -1,3 +1,4 @@
+import { flushAll } from "../state/flush.ts";
 import { resetBudget } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { setCurrentEvent } from "./respond.ts";
@@ -79,6 +80,11 @@ export async function dispatch(event: string): Promise<void> {
 			process.stderr.write(`[alfred] ${event}: ${err.message}\n`);
 		}
 	} finally {
+		try {
+			flushAll();
+		} catch {
+			/* fail-open */
+		}
 		setCurrentEvent("unknown");
 	}
 }

@@ -1,3 +1,4 @@
+import { flushAll } from "../state/flush.ts";
 import { recordAction } from "../state/metrics.ts";
 import { checkBudget, incrementActionCount, recordInjection } from "../state/session-state.ts";
 import type { HookResponse } from "../types.ts";
@@ -56,6 +57,11 @@ export function deny(reason: string): never {
 			permissionDecisionReason: reason,
 		},
 	};
+	try {
+		flushAll();
+	} catch {
+		/* fail-open */
+	}
 	process.stdout.write(JSON.stringify(response));
 	process.stderr.write(reason);
 	process.exit(2);
@@ -72,6 +78,11 @@ export function block(reason: string): never {
 		/* fail-open */
 	}
 	const response: HookResponse = { decision: "block", reason };
+	try {
+		flushAll();
+	} catch {
+		/* fail-open */
+	}
 	process.stdout.write(JSON.stringify(response));
 	process.stderr.write(reason);
 	process.exit(2);

@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAllCaches } from "../state/flush.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import { readPace, writePace } from "../state/session-state.ts";
 import type { GatesConfig } from "../types.ts";
@@ -38,6 +39,7 @@ function setupPassingGates(): void {
 }
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];

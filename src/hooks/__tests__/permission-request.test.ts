@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAllCaches } from "../../state/flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-perm-test");
 let stdoutCapture: string[] = [];
@@ -8,6 +9,7 @@ let exitCode: number | null = null;
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(TEST_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];

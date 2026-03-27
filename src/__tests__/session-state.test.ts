@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { resetAllCaches } from "../state/flush.ts";
 import {
 	checkBudget,
 	clearOnCommit,
@@ -25,6 +26,7 @@ const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 });

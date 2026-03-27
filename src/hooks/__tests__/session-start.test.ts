@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAllCaches } from "../../state/flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-session-test");
 const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
@@ -8,6 +9,7 @@ let stdoutCapture: string[] = [];
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];
@@ -55,12 +57,15 @@ describe("sessionStart hook", () => {
 			fixesPath,
 			JSON.stringify([{ file: "old.ts", errors: ["stale error"], gate: "lint" }]),
 		);
+		// Reset cache so handler reads the stale file from disk
+		const { resetAllCaches } = await import("../../state/flush.ts");
+		resetAllCaches();
 
 		const handler = (await import("../session-start.ts")).default;
 		await handler({ hook_type: "SessionStart" });
 
-		const { readFileSync } = await import("node:fs");
-		const fixes = JSON.parse(readFileSync(fixesPath, "utf-8"));
+		const { readPendingFixes } = await import("../../state/pending-fixes.ts");
+		const fixes = readPendingFixes();
 		expect(fixes).toEqual([]);
 	});
 });

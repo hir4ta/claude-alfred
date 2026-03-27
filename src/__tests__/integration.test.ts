@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAllCaches } from "../state/flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-integration-test");
 const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
@@ -10,6 +11,7 @@ let stderrCapture: string[];
 let exitCode: number | null;
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	// Create a minimal gates.json with real biome
 	writeFileSync(
@@ -67,8 +69,8 @@ describe("Integration: real biome gate", () => {
 		});
 
 		// No pending fixes should be created for clean code
-		const fixes = JSON.parse(readFileSync(join(STATE_DIR, "pending-fixes.json"), "utf-8"));
-		expect(fixes).toHaveLength(0);
+		const { readPendingFixes } = await import("../state/pending-fixes.ts");
+		expect(readPendingFixes()).toHaveLength(0);
 	});
 
 	it("detects lint error and creates pending fix, then blocks other file edits", async () => {
@@ -86,9 +88,10 @@ describe("Integration: real biome gate", () => {
 		});
 
 		// Should have pending fixes
-		const fixes = JSON.parse(readFileSync(join(STATE_DIR, "pending-fixes.json"), "utf-8"));
+		const { readPendingFixes } = await import("../state/pending-fixes.ts");
+		const fixes = readPendingFixes();
 		expect(fixes.length).toBeGreaterThan(0);
-		expect(fixes[0].file).toContain("broken.ts");
+		expect(fixes[0]!.file).toContain("broken.ts");
 
 		// Now try to edit another file — should be DENIED
 		stdoutCapture = [];

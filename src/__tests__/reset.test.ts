@@ -2,12 +2,14 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runReset } from "../reset.ts";
+import { resetAllCaches } from "../state/flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-reset-test");
 const STATE_DIR = join(TEST_DIR, ".alfred", ".state");
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	writeFileSync(join(STATE_DIR, "pending-fixes.json"), "[]");
 	writeFileSync(join(STATE_DIR, "gate-history.json"), '{"gates":[],"commits":[]}');

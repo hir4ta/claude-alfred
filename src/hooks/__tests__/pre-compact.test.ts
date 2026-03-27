@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAllCaches } from "../../state/flush.ts";
 import { writePendingFixes } from "../../state/pending-fixes.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-precompact-test");
@@ -9,6 +10,7 @@ let stderrCapture: string[] = [];
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stderrCapture = [];

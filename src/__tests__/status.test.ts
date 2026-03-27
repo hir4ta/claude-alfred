@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetAllCaches } from "../state/flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-status");
 const ALFRED_DIR = join(TEST_DIR, ".alfred");
@@ -10,6 +11,7 @@ let stdoutCapture: string[] = [];
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];
