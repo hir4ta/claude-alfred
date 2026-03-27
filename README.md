@@ -213,15 +213,37 @@ qult doctor     # セットアップの健全性を確認
 
 ## Gate 自動検出
 
-`qult init` がプロジェクトの設定ファイルから gate を自動検出
+`/qult:detect-gates` で自動検出、`.qult/gates.json` に書き込み:
 
 | 言語 | on_write (lint/type) | on_commit (test) | on_review (e2e) |
 |---|---|---|---|
-| **TypeScript** | `biome check` / `eslint` / `tsc --noEmit` | `vitest --changed` / `jest` | — |
-| **Python** | `ruff check` / `pyright` / `mypy` | `pytest` | — |
-| **Go** | `go vet` | `go test` | — |
+| **TypeScript** | `biome check {file}` / `eslint {file}` / `tsc --noEmit` | `vitest run` / `jest` | — |
+| **Python** | `ruff check {file}` / `pyright` / `mypy` | `pytest` | — |
+| **Go** | `go vet ./...` | `go test ./...` | — |
 | **Rust** | `cargo clippy` | `cargo test` | — |
 | **Frontend** | — | — | `playwright test` / `cypress run` |
+
+## データストレージ
+
+メトリクスと gate 実行履歴は日次ローテーションで永続化:
+
+```
+.qult/
+├── metrics/            # hook アクション記録
+│   └── 2026-03/
+│       ├── 2026-03-27.json
+│       └── 2026-03-28.json
+├── gate-history/       # gate 実行結果 + コミット履歴
+│   └── 2026-03/
+│       └── 2026-03-28.json
+└── .state/             # セッション状態 (非ローテーション)
+    ├── session-state.json
+    └── pending-fixes.json
+```
+
+- 1日1ファイル、エントリ上限なし
+- `qult doctor --metrics` は全日分を集計して表示
+- 旧フォーマット (`.state/metrics.json`) は `qult init` または次回セッション開始時に自動マイグレーション
 
 ## スタック
 

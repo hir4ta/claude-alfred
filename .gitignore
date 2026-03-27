@@ -13,6 +13,8 @@ node_modules/
 
 # qult state and generated files (not tracked)
 .qult/.state/
+.qult/metrics/
+.qult/gate-history/
 .qult/conventions.json
 .qult/layers.json
 

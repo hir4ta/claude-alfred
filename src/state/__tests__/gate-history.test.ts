@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetAllCaches } from "../flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-gate-history-test");
-const STATE_DIR = join(TEST_DIR, ".qult", ".state");
 const originalCwd = process.cwd();
 
 beforeEach(() => {
 	resetAllCaches();
-	mkdirSync(STATE_DIR, { recursive: true });
+	mkdirSync(join(TEST_DIR, ".qult", ".state"), { recursive: true });
+	mkdirSync(join(TEST_DIR, ".qult", "gate-history"), { recursive: true });
 	process.chdir(TEST_DIR);
 });
 
@@ -20,12 +20,13 @@ afterEach(() => {
 
 describe("gate results", () => {
 	it("records gate results and retrieves top errors", async () => {
-		const { recordGateResult, getTopErrors } = await import("../gate-history.ts");
+		const { recordGateResult, flush, getTopErrors } = await import("../gate-history.ts");
 		recordGateResult("lint", false, "unused import");
 		recordGateResult("lint", false, "unused import");
 		recordGateResult("lint", false, "unused import");
 		recordGateResult("typecheck", false, "type error");
 		recordGateResult("lint", true);
+		flush();
 
 		const top = getTopErrors(3);
 		expect(top.length).toBeGreaterThan(0);
@@ -34,17 +35,19 @@ describe("gate results", () => {
 	});
 
 	it("returns empty for no errors", async () => {
-		const { recordGateResult, getTopErrors } = await import("../gate-history.ts");
+		const { recordGateResult, flush, getTopErrors } = await import("../gate-history.ts");
 		recordGateResult("lint", true);
 		recordGateResult("typecheck", true);
+		flush();
 
 		const top = getTopErrors(3);
 		expect(top).toHaveLength(0);
 	});
 
 	it("returns empty array for getTopErrors(0)", async () => {
-		const { recordGateResult, getTopErrors } = await import("../gate-history.ts");
+		const { recordGateResult, flush, getTopErrors } = await import("../gate-history.ts");
 		recordGateResult("lint", false, "unused import");
+		flush();
 
 		const top = getTopErrors(0);
 		expect(top).toHaveLength(0);
@@ -52,21 +55,22 @@ describe("gate results", () => {
 	});
 
 	it("returns all available when n > actual count", async () => {
-		const { recordGateResult, getTopErrors } = await import("../gate-history.ts");
+		const { recordGateResult, flush, getTopErrors } = await import("../gate-history.ts");
 		recordGateResult("lint", false, "unused import");
+		flush();
 
 		const top = getTopErrors(100);
 		expect(top).toHaveLength(1);
 		expect(top[0]!.gate).toBe("lint");
 	});
 
-	it("caps at 200 entries", async () => {
-		const { recordGateResult, getTopErrors } = await import("../gate-history.ts");
+	it("daily files have no entry cap", async () => {
+		const { recordGateResult, flush, getTopErrors } = await import("../gate-history.ts");
 		for (let i = 0; i < 210; i++) {
 			recordGateResult("lint", false, `error-${i}`);
 		}
+		flush();
 
-		// Should still work, capped internally
 		const top = getTopErrors(1);
 		expect(top).toHaveLength(1);
 	});
@@ -79,15 +83,14 @@ describe("commit stats", () => {
 	});
 
 	it("calculates average commit interval", async () => {
-		const { recordCommit, getCommitStats } = await import("../gate-history.ts");
-		// Record commits close together
+		const { recordCommit, flush, getCommitStats } = await import("../gate-history.ts");
 		recordCommit();
 		recordCommit();
+		flush();
 
 		const stats = getCommitStats();
 		expect(stats).not.toBeNull();
 		expect(stats!.count).toBe(2);
-		// Interval should be very small (both recorded almost simultaneously)
 		expect(stats!.avgMinutes).toBeLessThan(1);
 	});
 });

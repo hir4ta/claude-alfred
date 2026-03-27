@@ -167,9 +167,11 @@ export async function runInit(force: boolean): Promise<void> {
 	console.log("Writing rules: qult-quality...");
 	writeFile(join(claudeDir, "rules", "qult-quality.md"), loadTemplate("rules-quality.md"), force);
 
-	// 3. Create .qult/ and gates.json
+	// 3. Create .qult/ directories and gates.json
 	const qultDir = join(process.cwd(), ".qult");
 	mkdirSync(join(qultDir, ".state"), { recursive: true });
+	mkdirSync(join(qultDir, "metrics"), { recursive: true });
+	mkdirSync(join(qultDir, "gate-history"), { recursive: true });
 
 	const gatesPath = join(qultDir, "gates.json");
 	if (!existsSync(gatesPath)) {
@@ -177,14 +179,25 @@ export async function runInit(force: boolean): Promise<void> {
 		console.log(`  Created ${gatesPath} (run /qult:detect-gates to configure)`);
 	}
 
-	// 4. Clear stale pending-fixes (fresh start)
+	// 4. Migrate old single-file state to daily rotation
+	const { migrateIfNeeded } = await import("./state/daily-file.ts");
+	const oldMetrics = join(qultDir, ".state", "metrics.json");
+	if (migrateIfNeeded(oldMetrics, "metrics")) {
+		console.log("  Migrated .state/metrics.json → metrics/ (daily rotation)");
+	}
+	const oldGateHistory = join(qultDir, ".state", "gate-history.json");
+	if (migrateIfNeeded(oldGateHistory, "gate-history")) {
+		console.log("  Migrated .state/gate-history.json → gate-history/ (daily rotation)");
+	}
+
+	// 5. Clear stale pending-fixes (fresh start)
 	const pendingPath = join(qultDir, ".state", "pending-fixes.json");
 	writeFileSync(pendingPath, "[]");
 
-	// 5. Register project in central registry (~/.qult/registry.json)
+	// 6. Register project in central registry (~/.qult/registry.json)
 	registerProject(home, process.cwd());
 
-	// 6. Add .qult/ to .gitignore if not already present
+	// 7. Add .qult/ to .gitignore if not already present
 	const gitignorePath = join(process.cwd(), ".gitignore");
 	try {
 		const gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";

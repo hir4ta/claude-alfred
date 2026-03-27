@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetAllCaches } from "../state/flush.ts";
+import { flushAll, resetAllCaches } from "../state/flush.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import { readPace, writePace } from "../state/session-state.ts";
 import type { GatesConfig } from "../types.ts";
@@ -41,6 +41,8 @@ function setupPassingGates(): void {
 beforeEach(() => {
 	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
+	mkdirSync(join(QULT_DIR, "metrics"), { recursive: true });
+	mkdirSync(join(QULT_DIR, "gate-history"), { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];
 	stderrCapture = [];
@@ -1324,6 +1326,7 @@ describe("Scenario 28: DENY effectiveness — resolution tracked when fix clears
 		expect(readPendingFixes().length).toBe(0);
 
 		// Metrics should contain both a deny and a resolution
+		flushAll();
 		const metrics = readMetrics();
 		const denies = metrics.filter((m) => m.action.endsWith(":deny"));
 		const resolutions = metrics.filter((m) => m.action.endsWith(":resolution"));
@@ -1426,6 +1429,7 @@ describe("Scenario 32: Reviewer findings recorded in metrics with severity break
 			// exit(2) from block on FAIL
 		}
 
+		flushAll();
 		const metrics = readMetrics();
 		const reviewEntry = metrics.find((m) => m.action === "review:fail");
 		expect(reviewEntry).toBeDefined();
@@ -1455,6 +1459,7 @@ describe("Scenario 32: Reviewer findings recorded in metrics with severity break
 			last_assistant_message: reviewerOutput,
 		});
 
+		flushAll();
 		const metrics = readMetrics();
 		const reviewEntry = metrics.find((m) => m.action === "review:pass");
 		expect(reviewEntry).toBeDefined();

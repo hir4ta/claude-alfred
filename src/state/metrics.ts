@@ -1,14 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { atomicWriteJson } from "./atomic-write.ts";
+import { pathForToday, readAllDaysArray, readDaily, today, writeDaily } from "./daily-file.ts";
 
-const STATE_DIR = ".qult/.state";
-const FILE = "metrics.json";
-const MAX_ENTRIES = 500;
+const BASE = "metrics";
 
-// Process-scoped cache
+// Process-scoped cache (today's file only)
 let _cache: MetricEntry[] | null = null;
 let _dirty = false;
+let _today: string | null = null;
 
 // Module-scoped context: auto-injected into every metric entry
 let _sessionId: string | undefined;
@@ -48,24 +45,14 @@ export interface MetricEntry {
 	user?: string; // git user or $USER
 }
 
-function filePath(): string {
-	return join(process.cwd(), STATE_DIR, FILE);
-}
-
+/** Read today's entries (process-scoped cache for writes). */
 function readState(): MetricEntry[] {
-	if (_cache) return _cache;
-	try {
-		const path = filePath();
-		if (!existsSync(path)) {
-			_cache = [];
-			return _cache;
-		}
-		_cache = JSON.parse(readFileSync(path, "utf-8"));
-		return _cache!;
-	} catch {
-		_cache = [];
-		return _cache;
-	}
+	const d = today();
+	if (_cache && _today === d) return _cache;
+	_cache = readDaily<MetricEntry[]>(BASE, d, []);
+	_today = d;
+	_dirty = false;
+	return _cache;
 }
 
 function writeState(entries: MetricEntry[]): void {
@@ -75,9 +62,9 @@ function writeState(entries: MetricEntry[]): void {
 
 /** Flush cached metrics to disk if dirty. */
 export function flush(): void {
-	if (!_dirty || !_cache) return;
+	if (!_dirty || !_cache || !_today) return;
 	try {
-		atomicWriteJson(filePath(), _cache);
+		writeDaily(BASE, _today, _cache);
 	} catch {
 		// fail-open
 	}
@@ -88,6 +75,7 @@ export function flush(): void {
 export function resetCache(): void {
 	_cache = null;
 	_dirty = false;
+	_today = null;
 }
 
 /** Record a DENY/block/respond/respond-skipped/miss action with event name and reason. */
@@ -98,9 +86,6 @@ export function recordAction(
 ): void {
 	const entries = readState();
 	entries.push(withContext({ action: `${event}:${type}`, reason, at: new Date().toISOString() }));
-	if (entries.length > MAX_ENTRIES) {
-		entries.splice(0, entries.length - MAX_ENTRIES);
-	}
 	writeState(entries);
 }
 
@@ -115,9 +100,6 @@ export function recordGateOutcome(gate: string, passed: boolean): void {
 				at: new Date().toISOString(),
 			}),
 		);
-		if (entries.length > MAX_ENTRIES) {
-			entries.splice(0, entries.length - MAX_ENTRIES);
-		}
 		writeState(entries);
 	} catch {
 		// fail-open
@@ -130,9 +112,6 @@ export function recordResolution(event: string, reason: string): void {
 	entries.push(
 		withContext({ action: `${event}:resolution`, reason, at: new Date().toISOString() }),
 	);
-	if (entries.length > MAX_ENTRIES) {
-		entries.splice(0, entries.length - MAX_ENTRIES);
-	}
 	writeState(entries);
 }
 
@@ -148,18 +127,15 @@ export function recordFixEffort(edits: number): void {
 				detail: { edits },
 			}),
 		);
-		if (entries.length > MAX_ENTRIES) {
-			entries.splice(0, entries.length - MAX_ENTRIES);
-		}
 		writeState(entries);
 	} catch {
 		// fail-open
 	}
 }
 
-/** Read all recorded metrics (up to 500). Returns a copy to prevent external mutation of cache. */
+/** Read all recorded metrics across all days. */
 export function readMetrics(): MetricEntry[] {
-	return [...readState()];
+	return readAllDaysArray<MetricEntry>(BASE);
 }
 
 /** Record a first-pass outcome (file passed all gates on first write without fixes).
@@ -175,9 +151,6 @@ export function recordFirstPass(passed: boolean, gate?: string): void {
 				at: new Date().toISOString(),
 			}),
 		);
-		if (entries.length > MAX_ENTRIES) {
-			entries.splice(0, entries.length - MAX_ENTRIES);
-		}
 		writeState(entries);
 	} catch {
 		// fail-open
@@ -196,9 +169,6 @@ export function recordReviewOutcome(passed: boolean, detail?: Record<string, num
 				detail,
 			}),
 		);
-		if (entries.length > MAX_ENTRIES) {
-			entries.splice(0, entries.length - MAX_ENTRIES);
-		}
 		writeState(entries);
 	} catch {
 		// fail-open
@@ -247,7 +217,7 @@ export interface MetricsSummary {
  * @param commitCount — total commits from gate-history (avoids circular import)
  */
 export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSummary {
-	const entries = readState();
+	const entries = readMetrics();
 	let deny = 0;
 	let denyDefensive = 0;
 	let denyActionable = 0;
@@ -400,8 +370,6 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 		planSuccessRate:
 			permissionTotal > 0 ? Math.round((permissionAllow / permissionTotal) * 100) : 0,
 		peakConsecutiveErrors: peakErrors,
-		// gate-specific: how many first-pass failures were caused by each gate
-		// rate = (total first-pass files - failures by this gate) / total = % that this gate didn't break
 		gateFirstPassRates:
 			firstPassTotal > 0
 				? [...gateFirstPass.entries()]

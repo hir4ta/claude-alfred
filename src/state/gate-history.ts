@@ -1,14 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { atomicWriteJson } from "./atomic-write.ts";
+import { pathForToday, readAllDaysMerge, readDaily, today, writeDaily } from "./daily-file.ts";
 
-const STATE_DIR = ".qult/.state";
-const FILE = "gate-history.json";
-const MAX_ENTRIES = 200;
+const BASE = "gate-history";
 
-// Process-scoped cache
+// Process-scoped cache (today's file only)
 let _cache: HistoryState | null = null;
 let _dirty = false;
+let _today: string | null = null;
 
 interface GateEntry {
 	gate: string;
@@ -27,24 +24,16 @@ interface HistoryState {
 	commits: CommitEntry[];
 }
 
-function filePath(): string {
-	return join(process.cwd(), STATE_DIR, FILE);
-}
+const EMPTY: HistoryState = { gates: [], commits: [] };
 
+/** Read today's history (process-scoped cache for writes). */
 function readHistory(): HistoryState {
-	if (_cache) return _cache;
-	try {
-		const path = filePath();
-		if (!existsSync(path)) {
-			_cache = { gates: [], commits: [] };
-			return _cache;
-		}
-		_cache = JSON.parse(readFileSync(path, "utf-8"));
-		return _cache!;
-	} catch {
-		_cache = { gates: [], commits: [] };
-		return _cache;
-	}
+	const d = today();
+	if (_cache && _today === d) return _cache;
+	_cache = readDaily<HistoryState>(BASE, d, { gates: [], commits: [] });
+	_today = d;
+	_dirty = false;
+	return _cache;
 }
 
 function writeHistory(state: HistoryState): void {
@@ -52,11 +41,17 @@ function writeHistory(state: HistoryState): void {
 	_dirty = true;
 }
 
+/** Read all days' history merged into a single HistoryState. */
+function readAllHistory(): HistoryState {
+	const merged = readAllDaysMerge(BASE, ["gates", "commits"]);
+	return { gates: merged.gates as GateEntry[], commits: merged.commits as CommitEntry[] };
+}
+
 /** Flush cached history to disk if dirty. */
 export function flush(): void {
-	if (!_dirty || !_cache) return;
+	if (!_dirty || !_cache || !_today) return;
 	try {
-		atomicWriteJson(filePath(), _cache);
+		writeDaily(BASE, _today, _cache);
 	} catch {
 		// fail-open
 	}
@@ -67,6 +62,7 @@ export function flush(): void {
 export function resetCache(): void {
 	_cache = null;
 	_dirty = false;
+	_today = null;
 }
 
 /** Record a gate execution result. */
@@ -80,15 +76,12 @@ export function recordGateResult(
 	const entry: GateEntry = { gate, passed, error, at: new Date().toISOString() };
 	if (duration_ms !== undefined) entry.duration_ms = duration_ms;
 	history.gates.push(entry);
-	if (history.gates.length > MAX_ENTRIES) {
-		history.gates = history.gates.slice(-MAX_ENTRIES);
-	}
 	writeHistory(history);
 }
 
-/** Get top N most frequent gate errors. */
+/** Get top N most frequent gate errors (across all days). */
 export function getTopErrors(n: number): { gate: string; error: string; count: number }[] {
-	const history = readHistory();
+	const history = readAllHistory();
 	const errors = history.gates.filter((e) => !e.passed && e.error);
 
 	const counts = new Map<string, { gate: string; error: string; count: number }>();
@@ -109,13 +102,10 @@ export function getTopErrors(n: number): { gate: string; error: string; count: n
 export function recordCommit(): void {
 	const history = readHistory();
 	history.commits.push({ at: new Date().toISOString() });
-	if (history.commits.length > MAX_ENTRIES) {
-		history.commits = history.commits.slice(-MAX_ENTRIES);
-	}
 	writeHistory(history);
 }
 
-/** Get commit interval statistics. Returns null if < 2 commits. */
+/** Get commit interval statistics (across all days). Returns null if < 2 commits. */
 export function getCommitStats(): {
 	avgMinutes: number;
 	medianMinutes: number;
@@ -123,7 +113,7 @@ export function getCommitStats(): {
 	maxMinutes: number;
 	count: number;
 } | null {
-	const history = readHistory();
+	const history = readAllHistory();
 	if (history.commits.length < 2) return null;
 
 	const times = history.commits.map((c) => new Date(c.at).getTime()).sort((a, b) => a - b);
@@ -147,9 +137,9 @@ export function getCommitStats(): {
 	};
 }
 
-/** Get pass rate per gate name. */
+/** Get pass rate per gate name (across all days). */
 export function getGatePassRates(): { gate: string; passRate: number; total: number }[] {
-	const history = readHistory();
+	const history = readAllHistory();
 	const stats = new Map<string, { pass: number; total: number }>();
 	for (const e of history.gates) {
 		const s = stats.get(e.gate) ?? { pass: 0, total: 0 };
@@ -162,9 +152,9 @@ export function getGatePassRates(): { gate: string; passRate: number; total: num
 		.sort((a, b) => a.passRate - b.passRate);
 }
 
-/** Get average gate execution duration per gate name. */
+/** Get average gate execution duration per gate name (across all days). */
 export function getAvgGateDuration(): { gate: string; avgMs: number; count: number }[] {
-	const history = readHistory();
+	const history = readAllHistory();
 	const stats = new Map<string, { sum: number; count: number }>();
 	for (const e of history.gates) {
 		if (e.duration_ms === undefined) continue;
@@ -185,9 +175,9 @@ const TS_ERROR_RE = /TS\d{4,5}/g;
 // ESLint: @scope/rule-name or no-something (must have hyphen to distinguish from paths)
 const ESLINT_RULE_RE = /@[\w-]+\/[\w-]+|no-[\w-]+/g;
 
-/** Extract specific error patterns from gate failure output. */
+/** Extract specific error patterns from gate failure output (across all days). */
 export function getTopErrorPatterns(n: number): { gate: string; pattern: string; count: number }[] {
-	const history = readHistory();
+	const history = readAllHistory();
 	const counts = new Map<string, { gate: string; pattern: string; count: number }>();
 
 	for (const e of history.gates) {

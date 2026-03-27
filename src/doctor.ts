@@ -145,8 +145,7 @@ function checkGates(): CheckResult {
 const KNOWN_STATE_FILES = new Set([
 	"pending-fixes.json",
 	"session-state.json",
-	"gate-history.json",
-	"metrics.json",
+	// metrics.json and gate-history.json migrated to daily rotation (.qult/metrics/, .qult/gate-history/)
 ]);
 
 function checkStateDir(): CheckResult {
@@ -373,8 +372,7 @@ function showMetrics(): void {
 const STATE_DEFAULTS: Record<string, string> = {
 	"pending-fixes.json": "[]",
 	"session-state.json": "{}",
-	"gate-history.json": '{"gates":[],"commits":[]}',
-	"metrics.json": "[]",
+	// metrics.json and gate-history.json are now daily-rotated files under .qult/metrics/ and .qult/gate-history/
 };
 
 /** Scan .qult/.state/ for corrupt JSON and replace with defaults. */

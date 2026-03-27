@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadGates } from "../gates/load.ts";
+import { migrateIfNeeded } from "../state/daily-file.ts";
 import { getTopErrors } from "../state/gate-history.ts";
 import { writePendingFixes } from "../state/pending-fixes.ts";
 import type { HookEvent } from "../types.ts";
@@ -12,6 +13,17 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 	const stateDir = join(qultDir, ".state");
 	if (!existsSync(stateDir)) {
 		mkdirSync(stateDir, { recursive: true });
+	}
+	// Ensure daily rotation directories exist
+	mkdirSync(join(qultDir, "metrics"), { recursive: true });
+	mkdirSync(join(qultDir, "gate-history"), { recursive: true });
+
+	// Auto-migrate old single-file state to daily rotation
+	try {
+		migrateIfNeeded(join(stateDir, "metrics.json"), "metrics");
+		migrateIfNeeded(join(stateDir, "gate-history.json"), "gate-history");
+	} catch {
+		/* fail-open */
 	}
 
 	// Clear stale pending-fixes from previous session.

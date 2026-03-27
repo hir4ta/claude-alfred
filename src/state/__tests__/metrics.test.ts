@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetAllCaches } from "../flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-metrics-test");
-const STATE_DIR = join(TEST_DIR, ".qult", ".state");
 const originalCwd = process.cwd();
 
 beforeEach(() => {
 	resetAllCaches();
-	mkdirSync(STATE_DIR, { recursive: true });
+	mkdirSync(join(TEST_DIR, ".qult", ".state"), { recursive: true });
+	mkdirSync(join(TEST_DIR, ".qult", "metrics"), { recursive: true });
 	process.chdir(TEST_DIR);
 });
 
@@ -20,10 +20,11 @@ afterEach(() => {
 
 describe("metrics", () => {
 	it("records actions and reads them back", async () => {
-		const { recordAction, readMetrics } = await import("../metrics.ts");
+		const { recordAction, flush, readMetrics } = await import("../metrics.ts");
 		recordAction("pre-tool", "deny", "pending-fixes exist");
 		recordAction("stop", "block", "plan incomplete");
 		recordAction("post-tool", "respond", "lint errors found");
+		flush();
 
 		const entries = readMetrics();
 		expect(entries).toHaveLength(3);
@@ -32,25 +33,26 @@ describe("metrics", () => {
 		expect(entries[2]!.action).toBe("post-tool:respond");
 	});
 
-	it("caps at 500 entries", async () => {
-		const { recordAction, readMetrics } = await import("../metrics.ts");
+	it("daily files have no entry cap", async () => {
+		const { recordAction, flush, readMetrics } = await import("../metrics.ts");
 		for (let i = 0; i < 510; i++) {
 			recordAction("post-tool", "respond", `error-${i}`);
 		}
+		flush();
 
 		const entries = readMetrics();
-		expect(entries).toHaveLength(500);
-		// Oldest entries should be trimmed
-		expect(entries[0]!.reason).toBe("error-10");
+		expect(entries).toHaveLength(510);
+		expect(entries[0]!.reason).toBe("error-0");
 	});
 
 	it("returns summary counts by action", async () => {
-		const { recordAction, getMetricsSummary } = await import("../metrics.ts");
+		const { recordAction, flush, getMetricsSummary } = await import("../metrics.ts");
 		recordAction("pre-tool", "deny", "pending-fixes");
 		recordAction("pre-tool", "deny", "pace red");
 		recordAction("pre-tool", "deny", "pending-fixes");
 		recordAction("stop", "block", "plan incomplete");
 		recordAction("post-tool", "respond", "lint errors");
+		flush();
 
 		const summary = getMetricsSummary();
 		expect(summary.deny).toBe(3);
@@ -73,41 +75,45 @@ describe("metrics", () => {
 	});
 
 	it("records gate outcomes and computes pass rate", async () => {
-		const { recordGateOutcome, getMetricsSummary } = await import("../metrics.ts");
+		const { recordGateOutcome, flush, getMetricsSummary } = await import("../metrics.ts");
 		recordGateOutcome("lint", true);
 		recordGateOutcome("typecheck", true);
 		recordGateOutcome("lint", false);
 		recordGateOutcome("lint", true);
+		flush();
 
 		const summary = getMetricsSummary();
 		expect(summary.gatePassRate).toBe(75); // 3 pass / 4 total
 	});
 
 	it("tracks respond-skipped in summary", async () => {
-		const { recordAction, getMetricsSummary } = await import("../metrics.ts");
+		const { recordAction, flush, getMetricsSummary } = await import("../metrics.ts");
 		recordAction("post-tool", "respond-skipped", "budget exceeded");
 		recordAction("session-start", "respond-skipped", "budget exceeded");
+		flush();
 
 		const summary = getMetricsSummary();
 		expect(summary.respondSkipped).toBe(2);
 	});
 
 	it("records first-pass outcomes and computes clean rate", async () => {
-		const { recordFirstPass, getMetricsSummary } = await import("../metrics.ts");
+		const { recordFirstPass, flush, getMetricsSummary } = await import("../metrics.ts");
 		recordFirstPass(true);
 		recordFirstPass(true);
 		recordFirstPass(false);
 		recordFirstPass(true);
+		flush();
 
 		const summary = getMetricsSummary();
 		expect(summary.firstPassRate).toBe(75); // 3 clean / 4 total
 	});
 
 	it("records review outcomes and computes pass rate", async () => {
-		const { recordReviewOutcome, getMetricsSummary } = await import("../metrics.ts");
+		const { recordReviewOutcome, flush, getMetricsSummary } = await import("../metrics.ts");
 		recordReviewOutcome(true);
 		recordReviewOutcome(false);
 		recordReviewOutcome(true);
+		flush();
 
 		const summary = getMetricsSummary();
 		expect(summary.reviewPassRate).toBe(67); // 2 pass / 3 total

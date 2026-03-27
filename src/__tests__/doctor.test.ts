@@ -255,20 +255,19 @@ describe("doctor --fix repairs corrupted state", () => {
 	it("resets corrupt JSON files to valid defaults", async () => {
 		setupValidEnv();
 
-		// Write corrupt JSON to state files
+		// Write corrupt JSON to state files (metrics.json and gate-history.json are now daily-rotated)
 		const stateDir = join(TEST_PROJECT, ".qult", ".state");
 		writeFileSync(join(stateDir, "pending-fixes.json"), "{broken json");
 		writeFileSync(join(stateDir, "session-state.json"), "not json at all");
-		writeFileSync(join(stateDir, "metrics.json"), "{{{{");
 
 		// Import and run repair
 		const { repairState } = await import("../doctor.ts");
 		const repaired = repairState();
 
-		expect(repaired.length).toBeGreaterThanOrEqual(3);
+		expect(repaired.length).toBeGreaterThanOrEqual(2);
 
 		// Verify files are now valid JSON
-		for (const file of ["pending-fixes.json", "session-state.json", "metrics.json"]) {
+		for (const file of ["pending-fixes.json", "session-state.json"]) {
 			const content = readFileSync(join(stateDir, file), "utf-8");
 			expect(() => JSON.parse(content)).not.toThrow();
 		}
