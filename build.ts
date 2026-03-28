@@ -5,6 +5,8 @@
  *   bun build.ts              # Bundle CLI to dist/cli.mjs
  *   bun build.ts --compile    # Compile to single binary
  */
+export type {};
+
 const pkg = await Bun.file("package.json").json();
 const version = pkg.version ?? "dev";
 const isCompile = process.argv.includes("--compile");

@@ -33,7 +33,6 @@
     "enabled": true
   },
   "files": {
-    "includes": ["src/**"],
-    "experimentalScannerIgnores": ["dist/"]
+    "includes": ["src/**", "build.ts"]
   }
 }
