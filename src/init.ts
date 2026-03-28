@@ -147,6 +147,8 @@ export async function runInit(force: boolean): Promise<void> {
 	);
 	console.log("Writing rules: qult-quality...");
 	writeFile(join(claudeDir, "rules", "qult-quality.md"), loadTemplate("rules-quality.md"), force);
+	console.log("Writing rules: qult-plan...");
+	writeFile(join(claudeDir, "rules", "qult-plan.md"), loadTemplate("rules-plan.md"), force);
 
 	// 3. Create .qult/ directories and gates.json
 	const qultDir = join(process.cwd(), ".qult");

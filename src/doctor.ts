@@ -226,6 +226,7 @@ export function runChecks(): CheckResult[] {
 			"/qult:plan-generator skill",
 		),
 		checkFileExists("rules", join(claudeDir, "rules", "qult-quality.md"), "qult-quality rules"),
+		checkFileExists("rules", join(claudeDir, "rules", "qult-plan.md"), "qult-plan rules"),
 		checkGates(),
 		checkStateDir(),
 		checkPath(),

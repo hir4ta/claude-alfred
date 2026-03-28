@@ -731,12 +731,13 @@ describe("Scenario 23: Init → Doctor reports all OK", () => {
 				recursive: true,
 			});
 			mkdirSync(join(claudeDir, "agents"), { recursive: true });
-			mkdirSync(join(claudeDir, "rules"), { recursive: true });
 			writeFileSync(join(claudeDir, "skills", "qult-review", "SKILL.md"), "# skill");
 			writeFileSync(join(claudeDir, "skills", "qult-plan-generator", "SKILL.md"), "# skill");
 			writeFileSync(join(claudeDir, "agents", "qult-reviewer.md"), "# agent");
 			writeFileSync(join(claudeDir, "agents", "qult-plan-generator.md"), "# agent");
+			mkdirSync(join(claudeDir, "rules"), { recursive: true });
 			writeFileSync(join(claudeDir, "rules", "qult-quality.md"), "# rules");
+			writeFileSync(join(claudeDir, "rules", "qult-plan.md"), "# rules");
 
 			const { QULT_HOOKS } = await import("../init.ts");
 			const hooks: Record<string, unknown> = {};
