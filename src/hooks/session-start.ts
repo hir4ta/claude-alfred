@@ -72,6 +72,8 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 				respond: summary.respond,
 				avgFixEffort: summary.avgFixEffort,
 				fixEffortTotal: summary.fixEffortTotal,
+				planAvgCompliance: summary.planAvgCompliance,
+				planComplianceTotal: summary.planComplianceTotal,
 			});
 			writeCalibration(cal);
 			logCalibrationChanges(prev, cal);
@@ -108,6 +110,7 @@ const CAL_KEYS: (keyof Omit<Calibration, "calibrated_at">)[] = [
 	"review_file_threshold",
 	"context_budget",
 	"loc_limit",
+	"plan_task_threshold",
 ];
 
 function logCalibrationChanges(prev: Calibration | null, next: Calibration): void {

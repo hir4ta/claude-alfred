@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { getCalibrated } from "../state/calibration.ts";
 import { recordAction } from "../state/metrics.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import {
@@ -40,7 +41,7 @@ export default async function stop(ev: HookEvent): Promise<void> {
 	if (plan) {
 		const content = readFileSync(plan.path, "utf-8");
 		const taskCount = countTaskHeaders(content);
-		const isLarge = taskCount > 3;
+		const isLarge = taskCount > getCalibrated("plan_task_threshold", 3);
 
 		// Check: incomplete tasks
 		const incomplete = plan.tasks.filter((t) => t.status !== "done");

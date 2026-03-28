@@ -11,12 +11,14 @@ const DEFAULT_PACE_FILES = 15;
 const DEFAULT_REVIEW_THRESHOLD = 5;
 const DEFAULT_CONTEXT_BUDGET = 2000;
 const DEFAULT_LOC_LIMIT = 200;
+const DEFAULT_PLAN_TASK_THRESHOLD = 3;
 
 export interface Calibration {
 	pace_files: number;
 	review_file_threshold: number;
 	context_budget: number;
 	loc_limit: number;
+	plan_task_threshold: number;
 	calibrated_at: string;
 }
 
@@ -30,6 +32,22 @@ export interface CalibrationInput {
 	respond: number;
 	avgFixEffort: number;
 	fixEffortTotal: number;
+	planAvgCompliance: number;
+	planComplianceTotal: number;
+}
+
+/** Linear interpolation: map metric from [low, high] range to [minVal, maxVal]. */
+export function lerp(
+	metric: number,
+	low: number,
+	high: number,
+	minVal: number,
+	maxVal: number,
+): number {
+	if (metric <= low) return minVal;
+	if (metric >= high) return maxVal;
+	const t = (metric - low) / (high - low);
+	return Math.round(minVal + t * (maxVal - minVal));
 }
 
 function filePath(): string {
@@ -74,38 +92,71 @@ export function getCalibrated(
 	return fallback;
 }
 
-/** Compute calibrated thresholds from metrics summary. */
+/** Cold start: heuristic defaults when insufficient metrics data. */
+export function coldStartDefaults(): Partial<Calibration> {
+	try {
+		const gatesPath = join(process.cwd(), ".qult", "gates.json");
+		if (!existsSync(gatesPath)) return {};
+		const gates = JSON.parse(readFileSync(gatesPath, "utf-8"));
+		const gateCount =
+			Object.keys(gates?.on_write ?? {}).length +
+			Object.keys(gates?.on_commit ?? {}).length +
+			Object.keys(gates?.on_review ?? {}).length;
+		if (gateCount >= 4) return { pace_files: 10, loc_limit: 150 }; // strict project
+	} catch {
+		/* fail-open */
+	}
+	return {};
+}
+
+/** Compute calibrated thresholds from metrics summary.
+ * Uses graduated lerp interpolation instead of binary thresholds. */
 export function calibrate(input: CalibrationInput): Calibration {
-	// Rule 1: pace_files — adjust based on first-pass clean rate
-	let paceFiles = DEFAULT_PACE_FILES;
-	if (input.firstPassRate > 80 && input.firstPassTotal >= 20) {
-		paceFiles = 20;
-	} else if (input.firstPassRate < 50 && input.firstPassTotal >= 10) {
-		paceFiles = 10;
+	const isColdStart = input.firstPassTotal < 10;
+
+	// Rule 1: pace_files — graduated on first-pass rate (40-90% → 10-25 files)
+	let paceFiles: number;
+	if (isColdStart) {
+		paceFiles = coldStartDefaults().pace_files ?? DEFAULT_PACE_FILES;
+	} else {
+		paceFiles = lerp(input.firstPassRate, 40, 90, 10, 25);
 	}
 
-	// Rule 2: review_file_threshold — tighten if reviewer miss rate exceeds 5%
-	let reviewThreshold = DEFAULT_REVIEW_THRESHOLD;
-	if (input.reviewTotal >= 5 && input.reviewMiss / input.reviewTotal > 0.05) {
-		reviewThreshold = 3;
+	// Rule 2: review_file_threshold — graduated on review-miss rate (0-10% → 7-3 files)
+	let reviewThreshold: number;
+	if (input.reviewTotal < 5) {
+		reviewThreshold = DEFAULT_REVIEW_THRESHOLD;
+	} else {
+		const missRate = (input.reviewMiss / input.reviewTotal) * 100;
+		reviewThreshold = lerp(missRate, 0, 10, 7, 3);
 	}
 
-	// Rule 3: context_budget — adjust based on respond-skipped rate
+	// Rule 3: context_budget — graduated on respond-skipped rate (0-30% → 1500-2500)
 	const totalRespond = input.respond + input.respondSkipped;
-	const skipRate = totalRespond > 0 ? input.respondSkipped / totalRespond : 0;
-	let contextBudget = DEFAULT_CONTEXT_BUDGET;
-	if (skipRate > 0.2) {
-		contextBudget = 2500;
-	} else if (skipRate < 0.05) {
-		contextBudget = 1500;
+	let contextBudget: number;
+	if (totalRespond < 10) {
+		contextBudget = DEFAULT_CONTEXT_BUDGET;
+	} else {
+		const skipRate = (input.respondSkipped / totalRespond) * 100;
+		contextBudget = lerp(skipRate, 0, 30, 1500, 2500);
 	}
 
-	// Rule 4: loc_limit — adjust based on fix effort
-	let locLimit = DEFAULT_LOC_LIMIT;
-	if (input.avgFixEffort > 3 && input.fixEffortTotal >= 3) {
-		locLimit = 150;
-	} else if (input.avgFixEffort < 1.5 && input.fixEffortTotal >= 5) {
-		locLimit = 250;
+	// Rule 4: loc_limit — graduated on fix effort (1-4 avg edits → 250-150 lines)
+	let locLimit: number;
+	if (isColdStart) {
+		locLimit = coldStartDefaults().loc_limit ?? DEFAULT_LOC_LIMIT;
+	} else if (input.fixEffortTotal < 3) {
+		locLimit = DEFAULT_LOC_LIMIT;
+	} else {
+		locLimit = lerp(input.avgFixEffort, 1, 4, 250, 150);
+	}
+
+	// Rule 5: plan_task_threshold — graduated on plan compliance (50-90 score → 2-5 tasks)
+	let planTaskThreshold: number;
+	if (input.planComplianceTotal < 3) {
+		planTaskThreshold = DEFAULT_PLAN_TASK_THRESHOLD;
+	} else {
+		planTaskThreshold = lerp(input.planAvgCompliance, 50, 90, 2, 5);
 	}
 
 	return {
@@ -113,6 +164,7 @@ export function calibrate(input: CalibrationInput): Calibration {
 		review_file_threshold: reviewThreshold,
 		context_budget: contextBudget,
 		loc_limit: locLimit,
+		plan_task_threshold: planTaskThreshold,
 		calibrated_at: new Date().toISOString(),
 	};
 }

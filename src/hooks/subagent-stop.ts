@@ -10,7 +10,16 @@ const FINDING_RE = new RegExp(SEVERITY_PATTERN.source, "i");
 const NO_ISSUES_RE = /no issues found/i;
 const REVIEW_PASS_RE = /^Review:\s*PASS/im;
 const REVIEW_FAIL_RE = /^Review:\s*FAIL/im;
-const SCORE_RE = /Score:\s*Correctness=\d\s+Design=\d\s+Security=\d/i;
+// Score parsing: strict → colon → loose fallback
+const SCORE_STRICT_RE = /Score:\s*Correctness=(\d)\s+Design=(\d)\s+Security=(\d)/i;
+const SCORE_COLON_RE = /Correctness[=:]\s*(\d).*?Design[=:]\s*(\d).*?Security[=:]\s*(\d)/i;
+const SCORE_LOOSE_RE = /Score:.*?[=:]\s*(\d).*?[=:]\s*(\d).*?[=:]\s*(\d)/i;
+
+export interface ReviewScores {
+	correctness: number;
+	design: number;
+	security: number;
+}
 
 interface FindingSummary {
 	total: number;
@@ -18,6 +27,21 @@ interface FindingSummary {
 	high: number;
 	medium: number;
 	low: number;
+}
+
+/** Parse reviewer scores with graduated fallback (strict → colon → loose). */
+export function parseScores(output: string): ReviewScores | null {
+	for (const re of [SCORE_STRICT_RE, SCORE_COLON_RE, SCORE_LOOSE_RE]) {
+		const m = re.exec(output);
+		if (m) {
+			return {
+				correctness: Number.parseInt(m[1]!, 10),
+				design: Number.parseInt(m[2]!, 10),
+				security: Number.parseInt(m[3]!, 10),
+			};
+		}
+	}
+	return null;
 }
 
 /** Parse reviewer output for severity-tagged findings. */
@@ -46,11 +70,18 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 		const passed = REVIEW_PASS_RE.test(output);
 		const failed = REVIEW_FAIL_RE.test(output);
 		validateReviewer(output);
-		// Record outcome metric with finding details if verdict is present
+		// Record outcome metric with finding details + scores if verdict is present
 		if (passed || failed) {
 			try {
 				const findings = parseFindings(output);
-				recordReviewOutcome(passed, { ...findings });
+				const scores = parseScores(output);
+				const detail: Record<string, number> = { ...findings };
+				if (scores) {
+					detail.correctness = scores.correctness;
+					detail.design = scores.design;
+					detail.security = scores.security;
+				}
+				recordReviewOutcome(passed, detail);
 			} catch {
 				/* fail-open */
 			}
@@ -69,7 +100,7 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 function validateReviewer(output: string): void {
 	const hasVerdict = REVIEW_PASS_RE.test(output) || REVIEW_FAIL_RE.test(output);
 	const hasFindings = FINDING_RE.test(output) || NO_ISSUES_RE.test(output);
-	const hasScore = SCORE_RE.test(output);
+	const hasScore = parseScores(output) !== null;
 
 	// Accept if: findings present (backward compat) OR verdict + score
 	if (hasFindings) return;

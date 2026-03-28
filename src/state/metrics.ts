@@ -138,6 +138,12 @@ export function readMetrics(): MetricEntry[] {
 	return readAllDaysArray<MetricEntry>(BASE);
 }
 
+/** Read metrics from the last N days only. */
+export function readRecentMetrics(windowDays: number): MetricEntry[] {
+	const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+	return readMetrics().filter((e) => e.at >= cutoff);
+}
+
 /** Record a first-pass outcome (file passed all gates on first write without fixes).
  * @param gate — optional gate name that caused the first failure (for gate-specific first-pass tracking)
  */
@@ -149,6 +155,58 @@ export function recordFirstPass(passed: boolean, gate?: string): void {
 				action: `first-pass:${passed ? "clean" : "dirty"}`,
 				reason: gate ?? "",
 				at: new Date().toISOString(),
+			}),
+		);
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
+}
+
+/** Record whether a commit was clean (zero DENYs in the session). */
+export function recordCleanCommit(clean: boolean): void {
+	try {
+		const entries = readState();
+		entries.push(
+			withContext({
+				action: `commit:${clean ? "clean" : "dirty"}`,
+				reason: "",
+				at: new Date().toISOString(),
+			}),
+		);
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
+}
+
+/** Record advisory compliance outcome (whether Claude followed the advisory). */
+export function recordAdvisoryOutcome(type: string, complied: boolean): void {
+	try {
+		const entries = readState();
+		entries.push(
+			withContext({
+				action: `advisory:${complied ? "complied" : "ignored"}`,
+				reason: type,
+				at: new Date().toISOString(),
+			}),
+		);
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
+}
+
+/** Record plan template compliance score (0-100). */
+export function recordPlanCompliance(score: number, detail: Record<string, number>): void {
+	try {
+		const entries = readState();
+		entries.push(
+			withContext({
+				action: "plan-compliance:score",
+				reason: `${score}/100`,
+				at: new Date().toISOString(),
+				detail: { score, ...detail },
 			}),
 		);
 		writeState(entries);
@@ -210,6 +268,15 @@ export interface MetricsSummary {
 	planSuccessRate: number;
 	peakConsecutiveErrors: number;
 	gateFirstPassRates: { gate: string; rate: number; total: number }[];
+	reviewAvgScores: { correctness: number; design: number; security: number } | null;
+	planAvgCompliance: number;
+	planComplianceTotal: number;
+	planComplianceWeakest: { field: string; avgRate: number }[];
+	advisoryComplianceRate: number;
+	advisoryComplianceTotal: number;
+	advisoryComplianceByType: { type: string; rate: number; total: number }[];
+	cleanCommitRate: number;
+	cleanCommitTotal: number;
 }
 
 /** Get summary: counts by action type + top reasons + outcome metrics.
@@ -238,6 +305,18 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 	let permissionAllow = 0;
 	let permissionDeny = 0;
 	const reviewFindingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
+	let scoreCorrectnessSum = 0;
+	let scoreDesignSum = 0;
+	let scoreSecuritySum = 0;
+	let scoreCount = 0;
+	let planComplianceSum = 0;
+	let planComplianceCount = 0;
+	const planFieldSums = new Map<string, { sum: number; count: number }>();
+	let advisoryComplied = 0;
+	let advisoryIgnored = 0;
+	const advisoryByType = new Map<string, { complied: number; total: number }>();
+	let commitClean = 0;
+	let commitDirty = 0;
 	const reasonCounts = new Map<string, number>();
 	const denyReasonCounts = new Map<string, number>();
 	const blockReasonCounts = new Map<string, number>();
@@ -294,6 +373,28 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 		} else if (e.action === "fix-effort:resolved" && e.detail) {
 			fixEffortSum += e.detail.edits ?? 0;
 			fixEffortCount++;
+		} else if (e.action === "plan-compliance:score" && e.detail) {
+			planComplianceSum += e.detail.score ?? 0;
+			planComplianceCount++;
+			for (const [k, v] of Object.entries(e.detail)) {
+				if (k === "score") continue;
+				const s = planFieldSums.get(k) ?? { sum: 0, count: 0 };
+				s.sum += v;
+				s.count++;
+				planFieldSums.set(k, s);
+			}
+		} else if (e.action === "commit:clean") {
+			commitClean++;
+		} else if (e.action === "commit:dirty") {
+			commitDirty++;
+		} else if (e.action === "advisory:complied" || e.action === "advisory:ignored") {
+			const complied = e.action === "advisory:complied";
+			if (complied) advisoryComplied++;
+			else advisoryIgnored++;
+			const s = advisoryByType.get(e.reason) ?? { complied: 0, total: 0 };
+			if (complied) s.complied++;
+			s.total++;
+			advisoryByType.set(e.reason, s);
 		}
 
 		// Permission deny (counted via action suffix above)
@@ -301,13 +402,19 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 			permissionDeny++;
 		}
 
-		// Aggregate review finding details
+		// Aggregate review finding details + scores
 		if ((e.action === "review:pass" || e.action === "review:fail") && e.detail) {
 			reviewFindingsTotal += e.detail.total ?? 0;
 			reviewFindingsBySeverity.critical += e.detail.critical ?? 0;
 			reviewFindingsBySeverity.high += e.detail.high ?? 0;
 			reviewFindingsBySeverity.medium += e.detail.medium ?? 0;
 			reviewFindingsBySeverity.low += e.detail.low ?? 0;
+			if (e.detail.correctness != null) {
+				scoreCorrectnessSum += e.detail.correctness;
+				scoreDesignSum += e.detail.design ?? 0;
+				scoreSecuritySum += e.detail.security ?? 0;
+				scoreCount++;
+			}
 		}
 
 		if (e.reason) {
@@ -380,5 +487,37 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 						}))
 						.sort((a, b) => a.rate - b.rate)
 				: [],
+		reviewAvgScores:
+			scoreCount > 0
+				? {
+						correctness: Math.round((scoreCorrectnessSum / scoreCount) * 10) / 10,
+						design: Math.round((scoreDesignSum / scoreCount) * 10) / 10,
+						security: Math.round((scoreSecuritySum / scoreCount) * 10) / 10,
+					}
+				: null,
+		planAvgCompliance:
+			planComplianceCount > 0 ? Math.round(planComplianceSum / planComplianceCount) : 0,
+		planComplianceTotal: planComplianceCount,
+		planComplianceWeakest: [...planFieldSums.entries()]
+			.map(([field, s]) => ({ field, avgRate: s.count > 0 ? Math.round(s.sum / s.count) : 0 }))
+			.sort((a, b) => a.avgRate - b.avgRate)
+			.slice(0, 3),
+		advisoryComplianceRate:
+			advisoryComplied + advisoryIgnored > 0
+				? Math.round((advisoryComplied / (advisoryComplied + advisoryIgnored)) * 100)
+				: 0,
+		advisoryComplianceTotal: advisoryComplied + advisoryIgnored,
+		advisoryComplianceByType: [...advisoryByType.entries()]
+			.map(([type, s]) => ({
+				type,
+				rate: s.total > 0 ? Math.round((s.complied / s.total) * 100) : 0,
+				total: s.total,
+			}))
+			.sort((a, b) => a.rate - b.rate),
+		cleanCommitRate:
+			commitClean + commitDirty > 0
+				? Math.round((commitClean / (commitClean + commitDirty)) * 100)
+				: 0,
+		cleanCommitTotal: commitClean + commitDirty,
 	};
 }

@@ -49,6 +49,14 @@ export interface SessionState {
 	deny_edits_before_resolution: number;
 	// LOC tracking: cumulative lines changed since last commit
 	changed_lines: number;
+	// Advisory compliance tracking
+	pending_advisory: PendingAdvisory | null;
+}
+
+export interface PendingAdvisory {
+	type: "fix" | "error-loop" | "verify-check";
+	expected_files?: string[];
+	injected_at: string;
 }
 
 function filePath(): string {
@@ -78,6 +86,7 @@ function defaultState(): SessionState {
 		peak_consecutive_error_count: 0,
 		deny_edits_before_resolution: 0,
 		changed_lines: 0,
+		pending_advisory: null,
 	};
 }
 
@@ -438,6 +447,8 @@ export function clearOnCommit(paceReset?: {
 	state.ran_gates = {};
 	state.changed_file_paths = [];
 	state.changed_lines = 0;
+	state.session_deny_count = 0;
+	state.pending_advisory = null;
 	state.last_error_signature = "";
 	state.consecutive_error_count = 0;
 	if (paceReset) {
@@ -445,5 +456,23 @@ export function clearOnCommit(paceReset?: {
 		state.changed_files = paceReset.changed_files;
 		state.tool_calls = paceReset.tool_calls;
 	}
+	writeState(state);
+}
+
+// --- Advisory compliance tracking ---
+
+export function setPendingAdvisory(advisory: PendingAdvisory): void {
+	const state = readSessionState();
+	state.pending_advisory = advisory;
+	writeState(state);
+}
+
+export function getPendingAdvisory(): PendingAdvisory | null {
+	return readSessionState().pending_advisory ?? null;
+}
+
+export function clearPendingAdvisory(): void {
+	const state = readSessionState();
+	state.pending_advisory = null;
 	writeState(state);
 }

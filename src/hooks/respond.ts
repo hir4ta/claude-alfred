@@ -1,6 +1,12 @@
 import { flushAll } from "../state/flush.ts";
 import { recordAction } from "../state/metrics.ts";
-import { checkBudget, incrementActionCount, recordInjection } from "../state/session-state.ts";
+import {
+	checkBudget,
+	incrementActionCount,
+	type PendingAdvisory,
+	recordInjection,
+	setPendingAdvisory,
+} from "../state/session-state.ts";
 import type { HookResponse } from "../types.ts";
 
 /** Current hook event name, set by dispatcher before calling handler */
@@ -15,8 +21,9 @@ function estimateTokens(text: string): number {
 }
 
 /** Send additionalContext to Claude (advisory, non-blocking). Skipped if budget exceeded.
- * Only valid for: PostToolUse, UserPromptSubmit, SessionStart, SubagentStart, PostToolUseFailure */
-export function respond(context: string): void {
+ * Only valid for: PostToolUse, UserPromptSubmit, SessionStart, SubagentStart, PostToolUseFailure
+ * @param advisory — optional advisory type for compliance tracking */
+export function respond(context: string, advisory?: Omit<PendingAdvisory, "injected_at">): void {
 	const tokens = estimateTokens(context);
 	if (!checkBudget(tokens)) {
 		try {
@@ -33,6 +40,13 @@ export function respond(context: string): void {
 		incrementActionCount("respond");
 	} catch {
 		/* fail-open */
+	}
+	if (advisory) {
+		try {
+			setPendingAdvisory({ ...advisory, injected_at: new Date().toISOString() });
+		} catch {
+			/* fail-open */
+		}
 	}
 	const response: HookResponse = {
 		hookSpecificOutput: {

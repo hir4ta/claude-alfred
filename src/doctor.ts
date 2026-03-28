@@ -6,6 +6,7 @@ import { readCalibration } from "./state/calibration.ts";
 import {
 	getAvgGateDuration,
 	getCommitStats,
+	getFileFailRates,
 	getGatePassRates,
 	getTopErrorPatterns,
 } from "./state/gate-history.ts";
@@ -369,6 +370,60 @@ function showMetrics(): void {
 		);
 	}
 
+	// --- Plan Compliance ---
+	if (summary.planComplianceTotal > 0) {
+		console.log("\n  Plan compliance:");
+		console.log(
+			`    Avg score: ${summary.planAvgCompliance}/100 (${summary.planComplianceTotal} plans)`,
+		);
+		if (summary.planComplianceWeakest.length > 0) {
+			const weakest = summary.planComplianceWeakest
+				.map((w) => `${w.field}=${w.avgRate}`)
+				.join(", ");
+			console.log(`    Weakest: ${weakest}`);
+		}
+	}
+
+	// --- Advisory Compliance ---
+	if (summary.advisoryComplianceTotal > 0) {
+		console.log("\n  Advisory compliance:");
+		console.log(
+			`    Overall: ${summary.advisoryComplianceRate}% (${summary.advisoryComplianceTotal} tracked)`,
+		);
+		for (const t of summary.advisoryComplianceByType) {
+			console.log(`    ${t.type.padEnd(14)} ${t.rate}% (${t.total})`);
+		}
+	}
+
+	// --- Artifact Quality ---
+	const hasArtifactData = summary.cleanCommitTotal > 0 || summary.reviewAvgScores !== null;
+	if (hasArtifactData) {
+		console.log("\n  Artifact quality:");
+		if (summary.cleanCommitTotal > 0) {
+			console.log(
+				`    Clean commit rate: ${summary.cleanCommitRate}% (${summary.cleanCommitTotal} commits)`,
+			);
+		}
+		if (summary.reviewAvgScores) {
+			const s = summary.reviewAvgScores;
+			console.log(
+				`    Avg review scores: Correctness=${s.correctness} Design=${s.design} Security=${s.security}`,
+			);
+		}
+		try {
+			const hotspots = getFileFailRates(5);
+			if (hotspots.length > 0) {
+				console.log("    Hotspot files (high fail rate):");
+				for (const h of hotspots) {
+					const shortPath = h.file.replace(process.cwd(), "").replace(/^\//, "");
+					console.log(`      ${shortPath.padEnd(40)} fail ${h.failRate}% (${h.total} runs)`);
+				}
+			}
+		} catch {
+			/* fail-open */
+		}
+	}
+
 	// --- Calibration ---
 	try {
 		const cal = readCalibration();
@@ -378,6 +433,7 @@ function showMetrics(): void {
 				review_file_threshold: 5,
 				context_budget: 2000,
 				loc_limit: 200,
+				plan_task_threshold: 3,
 			};
 			const changes: string[] = [];
 			for (const [key, defVal] of Object.entries(defaults)) {

@@ -5,6 +5,8 @@ import { runGate } from "../gates/runner.ts";
 import { recordCommit, recordGateResult } from "../state/gate-history.ts";
 import {
 	recordAction,
+	recordAdvisoryOutcome,
+	recordCleanCommit,
 	recordFirstPass,
 	recordFixEffort,
 	recordGateOutcome,
@@ -15,12 +17,15 @@ import { getActivePlan, parseCriteriaCommands, parseVerifyFields } from "../stat
 import {
 	clearFailCount,
 	clearOnCommit,
+	clearPendingAdvisory,
 	getGatedExtensions,
+	getPendingAdvisory,
 	isFirstPassRecorded,
 	markFirstPassRecorded,
 	markGateRan,
 	readLastReview,
 	readPace,
+	readSessionState,
 	recordChangedFile,
 	recordChangedLines,
 	recordCriteriaCommand,
@@ -57,6 +62,9 @@ function handleEditWrite(ev: HookEvent): void {
 	// Skip qult's own state/config files
 	const qultDir = resolve(process.cwd(), ".qult");
 	if (file.startsWith(`${qultDir}/`) || file === qultDir) return;
+
+	// Check advisory compliance: did Claude edit the expected file?
+	checkAdvisoryCompliance("edit", file);
 
 	// Track LOC changes from tool_input
 	try {
@@ -107,6 +115,7 @@ function handleEditWrite(ev: HookEvent): void {
 				result.passed,
 				result.passed ? undefined : result.output,
 				result.duration_ms,
+				file,
 			);
 			try {
 				recordGateOutcome(name, result.passed);
@@ -172,7 +181,10 @@ function handleEditWrite(ev: HookEvent): void {
 				/* fail-open */
 			}
 		}
-		respond(`Fix these errors before continuing:\n${messages.join("\n")}`);
+		respond(`Fix these errors before continuing:\n${messages.join("\n")}`, {
+			type: "fix",
+			expected_files: newFixes.map((f) => f.file),
+		});
 	}
 
 	// Update pace tracking
@@ -183,8 +195,16 @@ function handleBash(ev: HookEvent): void {
 	const command = typeof ev.tool_input?.command === "string" ? ev.tool_input.command : null;
 	if (!command) return;
 
+	// Check advisory compliance for Bash (e.g., error-loop → expects /clear)
+	checkAdvisoryCompliance("bash");
+
 	// Detect git commit → reset pace + run on_commit gates
 	if (/\bgit\s+commit\b/.test(command)) {
+		try {
+			recordCleanCommit(readSessionState().session_deny_count === 0);
+		} catch {
+			/* fail-open */
+		}
 		clearOnCommit({ last_commit_at: new Date().toISOString(), changed_files: 0, tool_calls: 0 });
 		recordCommit();
 
@@ -229,6 +249,7 @@ function handleBash(ev: HookEvent): void {
 		if (count >= 2) {
 			respond(
 				"Same error 2 times in a row. Consider running /clear and trying a different approach.",
+				{ type: "error-loop" },
 			);
 		}
 	} else if (output.length > 0) {
@@ -306,7 +327,7 @@ function checkVerifyFields(output: string): void {
 		}
 
 		if (messages.length > 0) {
-			respond(`Plan verify check:\n${messages.join("\n")}`);
+			respond(`Plan verify check:\n${messages.join("\n")}`, { type: "verify-check" });
 		}
 	} catch {
 		// fail-open
@@ -410,4 +431,32 @@ function computeChangedLines(ev: HookEvent): number {
 	}
 
 	return 0;
+}
+
+/** Check if the current action complies with a pending advisory. */
+function checkAdvisoryCompliance(tool: "edit" | "bash", file?: string): void {
+	try {
+		const advisory = getPendingAdvisory();
+		if (!advisory) return;
+
+		let complied = false;
+		if (advisory.type === "fix" && tool === "edit") {
+			// Fix advisory: editing any of the expected files = complied
+			complied = advisory.expected_files?.includes(file!) ?? false;
+		} else if (advisory.type === "error-loop" && tool === "bash") {
+			// Error-loop advisory: running /clear or a distinctly different command = complied
+			// We can't detect /clear from PostToolUse, so any Bash after error-loop = compliance attempt
+			complied = true;
+		} else if (advisory.type === "verify-check" && tool === "edit") {
+			// Verify-check advisory: any edit = attempt to fix
+			complied = true;
+		} else {
+			return; // Different tool type than expected — don't judge yet
+		}
+
+		recordAdvisoryOutcome(advisory.type, complied);
+		clearPendingAdvisory();
+	} catch {
+		/* fail-open */
+	}
 }

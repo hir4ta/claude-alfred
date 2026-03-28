@@ -13,6 +13,7 @@ interface GateEntry {
 	error?: string;
 	at: string;
 	duration_ms?: number;
+	file?: string;
 }
 
 interface CommitEntry {
@@ -69,10 +70,12 @@ export function recordGateResult(
 	passed: boolean,
 	error?: string,
 	duration_ms?: number,
+	file?: string,
 ): void {
 	const history = readHistory();
 	const entry: GateEntry = { gate, passed, error, at: new Date().toISOString() };
 	if (duration_ms !== undefined) entry.duration_ms = duration_ms;
+	if (file) entry.file = file;
 	history.gates.push(entry);
 	writeHistory(history);
 }
@@ -164,6 +167,28 @@ export function getAvgGateDuration(): { gate: string; avgMs: number; count: numb
 	return [...stats.entries()]
 		.map(([gate, s]) => ({ gate, avgMs: Math.round(s.sum / s.count), count: s.count }))
 		.sort((a, b) => b.avgMs - a.avgMs);
+}
+
+/** Get files with highest gate failure rates (hotspot detection, across all days). */
+export function getFileFailRates(n: number): { file: string; failRate: number; total: number }[] {
+	const history = readAllHistory();
+	const stats = new Map<string, { fail: number; total: number }>();
+	for (const e of history.gates) {
+		if (!e.file) continue;
+		const s = stats.get(e.file) ?? { fail: 0, total: 0 };
+		s.total++;
+		if (!e.passed) s.fail++;
+		stats.set(e.file, s);
+	}
+	return [...stats.entries()]
+		.filter(([, s]) => s.total >= 2) // need at least 2 runs to be meaningful
+		.map(([file, s]) => ({
+			file,
+			failRate: Math.round((s.fail / s.total) * 100),
+			total: s.total,
+		}))
+		.sort((a, b) => b.failRate - a.failRate)
+		.slice(0, n);
 }
 
 // Patterns to extract specific error codes from gate output
