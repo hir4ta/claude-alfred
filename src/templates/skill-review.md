@@ -49,7 +49,7 @@ When blocked:
 2. Re-spawn `qult-reviewer` on the updated diff
 3. Re-apply Judge filter on new findings
 
-Maximum 3 iterations (calibration-controlled). After max iterations, the review proceeds regardless.
+Maximum 3 iterations. After max iterations, the review proceeds regardless.
 
 If no scores are present in reviewer output (legacy format), fall back to severity-based
 iteration: fix critical/high findings and re-review, max 2 cycles.

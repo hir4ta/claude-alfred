@@ -19,11 +19,13 @@ Analyze the project and generate `.qult/gates.json` with the correct gate comman
 
 ## Step 1: Discover toolchain
 
-Use Glob to find config files in the project root. Look for (not limited to):
+Check which config files exist **in the project root only** (not recursive). Use Glob with root-only patterns like `biome.json`, `tsconfig.json`, `package.json` — never `**/*` patterns.
 
-- **Lint**: biome.json, .eslintrc*, eslint.config.*, ruff.toml, .rubocop.yml, .golangci.yml, .swiftlint.yml, phpstan.neon, .credo.exs, shellcheck, tflint, ktlint, detekt, stylelint, deno.json
+Look for:
+
+- **Lint**: biome.json, .eslintrc*, eslint.config.*, ruff.toml, .rubocop.yml, .golangci.yml, deno.json, stylelint.config.*
 - **Typecheck**: tsconfig.json, pyrightconfig.json, mypy.ini, go.mod (go vet), Cargo.toml (cargo check)
-- **Test**: package.json (vitest/jest/mocha), pytest.ini, setup.cfg, go.mod, Cargo.toml, Gemfile (rspec), build.gradle, pom.xml, mix.exs, deno.json
+- **Test**: package.json (check scripts/devDependencies for vitest/jest/mocha), pytest.ini, setup.cfg, go.mod, Cargo.toml, Gemfile, mix.exs, deno.json
 - **E2E**: playwright.config.*, cypress.config.*, wdio.conf.*
 
 Read the relevant config files to confirm which tools are actually configured.
@@ -62,23 +64,6 @@ Rules:
 
 For each gate command, confirm the tool is available (e.g. `which biome`, `cargo --version`). Do NOT run full test suites or commands that modify state. If a tool is not installed, remove that gate.
 
-## Step 4: Context providers (optional)
-
-Check if `gh` CLI is available (`which gh`). If it is, create `.qult/context-providers.json` with a default CI status provider:
-
-```json
-{
-  "ci_status": {
-    "command": "gh run list --limit 3 --json status,conclusion,name --jq '.[] | \"\\(.name): \\(.conclusion // .status)\"'",
-    "timeout": 5000,
-    "inject_on": "session_start"
-  }
-}
-```
-
-If `gh` is not available, skip this step. If `.qult/context-providers.json` already exists, do not overwrite it.
-
 ## Output
 
 Print the final gates.json content and confirm: `Gates configured: N on_write, N on_commit, N on_review`
-If context providers were created, also confirm: `Context providers configured: N provider(s)`

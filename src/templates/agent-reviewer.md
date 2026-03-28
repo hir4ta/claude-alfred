@@ -73,15 +73,15 @@ Fix: Match `commit` as a git subcommand more broadly: /\bgit\b.*\bcommit\b/
 
 ### Good finding (medium)
 ```
-- [medium] src/state/metrics.ts:46 — splice(0, entries.length - MAX_ENTRIES) silently drops oldest entries without logging, making it hard to diagnose metric loss
-Fix: Add a stderr warning when entries are trimmed, or expose the trim count in getMetricsSummary
+- [medium] src/state/session-state.ts:46 — clearOnCommit resets ran_gates to {} but does not reset review_iteration, allowing stale iteration count to carry over
+Fix: Add review_iteration = 0 to clearOnCommit
 ```
 
 ### Bad finding (DO NOT output like this)
 ```
-- [medium] src/state/pace.ts:40 — getRedThreshold could return Infinity if avgMinutes is very large, but this probably won't happen in practice and the Math.min(60) cap handles it anyway
+- [medium] src/state/session-state.ts:40 — readSessionState could return stale cache if file was modified externally, but this probably won't happen in practice since hooks run sequentially
 ```
-This is self-talk-out. You found the Infinity edge case — report it without rationalizing.
+This is self-talk-out. You found the stale cache risk — report it without rationalizing.
 
 ## What NOT to do
 
