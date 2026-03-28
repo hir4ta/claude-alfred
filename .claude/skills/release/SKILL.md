@@ -37,11 +37,14 @@ bun build.ts
 
 ## Version Update
 
-Edit `version` in `package.json` only (no plugin files in v1).
+1. Edit `version` in `package.json`
+2. Update the version badge in `README.md`:
+   - Find: `![Version](https://img.shields.io/badge/version-<OLD_VERSION>-7fbbb3?style=flat-square)`
+   - Replace with: `![Version](https://img.shields.io/badge/version-<NEW_VERSION>-7fbbb3?style=flat-square)`
 
 ## Commit & Tag
 
-1. Stage: `git add package.json` (+ other files if agreed with user)
+1. Stage: `git add package.json README.md` (+ other files if agreed with user)
 2. Commit message: `v<VERSION>: <one-line summary of commits>` (in English)
    - Generate summary from `git log <prev-tag>..HEAD --oneline`
    - **NEVER add Co-Authored-By** (public repository)

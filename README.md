@@ -5,10 +5,10 @@
 ![Hooks](https://img.shields.io/badge/hooks-12-dbbc7f?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-83c092?style=flat-square)
 
-Claude Code の品質を構造で守る **evaluator harness**。quality + cult = qult。
+**Claude の悪い癖を物理的に止める。** コードの品質を構造で守る evaluator harness。
 
 > Claude は優秀だが、lint エラーを放置して次のファイルに行く。テストなしでコミットする。自分のコードを褒めてレビューを終える。
-> qult はそれを **物理的に止める**。お願い (advisory) ではなく、exit 2 (DENY) で。
+> qult は 12 hooks + 独立 Opus evaluator で、それを **お願い (advisory) ではなく exit 2 (DENY) で止める**。
 
 > [!NOTE]
 > セッション開始時に `SessionStart:startup hook error` や `Stop hook error` と表示されることがありますが、**これは qult のバグではありません**。
