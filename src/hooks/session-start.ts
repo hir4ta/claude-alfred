@@ -76,6 +76,8 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 				fixEffortTotal: summary.fixEffortTotal,
 				planAvgCompliance: summary.planAvgCompliance,
 				planComplianceTotal: summary.planComplianceTotal,
+				paceRedFalsePositiveRate: summary.paceRedFalsePositiveRate,
+				locLimitFalsePositiveRate: summary.locLimitFalsePositiveRate,
 			});
 			writeCalibration(cal);
 			logCalibrationChanges(prev, cal);

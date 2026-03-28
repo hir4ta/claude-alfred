@@ -133,6 +133,41 @@ export function recordFixEffort(edits: number): void {
 	}
 }
 
+/** Record DENY resolution time (seconds from DENY to fix). */
+export function recordDenyResolutionTime(reason: string, seconds: number): void {
+	try {
+		const entries = readState();
+		entries.push(
+			withContext({
+				action: "deny-resolution-time:recorded",
+				reason,
+				at: new Date().toISOString(),
+				detail: { seconds: Math.round(seconds) },
+			}),
+		);
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
+}
+
+/** Record a false positive DENY (DENY followed by clean outcome). */
+export function recordFalsePositive(type: string): void {
+	try {
+		const entries = readState();
+		entries.push(
+			withContext({
+				action: "false-positive:detected",
+				reason: type,
+				at: new Date().toISOString(),
+			}),
+		);
+		writeState(entries);
+	} catch {
+		// fail-open
+	}
+}
+
 /** Read all recorded metrics across all days. */
 export function readMetrics(): MetricEntry[] {
 	return readAllDaysArray<MetricEntry>(BASE);
@@ -326,6 +361,10 @@ export interface MetricsSummary {
 	advisoryComplianceByType: { type: string; rate: number; total: number }[];
 	cleanCommitRate: number;
 	cleanCommitTotal: number;
+	// False positive metrics
+	avgDenyResolutionTimeSec: number;
+	paceRedFalsePositiveRate: number;
+	locLimitFalsePositiveRate: number;
 }
 
 /** Get summary: counts by action type + top reasons + outcome metrics.
@@ -366,6 +405,13 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 	const advisoryByType = new Map<string, { complied: number; total: number }>();
 	let commitClean = 0;
 	let commitDirty = 0;
+	// False positive tracking
+	let fpResolutionTimeSum = 0;
+	let fpResolutionTimeCount = 0;
+	let fpPaceRed = 0;
+	let fpLocLimit = 0;
+	let denyPaceRed = 0;
+	let denyLocLimit = 0;
 	const reasonCounts = new Map<string, number>();
 	const denyReasonCounts = new Map<string, number>();
 	const blockReasonCounts = new Map<string, number>();
@@ -381,6 +427,9 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 			} else {
 				denyActionable++;
 				if (e.reason) denyReasonCounts.set(e.reason, (denyReasonCounts.get(e.reason) ?? 0) + 1);
+				// Classify DENY type for false positive rate (anchored to avoid substring matches)
+				if (/^Long time without commit/i.test(e.reason)) denyPaceRed++;
+				else if (/^Too many lines changed/i.test(e.reason)) denyLocLimit++;
 			}
 		} else if (e.action.endsWith(":block")) {
 			block++;
@@ -464,6 +513,16 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 				scoreSecuritySum += e.detail.security ?? 0;
 				scoreCount++;
 			}
+		}
+
+		// False positive metrics
+		if (e.action === "deny-resolution-time:recorded" && e.detail?.seconds != null) {
+			fpResolutionTimeSum += e.detail.seconds;
+			fpResolutionTimeCount++;
+		}
+		if (e.action === "false-positive:detected") {
+			if (e.reason === "pace-red") fpPaceRed++;
+			else if (e.reason === "loc-limit") fpLocLimit++;
 		}
 
 		if (e.reason) {
@@ -568,5 +627,9 @@ export function getMetricsSummary(peakErrors = 0, commitCount = 0): MetricsSumma
 				? Math.round((commitClean / (commitClean + commitDirty)) * 100)
 				: 0,
 		cleanCommitTotal: commitClean + commitDirty,
+		avgDenyResolutionTimeSec:
+			fpResolutionTimeCount > 0 ? Math.round(fpResolutionTimeSum / fpResolutionTimeCount) : 0,
+		paceRedFalsePositiveRate: denyPaceRed > 0 ? Math.round((fpPaceRed / denyPaceRed) * 100) : 0,
+		locLimitFalsePositiveRate: denyLocLimit > 0 ? Math.round((fpLocLimit / denyLocLimit) * 100) : 0,
 	};
 }

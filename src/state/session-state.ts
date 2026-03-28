@@ -64,6 +64,9 @@ export interface SessionState {
 	review_last_aggregate: number;
 	// Plan evaluation tracking
 	plan_evaluated_at: string | null;
+	// False positive tracking: last DENY timestamp and reason
+	last_deny_at: string | null;
+	last_deny_reason: string | null;
 }
 
 export interface PendingAdvisory {
@@ -104,6 +107,8 @@ function defaultState(): SessionState {
 		review_iteration: 0,
 		review_last_aggregate: 0,
 		plan_evaluated_at: null,
+		last_deny_at: null,
+		last_deny_reason: null,
 	};
 }
 
@@ -470,6 +475,8 @@ export function clearOnCommit(paceReset?: {
 	state.review_iteration = 0;
 	state.review_last_aggregate = 0;
 	state.plan_evaluated_at = null;
+	state.last_deny_at = null;
+	state.last_deny_reason = null;
 	state.last_error_signature = "";
 	state.consecutive_error_count = 0;
 	if (paceReset) {
@@ -533,4 +540,25 @@ export function recordPlanEvaluation(): void {
 	const state = readSessionState();
 	state.plan_evaluated_at = new Date().toISOString();
 	writeState(state);
+}
+
+// --- False positive tracking ---
+
+/** Record DENY timestamp and reason for false positive detection. */
+export function recordDenyTimestamp(reason: string): void {
+	try {
+		const state = readSessionState();
+		state.last_deny_at = new Date().toISOString();
+		state.last_deny_reason = reason;
+		writeState(state);
+	} catch {
+		/* fail-open */
+	}
+}
+
+/** Read last DENY info for resolution time / FP computation. */
+export function readLastDeny(): { at: string; reason: string } | null {
+	const state = readSessionState();
+	if (!state.last_deny_at || !state.last_deny_reason) return null;
+	return { at: state.last_deny_at, reason: state.last_deny_reason };
 }

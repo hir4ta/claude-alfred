@@ -26,11 +26,19 @@ function setupValidEnv(): void {
 	writeFileSync(join(claudeDir, "skills", "qult-review", "SKILL.md"), "# review skill");
 	mkdirSync(join(claudeDir, "skills", "qult-plan-review"), { recursive: true });
 	writeFileSync(join(claudeDir, "skills", "qult-plan-review", "SKILL.md"), "# plan-review skill");
+	mkdirSync(join(claudeDir, "skills", "qult-detect-gates"), { recursive: true });
+	writeFileSync(join(claudeDir, "skills", "qult-detect-gates", "SKILL.md"), "# detect-gates skill");
+	mkdirSync(join(claudeDir, "skills", "qult-plan-generator"), { recursive: true });
+	writeFileSync(
+		join(claudeDir, "skills", "qult-plan-generator", "SKILL.md"),
+		"# plan-generator skill",
+	);
 
 	// agents
 	mkdirSync(join(claudeDir, "agents"), { recursive: true });
 	writeFileSync(join(claudeDir, "agents", "qult-reviewer.md"), "# reviewer agent");
 	writeFileSync(join(claudeDir, "agents", "qult-plan-evaluator.md"), "# plan-evaluator agent");
+	writeFileSync(join(claudeDir, "agents", "qult-plan-generator.md"), "# plan-generator agent");
 
 	// rules
 	mkdirSync(join(claudeDir, "rules"), { recursive: true });
@@ -236,11 +244,11 @@ describe("doctor: check 8 — qult in PATH", () => {
 });
 
 describe("doctor: overall", () => {
-	it("returns 8 check results", async () => {
+	it("returns 12 check results", async () => {
 		setupValidEnv();
 		const { runChecks } = await import("../doctor.ts");
 		const results = runChecks();
-		expect(results).toHaveLength(10);
+		expect(results).toHaveLength(12);
 	});
 
 	it("all checks pass with valid setup", async () => {

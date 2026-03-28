@@ -88,7 +88,7 @@ task clean    # ビルド成果物削除
 
 ### 状態ファイル
 - `.qult/.state/pending-fixes.json` — 未修正 lint/type エラー
-- `.qult/.state/session-state.json` — 統合セッション状態 (pace, test pass, review, gate batch, fail count, budget, action counters, verified_fields, criteria_commands_run, changed_lines, review_iteration, plan_evaluated_at)
+- `.qult/.state/session-state.json` — 統合セッション状態 (pace, test pass, review, gate batch, fail count, budget, action counters, verified_fields, criteria_commands_run, changed_lines, review_iteration, plan_evaluated_at, last_deny_at, last_deny_reason)
 - `.qult/.state/calibration.json` — 自動キャリブレーション結果 (pace_files, review_file_threshold, context_budget, loc_limit, review_score_threshold)
 - `.qult/metrics/YYYY-MM/YYYY-MM-DD.json` — DENY/block/respond 発火記録 (日次ローテーション, 上限なし)
 - `.qult/gate-history/YYYY-MM/YYYY-MM-DD.json` — gate 結果 + コミット履歴 (日次ローテーション, 上限なし)
@@ -153,7 +153,15 @@ task clean    # ビルド成果物削除
 - SessionStart で24時間ごとに metrics から閾値を自動調整
 - 調整対象: pace_files, review_file_threshold, context_budget, loc_limit, review_score_threshold
 - ルール: first-pass rate → pace_files, review:miss → review threshold + review score threshold, respond-skipped率 → budget, fix effort → loc_limit
+- **False Positive 緩和**: pace-red/loc-limit DENY 後に clean commit → FP 記録。FP 率 >20% で pace_files +1-5, loc_limit +10-50 自動加算
+- DENY 解消時間も記録 (metrics `deny-resolution-time:recorded`)
 - `.qult/.state/calibration.json` に保存。`doctor --metrics` で確認可能
+
+### Plan 自動生成
+- `/qult:plan-generator` skill: 1 文の説明 → codebase 分析 → 構造化 Plan 生成
+- `qult-plan-generator` agent (Opus): Read/Glob/Grep で codebase を分析し WHAT/WHERE/VERIFY/BOUNDARY/SIZE 形式の Plan を出力
+- 4+ tasks の Plan は自動で `/qult:plan-review` による検証
+- `.claude/plans/plan-YYYYMMDD-HHMMSS.md` に書き出し
 
 ### 外部コンテキストプロバイダー
 - `.qult/context-providers.json` でコマンドベースの外部コンテキスト取得を宣言

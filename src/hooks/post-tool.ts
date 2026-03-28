@@ -7,6 +7,8 @@ import {
 	recordAction,
 	recordAdvisoryOutcome,
 	recordCleanCommit,
+	recordDenyResolutionTime,
+	recordFalsePositive,
 	recordFirstPass,
 	recordFixEffort,
 	recordGateOutcome,
@@ -23,6 +25,7 @@ import {
 	isFirstPassRecorded,
 	markFirstPassRecorded,
 	markGateRan,
+	readLastDeny,
 	readLastReview,
 	readPace,
 	readSessionState,
@@ -200,7 +203,10 @@ function handleBash(ev: HookEvent): void {
 
 	// Detect git commit → reset pace + run on_commit gates
 	if (/\bgit\s+commit\b/.test(command)) {
+		// Capture last deny info BEFORE clearOnCommit resets it
+		let lastDeny: { at: string; reason: string } | null = null;
 		try {
+			lastDeny = readLastDeny();
 			recordCleanCommit(readSessionState().session_deny_count === 0);
 		} catch {
 			/* fail-open */
@@ -209,7 +215,19 @@ function handleBash(ev: HookEvent): void {
 		recordCommit();
 
 		const gates = loadGates();
-		if (!gates?.on_commit) return;
+		if (!gates?.on_commit) {
+			// No gates → clean commit after DENY = false positive
+			try {
+				if (lastDeny && (lastDeny.reason === "pace-red" || lastDeny.reason === "loc-limit")) {
+					recordFalsePositive(lastDeny.reason);
+					const elapsed = (Date.now() - new Date(lastDeny.at).getTime()) / 1000;
+					if (elapsed > 0 && elapsed < 86400) recordDenyResolutionTime(lastDeny.reason, elapsed);
+				}
+			} catch {
+				/* fail-open */
+			}
+			return;
+		}
 
 		const messages: string[] = [];
 		for (const [name, gate] of Object.entries(gates.on_commit)) {
@@ -220,6 +238,20 @@ function handleBash(ev: HookEvent): void {
 				}
 			} catch {
 				// fail-open
+			}
+		}
+
+		// False positive: pace-red/loc-limit DENY followed by clean commit (all gates pass)
+		// A clean commit after pace-red/loc-limit means the threshold was too strict for this session
+		if (messages.length === 0) {
+			try {
+				if (lastDeny && (lastDeny.reason === "pace-red" || lastDeny.reason === "loc-limit")) {
+					recordFalsePositive(lastDeny.reason);
+					const elapsed = (Date.now() - new Date(lastDeny.at).getTime()) / 1000;
+					if (elapsed > 0 && elapsed < 86400) recordDenyResolutionTime(lastDeny.reason, elapsed);
+				}
+			} catch {
+				/* fail-open */
 			}
 		}
 

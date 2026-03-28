@@ -36,6 +36,9 @@ export interface CalibrationInput {
 	fixEffortTotal: number;
 	planAvgCompliance: number;
 	planComplianceTotal: number;
+	// False positive rates (0-100)
+	paceRedFalsePositiveRate: number;
+	locLimitFalsePositiveRate: number;
 }
 
 /** Linear interpolation: map metric from [low, high] range to [minVal, maxVal]. */
@@ -117,11 +120,15 @@ export function calibrate(input: CalibrationInput): Calibration {
 	const isColdStart = input.firstPassTotal < 10;
 
 	// Rule 1: pace_files — graduated on first-pass rate (40-90% → 10-25 files)
+	// + false positive relaxation: if >20% of pace-red DENYs were FP, increase by 1-5
 	let paceFiles: number;
 	if (isColdStart) {
 		paceFiles = coldStartDefaults().pace_files ?? DEFAULT_PACE_FILES;
 	} else {
 		paceFiles = lerp(input.firstPassRate, 40, 90, 10, 25);
+		if (input.paceRedFalsePositiveRate > 20) {
+			paceFiles = Math.min(paceFiles + lerp(input.paceRedFalsePositiveRate, 20, 50, 1, 5), 30);
+		}
 	}
 
 	// Rule 2: review_file_threshold — graduated on review-miss rate (0-10% → 7-3 files)
@@ -144,6 +151,7 @@ export function calibrate(input: CalibrationInput): Calibration {
 	}
 
 	// Rule 4: loc_limit — graduated on fix effort (1-4 avg edits → 250-150 lines)
+	// + false positive relaxation: if >20% of loc-limit DENYs were FP, increase by 10-50
 	let locLimit: number;
 	if (isColdStart) {
 		locLimit = coldStartDefaults().loc_limit ?? DEFAULT_LOC_LIMIT;
@@ -151,6 +159,9 @@ export function calibrate(input: CalibrationInput): Calibration {
 		locLimit = DEFAULT_LOC_LIMIT;
 	} else {
 		locLimit = lerp(input.avgFixEffort, 1, 4, 250, 150);
+	}
+	if (!isColdStart && input.locLimitFalsePositiveRate > 20) {
+		locLimit = Math.min(locLimit + lerp(input.locLimitFalsePositiveRate, 20, 50, 10, 50), 400);
 	}
 
 	// Rule 5: plan_task_threshold — graduated on plan compliance (50-90 score → 2-5 tasks)

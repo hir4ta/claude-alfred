@@ -195,4 +195,26 @@ describe("qult init", () => {
 		);
 		expect(qultEntries).toHaveLength(3);
 	});
+
+	it("writes agent file for qult-plan-generator", async () => {
+		const { runInit } = await import("../init.ts");
+		await runInit(false);
+
+		const agentPath = join(TEST_HOME, ".claude", "agents", "qult-plan-generator.md");
+		expect(existsSync(agentPath)).toBe(true);
+
+		const content = readFileSync(agentPath, "utf-8");
+		expect(content).toContain("plan generator");
+	});
+
+	it("writes skill file for /qult:plan-generator", async () => {
+		const { runInit } = await import("../init.ts");
+		await runInit(false);
+
+		const skillPath = join(TEST_HOME, ".claude", "skills", "qult-plan-generator", "SKILL.md");
+		expect(existsSync(skillPath)).toBe(true);
+
+		const content = readFileSync(skillPath, "utf-8");
+		expect(content).toContain("plan-generator");
+	});
 });

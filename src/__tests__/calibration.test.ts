@@ -17,6 +17,8 @@ const BASE_INPUT = {
 	fixEffortTotal: 5,
 	planAvgCompliance: 70,
 	planComplianceTotal: 0,
+	paceRedFalsePositiveRate: 0,
+	locLimitFalsePositiveRate: 0,
 };
 
 beforeEach(() => {
@@ -245,5 +247,38 @@ describe("getCalibrated", () => {
 		const { getCalibrated } = await import("../state/calibration.ts");
 		expect(getCalibrated("pace_files", 15)).toBe(15);
 		expect(getCalibrated("context_budget", 2000)).toBe(2000);
+	});
+});
+
+describe("calibrate: false positive relaxation", () => {
+	it("high pace-red FP rate relaxes pace_files", async () => {
+		const { calibrate } = await import("../state/calibration.ts");
+		const base = calibrate({ ...BASE_INPUT, firstPassRate: 65 });
+		const withFP = calibrate({ ...BASE_INPUT, firstPassRate: 65, paceRedFalsePositiveRate: 40 });
+		expect(withFP.pace_files).toBeGreaterThan(base.pace_files);
+	});
+
+	it("high loc-limit FP rate relaxes loc_limit", async () => {
+		const { calibrate } = await import("../state/calibration.ts");
+		const base = calibrate({ ...BASE_INPUT, avgFixEffort: 2, fixEffortTotal: 10 });
+		const withFP = calibrate({
+			...BASE_INPUT,
+			avgFixEffort: 2,
+			fixEffortTotal: 10,
+			locLimitFalsePositiveRate: 40,
+		});
+		expect(withFP.loc_limit).toBeGreaterThan(base.loc_limit);
+	});
+
+	it("low FP rates have no effect", async () => {
+		const { calibrate } = await import("../state/calibration.ts");
+		const base = calibrate({ ...BASE_INPUT });
+		const withLowFP = calibrate({
+			...BASE_INPUT,
+			paceRedFalsePositiveRate: 10,
+			locLimitFalsePositiveRate: 15,
+		});
+		expect(withLowFP.pace_files).toBe(base.pace_files);
+		expect(withLowFP.loc_limit).toBe(base.loc_limit);
 	});
 });

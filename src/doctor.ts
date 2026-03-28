@@ -223,6 +223,16 @@ export function runChecks(): CheckResult[] {
 			join(claudeDir, "agents", "qult-plan-evaluator.md"),
 			"qult-plan-evaluator agent",
 		),
+		checkFileExists(
+			"agent",
+			join(claudeDir, "agents", "qult-plan-generator.md"),
+			"qult-plan-generator agent",
+		),
+		checkFileExists(
+			"skill",
+			join(claudeDir, "skills", "qult-plan-generator", "SKILL.md"),
+			"/qult:plan-generator skill",
+		),
 		checkFileExists("rules", join(claudeDir, "rules", "qult-quality.md"), "qult-quality rules"),
 		checkGates(),
 		checkStateDir(),
@@ -317,6 +327,24 @@ function showMetrics(): void {
 		}
 		if (summary.peakConsecutiveErrors > 0) {
 			console.log(`    Peak consecutive errors: ${summary.peakConsecutiveErrors}`);
+		}
+	}
+
+	// --- False Positives ---
+	if (
+		summary.avgDenyResolutionTimeSec > 0 ||
+		summary.paceRedFalsePositiveRate > 0 ||
+		summary.locLimitFalsePositiveRate > 0
+	) {
+		console.log("\n  False Positives:");
+		if (summary.avgDenyResolutionTimeSec > 0) {
+			console.log(`    Avg DENY resolution time: ${summary.avgDenyResolutionTimeSec}s`);
+		}
+		if (summary.paceRedFalsePositiveRate > 0) {
+			console.log(`    Pace-red FP rate: ${summary.paceRedFalsePositiveRate}%`);
+		}
+		if (summary.locLimitFalsePositiveRate > 0) {
+			console.log(`    LOC-limit FP rate: ${summary.locLimitFalsePositiveRate}%`);
 		}
 	}
 

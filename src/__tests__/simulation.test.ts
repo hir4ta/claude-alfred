@@ -1027,12 +1027,17 @@ describe("Scenario 23: Init → Doctor reports all OK", () => {
 			const claudeDir = join(TEST_DIR, ".claude");
 			mkdirSync(join(claudeDir, "skills", "qult-review"), { recursive: true });
 			mkdirSync(join(claudeDir, "skills", "qult-plan-review"), { recursive: true });
+			mkdirSync(join(claudeDir, "skills", "qult-detect-gates"), { recursive: true });
+			mkdirSync(join(claudeDir, "skills", "qult-plan-generator"), { recursive: true });
 			mkdirSync(join(claudeDir, "agents"), { recursive: true });
 			mkdirSync(join(claudeDir, "rules"), { recursive: true });
 			writeFileSync(join(claudeDir, "skills", "qult-review", "SKILL.md"), "# skill");
 			writeFileSync(join(claudeDir, "skills", "qult-plan-review", "SKILL.md"), "# skill");
+			writeFileSync(join(claudeDir, "skills", "qult-detect-gates", "SKILL.md"), "# skill");
+			writeFileSync(join(claudeDir, "skills", "qult-plan-generator", "SKILL.md"), "# skill");
 			writeFileSync(join(claudeDir, "agents", "qult-reviewer.md"), "# agent");
 			writeFileSync(join(claudeDir, "agents", "qult-plan-evaluator.md"), "# agent");
+			writeFileSync(join(claudeDir, "agents", "qult-plan-generator.md"), "# agent");
 			writeFileSync(join(claudeDir, "rules", "qult-quality.md"), "# rules");
 
 			// Write settings.json with all 12 hooks
@@ -1047,7 +1052,7 @@ describe("Scenario 23: Init → Doctor reports all OK", () => {
 			const { runChecks } = await import("../doctor.ts");
 			const results = runChecks();
 
-			expect(results).toHaveLength(10);
+			expect(results).toHaveLength(12);
 
 			// All checks should be ok (except path which may be warn)
 			const failures = results.filter((r) => r.status === "fail");
@@ -1951,5 +1956,77 @@ describe("Scenario: Non-gated file extensions are skipped", () => {
 			tool_input: { file_path: join(TEST_DIR, "src/foo.ts") },
 		});
 		expect(exitCode).toBeNull();
+	});
+});
+
+// ============================================================
+// False Positive Detection
+// ============================================================
+
+describe("Scenario: Pace-red DENY followed by clean commit records false positive", () => {
+	it("detects false positive when pace-red DENY is followed by clean commit", async () => {
+		// Set up passing on_commit gates
+		const gates: GatesConfig = {
+			on_write: {
+				lint: { command: "echo 'OK' && exit 0", timeout: 3000 },
+			},
+			on_commit: {
+				test: { command: "echo 'pass' && exit 0", timeout: 3000 },
+			},
+		};
+		writeFileSync(join(QULT_DIR, "gates.json"), JSON.stringify(gates));
+
+		// Simulate pace-red state (120+ min, 16+ files)
+		writePace({
+			last_commit_at: new Date(Date.now() - 125 * 60_000).toISOString(),
+			changed_files: 16,
+			tool_calls: 80,
+		});
+
+		// Step 1: pre-tool DENY (pace-red) — records deny timestamp
+		const preTool = (await import("../hooks/pre-tool.ts")).default;
+		try {
+			await preTool({
+				hook_type: "PreToolUse",
+				tool_name: "Edit",
+				tool_input: { file_path: join(TEST_DIR, "src/foo.ts") },
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+
+		// Verify deny timestamp was recorded
+		const { readLastDeny } = await import("../state/session-state.ts");
+		const lastDeny = readLastDeny();
+		expect(lastDeny).not.toBeNull();
+		expect(lastDeny!.reason).toBe("pace-red");
+
+		// Step 2: User commits (simulating they reduced scope)
+		// Reset pace so commit can proceed
+		writePace({
+			last_commit_at: new Date().toISOString(),
+			changed_files: 0,
+			tool_calls: 0,
+		});
+
+		stdoutCapture = [];
+		exitCode = null;
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		await postTool({
+			hook_type: "PostToolUse",
+			tool_name: "Bash",
+			tool_input: { command: "git commit -m 'test commit'" },
+		});
+
+		// Flush caches to disk (handler doesn't call flushAll, dispatcher does)
+		flushAll();
+
+		// Step 3: Verify false-positive:detected metric was recorded
+		const { readMetrics } = await import("../state/metrics.ts");
+		const metrics = readMetrics();
+		const fpEntries = metrics.filter((m) => m.action === "false-positive:detected");
+		expect(fpEntries.length).toBeGreaterThanOrEqual(1);
+		expect(fpEntries[0]!.reason).toBe("pace-red");
 	});
 });

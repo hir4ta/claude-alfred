@@ -11,6 +11,7 @@ import {
 	readLastReview,
 	readLastTestPass,
 	readPace,
+	recordDenyTimestamp,
 } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
 import { deny } from "./respond.ts";
@@ -48,6 +49,7 @@ function checkEditWrite(ev: HookEvent): void {
 	const pace = readPace();
 	const hasPlan = getActivePlan() !== null;
 	if (isPaceRed(pace, hasPlan)) {
+		recordDenyTimestamp("pace-red");
 		deny(
 			"Long time without commit on many changed files. Commit your current changes before continuing.",
 		);
@@ -58,6 +60,7 @@ function checkEditWrite(ev: HookEvent): void {
 		const locLimit = getLocLimit(hasPlan);
 		const currentLines = readChangedLines();
 		if (currentLines >= locLimit) {
+			recordDenyTimestamp("loc-limit");
 			deny(
 				`Too many lines changed (${currentLines}/${locLimit}) since last commit. Commit current changes first.`,
 			);
