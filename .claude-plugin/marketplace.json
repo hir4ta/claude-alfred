@@ -10,7 +10,7 @@
 	"plugins": [
 		{
 			"name": "qult",
-			"source": ".",
+			"source": "./",
 			"description": "Enforces lint, typecheck, test, and review gates via hooks + MCP",
 			"version": "0.16.0"
 		}
