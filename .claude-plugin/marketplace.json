@@ -5,14 +5,14 @@
 	},
 	"metadata": {
 		"description": "Quality evaluator harness for Claude Code",
-		"version": "0.15.3"
+		"version": "0.16.0"
 	},
 	"plugins": [
 		{
 			"name": "qult",
 			"source": ".",
 			"description": "Enforces lint, typecheck, test, and review gates via hooks + MCP",
-			"version": "0.15.3"
+			"version": "0.16.0"
 		}
 	]
 }
