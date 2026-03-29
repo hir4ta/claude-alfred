@@ -40,12 +40,6 @@ afterEach(() => {
 	rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
-function getResponse(): Record<string, unknown> | null {
-	const output = stdoutCapture.join("");
-	if (!output) return null;
-	return JSON.parse(output);
-}
-
 describe("stop hook", () => {
 	it("blocks when pending-fixes exist", async () => {
 		writePendingFixes([{ file: "src/foo.ts", errors: ["lint error"], gate: "lint" }]);
@@ -58,8 +52,8 @@ describe("stop hook", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect((response as Record<string, string>)?.reason).toContain("Fix");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("Fix");
 	});
 
 	it("does not block when no pending-fixes and review completed", async () => {
@@ -87,8 +81,8 @@ describe("stop hook", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect((response as Record<string, string>)?.reason).toContain("review");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("review");
 	});
 
 	it("does not block when stop_hook_active is true (prevent infinite loop)", async () => {

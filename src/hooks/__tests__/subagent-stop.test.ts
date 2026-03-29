@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAllCaches } from "../../state/flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-subagent-stop-test");
-let stdoutCapture: string[] = [];
+let stderrCapture: string[] = [];
 let exitCode: number | null = null;
 const originalCwd = process.cwd();
 
@@ -12,13 +12,13 @@ beforeEach(() => {
 	resetAllCaches();
 	mkdirSync(join(TEST_DIR, ".qult", ".state"), { recursive: true });
 	process.chdir(TEST_DIR);
-	stdoutCapture = [];
+	stderrCapture = [];
 	exitCode = null;
-	vi.spyOn(process.stdout, "write").mockImplementation((data) => {
-		stdoutCapture.push(typeof data === "string" ? data : data.toString());
+	vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+	vi.spyOn(process.stderr, "write").mockImplementation((data) => {
+		stderrCapture.push(typeof data === "string" ? data : data.toString());
 		return true;
 	});
-	vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 	vi.spyOn(process, "exit").mockImplementation((code) => {
 		exitCode = code as number;
 		throw new Error(`process.exit(${code})`);
@@ -128,8 +128,8 @@ describe("subagentStop", () => {
 			// process.exit(2)
 		}
 		expect(exitCode).toBe(2);
-		const output = stdoutCapture.join("");
-		expect(output).toContain("FAIL");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("FAIL");
 	});
 
 	it("blocks qult-reviewer with PASS verdict but no Score or findings", async () => {
@@ -505,7 +505,7 @@ describe("plan-evaluator SubagentStop", () => {
 			// process.exit(2)
 		}
 		expect(exitCode).toBe(2);
-		expect(stdoutCapture.join("")).toContain("REVISE");
+		expect(stderrCapture.join("")).toContain("REVISE");
 	});
 
 	it("blocks qult-plan-evaluator with PASS but low aggregate score", async () => {
@@ -521,7 +521,7 @@ describe("plan-evaluator SubagentStop", () => {
 			// process.exit(2)
 		}
 		expect(exitCode).toBe(2);
-		expect(stdoutCapture.join("")).toContain("below threshold");
+		expect(stderrCapture.join("")).toContain("below threshold");
 	});
 
 	it("blocks qult-plan-evaluator with malformed output", async () => {

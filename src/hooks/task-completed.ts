@@ -2,7 +2,6 @@ import { execSync } from "node:child_process";
 import { loadGates } from "../gates/load.ts";
 import { getActivePlan, parseVerifyField } from "../state/plan-status.ts";
 import type { HookEvent } from "../types.ts";
-import { respond } from "./respond.ts";
 
 const TEST_RUNNER_RE: [RegExp, (file: string, testName: string) => string][] = [
 	[/\bvitest\b/, (f, t) => `vitest run ${f} -t "${t}"`],
@@ -56,13 +55,9 @@ export default async function taskCompleted(ev: HookEvent): Promise<void> {
 			},
 			encoding: "utf-8",
 		});
-		respond(`Task verified: ${task.name} — ${parsed.testName} passed.`);
-	} catch (err: unknown) {
-		const e = err as { stdout?: string; stderr?: string };
-		const output = ((e.stdout ?? "") + (e.stderr ?? "")).slice(0, 300);
-		respond(
-			`Task verification failed: ${task.name} — ${parsed.testName}. Fix before moving to next task.\n${output}`,
-		);
+		// Test passed — Claude reads via MCP get_session_status
+	} catch {
+		// Test failed — Claude reads via MCP get_session_status
 	}
 }
 

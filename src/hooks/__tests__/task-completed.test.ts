@@ -105,9 +105,11 @@ describe("taskCompleted: task matching", () => {
 		const taskCompleted = (await import("../task-completed.ts")).default;
 		await taskCompleted({ task_subject: "Task 2: Add error handler" });
 
-		const output = stdoutCapture.join("");
-		expect(output).toContain("Add error handler");
-		expect(output).toContain("handlesError");
+		// Verify execSync was called with the correct test file/name
+		expect(mockedExecSync).toHaveBeenCalledOnce();
+		const cmd = mockedExecSync.mock.calls[0]![0] as string;
+		expect(cmd).toContain("error.test.ts");
+		expect(cmd).toContain("handlesError");
 	});
 
 	it("does NOT match by substring (Add handler should not match Add error handler)", async () => {
@@ -118,16 +120,17 @@ describe("taskCompleted: task matching", () => {
 		// Subject is just "Add handler" without task number — should match Task 1 exactly
 		await taskCompleted({ task_subject: "Add handler" });
 
-		const output = stdoutCapture.join("");
-		expect(output).toContain("Add handler");
-		expect(output).toContain("handlesRequest");
-		// Should NOT have matched Task 2's verify
-		expect(output).not.toContain("handlesError");
+		// Verify execSync was called with Task 1's test, not Task 2's
+		expect(mockedExecSync).toHaveBeenCalledOnce();
+		const cmd = mockedExecSync.mock.calls[0]![0] as string;
+		expect(cmd).toContain("handler.test.ts");
+		expect(cmd).toContain("handlesRequest");
+		expect(cmd).not.toContain("handlesError");
 	});
 });
 
 describe("taskCompleted: verify execution", () => {
-	it("runs verify test and responds with success", async () => {
+	it("runs verify test without error when test passes", async () => {
 		writePlan(PLAN_WITH_VERIFY);
 		writeGates({ on_commit: { test: { command: "vitest run" } } });
 
@@ -140,12 +143,11 @@ describe("taskCompleted: verify execution", () => {
 		expect(cmd).toContain("handler.test.ts");
 		expect(cmd).toContain("handlesRequest");
 
-		const output = stdoutCapture.join("");
-		expect(output).toContain("Task verified");
-		expect(output).toContain("passed");
+		// No stdout output — state is read via MCP
+		expect(stdoutCapture.join("")).toBe("");
 	});
 
-	it("responds with failure when test throws", async () => {
+	it("does not throw when test fails", async () => {
 		writePlan(PLAN_WITH_VERIFY);
 		writeGates({ on_commit: { test: { command: "vitest run" } } });
 
@@ -160,11 +162,11 @@ describe("taskCompleted: verify execution", () => {
 		});
 
 		const taskCompleted = (await import("../task-completed.ts")).default;
+		// Should not throw — fail-open
 		await taskCompleted({ task_subject: "Task 1: Add handler" });
 
-		const output = stdoutCapture.join("");
-		expect(output).toContain("verification failed");
-		expect(output).toContain("Fix before moving to next task");
+		// No stdout output — state is read via MCP
+		expect(stdoutCapture.join("")).toBe("");
 	});
 });
 

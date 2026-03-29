@@ -49,8 +49,8 @@ describe("postTool: Edit/Write gate execution", () => {
 		expect(fixes.length).toBe(1);
 		expect(fixes[0]!.gate).toBe("lint");
 
-		const output = stdoutCapture.join("");
-		expect(output).toContain("lint error");
+		// stdout is no longer used; state is written to pending-fixes.json
+		expect(stdoutCapture.join("")).toBe("");
 	});
 
 	it("does not add pending-fixes when gate passes", async () => {

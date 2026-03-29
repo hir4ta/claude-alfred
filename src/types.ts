@@ -30,34 +30,11 @@ export interface HookEvent {
 	hook_type?: string;
 }
 
-/** Hook response written to stdout.
- *
- * Schema varies by event:
- * - PostToolUse / SessionStart:
- *     hookSpecificOutput.additionalContext
- * - PreToolUse:
- *     hookSpecificOutput.permissionDecision + permissionDecisionReason
- * - Stop (block):
- *     top-level decision + reason (NOT inside hookSpecificOutput)
- *
- * See: https://code.claude.com/docs/en/hooks
+/**
+ * Hook response schema (legacy — stdout output removed for plugin compatibility).
+ * deny() and block() now use stderr + exit 2 only, bypassing #16538.
+ * State communication is handled via MCP server tools.
  */
-export type HookResponse =
-	| {
-			hookSpecificOutput: {
-				additionalContext: string;
-			};
-	  }
-	| {
-			hookSpecificOutput: {
-				permissionDecision: "allow" | "deny" | "ask";
-				permissionDecisionReason?: string;
-			};
-	  }
-	| {
-			decision: "block";
-			reason: string;
-	  };
 
 /** Pending fix entry stored in .qult/.state/pending-fixes.json */
 export interface PendingFix {

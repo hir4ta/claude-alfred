@@ -32,12 +32,6 @@ afterEach(() => {
 	rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
-function getResponse(): Record<string, unknown> | null {
-	const output = stdoutCapture.join("");
-	if (!output) return null;
-	return JSON.parse(output);
-}
-
 describe("sessionStart hook", () => {
 	it("creates .qult dir if missing", async () => {
 		rmSync(join(TEST_DIR, ".qult"), { recursive: true, force: true });
@@ -49,23 +43,22 @@ describe("sessionStart hook", () => {
 		expect(existsSync(join(TEST_DIR, ".qult", ".state"))).toBe(true);
 	});
 
-	it("does not inject context when gates configured and no errors", async () => {
+	it("does not output anything to stdout", async () => {
 		writeFileSync(join(QULT_DIR, "gates.json"), SAMPLE_GATES);
 
 		const handler = (await import("../session-start.ts")).default;
 		await handler({ hook_type: "SessionStart" });
 
-		expect(getResponse()).toBeNull();
+		expect(stdoutCapture.join("")).toBe("");
 	});
 
-	it("prompts /qult:detect-gates when gates are empty", async () => {
+	it("does not output anything when gates are empty", async () => {
 		writeFileSync(join(QULT_DIR, "gates.json"), "{}");
 
 		const handler = (await import("../session-start.ts")).default;
 		await handler({ hook_type: "SessionStart" });
 
-		const output = stdoutCapture.join("");
-		expect(output).toContain("qult:detect-gates");
+		expect(stdoutCapture.join("")).toBe("");
 	});
 
 	it("clears stale pending-fixes from previous session", async () => {

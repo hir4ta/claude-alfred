@@ -1,9 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { loadGates } from "../gates/load.ts";
 import { writePendingFixes } from "../state/pending-fixes.ts";
 import type { HookEvent } from "../types.ts";
-import { respond } from "./respond.ts";
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const SCOPED_FILE_RE = /^(session-state|pending-fixes)-.+\.json$/;
@@ -22,18 +20,7 @@ export default async function sessionStart(_ev: HookEvent): Promise<void> {
 	// Clear this session's pending-fixes. Gates will re-detect on edit.
 	writePendingFixes([]);
 
-	// Prompt gate detection if gates are empty
-	const gates = loadGates();
-	const hasGates =
-		gates &&
-		(Object.keys(gates.on_write ?? {}).length > 0 ||
-			Object.keys(gates.on_commit ?? {}).length > 0 ||
-			Object.keys(gates.on_review ?? {}).length > 0);
-	if (!hasGates) {
-		respond(
-			"Gates are not configured. Run /qult:detect-gates to auto-detect your project's lint, typecheck, and test tools.",
-		);
-	}
+	// Gate detection prompt moved to MCP server instructions + rules
 }
 
 /** Remove session-scoped state files older than 24h. */

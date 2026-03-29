@@ -5,7 +5,7 @@ import { resetAllCaches } from "../state/flush.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-pretool-test");
 const STATE_DIR = join(TEST_DIR, ".qult", ".state");
-let stdoutCapture: string[] = [];
+let stderrCapture: string[] = [];
 let exitCode: number | null = null;
 const originalCwd = process.cwd();
 
@@ -13,14 +13,14 @@ beforeEach(() => {
 	resetAllCaches();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
-	stdoutCapture = [];
+	stderrCapture = [];
 	exitCode = null;
 
-	vi.spyOn(process.stdout, "write").mockImplementation((data) => {
-		stdoutCapture.push(typeof data === "string" ? data : data.toString());
+	vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+	vi.spyOn(process.stderr, "write").mockImplementation((data) => {
+		stderrCapture.push(typeof data === "string" ? data : data.toString());
 		return true;
 	});
-	vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 	vi.spyOn(process, "exit").mockImplementation((code) => {
 		exitCode = code as number;
 		throw new Error(`process.exit(${code})`);
@@ -55,8 +55,8 @@ describe("preTool: Edit/Write checks", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const output = stdoutCapture.join("");
-		expect(output).toContain("permissionDecision");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("Fix existing errors");
 	});
 
 	it("allows editing the file with pending fixes", async () => {
@@ -104,8 +104,8 @@ describe("preTool: Bash git commit checks", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const output = stdoutCapture.join("");
-		expect(output).toContain("test");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("test");
 	});
 
 	it("allows commit without review for small change", async () => {
@@ -157,8 +157,8 @@ describe("preTool: Bash git commit checks", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const output = stdoutCapture.join("");
-		expect(output).toContain("review");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("review");
 	});
 
 	it("DENY commit without review when many gated files changed", async () => {
@@ -187,8 +187,8 @@ describe("preTool: Bash git commit checks", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const output = stdoutCapture.join("");
-		expect(output).toContain("review");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("review");
 	});
 
 	it("allows non-commit Bash commands", async () => {

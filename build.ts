@@ -12,51 +12,87 @@ const version = pkg.version ?? "dev";
 const isCompile = process.argv.includes("--compile");
 
 function findArg(flag: string): string | undefined {
-  const eqIdx = process.argv.findIndex((a) => a.startsWith(`${flag}=`));
-  if (eqIdx !== -1) return process.argv[eqIdx].split("=").slice(1).join("=");
-  const spaceIdx = process.argv.indexOf(flag);
-  if (spaceIdx !== -1 && spaceIdx + 1 < process.argv.length)
-    return process.argv[spaceIdx + 1];
-  return undefined;
+	const eqIdx = process.argv.findIndex((a) => a.startsWith(`${flag}=`));
+	if (eqIdx !== -1) return process.argv[eqIdx].split("=").slice(1).join("=");
+	const spaceIdx = process.argv.indexOf(flag);
+	if (spaceIdx !== -1 && spaceIdx + 1 < process.argv.length) return process.argv[spaceIdx + 1];
+	return undefined;
 }
 
 if (isCompile) {
-  const target = findArg("--target");
-  const outfile = findArg("--outfile") ?? "dist/qult";
+	const target = findArg("--target");
+	const outfile = findArg("--outfile") ?? "dist/qult";
 
-  const args = [
-    "bun",
-    "build",
-    "src/cli.ts",
-    "--compile",
-    "--minify",
-    "--define",
-    `__QULT_VERSION__="${version}"`,
-    "--outfile",
-    outfile,
-  ];
-  if (target) args.push("--target", target);
+	const args = [
+		"bun",
+		"build",
+		"src/cli.ts",
+		"--compile",
+		"--minify",
+		"--define",
+		`__QULT_VERSION__="${version}"`,
+		"--outfile",
+		outfile,
+	];
+	if (target) args.push("--target", target);
 
-  const proc = Bun.spawnSync(args, {
-    stdio: ["inherit", "inherit", "inherit"],
-  });
-  process.exit(proc.exitCode ?? 1);
+	const proc = Bun.spawnSync(args, {
+		stdio: ["inherit", "inherit", "inherit"],
+	});
+	process.exit(proc.exitCode ?? 1);
 } else {
-  const result = await Bun.build({
-    entrypoints: ["./src/cli.ts"],
-    outdir: "./dist",
-    target: "bun",
-    minify: false,
-    banner: "#!/usr/bin/env bun",
-    naming: "[name].mjs",
-    define: {
-      __QULT_VERSION__: JSON.stringify(version),
-    },
-  });
+	// Build CLI (legacy, will be removed after plugin migration)
+	const cliResult = await Bun.build({
+		entrypoints: ["./src/cli.ts"],
+		outdir: "./dist",
+		target: "bun",
+		minify: false,
+		banner: "#!/usr/bin/env bun",
+		naming: "[name].mjs",
+		define: {
+			__QULT_VERSION__: JSON.stringify(version),
+		},
+	});
 
-  if (!result.success) {
-    for (const log of result.logs) console.error(log);
-    process.exit(1);
-  }
-  console.log(`Built ${result.outputs.length} file(s) to dist/`);
+	if (!cliResult.success) {
+		for (const log of cliResult.logs) console.error(log);
+		process.exit(1);
+	}
+
+	// Build hook entry (plugin: node dist/hook.mjs <event>)
+	const hookResult = await Bun.build({
+		entrypoints: ["./src/hook-entry.ts"],
+		outdir: "./dist",
+		target: "node",
+		minify: false,
+		naming: "hook.mjs",
+		define: {
+			__QULT_VERSION__: JSON.stringify(version),
+		},
+	});
+
+	if (!hookResult.success) {
+		for (const log of hookResult.logs) console.error(log);
+		process.exit(1);
+	}
+
+	// Build MCP server (plugin: node dist/mcp-server.mjs)
+	const mcpResult = await Bun.build({
+		entrypoints: ["./src/mcp-server.ts"],
+		outdir: "./dist",
+		target: "node",
+		minify: false,
+		naming: "mcp-server.mjs",
+		define: {
+			__QULT_VERSION__: JSON.stringify(version),
+		},
+	});
+
+	if (!mcpResult.success) {
+		for (const log of mcpResult.logs) console.error(log);
+		process.exit(1);
+	}
+
+	const total = cliResult.outputs.length + hookResult.outputs.length + mcpResult.outputs.length;
+	console.log(`Built ${total} file(s) to dist/`);
 }

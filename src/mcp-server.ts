@@ -1,0 +1,148 @@
+/**
+ * qult MCP Server — exposes quality gate state to Claude via tools.
+ *
+ * Architecture: hooks write state to .qult/.state/ files (exit 2 for deny/block).
+ * This read-only server lets Claude query that state via MCP tools.
+ * Runs as stdio transport, spawned by Claude Code plugin system.
+ *
+ * @see https://modelcontextprotocol.io/docs/concepts/servers
+ */
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { GatesConfig, PendingFix } from "./types.ts";
+
+const STATE_DIR = ".qult/.state";
+const GATES_PATH = ".qult/gates.json";
+
+/** Read a JSON file, returning fallback on any error (fail-open). */
+function readJson<T>(path: string, fallback: T): T {
+	try {
+		if (!existsSync(path)) return fallback;
+		return JSON.parse(readFileSync(path, "utf-8")) as T;
+	} catch {
+		return fallback;
+	}
+}
+
+/**
+ * Find the most recently modified file matching a prefix in the state dir.
+ * Hooks write session-scoped files (e.g. pending-fixes-{sessionId}.json).
+ * MCP server picks the latest one since it doesn't know the session ID.
+ */
+function findLatestStateFile(cwd: string, prefix: string): string {
+	const dir = join(cwd, STATE_DIR);
+	const nonScoped = join(dir, `${prefix}.json`);
+	try {
+		if (!existsSync(dir)) return nonScoped;
+		const files = readdirSync(dir)
+			.filter((f) => f.startsWith(prefix) && f.endsWith(".json"))
+			.map((f) => ({ name: f, mtime: statSync(join(dir, f)).mtimeMs }))
+			.sort((a, b) => b.mtime - a.mtime);
+		if (files.length === 0) return nonScoped;
+		return join(dir, files[0]!.name);
+	} catch {
+		return nonScoped;
+	}
+}
+
+/** Format pending fixes into a human-readable summary for Claude. */
+function formatPendingFixes(fixes: PendingFix[]): string {
+	const lines: string[] = [`${fixes.length} pending fix(es):\n`];
+	for (const fix of fixes) {
+		lines.push(`[${fix.gate}] ${fix.file}`);
+		for (const err of fix.errors) {
+			lines.push(`  ${err}`);
+		}
+	}
+	return lines.join("\n");
+}
+
+function createServer(cwd: string): McpServer {
+	const server = new McpServer(
+		{ name: "qult", version: "1.0.0" },
+		{
+			instructions: [
+				"qult enforces quality gates (lint, typecheck, test, review) via hooks.",
+				"Hooks block tool use with exit 2 when violations exist.",
+				"",
+				"IMPORTANT: When a tool is DENIED by qult, call get_pending_fixes immediately.",
+				"Before committing, call get_session_status to verify test/review gates.",
+				"If gates are not configured, run /qult:detect-gates.",
+			].join("\n"),
+		},
+	);
+
+	server.tool(
+		"get_pending_fixes",
+		"Returns lint/typecheck errors that must be fixed. Call this when a tool is DENIED by qult.",
+		{},
+		() => {
+			const path = findLatestStateFile(cwd, "pending-fixes");
+			const fixes = readJson<PendingFix[]>(path, []);
+			if (!Array.isArray(fixes) || fixes.length === 0) {
+				return { content: [{ type: "text" as const, text: "No pending fixes." }] };
+			}
+			return {
+				content: [{ type: "text" as const, text: formatPendingFixes(fixes) }],
+			};
+		},
+	);
+
+	server.tool(
+		"get_session_status",
+		"Returns session state: test pass, review status, changed files, commit gates. Call before committing.",
+		{},
+		() => {
+			const path = findLatestStateFile(cwd, "session-state");
+			const state = readJson<Record<string, unknown> | null>(path, null);
+			if (!state) {
+				return {
+					isError: true,
+					content: [{ type: "text" as const, text: "No session state. Run /qult:init to set up." }],
+				};
+			}
+			return {
+				content: [{ type: "text" as const, text: JSON.stringify(state, null, 2) }],
+			};
+		},
+	);
+
+	server.tool(
+		"get_gate_config",
+		"Returns quality gate definitions (on_write, on_commit, on_review commands and settings).",
+		{},
+		() => {
+			const gatesPath = join(cwd, GATES_PATH);
+			const gates = readJson<GatesConfig | null>(gatesPath, null);
+			if (!gates) {
+				return {
+					isError: true,
+					content: [
+						{ type: "text" as const, text: "No gates configured. Run /qult:detect-gates." },
+					],
+				};
+			}
+			return {
+				content: [{ type: "text" as const, text: JSON.stringify(gates, null, 2) }],
+			};
+		},
+	);
+
+	return server;
+}
+
+async function main(): Promise<void> {
+	const cwd = process.env.QULT_CWD ?? process.cwd();
+	const server = createServer(cwd);
+	const transport = new StdioServerTransport();
+	await server.connect(transport);
+}
+
+main().catch((err) => {
+	process.stderr.write(`[qult-mcp] Fatal: ${err}\n`);
+	process.exit(1);
+});
+
+export { createServer, findLatestStateFile, readJson };

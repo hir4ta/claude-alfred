@@ -16,7 +16,6 @@ import {
 	shouldSkipGate,
 } from "../state/session-state.ts";
 import type { GatesConfig, HookEvent, PendingFix } from "../types.ts";
-import { respond } from "./respond.ts";
 
 /** Fallback regex for test command detection when no on_commit gates configured */
 const TEST_CMD_RE = /\b(vitest|jest|mocha|pytest|go\s+test|cargo\s+test)\b/;
@@ -109,9 +108,7 @@ function handleEditWrite(ev: HookEvent): void {
 		/* fail-open */
 	}
 
-	if (newFixes.length > 0) {
-		respond(`Fix these errors before continuing:\n${messages.join("\n")}`);
-	}
+	// State written via addPendingFixes above; Claude reads via MCP get_pending_fixes
 }
 
 function handleBash(ev: HookEvent): void {
@@ -137,9 +134,7 @@ function handleBash(ev: HookEvent): void {
 			}
 		}
 
-		if (messages.length > 0) {
-			respond(`Tests failed after commit:\n${messages.join("\n")}`);
-		}
+		// Test failures recorded; Claude reads via MCP get_session_status
 		return;
 	}
 

@@ -39,26 +39,8 @@ afterEach(() => {
 	rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
-function getResponse(): Record<string, unknown> | null {
-	const output = stdoutCapture.join("");
-	if (!output) return null;
-	return JSON.parse(output);
-}
-
-describe("respond()", () => {
-	it("writes additionalContext to stdout", async () => {
-		const { respond } = await import("../respond.ts");
-		respond("Fix this error");
-		const response = getResponse();
-		expect(response).not.toBeNull();
-		expect((response?.hookSpecificOutput as Record<string, string>)?.additionalContext).toBe(
-			"Fix this error",
-		);
-	});
-});
-
 describe("deny()", () => {
-	it("writes permissionDecision deny and exits with code 2", async () => {
+	it("exits with code 2 and writes reason to stderr only", async () => {
 		const { deny } = await import("../respond.ts");
 		try {
 			deny("Fix errors first");
@@ -66,16 +48,13 @@ describe("deny()", () => {
 			// process.exit(2) throws
 		}
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect((response?.hookSpecificOutput as Record<string, string>)?.permissionDecision).toBe(
-			"deny",
-		);
 		expect(stderrCapture.join("")).toContain("Fix errors first");
+		expect(stdoutCapture.join("")).toBe("");
 	});
 });
 
 describe("block()", () => {
-	it("writes top-level decision/reason and exits with code 2", async () => {
+	it("exits with code 2 and writes reason to stderr only", async () => {
 		const { block } = await import("../respond.ts");
 		try {
 			block("Pending fixes remain");
@@ -83,8 +62,7 @@ describe("block()", () => {
 			// process.exit(2) throws
 		}
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect(response?.decision).toBe("block");
-		expect(response?.reason).toBe("Pending fixes remain");
+		expect(stderrCapture.join("")).toContain("Pending fixes remain");
+		expect(stdoutCapture.join("")).toBe("");
 	});
 });

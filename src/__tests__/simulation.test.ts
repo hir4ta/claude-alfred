@@ -65,11 +65,7 @@ afterEach(() => {
 	rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
-function getResponse(): Record<string, unknown> | null {
-	const output = stdoutCapture.join("");
-	if (!output) return null;
-	return JSON.parse(output);
-}
+// No stdout output expected; deny/block write to stderr only
 
 // ============================================================
 // Core: Gate → DENY → Fix loop
@@ -106,8 +102,8 @@ describe("Scenario 1: Edit → lint fails → block other files → allow fix fi
 		}
 
 		expect(exitCode).toBe(2);
-		const denyResponse = getResponse();
-		expect(denyResponse?.hookSpecificOutput).toHaveProperty("permissionDecision", "deny");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("Fix existing errors");
 
 		// Step 3: PreToolUse on SAME file — should ALLOW (no exit)
 		stdoutCapture = [];
@@ -278,8 +274,8 @@ describe("Scenario 10: Stop hook blocks when pending fixes exist", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect((response as Record<string, string>)?.decision).toBe("block");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("Pending lint/type errors");
 	});
 });
 
@@ -319,15 +315,15 @@ describe("Scenario 13: Stop infinite loop prevention", () => {
 // Session start + init
 // ============================================================
 
-describe("Scenario 15: Init creates empty gates, session-start prompts detection", () => {
-	it("session-start responds with detect-gates prompt when gates are empty", async () => {
+describe("Scenario 15: Init creates empty gates, session-start clears state", () => {
+	it("session-start produces no stdout when gates are empty", async () => {
 		writeFileSync(join(QULT_DIR, "gates.json"), "{}");
 
 		const sessionStart = (await import("../hooks/session-start.ts")).default;
 		await sessionStart({ session_id: "test" });
 
-		const output = stdoutCapture.join("");
-		expect(output).toContain("qult:detect-gates");
+		// Gate detection is now handled by MCP server instructions, not stdout
+		expect(stdoutCapture.join("")).toBe("");
 	});
 });
 
@@ -571,8 +567,8 @@ describe("Scenario 27: Stop blocks without review when plan exists", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect((response as Record<string, string>)?.reason).toContain("review");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("review");
 	});
 });
 
@@ -608,8 +604,8 @@ describe("Scenario 31: Small change skips review requirement", () => {
 		}
 
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect((response as Record<string, string>)?.decision).toBe("block");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("review");
 	});
 });
 
@@ -696,8 +692,8 @@ describe("Scenario: Review score threshold — PASS with low scores blocks", () 
 			// exit(2)
 		}
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		expect((response as Record<string, string>)?.reason).toContain("below threshold");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("below threshold");
 	});
 });
 
@@ -857,7 +853,7 @@ describe("Scenario: Plan validation full flow", () => {
 			// process.exit(2)
 		}
 		expect(exitCode).toBe(2);
-		expect(stdoutCapture.join("")).toContain("Context");
+		expect(stderrCapture.join("")).toContain("Context");
 	});
 
 	it("L2 blocks plan with vague Change field", async () => {
@@ -892,7 +888,7 @@ describe("Scenario: Plan validation full flow", () => {
 			// process.exit(2)
 		}
 		expect(exitCode).toBe(2);
-		expect(stdoutCapture.join("")).toContain("vague");
+		expect(stderrCapture.join("")).toContain("vague");
 	});
 
 	it("L1+L2 pass for well-formed plan", async () => {
@@ -969,10 +965,9 @@ describe("Scenario: Adaptive review block message shows trend", () => {
 			// exit(2)
 		}
 		expect(exitCode).toBe(2);
-		const response = getResponse();
-		const reason = (response as Record<string, string>)?.reason ?? "";
-		expect(reason).toContain("Design");
-		expect(reason).toContain("2/5");
+		const errOutput = stderrCapture.join("");
+		expect(errOutput).toContain("Design");
+		expect(errOutput).toContain("2/5");
 	});
 });
 
@@ -1018,18 +1013,8 @@ describe("Scenario: TaskCompleted verifies plan task", () => {
 			task_subject: "Add helper",
 		});
 
-		// Should respond (pass or fail — depends on whether test exists)
-		// The key thing is: it doesn't crash and it attempts to respond
-		const output = stdoutCapture.join("");
-		// Advisory hook: either responds with result or silently returns
-		// Since the test file doesn't exist, execSync will throw and respond with failure
-		if (output) {
-			const response = JSON.parse(output);
-			expect(response).toHaveProperty("hookSpecificOutput");
-			expect((response.hookSpecificOutput as Record<string, string>).additionalContext).toContain(
-				"Task",
-			);
-		}
+		// No stdout output — result is read via MCP get_session_status
+		expect(stdoutCapture.join("")).toBe("");
 	});
 
 	it("silently returns when no plan exists", async () => {
