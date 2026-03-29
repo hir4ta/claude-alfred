@@ -60,7 +60,7 @@ qult/
 ### MCP Server
 - Claude が状態を取得する唯一の経路
 - tools: get_pending_fixes, get_session_status, get_gate_config
-- instructions で DENY 時の呼び出しルールを Claude に指示
+- MCP tool の呼び出しルールは `.claude/rules/qult-gates.md` に定義
 
 ### Gates
 - on_write: 編集時 (lint, typecheck) / on_commit: コミット時 (test) / on_review: レビュー時 (e2e)

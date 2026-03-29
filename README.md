@@ -119,7 +119,7 @@ flowchart TB
 init が行うこと:
 - `.qult/` ディレクトリ作成
 - `.qult/gates.json` 生成 — プロジェクトの lint/typecheck/test ツールを自動検出
-- `.claude/rules/qult.md` 配置 — MCP tool の呼び出しルール (DENY 時に `get_pending_fixes` を呼ぶ等)
+- `.claude/rules/qult-gates.md` 配置 — MCP tool の呼び出しルール (DENY 時に `get_pending_fixes` を呼ぶ等)
 - `.claude/rules/qult-quality.md` 配置 — テスト駆動、スコープ管理ルール
 - `.claude/rules/qult-plan.md` 配置 — Plan 構造ルール
 - `.gitignore` に `.qult/` 追加
@@ -139,12 +139,14 @@ init が行うこと:
 | `/qult:detect-gates` | ゲート設定を再検出 |
 | `/qult:plan-generator` | 機能説明から構造化 Plan を生成 |
 | `/qult:doctor` | セットアップの健全性チェック |
+| `/qult:update` | プラグイン更新後に rules ファイルを最新化 |
 
 hooks (PostToolUse, PreToolUse, Stop, SubagentStop, TaskCompleted) と MCP server は自動で動作する。
 
 ## 更新
 
-`/plugin` > qult 詳細 > 更新。
+1. `/plugin` > qult 詳細 > 更新 (hooks, skills, agents, MCP server が更新される)
+2. `/qult:update` (プロジェクトの rules ファイルを最新化)
 
 ## アンインストール
 
