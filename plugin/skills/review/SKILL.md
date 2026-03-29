@@ -1,6 +1,6 @@
 ---
 name: review
-description: "Independent code review using a separate evaluator agent (HubSpot 2-stage pattern). Spawns reviewer to find issues, then filters findings by Succinctness/Accuracy/Actionability. Use when completing a milestone, before a major commit, or as a review gate in a plan. NOT for trivial changes (typo, rename, log line)."
+description: "Independent code review using a separate evaluator agent. Spawns reviewer to find issues, then filters by Succinctness/Accuracy/Actionability. Use before a major commit or as a review gate. NOT for trivial changes."
 ---
 
 # /qult:review

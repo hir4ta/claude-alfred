@@ -1,28 +1,28 @@
 # qult
 
-![Version](https://img.shields.io/badge/version-0.16.4-7fbbb3?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.16.5-7fbbb3?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-standalone_binary-a7c080?style=flat-square&logo=typescript&logoColor=d3c6aa)
 ![Hooks](https://img.shields.io/badge/hooks-5-dbbc7f?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-83c092?style=flat-square)
 
-**Claude の悪い癖を物理的に止める。** コードの品質を構造で守る evaluator harness。
+**Physically stop Claude's bad habits.** An evaluator harness that enforces code quality through structure.
 
-> Claude は優秀だが、lint エラーを放置して次のファイルに行く。テストなしでコミットする。自分のコードを褒めてレビューを終える。
-> qult は 5 hooks + MCP server + 独立 Opus evaluator で、それを **お願い (advisory) ではなく exit 2 (DENY) で止める**。
-> Claude Code Plugin として配布。`/plugin install` で導入完了。
+> Claude is capable, but it leaves lint errors behind and moves to the next file. It commits without tests. It praises its own code and calls the review done.
+> qult uses 5 hooks + MCP server + independent Opus evaluator to stop that with **exit 2 (DENY), not advisory messages**.
+> Distributed as a Claude Code Plugin. Install with `/plugin install`.
 
 > [!NOTE]
-> セッション開始時に `SessionStart:startup hook error` や `Stop hook error` と表示されることがありますが、**これは qult のバグではありません**。
-> Claude Code の UI が hook の成功/失敗を正しく判別できない既知のバグです ([#12671](https://github.com/anthropics/claude-code/issues/12671), [#21643](https://github.com/anthropics/claude-code/issues/21643), [#10463](https://github.com/anthropics/claude-code/issues/10463))。
-> hook 自体は正常に動作しています。
+> You may see `SessionStart:startup hook error` or `Stop hook error` at session start. **This is not a qult bug.**
+> It's a known Claude Code UI bug that misreports hook success/failure ([#12671](https://github.com/anthropics/claude-code/issues/12671), [#21643](https://github.com/anthropics/claude-code/issues/21643), [#10463](https://github.com/anthropics/claude-code/issues/10463)).
+> Hooks are working correctly.
 
 > [!WARNING]
-> **PreToolUse hook の DENY が無視される場合があります。** qult は正しく `exit 2` を返しますが、
-> Claude Code がブロックせずにツールを実行してしまうケースが報告されています
-> ([#21988](https://github.com/anthropics/claude-code/issues/21988), [#4669](https://github.com/anthropics/claude-code/issues/4669), [#24327](https://github.com/anthropics/claude-code/issues/24327))。
-> Claude Code 側の修正待ちです。
+> **PreToolUse DENY may be ignored.** qult correctly returns `exit 2`, but
+> Claude Code sometimes executes the tool anyway
+> ([#21988](https://github.com/anthropics/claude-code/issues/21988), [#4669](https://github.com/anthropics/claude-code/issues/4669), [#24327](https://github.com/anthropics/claude-code/issues/24327)).
+> Waiting for a Claude Code fix.
 
----
+[Japanese README / README.ja.md](README.ja.md)
 
 ## How it works
 
@@ -31,9 +31,9 @@ flowchart LR
     Edit["Edit / Write"] --> Gate{"Gate\n(lint, type)"}
     Gate -- pass --> OK["Continue"]
     Gate -- fail --> PF["pending-fixes"]
-    PF --> Next["別ファイルを\nEdit しようとする"]
+    PF --> Next["Try to Edit\nanother file"]
     Next --> DENY["DENY\n(exit 2)"]
-    DENY --> Fix["同じファイルを修正"]
+    DENY --> Fix["Fix the\nsame file"]
     Fix --> Gate
 
     style DENY fill:#e67e80,color:#2d353b,stroke:#e67e80
@@ -41,23 +41,23 @@ flowchart LR
     style PF fill:#dbbc7f,color:#2d353b,stroke:#dbbc7f
 ```
 
-Anthropic の [Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) 記事が示した Generator-Evaluator パターンで動作:
+Operates on the Generator-Evaluator pattern from Anthropic's [Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) article:
 
 ```mermaid
 flowchart TB
     subgraph Generator["Generator"]
-        Claude["Claude 本体\n+ 6 hooks で品質ゲート"]
+        Claude["Claude\n+ 5 hooks for quality gates"]
     end
     subgraph Evaluator["Evaluator"]
         Rev["/qult:review\n(Opus)"]
     end
 
-    Claude -- "タスク完了" --> TV["TaskCompleted\nVerify 即時実行"]
-    TV -- "FAIL → 即修正" --> Claude
+    Claude -- "Task done" --> TV["TaskCompleted\nRun Verify immediately"]
+    TV -- "FAIL" --> Claude
     TV -- "PASS" --> Claude
-    Claude -- "全タスク完了" --> Rev
-    Rev -- "FAIL / score < 12\n傾向分析付き block" --> Claude
-    Rev -- "PASS + score ≥ 12/15" --> Done["Commit"]
+    Claude -- "All tasks done" --> Rev
+    Rev -- "FAIL / score < 12\ntrend-aware block" --> Claude
+    Rev -- "PASS + score >= 12/15" --> Done["Commit"]
 
     style Generator fill:#7fbbb3,color:#2d353b,stroke:#7fbbb3
     style Evaluator fill:#e69875,color:#2d353b,stroke:#e69875
@@ -65,96 +65,90 @@ flowchart TB
     style TV fill:#dbbc7f,color:#2d353b,stroke:#dbbc7f
 ```
 
----
+## What it prevents
 
-## 何を防ぐか
-
-| 状況 | 行動 |
+| Situation | Action |
 |---|---|
-| lint/type エラーを放置して別ファイルへ | **DENY** — 修正するまでブロック |
-| テスト未実行で git commit | **DENY** — テスト pass を要求 |
-| レビュー未実行/FAIL で完了宣言 | **block** — /qult:review を要求 |
-| レビュー PASS だがスコア低い | **block** — 傾向分析付きで再レビュー (最大3回) |
-| Plan 確定時に漏れがある | **DENY** — セッション全体の漏れチェックを強制 (1回) |
-| Plan の途中で完了宣言 | **block** — 全タスク完了を要求 |
-| Plan タスク完了時 | **verify** — Verify フィールドのテストを即時実行 |
-
----
+| Lint/type errors left behind, moves to another file | **DENY** -- blocked until fixed |
+| `git commit` without running tests | **DENY** -- requires test pass |
+| Declares done without review or after FAIL | **block** -- requires /qult:review |
+| Review PASS but low score | **block** -- trend-aware re-review (up to 3x) |
+| Plan finalized with omissions | **DENY** -- forces session-wide check (once) |
+| Declares done mid-plan | **block** -- requires all tasks completed |
+| Plan task completed | **verify** -- runs Verify test immediately |
 
 ## 5 Hooks + MCP Server
 
-| 分類 | Hook | 役割 |
+| Type | Hook | Role |
 |------|------|------|
-| **壁** (enforcement) | PostToolUse | Edit/Write 後に lint/type gate 実行、state に書き込み |
-| **壁** (enforcement) | PreToolUse | pending-fixes 未修正なら DENY、commit 前にテスト/レビュー要求、ExitPlanMode 時に漏れチェック強制 |
-| **完了ゲート** (enforcement) | Stop | 未修正エラー・未完了タスク・レビュー未実施なら block |
-| **サブエージェント** (enforcement) | SubagentStop | レビュー出力検証 + 傾向分析付きスコア閾値強制 (12/15) |
-| **タスク検証** (advisory) | TaskCompleted | Plan タスク完了時に Verify テストを即時実行 |
+| **Wall** (enforcement) | PostToolUse | Runs lint/type gates after Edit/Write, writes state |
+| **Wall** (enforcement) | PreToolUse | DENY if pending fixes, require test/review before commit, force selfcheck on ExitPlanMode |
+| **Completion gate** (enforcement) | Stop | Block if unresolved errors, incomplete tasks, or missing review |
+| **Subagent** (enforcement) | SubagentStop | Validates review output + enforces trend-aware score threshold (12/15) |
+| **Task verify** (advisory) | TaskCompleted | Runs Verify test immediately when plan task completes |
 
-| MCP Tool | 役割 |
+| MCP Tool | Role |
 |----------|------|
-| get_pending_fixes | lint/typecheck エラーの詳細を返す |
-| get_session_status | テスト/レビュー状態を返す |
-| get_gate_config | ゲート設定を返す |
+| get_pending_fixes | Returns lint/typecheck error details |
+| get_session_status | Returns test/review state |
+| get_gate_config | Returns gate configuration |
 
----
+## Installation
 
-## インストール
-
-### 1. プラグインの導入 (1回だけ)
+### 1. Install the plugin (once)
 
 ```
 /plugin marketplace add hir4ta/qult
 /plugin install qult@hir4ta-qult
 ```
 
-インストール後、Claude Code を再起動する（セッションを終了して新しいセッションを開始）。
+Restart Claude Code after installation (end the session and start a new one).
 
-### 2. プロジェクトのセットアップ (プロジェクトごとに1回)
+### 2. Project setup (once per project)
 
 ```
 /qult:init
 ```
 
-init が行うこと:
-- `.qult/` ディレクトリ作成
-- `.qult/gates.json` 生成 — プロジェクトの lint/typecheck/test ツールを自動検出
-- `.claude/rules/qult-gates.md` 配置 — MCP tool の呼び出しルール (DENY 時に `get_pending_fixes` を呼ぶ等)
-- `.claude/rules/qult-quality.md` 配置 — テスト駆動、スコープ管理ルール
-- `.claude/rules/qult-plan.md` 配置 — Plan 構造ルール
-- `.gitignore` に `.qult/` 追加
+What init does:
+- Creates `.qult/` directory
+- Generates `.qult/gates.json` -- auto-detects project lint/typecheck/test tools
+- Places `.claude/rules/qult-gates.md` -- MCP tool invocation rules
+- Places `.claude/rules/qult-quality.md` -- test-driven, scope management rules
+- Places `.claude/rules/qult-plan.md` -- plan structure rules
+- Adds `.qult/` to `.gitignore`
 
-### 3. 動作確認
+### 3. Verify setup
 
 ```
 /qult:doctor
 ```
 
-### init 後に使えるコマンド
+### Available commands after init
 
-| コマンド | 説明 |
-|---------|------|
-| `/qult:status` | 現在の品質ゲート状態を表示 |
-| `/qult:review` | 独立コードレビュー (Opus evaluator) |
-| `/qult:detect-gates` | ゲート設定を再検出 |
-| `/qult:plan-generator` | 機能説明から構造化 Plan を生成 |
-| `/qult:doctor` | セットアップの健全性チェック |
-| `/qult:update` | プラグイン更新後に rules ファイルを最新化 |
+| Command | Description |
+|---------|-------------|
+| `/qult:status` | Show current quality gate status |
+| `/qult:review` | Independent code review (Opus evaluator) |
+| `/qult:detect-gates` | Re-detect gate configuration |
+| `/qult:plan-generator` | Generate structured plan from feature description |
+| `/qult:doctor` | Health check for setup |
+| `/qult:update` | Update rules files after plugin update |
 
-hooks (PostToolUse, PreToolUse, Stop, SubagentStop, TaskCompleted) と MCP server は自動で動作する。
+Hooks (PostToolUse, PreToolUse, Stop, SubagentStop, TaskCompleted) and MCP server run automatically.
 
-## 更新
+## Updating
 
-1. `/plugin` > qult 詳細 > 更新 (hooks, skills, agents, MCP server が更新される)
-2. `/qult:update` (プロジェクトの rules ファイルを最新化)
+1. `/plugin` > qult details > update (hooks, skills, agents, MCP server are updated)
+2. `/qult:update` (updates project rules files to latest)
 
-## アンインストール
+## Uninstalling
 
-`/plugin` > qult を削除。プロジェクトの `.qult/` と `.claude/rules/qult*.md` は手動で削除。
+`/plugin` > delete qult. Manually remove `.qult/` and `.claude/rules/qult*.md` from the project.
 
-## 設定
+## Configuration
 
-`.qult/config.json` で閾値をカスタマイズできる (全てオプション):
+Customize thresholds in `.qult/config.json` (all optional):
 
 ```json
 {
@@ -170,50 +164,52 @@ hooks (PostToolUse, PreToolUse, Stop, SubagentStop, TaskCompleted) と MCP serve
 }
 ```
 
-環境変数でも上書き可能: `QULT_REVIEW_SCORE_THRESHOLD`, `QULT_GATE_OUTPUT_MAX` など。
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `review.score_threshold` | number | 12 | Aggregate score required to pass review (max 15) |
+| `review.max_iterations` | number | 3 | Maximum review retry iterations |
+| `review.required_changed_files` | number | 5 | Number of changed files that triggers mandatory review |
+| `gates.output_max_chars` | number | 2000 | Max gate output chars (excess is truncated) |
+| `gates.default_timeout` | number | 10000 | Gate command timeout (ms) |
+
+Environment variable overrides: `QULT_REVIEW_SCORE_THRESHOLD`, `QULT_REVIEW_MAX_ITERATIONS`, `QULT_REVIEW_REQUIRED_FILES`, `QULT_GATE_OUTPUT_MAX`, `QULT_GATE_DEFAULT_TIMEOUT`
 
 <details>
-<summary><strong>対応言語・ツール</strong></summary>
+<summary><strong>Supported languages and tools</strong></summary>
 
-| 言語 | on_write (lint/type) | on_commit (test) | on_review (e2e) |
+| Language | on_write (lint/type) | on_commit (test) | on_review (e2e) |
 |---|---|---|---|
-| **TypeScript/JS** | biome / eslint / tsc | vitest / jest / mocha | — |
-| **Python** | ruff / pyright / mypy | pytest | — |
-| **Go** | go vet | go test | — |
-| **Rust** | cargo clippy / check | cargo test | — |
-| **Ruby** | rubocop | rspec | — |
-| **Java/Kotlin** | ktlint / detekt | gradle test / mvn test | — |
-| **Elixir** | credo | mix test | — |
-| **Deno** | deno lint | deno test | — |
-| **Frontend** | stylelint | — | playwright / cypress / wdio |
+| **TypeScript/JS** | biome / eslint / tsc | vitest / jest / mocha | -- |
+| **Python** | ruff / pyright / mypy | pytest | -- |
+| **Go** | go vet | go test | -- |
+| **Rust** | cargo clippy / check | cargo test | -- |
+| **Ruby** | rubocop | rspec | -- |
+| **Java/Kotlin** | ktlint / detekt | gradle test / mvn test | -- |
+| **Elixir** | credo | mix test | -- |
+| **Deno** | deno lint | deno test | -- |
+| **Frontend** | stylelint | -- | playwright / cypress / wdio |
 
 </details>
 
----
+## Design principles
 
-## 設計原則
+| Principle | Meaning |
+|-----------|---------|
+| **Wall > advisory** | Stop with DENY (exit 2). Advisories are assumed to be ignored |
+| **fail-open** | All hooks use try-catch. qult failures never block Claude |
+| **structural guarantee** | Quality enforced by structure. Stress-test assumptions, remove if broken |
+| **zero dependencies** | All devDependencies + bun build bundle |
 
-| 原則 | 意味 |
-|------|------|
-| **壁 > 情報提示** | DENY (exit 2) で止める。advisory は無視される前提 |
-| **fail-open** | 全 hook は try-catch。qult の障害で Claude を止めない |
-| **structural guarantee** | 品質を構造で保証する。仮定を stress-test し、崩れたら削除 |
-| **dependencies ゼロ** | 全て devDependencies + bun build バンドル |
-
----
-
-## Plan 自動生成
+## Plan generation
 
 ```
-/qult:plan-generator "JWT認証をAPIに追加"
-  → Opus が codebase を分析
-  → WHAT/WHERE/VERIFY/BOUNDARY/SIZE 形式の Plan を生成
-  → .claude/plans/ に書き出し
+/qult:plan-generator "Add JWT auth to the API"
+  -> Opus analyzes the codebase
+  -> Generates plan in WHAT/WHERE/VERIFY/BOUNDARY/SIZE format
+  -> Writes to .claude/plans/
 ```
 
----
-
-## データストレージ
+## Data storage
 
 ```
 .qult/
@@ -222,13 +218,56 @@ hooks (PostToolUse, PreToolUse, Stop, SubagentStop, TaskCompleted) と MCP serve
     └── pending-fixes-{id}.json
 ```
 
-- セッション ID でスコープ (並行セッション安全)
-- 24h 経過した古いファイルは自動クリーンアップ
+- Scoped by session ID (concurrent session safe)
+- Stale files auto-cleaned after 24h
 
----
+## Troubleshooting
 
-## スタック
+<details>
+<summary><strong>"Hook Error" shown at session start</strong></summary>
 
-TypeScript / MCP SDK / vitest (テスト) / Biome (lint)
+Not a qult bug. Known Claude Code UI bug that misreports hook success/failure ([#12671](https://github.com/anthropics/claude-code/issues/12671), [#34713](https://github.com/anthropics/claude-code/issues/34713)). Hooks are working correctly.
 
-Claude Code Plugin として配布。開発には Bun 1.3+ が必要。
+</details>
+
+<details>
+<summary><strong>DENY issued but tool still executes</strong></summary>
+
+Known Claude Code bug ([#21988](https://github.com/anthropics/claude-code/issues/21988), [#24327](https://github.com/anthropics/claude-code/issues/24327)). qult correctly returns exit 2, but Claude Code sometimes does not block. Awaiting fix.
+
+</details>
+
+<details>
+<summary><strong>Gates not detected</strong></summary>
+
+Run `/qult:detect-gates`. Ensure tool binaries are on PATH (`which biome`, `which tsc`, etc.). `node_modules/.bin` is searched automatically.
+
+</details>
+
+<details>
+<summary><strong>Corrupt state files</strong></summary>
+
+Delete files in `.qult/.state/` and start a new session. qult is fail-open by design -- corrupt state files will not block Claude.
+
+</details>
+
+<details>
+<summary><strong>Skip gates for specific files</strong></summary>
+
+Manually add an `extensions` field to gates in `.qult/gates.json` to restrict which file types are checked:
+
+```json
+{
+  "on_write": {
+    "lint": { "command": "biome check {file}", "extensions": [".ts", ".tsx"] }
+  }
+}
+```
+
+</details>
+
+## Stack
+
+TypeScript / MCP SDK / vitest (tests) / Biome (lint)
+
+Distributed as a Claude Code Plugin. Development requires Bun 1.3+.

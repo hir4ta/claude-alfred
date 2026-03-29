@@ -588,14 +588,7 @@ describe("Scenario 16: Small change skips review requirement", () => {
 		expect(exitCode).toBeNull();
 	});
 
-	it("stop blocks finish without review for large changes (6+ gated files)", async () => {
-		writeFileSync(
-			join(QULT_DIR, "gates.json"),
-			JSON.stringify({
-				on_write: { lint: { command: "biome check {file}", timeout: 3000 } },
-			}),
-		);
-
+	it("stop blocks finish without review for large changes (6+ changed files)", async () => {
 		const { recordChangedFile } = await import("../state/session-state.ts");
 		for (let i = 0; i < 6; i++) {
 			recordChangedFile(`/project/src/file${i}.ts`);

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { loadGates } from "../gates/load.ts";
 import { atomicWriteJson } from "./atomic-write.ts";
@@ -148,18 +148,6 @@ export function getGatedExtensions(): Set<string> {
 	return exts;
 }
 
-/** Count changed files covered by on_write gates */
-export function countGatedFiles(): number {
-	const state = readSessionState();
-	const paths = state.changed_file_paths ?? [];
-	if (paths.length === 0) return 0;
-
-	const exts = getGatedExtensions();
-	if (exts.size === 0) return 0;
-
-	return paths.filter((p) => exts.has(extname(p).toLowerCase())).length;
-}
-
 /** Record a changed file path (deduplicated) */
 export function recordChangedFile(filePath: string): void {
 	const state = readSessionState();
@@ -171,11 +159,12 @@ export function recordChangedFile(filePath: string): void {
 }
 
 /** Determine if independent review is required for current session.
- *  Required when: plan is active OR gated_files >= threshold.
- *  Files outside gate coverage (e.g. .md) don't count toward threshold. */
+ *  Required when: plan is active OR changed_files >= threshold. */
 export function isReviewRequired(): boolean {
 	if (getActivePlan() !== null) return true;
-	if (countGatedFiles() >= loadConfig().review.required_changed_files) return true;
+	const state = readSessionState();
+	const changedCount = state.changed_file_paths?.length ?? 0;
+	if (changedCount >= loadConfig().review.required_changed_files) return true;
 	return false;
 }
 

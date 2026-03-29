@@ -19936,7 +19936,7 @@ function createServer(cwd) {
     ].join(`
 `)
   });
-  server.tool("get_pending_fixes", "Returns lint/typecheck errors that must be fixed. Call this when a tool is DENIED by qult.", {}, () => {
+  server.tool("get_pending_fixes", "Returns lint/typecheck errors that must be fixed. Call when DENIED by qult. Response: '[gate] file\\n  error details' per fix, or 'No pending fixes.'", {}, () => {
     const path = findLatestStateFile(cwd, "pending-fixes");
     const fixes = readJson(path, []);
     if (!Array.isArray(fixes) || fixes.length === 0) {
@@ -19946,7 +19946,7 @@ function createServer(cwd) {
       content: [{ type: "text", text: formatPendingFixes(fixes) }]
     };
   });
-  server.tool("get_session_status", "Returns session state: test pass, review status, changed files, commit gates. Call before committing.", {}, () => {
+  server.tool("get_session_status", "Returns session state as JSON: test_passed_at, review_completed_at, changed_file_paths, review_iteration. Call before committing to verify gates.", {}, () => {
     const path = findLatestStateFile(cwd, "session-state");
     const state = readJson(path, null);
     if (!state) {
@@ -19959,7 +19959,7 @@ function createServer(cwd) {
       content: [{ type: "text", text: JSON.stringify(state, null, 2) }]
     };
   });
-  server.tool("get_gate_config", "Returns quality gate definitions (on_write, on_commit, on_review commands and settings).", {}, () => {
+  server.tool("get_gate_config", "Returns gate definitions as JSON: on_write (lint/typecheck per file), on_commit (test), on_review (e2e). Each gate has command, timeout, optional run_once_per_batch.", {}, () => {
     const gatesPath = join(cwd, GATES_PATH);
     const gates = readJson(gatesPath, null);
     if (!gates) {

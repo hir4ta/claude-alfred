@@ -261,7 +261,7 @@ var init_plan_status = __esm(() => {
 
 // src/state/session-state.ts
 import { existsSync as existsSync6, readFileSync as readFileSync5 } from "node:fs";
-import { extname, join as join5 } from "node:path";
+import { join as join5 } from "node:path";
 function setStateSessionScope(sessionId) {
   _sessionScope2 = sessionId;
 }
@@ -344,16 +344,6 @@ function getGatedExtensions() {
   }
   return exts;
 }
-function countGatedFiles() {
-  const state = readSessionState();
-  const paths = state.changed_file_paths ?? [];
-  if (paths.length === 0)
-    return 0;
-  const exts = getGatedExtensions();
-  if (exts.size === 0)
-    return 0;
-  return paths.filter((p) => exts.has(extname(p).toLowerCase())).length;
-}
 function recordChangedFile(filePath2) {
   const state = readSessionState();
   if (!state.changed_file_paths)
@@ -366,7 +356,9 @@ function recordChangedFile(filePath2) {
 function isReviewRequired() {
   if (getActivePlan() !== null)
     return true;
-  if (countGatedFiles() >= loadConfig().review.required_changed_files)
+  const state = readSessionState();
+  const changedCount = state.changed_file_paths?.length ?? 0;
+  if (changedCount >= loadConfig().review.required_changed_files)
     return true;
   return false;
 }
@@ -579,7 +571,7 @@ var exports_post_tool = {};
 __export(exports_post_tool, {
   default: () => postTool
 });
-import { extname as extname2, resolve } from "node:path";
+import { extname, resolve } from "node:path";
 function isTestCommand(command, gates) {
   if (gates?.on_commit) {
     for (const gate of Object.values(gates.on_commit)) {
@@ -612,7 +604,7 @@ function handleEditWrite(ev) {
   const gates = loadGates();
   if (!gates?.on_write)
     return;
-  const fileExt = extname2(file).toLowerCase();
+  const fileExt = extname(file).toLowerCase();
   const gatedExts = getGatedExtensions();
   const newFixes = [];
   const messages = [];

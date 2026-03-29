@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetAllCaches } from "../state/flush.ts";
 import {
 	clearOnCommit,
-	countGatedFiles,
 	getGatedExtensions,
 	isReviewRequired,
 	markGateRan,
@@ -94,27 +93,22 @@ describe("session-state: isReviewRequired", () => {
 		expect(isReviewRequired()).toBe(true);
 	});
 
-	it("required when gated files >= 5", () => {
-		writeFileSync(
-			join(TEST_DIR, ".qult", "gates.json"),
-			JSON.stringify({
-				on_write: { lint: { command: "biome check {file}", timeout: 3000 } },
-			}),
-		);
+	it("required when changed files >= 5", () => {
 		for (let i = 0; i < 5; i++) {
 			recordChangedFile(`/project/src/file${i}.ts`);
 		}
 		expect(isReviewRequired()).toBe(true);
 	});
 
-	it("not required when only non-gated files changed", () => {
-		writeFileSync(
-			join(TEST_DIR, ".qult", "gates.json"),
-			JSON.stringify({
-				on_write: { lint: { command: "biome check {file}", timeout: 3000 } },
-			}),
-		);
-		for (let i = 0; i < 10; i++) {
+	it("required when non-gated files >= threshold", () => {
+		for (let i = 0; i < 5; i++) {
+			recordChangedFile(`/project/docs/file${i}.md`);
+		}
+		expect(isReviewRequired()).toBe(true);
+	});
+
+	it("not required when changed files < threshold", () => {
+		for (let i = 0; i < 4; i++) {
 			recordChangedFile(`/project/docs/file${i}.md`);
 		}
 		expect(isReviewRequired()).toBe(false);
@@ -122,44 +116,6 @@ describe("session-state: isReviewRequired", () => {
 
 	it("not required when no state (fresh session, no plan)", () => {
 		expect(isReviewRequired()).toBe(false);
-	});
-});
-
-describe("session-state: countGatedFiles", () => {
-	it("counts only files with gated extensions", () => {
-		writeFileSync(
-			join(TEST_DIR, ".qult", "gates.json"),
-			JSON.stringify({
-				on_write: {
-					lint: { command: "biome check {file}", timeout: 3000 },
-					typecheck: { command: "tsc --noEmit", timeout: 10000 },
-				},
-			}),
-		);
-		recordChangedFile("/project/src/app.ts");
-		recordChangedFile("/project/src/utils.tsx");
-		recordChangedFile("/project/CLAUDE.md");
-		recordChangedFile("/project/README.md");
-		recordChangedFile("/project/config.json");
-		expect(countGatedFiles()).toBe(2);
-	});
-
-	it("returns 0 when no gates configured", () => {
-		recordChangedFile("/project/src/app.ts");
-		expect(countGatedFiles()).toBe(0);
-	});
-
-	it("deduplicates file paths", () => {
-		writeFileSync(
-			join(TEST_DIR, ".qult", "gates.json"),
-			JSON.stringify({
-				on_write: { lint: { command: "biome check {file}", timeout: 3000 } },
-			}),
-		);
-		recordChangedFile("/project/src/app.ts");
-		recordChangedFile("/project/src/app.ts");
-		recordChangedFile("/project/src/app.ts");
-		expect(countGatedFiles()).toBe(1);
 	});
 });
 

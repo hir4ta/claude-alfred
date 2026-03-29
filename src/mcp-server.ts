@@ -76,7 +76,7 @@ function createServer(cwd: string): McpServer {
 
 	server.tool(
 		"get_pending_fixes",
-		"Returns lint/typecheck errors that must be fixed. Call this when a tool is DENIED by qult.",
+		"Returns lint/typecheck errors that must be fixed. Call when DENIED by qult. Response: '[gate] file\\n  error details' per fix, or 'No pending fixes.'",
 		{},
 		() => {
 			const path = findLatestStateFile(cwd, "pending-fixes");
@@ -92,7 +92,7 @@ function createServer(cwd: string): McpServer {
 
 	server.tool(
 		"get_session_status",
-		"Returns session state: test pass, review status, changed files, commit gates. Call before committing.",
+		"Returns session state as JSON: test_passed_at, review_completed_at, changed_file_paths, review_iteration. Call before committing to verify gates.",
 		{},
 		() => {
 			const path = findLatestStateFile(cwd, "session-state");
@@ -111,7 +111,7 @@ function createServer(cwd: string): McpServer {
 
 	server.tool(
 		"get_gate_config",
-		"Returns quality gate definitions (on_write, on_commit, on_review commands and settings).",
+		"Returns gate definitions as JSON: on_write (lint/typecheck per file), on_commit (test), on_review (e2e). Each gate has command, timeout, optional run_once_per_batch.",
 		{},
 		() => {
 			const gatesPath = join(cwd, GATES_PATH);

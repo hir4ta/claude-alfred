@@ -161,11 +161,10 @@ describe("preTool: Bash git commit checks", () => {
 		expect(errOutput).toContain("review");
 	});
 
-	it("DENY commit without review when many gated files changed", async () => {
+	it("DENY commit without review when many files changed", async () => {
 		writeFileSync(
 			join(TEST_DIR, ".qult", "gates.json"),
 			JSON.stringify({
-				on_write: { lint: { command: "biome check {file}", timeout: 3000 } },
 				on_commit: { test: { command: "vitest run", timeout: 30000 } },
 			}),
 		);
