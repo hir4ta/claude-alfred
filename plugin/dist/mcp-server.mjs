@@ -19889,11 +19889,19 @@ class StdioServerTransport {
 // src/mcp-server.ts
 var STATE_DIR = ".qult/.state";
 var GATES_PATH = ".qult/gates.json";
+var CACHE_TTL_MS = 2000;
+var _jsonCache = new Map;
 function readJson(path, fallback) {
+  const now = Date.now();
+  const cached2 = _jsonCache.get(path);
+  if (cached2 && cached2.expires > now)
+    return cached2.value;
   try {
     if (!existsSync(path))
       return fallback;
-    return JSON.parse(readFileSync(path, "utf-8"));
+    const value = JSON.parse(readFileSync(path, "utf-8"));
+    _jsonCache.set(path, { value, expires: now + CACHE_TTL_MS });
+    return value;
   } catch {
     return fallback;
   }
@@ -19987,7 +19995,11 @@ main().catch((err) => {
 `);
   process.exit(1);
 });
+function resetMcpCache() {
+  _jsonCache.clear();
+}
 export {
+  resetMcpCache,
   readJson,
   findLatestStateFile,
   createServer

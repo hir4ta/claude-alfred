@@ -1,13 +1,14 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createServer, findLatestStateFile, readJson } from "../mcp-server.ts";
+import { createServer, findLatestStateFile, readJson, resetMcpCache } from "../mcp-server.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-mcp-test");
 const STATE_DIR = join(TEST_DIR, ".qult", ".state");
 const originalCwd = process.cwd();
 
 beforeEach(() => {
+	resetMcpCache();
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 });

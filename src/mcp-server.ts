@@ -16,11 +16,27 @@ import type { GatesConfig, PendingFix } from "./types.ts";
 const STATE_DIR = ".qult/.state";
 const GATES_PATH = ".qult/gates.json";
 
-/** Read a JSON file, returning fallback on any error (fail-open). */
+/** Cache TTL in ms — MCP tools are called infrequently, 2s prevents redundant reads. */
+const CACHE_TTL_MS = 2000;
+
+interface CacheEntry<T> {
+	value: T;
+	expires: number;
+}
+
+const _jsonCache = new Map<string, CacheEntry<unknown>>();
+
+/** Read a JSON file with TTL cache, returning fallback on any error (fail-open). */
 function readJson<T>(path: string, fallback: T): T {
+	const now = Date.now();
+	const cached = _jsonCache.get(path) as CacheEntry<T> | undefined;
+	if (cached && cached.expires > now) return cached.value;
+
 	try {
 		if (!existsSync(path)) return fallback;
-		return JSON.parse(readFileSync(path, "utf-8")) as T;
+		const value = JSON.parse(readFileSync(path, "utf-8")) as T;
+		_jsonCache.set(path, { value, expires: now + CACHE_TTL_MS });
+		return value;
 	} catch {
 		return fallback;
 	}
@@ -145,4 +161,9 @@ main().catch((err) => {
 	process.exit(1);
 });
 
-export { createServer, findLatestStateFile, readJson };
+/** Reset MCP read cache (for tests). */
+function resetMcpCache(): void {
+	_jsonCache.clear();
+}
+
+export { createServer, findLatestStateFile, readJson, resetMcpCache };

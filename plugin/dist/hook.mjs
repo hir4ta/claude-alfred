@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 var __defProp = Object.defineProperty;
 var __returnValue = (v) => v;
 function __exportSetter(name, newValue) {
@@ -14,121 +13,18 @@ var __export = (target, all) => {
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
-var __require = /* @__PURE__ */ createRequire(import.meta.url);
-
-// src/gates/load.ts
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-function loadGates() {
-  if (_cache !== undefined)
-    return _cache;
-  try {
-    const path = join(process.cwd(), ".qult", "gates.json");
-    if (!existsSync(path)) {
-      _cache = null;
-      return null;
-    }
-    const parsed = JSON.parse(readFileSync(path, "utf-8"));
-    _cache = parsed;
-    return parsed;
-  } catch {
-    _cache = null;
-    return null;
-  }
-}
-var _cache;
-var init_load = () => {};
-
-// src/state/atomic-write.ts
-import { existsSync as existsSync2, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-function atomicWriteJson(filePath, data) {
-  const dir = dirname(filePath);
-  if (!existsSync2(dir))
-    mkdirSync(dir, { recursive: true });
-  const tmp = `${filePath}.${process.pid}.tmp`;
-  try {
-    writeFileSync(tmp, JSON.stringify(data, null, 2));
-    renameSync(tmp, filePath);
-  } catch (err) {
-    try {
-      unlinkSync(tmp);
-    } catch {}
-    throw err;
-  }
-}
-var init_atomic_write = () => {};
-
-// src/state/pending-fixes.ts
-import { existsSync as existsSync3, readFileSync as readFileSync2 } from "node:fs";
-import { join as join2 } from "node:path";
-function setFixesSessionScope(sessionId) {
-  _sessionScope = sessionId;
-}
-function fixesPath() {
-  const file = _sessionScope ? `pending-fixes-${_sessionScope}.json` : FIXES_FILE;
-  return join2(process.cwd(), STATE_DIR, file);
-}
-function readPendingFixes() {
-  if (_cache2)
-    return _cache2;
-  try {
-    const path = fixesPath();
-    if (!existsSync3(path)) {
-      _cache2 = [];
-      return _cache2;
-    }
-    const raw = readFileSync2(path, "utf-8");
-    _cache2 = JSON.parse(raw);
-    return _cache2;
-  } catch {
-    _cache2 = [];
-    return _cache2;
-  }
-}
-function writePendingFixes(fixes) {
-  _cache2 = fixes;
-  _dirty = true;
-}
-function addPendingFixes(file, newFixes) {
-  const existing = readPendingFixes().filter((f) => f.file !== file);
-  writePendingFixes([...existing, ...newFixes]);
-}
-function clearPendingFixesForFile(file) {
-  const current = readPendingFixes();
-  const remaining = current.filter((f) => f.file !== file);
-  if (remaining.length !== current.length) {
-    writePendingFixes(remaining);
-  }
-}
-function flush() {
-  if (!_dirty || !_cache2)
-    return;
-  try {
-    atomicWriteJson(fixesPath(), _cache2);
-  } catch (e) {
-    if (e instanceof Error)
-      process.stderr.write(`[qult] write error: ${e.message}
-`);
-  }
-  _dirty = false;
-}
-var STATE_DIR = ".qult/.state", FIXES_FILE = "pending-fixes.json", _cache2 = null, _dirty = false, _sessionScope = null;
-var init_pending_fixes = __esm(() => {
-  init_atomic_write();
-});
 
 // src/config.ts
-import { existsSync as existsSync4, readFileSync as readFileSync3 } from "node:fs";
-import { join as join3 } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 function loadConfig() {
-  if (_cache3)
-    return _cache3;
+  if (_cache)
+    return _cache;
   const config = structuredClone(DEFAULTS);
   try {
-    const configPath = join3(process.cwd(), ".qult", "config.json");
-    if (existsSync4(configPath)) {
-      const raw = JSON.parse(readFileSync3(configPath, "utf-8"));
+    const configPath = join(process.cwd(), ".qult", "config.json");
+    if (existsSync(configPath)) {
+      const raw = JSON.parse(readFileSync(configPath, "utf-8"));
       if (raw.review) {
         if (typeof raw.review.score_threshold === "number")
           config.review.score_threshold = raw.review.score_threshold;
@@ -136,6 +32,14 @@ function loadConfig() {
           config.review.max_iterations = raw.review.max_iterations;
         if (typeof raw.review.required_changed_files === "number")
           config.review.required_changed_files = raw.review.required_changed_files;
+      }
+      if (raw.plan_eval) {
+        if (typeof raw.plan_eval.score_threshold === "number")
+          config.plan_eval.score_threshold = raw.plan_eval.score_threshold;
+        if (typeof raw.plan_eval.max_iterations === "number")
+          config.plan_eval.max_iterations = raw.plan_eval.max_iterations;
+        if (Array.isArray(raw.plan_eval.registry_files))
+          config.plan_eval.registry_files = raw.plan_eval.registry_files.filter((f) => typeof f === "string");
       }
       if (raw.gates) {
         if (typeof raw.gates.output_max_chars === "number")
@@ -155,12 +59,14 @@ function loadConfig() {
   config.review.score_threshold = envInt("QULT_REVIEW_SCORE_THRESHOLD") ?? config.review.score_threshold;
   config.review.max_iterations = envInt("QULT_REVIEW_MAX_ITERATIONS") ?? config.review.max_iterations;
   config.review.required_changed_files = envInt("QULT_REVIEW_REQUIRED_FILES") ?? config.review.required_changed_files;
+  config.plan_eval.score_threshold = envInt("QULT_PLAN_EVAL_SCORE_THRESHOLD") ?? config.plan_eval.score_threshold;
+  config.plan_eval.max_iterations = envInt("QULT_PLAN_EVAL_MAX_ITERATIONS") ?? config.plan_eval.max_iterations;
   config.gates.output_max_chars = envInt("QULT_GATE_OUTPUT_MAX") ?? config.gates.output_max_chars;
   config.gates.default_timeout = envInt("QULT_GATE_DEFAULT_TIMEOUT") ?? config.gates.default_timeout;
-  _cache3 = config;
+  _cache = config;
   return config;
 }
-var DEFAULTS, _cache3 = null;
+var DEFAULTS, _cache = null;
 var init_config = __esm(() => {
   DEFAULTS = {
     review: {
@@ -168,11 +74,118 @@ var init_config = __esm(() => {
       max_iterations: 3,
       required_changed_files: 5
     },
+    plan_eval: {
+      score_threshold: 10,
+      max_iterations: 2,
+      registry_files: []
+    },
     gates: {
       output_max_chars: 2000,
       default_timeout: 1e4
     }
   };
+});
+
+// src/gates/load.ts
+import { existsSync as existsSync2, readFileSync as readFileSync2 } from "node:fs";
+import { join as join2 } from "node:path";
+function loadGates() {
+  if (_cache2 !== undefined)
+    return _cache2;
+  try {
+    const path = join2(process.cwd(), ".qult", "gates.json");
+    if (!existsSync2(path)) {
+      _cache2 = null;
+      return null;
+    }
+    const parsed = JSON.parse(readFileSync2(path, "utf-8"));
+    _cache2 = parsed;
+    return parsed;
+  } catch {
+    _cache2 = null;
+    return null;
+  }
+}
+var _cache2;
+var init_load = () => {};
+
+// src/state/atomic-write.ts
+import { existsSync as existsSync3, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+function atomicWriteJson(filePath, data) {
+  const dir = dirname(filePath);
+  if (!existsSync3(dir))
+    mkdirSync(dir, { recursive: true });
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(data, null, 2));
+    renameSync(tmp, filePath);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {}
+    throw err;
+  }
+}
+var init_atomic_write = () => {};
+
+// src/state/pending-fixes.ts
+import { existsSync as existsSync4, readFileSync as readFileSync3 } from "node:fs";
+import { join as join3 } from "node:path";
+function setFixesSessionScope(sessionId) {
+  _sessionScope = sessionId;
+}
+function fixesPath() {
+  const file = _sessionScope ? `pending-fixes-${_sessionScope}.json` : FIXES_FILE;
+  return join3(process.cwd(), STATE_DIR, file);
+}
+function readPendingFixes() {
+  if (_cache3)
+    return _cache3;
+  try {
+    const path = fixesPath();
+    if (!existsSync4(path)) {
+      _cache3 = [];
+      return _cache3;
+    }
+    const raw = readFileSync3(path, "utf-8");
+    _cache3 = JSON.parse(raw);
+    return _cache3;
+  } catch {
+    _cache3 = [];
+    return _cache3;
+  }
+}
+function writePendingFixes(fixes) {
+  _cache3 = fixes;
+  _dirty = true;
+}
+function addPendingFixes(file, newFixes) {
+  const existing = readPendingFixes().filter((f) => f.file !== file);
+  writePendingFixes([...existing, ...newFixes]);
+}
+function clearPendingFixesForFile(file) {
+  const current = readPendingFixes();
+  const remaining = current.filter((f) => f.file !== file);
+  if (remaining.length !== current.length) {
+    writePendingFixes(remaining);
+  }
+}
+function flush() {
+  if (!_dirty || !_cache3)
+    return;
+  try {
+    atomicWriteJson(fixesPath(), _cache3);
+  } catch (e) {
+    if (e instanceof Error)
+      process.stderr.write(`[qult] write error: ${e.message}
+`);
+  }
+  _dirty = false;
+}
+var STATE_DIR = ".qult/.state", FIXES_FILE = "pending-fixes.json", _cache3 = null, _dirty = false, _sessionScope = null;
+var init_pending_fixes = __esm(() => {
+  init_atomic_write();
 });
 
 // src/state/plan-status.ts
@@ -242,17 +255,26 @@ function getActivePlan() {
   const path = getLatestPlanPath();
   if (!path)
     return null;
+  let mtime = null;
+  try {
+    mtime = statSync(path).mtimeMs;
+    if (_planCache && _planCachePath === path && _planCacheMtime === mtime)
+      return _planCache;
+  } catch {}
   try {
     const content = readFileSync4(path, "utf-8");
     const tasks = parsePlanTasks(content);
     if (tasks.length === 0)
       return null;
-    return { tasks, path };
+    _planCache = { tasks, path };
+    _planCachePath = path;
+    _planCacheMtime = mtime;
+    return _planCache;
   } catch {
     return null;
   }
 }
-var TASK_RE, CHECKBOX_RE, VERIFY_LINE_RE;
+var TASK_RE, CHECKBOX_RE, VERIFY_LINE_RE, _planCache = null, _planCachePath = null, _planCacheMtime = null;
 var init_plan_status = __esm(() => {
   TASK_RE = /^###\s+Task\s+(\d+):\s*(.+?)(?:\s*\[(done|pending|in-progress)\])?\s*$/;
   CHECKBOX_RE = /^-\s+\[([ xX])\]\s*(.+)$/;
@@ -487,8 +509,10 @@ function flushAll() {
   } catch {}
 }
 var init_flush = __esm(() => {
+  init_config();
   init_load();
   init_pending_fixes();
+  init_plan_status();
   init_session_state();
 });
 
@@ -550,10 +574,11 @@ function runGate(name, gate, file) {
     return { name, passed: true, output, duration_ms: Date.now() - start };
   } catch (err) {
     const duration_ms = Date.now() - start;
-    const e = err;
-    const stdout = typeof e.stdout === "string" ? e.stdout : "";
-    const stderr = typeof e.stderr === "string" ? e.stderr : "";
-    const output = smartTruncate(stdout + stderr, maxChars) || `Exit code ${e.status ?? 1}`;
+    const e = err != null && typeof err === "object" ? err : {};
+    const stdout = "stdout" in e && typeof e.stdout === "string" ? e.stdout : "";
+    const stderr = "stderr" in e && typeof e.stderr === "string" ? e.stderr : "";
+    const status = "status" in e && typeof e.status === "number" ? e.status : 1;
+    const output = smartTruncate(stdout + stderr, maxChars) || `Exit code ${status}`;
     return {
       name,
       passed: false,
@@ -747,7 +772,15 @@ function checkEditWrite(ev) {
     const resolvedTarget = resolve2(targetFile);
     const isFixingPendingFile = fixes.some((f) => resolve2(f.file) === resolvedTarget);
     if (!isFixingPendingFile) {
-      const fileList = fixes.map((f) => `  ${f.file}: ${f.errors[0]?.slice(0, 100) ?? "error"}`).join(`
+      const fileList = fixes.map((f) => {
+        const totalErrors = f.errors.length;
+        const shown = f.errors.slice(0, 3).map((e) => `    ${e.slice(0, 200)}`);
+        const suffix = totalErrors > 3 ? `
+    ... and ${totalErrors - 3} more error(s)` : "";
+        return `  ${f.file} (${totalErrors} error(s)):
+${shown.join(`
+`)}${suffix}`;
+      }).join(`
 `);
       deny(`Fix existing errors before editing other files:
 ${fileList}`);
@@ -833,15 +866,22 @@ __export(exports_subagent_stop, {
   buildReviewBlockMessage: () => buildReviewBlockMessage,
   buildPlanEvalBlockMessage: () => buildPlanEvalBlockMessage
 });
+import { existsSync as existsSync8, readdirSync as readdirSync3, readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
+import { join as join7 } from "node:path";
 function parseScores(output) {
   for (const re of [SCORE_STRICT_RE, SCORE_COLON_RE, SCORE_LOOSE_RE]) {
     const m = re.exec(output);
     if (m) {
-      return {
-        correctness: Number.parseInt(m[1], 10),
-        design: Number.parseInt(m[2], 10),
-        security: Number.parseInt(m[3], 10)
-      };
+      const correctness = Number.parseInt(m[1], 10);
+      const design = Number.parseInt(m[2], 10);
+      const security = Number.parseInt(m[3], 10);
+      if (correctness < 1 || correctness > 5)
+        return null;
+      if (design < 1 || design > 5)
+        return null;
+      if (security < 1 || security > 5)
+        return null;
+      return { correctness, design, security };
     }
   }
   return null;
@@ -911,16 +951,19 @@ function buildPlanEvalBlockMessage(dimensions, history, aggregate, threshold, it
   return `${header} Weakest dimension: ${weakest.name} (${weakest.score}/5). Fix this area first.`;
 }
 function parseDimensionScores(output, dimensions) {
-  const strictPattern = dimensions.map((d) => `${d}=(\\d)`).join("\\s+");
+  const strictPattern = dimensions.map((d) => `${d}=(\\d+)`).join("\\s+");
   const strictRe = new RegExp(`Score:\\s*${strictPattern}`, "i");
-  const colonParts = dimensions.map((d) => `${d}[=:]\\s*(\\d)`).join(".*?");
+  const colonParts = dimensions.map((d) => `${d}[=:]\\s*(\\d+)`).join(".*?");
   const colonRe = new RegExp(colonParts, "i");
   for (const re of [strictRe, colonRe]) {
     const m = re.exec(output);
     if (m) {
       const result = {};
       for (let i = 0;i < dimensions.length; i++) {
-        result[dimensions[i]] = Number.parseInt(m[i + 1], 10);
+        const val = Number.parseInt(m[i + 1], 10);
+        if (val < 1 || val > 5)
+          return null;
+        result[dimensions[i]] = val;
       }
       return result;
     }
@@ -986,6 +1029,7 @@ function validatePlanHeuristics(content) {
     const end = i + 1 < taskHeaders.length ? taskHeaders[i + 1].index : tasksContent.length;
     taskBlocks.push({ num: taskHeaders[i][1], block: tasksContent.slice(start, end) });
   }
+  const registryFiles = loadConfig().plan_eval.registry_files;
   const allFiles = [];
   for (const { block: block2 } of taskBlocks) {
     const fileMatch = block2.match(/^\s*-\s*\*\*File\*\*:\s*(.+)$/m);
@@ -1012,9 +1056,9 @@ function validatePlanHeuristics(content) {
       }
     }
     const fileMatch = block2.match(/^\s*-\s*\*\*File\*\*:\s*(.+)$/m);
-    if (fileMatch) {
+    if (fileMatch && registryFiles.length > 0) {
       const fileValue = fileMatch[1];
-      for (const registry of REGISTRY_FILES) {
+      for (const registry of registryFiles) {
         if (fileValue.includes(registry)) {
           const hasConsumer = allFilesJoined.split(/[\s,]+/).some((f) => !f.includes(registry) && (f.includes("test") || f.includes("spec") || f.includes("doctor") || f.includes("hook") || f.includes("cli")));
           if (!hasConsumer) {
@@ -1066,8 +1110,6 @@ async function subagentStop(ev) {
 }
 function validatePlan() {
   try {
-    const { existsSync: existsSync8, readdirSync: readdirSync3, readFileSync: readFileSync6, statSync: statSync3 } = __require("node:fs");
-    const { join: join7 } = __require("node:path");
     const planDir = join7(process.cwd(), ".claude", "plans");
     if (!existsSync8(planDir))
       return;
@@ -1107,8 +1149,9 @@ function validatePlanEvaluator(output) {
   }
   if (hasPassed && scores) {
     const aggregate = Object.values(scores).reduce((sum, v) => sum + v, 0);
-    const threshold = DEFAULT_PLAN_EVAL_SCORE_THRESHOLD;
-    const maxIter = DEFAULT_MAX_PLAN_EVAL_ITERATIONS;
+    const config = loadConfig();
+    const threshold = config.plan_eval.score_threshold;
+    const maxIter = config.plan_eval.max_iterations;
     try {
       recordPlanEvalIteration(aggregate);
     } catch {}
@@ -1130,7 +1173,7 @@ function validateReviewer(output) {
     return;
   block("Reviewer output must include: (1) 'Review: PASS' or 'Review: FAIL', (2) 'Score: Correctness=N Design=N Security=N', and (3) findings ([severity] file:line) or 'No issues found'. Rerun the review.");
 }
-var SEVERITY_PATTERN, FINDING_RE, NO_ISSUES_RE, REVIEW_PASS_RE, REVIEW_FAIL_RE, SCORE_STRICT_RE, SCORE_COLON_RE, SCORE_LOOSE_RE, DEFAULT_PLAN_EVAL_SCORE_THRESHOLD = 10, DEFAULT_MAX_PLAN_EVAL_ITERATIONS = 2, PLAN_PASS_RE, PLAN_REVISE_RE, TASK_HEADER_G, FIELD_RES, VAGUE_VERBS_RE, VERIFY_FORMAT_RE, REGISTRY_FILES, PLAN_EVAL_DIMENSIONS;
+var SEVERITY_PATTERN, FINDING_RE, NO_ISSUES_RE, REVIEW_PASS_RE, REVIEW_FAIL_RE, SCORE_STRICT_RE, SCORE_COLON_RE, SCORE_LOOSE_RE, PLAN_PASS_RE, PLAN_REVISE_RE, TASK_HEADER_G, FIELD_RES, VAGUE_VERBS_RE, VERIFY_FORMAT_RE, PLAN_EVAL_DIMENSIONS;
 var init_subagent_stop = __esm(() => {
   init_config();
   init_session_state();
@@ -1140,9 +1183,9 @@ var init_subagent_stop = __esm(() => {
   NO_ISSUES_RE = /no issues found/i;
   REVIEW_PASS_RE = /^Review:\s*PASS/im;
   REVIEW_FAIL_RE = /^Review:\s*FAIL/im;
-  SCORE_STRICT_RE = /Score:\s*Correctness=(\d)\s+Design=(\d)\s+Security=(\d)/i;
-  SCORE_COLON_RE = /Correctness[=:]\s*(\d).*?Design[=:]\s*(\d).*?Security[=:]\s*(\d)/i;
-  SCORE_LOOSE_RE = /Score:.*?[=:]\s*(\d).*?[=:]\s*(\d).*?[=:]\s*(\d)/i;
+  SCORE_STRICT_RE = /Score:\s*Correctness=(\d+)\s+Design=(\d+)\s+Security=(\d+)/i;
+  SCORE_COLON_RE = /Correctness[=:]\s*(\d+).*?Design[=:]\s*(\d+).*?Security[=:]\s*(\d+)/i;
+  SCORE_LOOSE_RE = /Score:.*?[=:]\s*(\d+).*?[=:]\s*(\d+).*?[=:]\s*(\d+)/i;
   PLAN_PASS_RE = /^Plan:\s*PASS/im;
   PLAN_REVISE_RE = /^Plan:\s*REVISE/im;
   TASK_HEADER_G = /^### Task \d+:/gm;
@@ -1154,7 +1197,6 @@ var init_subagent_stop = __esm(() => {
   };
   VAGUE_VERBS_RE = /^(improve|update|fix|refactor|clean\s*up|enhance|optimize|modify|adjust|change)\b/i;
   VERIFY_FORMAT_RE = /\S+\.\w+:\S+/;
-  REGISTRY_FILES = ["init.ts", "types.ts", "session-state.ts"];
   PLAN_EVAL_DIMENSIONS = ["Feasibility", "Completeness", "Clarity"];
 });
 
@@ -1163,7 +1205,7 @@ var exports_task_completed = {};
 __export(exports_task_completed, {
   default: () => taskCompleted
 });
-import { execSync as execSync2 } from "node:child_process";
+import { spawnSync } from "node:child_process";
 async function taskCompleted(ev) {
   const subject = ev.task_subject;
   if (!subject)
@@ -1180,20 +1222,19 @@ async function taskCompleted(ev) {
     return;
   if (!SAFE_SHELL_ARG_RE.test(parsed.file) || !SAFE_SHELL_ARG_RE.test(parsed.testName))
     return;
-  const cmdBuilder = detectTestRunner();
-  if (!cmdBuilder)
+  const argsBuilder = detectTestRunner();
+  if (!argsBuilder)
     return;
-  const command = cmdBuilder(parsed.file, parsed.testName);
+  const args = argsBuilder(parsed.file, parsed.testName);
   try {
-    execSync2(command, {
+    spawnSync(args[0], args.slice(1), {
       cwd: process.cwd(),
       timeout: VERIFY_TIMEOUT,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         PATH: `${process.cwd()}/node_modules/.bin:${process.env.PATH}`
-      },
-      encoding: "utf-8"
+      }
     });
   } catch {}
 }
@@ -1217,14 +1258,14 @@ var init_task_completed = __esm(() => {
   init_load();
   init_plan_status();
   TEST_RUNNER_RE = [
-    [/\bvitest\b/, (f, t) => `vitest run ${f} -t "${t}"`],
-    [/\bjest\b/, (f, t) => `jest ${f} -t "${t}"`],
-    [/\bpytest\b/, (f, t) => `pytest ${f} -k "${t}"`],
-    [/\bgo\s+test\b/, (f, _t) => `go test ./${f}`],
-    [/\bcargo\s+test\b/, (_f, t) => `cargo test ${t}`],
-    [/\bmocha\b/, (f, t) => `mocha ${f} --grep "${t}"`]
+    [/\bvitest\b/, (f, t) => ["vitest", "run", f, "-t", t]],
+    [/\bjest\b/, (f, t) => ["jest", f, "-t", t]],
+    [/\bpytest\b/, (f, t) => ["pytest", f, "-k", t]],
+    [/\bgo\s+test\b/, (f, _t) => ["go", "test", `./${f}`]],
+    [/\bcargo\s+test\b/, (_f, t) => ["cargo", "test", t]],
+    [/\bmocha\b/, (f, t) => ["mocha", f, "--grep", t]]
   ];
-  SAFE_SHELL_ARG_RE = /^[a-zA-Z0-9_/.\-:]+$/;
+  SAFE_SHELL_ARG_RE = /^[a-zA-Z0-9_/.@-]+$/;
 });
 
 // src/hooks/dispatcher.ts

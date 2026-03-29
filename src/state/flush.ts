@@ -1,5 +1,7 @@
+import { resetConfigCache } from "../config.ts";
 import { resetGatesCache } from "../gates/load.ts";
 import { flush as flushPendingFixes, resetCache as resetPendingFixes } from "./pending-fixes.ts";
+import { resetPlanCache } from "./plan-status.ts";
 import { flush as flushSessionState, resetCache as resetSessionState } from "./session-state.ts";
 
 /** Flush all dirty state caches to disk. Called once at end of hook dispatch. */
@@ -21,4 +23,6 @@ export function resetAllCaches(): void {
 	resetSessionState();
 	resetPendingFixes();
 	resetGatesCache();
+	resetPlanCache();
+	resetConfigCache();
 }

@@ -8,6 +8,11 @@ export interface QultConfig {
 		max_iterations: number;
 		required_changed_files: number;
 	};
+	plan_eval: {
+		score_threshold: number;
+		max_iterations: number;
+		registry_files: string[];
+	};
 	gates: {
 		output_max_chars: number;
 		default_timeout: number;
@@ -19,6 +24,11 @@ const DEFAULTS: QultConfig = {
 		score_threshold: 12,
 		max_iterations: 3,
 		required_changed_files: 5,
+	},
+	plan_eval: {
+		score_threshold: 10,
+		max_iterations: 2,
+		registry_files: [],
 	},
 	gates: {
 		output_max_chars: 2000,
@@ -48,6 +58,16 @@ export function loadConfig(): QultConfig {
 				if (typeof raw.review.required_changed_files === "number")
 					config.review.required_changed_files = raw.review.required_changed_files;
 			}
+			if (raw.plan_eval) {
+				if (typeof raw.plan_eval.score_threshold === "number")
+					config.plan_eval.score_threshold = raw.plan_eval.score_threshold;
+				if (typeof raw.plan_eval.max_iterations === "number")
+					config.plan_eval.max_iterations = raw.plan_eval.max_iterations;
+				if (Array.isArray(raw.plan_eval.registry_files))
+					config.plan_eval.registry_files = raw.plan_eval.registry_files.filter(
+						(f: unknown) => typeof f === "string",
+					);
+			}
 			if (raw.gates) {
 				if (typeof raw.gates.output_max_chars === "number")
 					config.gates.output_max_chars = raw.gates.output_max_chars;
@@ -73,6 +93,10 @@ export function loadConfig(): QultConfig {
 		envInt("QULT_REVIEW_MAX_ITERATIONS") ?? config.review.max_iterations;
 	config.review.required_changed_files =
 		envInt("QULT_REVIEW_REQUIRED_FILES") ?? config.review.required_changed_files;
+	config.plan_eval.score_threshold =
+		envInt("QULT_PLAN_EVAL_SCORE_THRESHOLD") ?? config.plan_eval.score_threshold;
+	config.plan_eval.max_iterations =
+		envInt("QULT_PLAN_EVAL_MAX_ITERATIONS") ?? config.plan_eval.max_iterations;
 	config.gates.output_max_chars = envInt("QULT_GATE_OUTPUT_MAX") ?? config.gates.output_max_chars;
 	config.gates.default_timeout =
 		envInt("QULT_GATE_DEFAULT_TIMEOUT") ?? config.gates.default_timeout;

@@ -43,10 +43,11 @@ export function runGate(name: string, gate: GateDefinition, file?: string): Gate
 		return { name, passed: true, output, duration_ms: Date.now() - start };
 	} catch (err: unknown) {
 		const duration_ms = Date.now() - start;
-		const e = err as { stdout?: string; stderr?: string; status?: number };
-		const stdout = typeof e.stdout === "string" ? e.stdout : "";
-		const stderr = typeof e.stderr === "string" ? e.stderr : "";
-		const output = smartTruncate(stdout + stderr, maxChars) || `Exit code ${e.status ?? 1}`;
+		const e = err != null && typeof err === "object" ? err : {};
+		const stdout = "stdout" in e && typeof e.stdout === "string" ? e.stdout : "";
+		const stderr = "stderr" in e && typeof e.stderr === "string" ? e.stderr : "";
+		const status = "status" in e && typeof e.status === "number" ? e.status : 1;
+		const output = smartTruncate(stdout + stderr, maxChars) || `Exit code ${status}`;
 		return {
 			name,
 			passed: false,

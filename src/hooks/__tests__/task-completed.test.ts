@@ -1,14 +1,14 @@
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAllCaches } from "../../state/flush.ts";
 
 vi.mock("node:child_process", () => ({
-	execSync: vi.fn(() => "PASS"),
+	spawnSync: vi.fn(() => ({ status: 0, stdout: "", stderr: "", pid: 0, output: [], signal: null })),
 }));
 
-const mockedExecSync = vi.mocked(execSync);
+const mockedSpawnSync = vi.mocked(spawnSync);
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-task-completed-test");
 const STATE_DIR = join(TEST_DIR, ".qult", ".state");
@@ -20,8 +20,15 @@ beforeEach(() => {
 	mkdirSync(STATE_DIR, { recursive: true });
 	process.chdir(TEST_DIR);
 	stdoutCapture = [];
-	mockedExecSync.mockReset();
-	mockedExecSync.mockReturnValue("PASS");
+	mockedSpawnSync.mockReset();
+	mockedSpawnSync.mockReturnValue({
+		status: 0,
+		stdout: "",
+		stderr: "",
+		pid: 0,
+		output: [],
+		signal: null,
+	} as ReturnType<typeof spawnSync>);
 
 	vi.spyOn(process.stdout, "write").mockImplementation((data) => {
 		stdoutCapture.push(typeof data === "string" ? data : data.toString());
@@ -66,14 +73,14 @@ describe("taskCompleted: early returns", () => {
 		const taskCompleted = (await import("../task-completed.ts")).default;
 		await taskCompleted({});
 		expect(stdoutCapture.join("")).toBe("");
-		expect(mockedExecSync).not.toHaveBeenCalled();
+		expect(mockedSpawnSync).not.toHaveBeenCalled();
 	});
 
 	it("returns silently when no active plan", async () => {
 		const taskCompleted = (await import("../task-completed.ts")).default;
 		await taskCompleted({ task_subject: "Task 1: Add handler" });
 		expect(stdoutCapture.join("")).toBe("");
-		expect(mockedExecSync).not.toHaveBeenCalled();
+		expect(mockedSpawnSync).not.toHaveBeenCalled();
 	});
 
 	it("returns silently when task has no verify field", async () => {
@@ -83,7 +90,7 @@ describe("taskCompleted: early returns", () => {
 		const taskCompleted = (await import("../task-completed.ts")).default;
 		await taskCompleted({ task_subject: "Task 1: Add handler" });
 		expect(stdoutCapture.join("")).toBe("");
-		expect(mockedExecSync).not.toHaveBeenCalled();
+		expect(mockedSpawnSync).not.toHaveBeenCalled();
 	});
 
 	it("returns silently when no test runner detected", async () => {
@@ -93,7 +100,7 @@ describe("taskCompleted: early returns", () => {
 		const taskCompleted = (await import("../task-completed.ts")).default;
 		await taskCompleted({ task_subject: "Task 1: Add handler" });
 		expect(stdoutCapture.join("")).toBe("");
-		expect(mockedExecSync).not.toHaveBeenCalled();
+		expect(mockedSpawnSync).not.toHaveBeenCalled();
 	});
 });
 
@@ -105,11 +112,11 @@ describe("taskCompleted: task matching", () => {
 		const taskCompleted = (await import("../task-completed.ts")).default;
 		await taskCompleted({ task_subject: "Task 2: Add error handler" });
 
-		// Verify execSync was called with the correct test file/name
-		expect(mockedExecSync).toHaveBeenCalledOnce();
-		const cmd = mockedExecSync.mock.calls[0]![0] as string;
-		expect(cmd).toContain("error.test.ts");
-		expect(cmd).toContain("handlesError");
+		// Verify spawnSync was called with the correct test file/name
+		expect(mockedSpawnSync).toHaveBeenCalledOnce();
+		const args = mockedSpawnSync.mock.calls[0]![1] as string[];
+		expect(args).toContain("src/__tests__/error.test.ts");
+		expect(args).toContain("handlesError");
 	});
 
 	it("does NOT match by substring (Add handler should not match Add error handler)", async () => {
@@ -120,12 +127,12 @@ describe("taskCompleted: task matching", () => {
 		// Subject is just "Add handler" without task number — should match Task 1 exactly
 		await taskCompleted({ task_subject: "Add handler" });
 
-		// Verify execSync was called with Task 1's test, not Task 2's
-		expect(mockedExecSync).toHaveBeenCalledOnce();
-		const cmd = mockedExecSync.mock.calls[0]![0] as string;
-		expect(cmd).toContain("handler.test.ts");
-		expect(cmd).toContain("handlesRequest");
-		expect(cmd).not.toContain("handlesError");
+		// Verify spawnSync was called with Task 1's test, not Task 2's
+		expect(mockedSpawnSync).toHaveBeenCalledOnce();
+		const args = mockedSpawnSync.mock.calls[0]![1] as string[];
+		expect(args).toContain("src/__tests__/handler.test.ts");
+		expect(args).toContain("handlesRequest");
+		expect(args).not.toContain("handlesError");
 	});
 });
 
@@ -137,11 +144,11 @@ describe("taskCompleted: verify execution", () => {
 		const taskCompleted = (await import("../task-completed.ts")).default;
 		await taskCompleted({ task_subject: "Task 1: Add handler" });
 
-		expect(mockedExecSync).toHaveBeenCalledOnce();
-		const cmd = mockedExecSync.mock.calls[0]![0] as string;
-		expect(cmd).toContain("vitest run");
-		expect(cmd).toContain("handler.test.ts");
-		expect(cmd).toContain("handlesRequest");
+		expect(mockedSpawnSync).toHaveBeenCalledOnce();
+		expect(mockedSpawnSync.mock.calls[0]![0]).toBe("vitest");
+		const args = mockedSpawnSync.mock.calls[0]![1] as string[];
+		expect(args).toContain("src/__tests__/handler.test.ts");
+		expect(args).toContain("handlesRequest");
 
 		// No stdout output — state is read via MCP
 		expect(stdoutCapture.join("")).toBe("");
@@ -151,7 +158,7 @@ describe("taskCompleted: verify execution", () => {
 		writePlan(PLAN_WITH_VERIFY);
 		writeGates({ on_commit: { test: { command: "vitest run" } } });
 
-		mockedExecSync.mockImplementation(() => {
+		mockedSpawnSync.mockImplementation(() => {
 			const err = new Error("test failed") as Error & {
 				stdout: string;
 				stderr: string;
@@ -183,7 +190,7 @@ describe("taskCompleted: shell safety", () => {
 		await taskCompleted({ task_subject: "Task 1: Exploit" });
 
 		expect(stdoutCapture.join("")).toBe("");
-		expect(mockedExecSync).not.toHaveBeenCalled();
+		expect(mockedSpawnSync).not.toHaveBeenCalled();
 	});
 
 	it("rejects test name with spaces", async () => {
@@ -198,6 +205,6 @@ describe("taskCompleted: shell safety", () => {
 		await taskCompleted({ task_subject: "Task 1: Test" });
 
 		expect(stdoutCapture.join("")).toBe("");
-		expect(mockedExecSync).not.toHaveBeenCalled();
+		expect(mockedSpawnSync).not.toHaveBeenCalled();
 	});
 });

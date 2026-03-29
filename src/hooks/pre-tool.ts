@@ -50,7 +50,12 @@ function checkEditWrite(ev: HookEvent): void {
 
 		if (!isFixingPendingFile) {
 			const fileList = fixes
-				.map((f) => `  ${f.file}: ${f.errors[0]?.slice(0, 100) ?? "error"}`)
+				.map((f) => {
+					const totalErrors = f.errors.length;
+					const shown = f.errors.slice(0, 3).map((e) => `    ${e.slice(0, 200)}`);
+					const suffix = totalErrors > 3 ? `\n    ... and ${totalErrors - 3} more error(s)` : "";
+					return `  ${f.file} (${totalErrors} error(s)):\n${shown.join("\n")}${suffix}`;
+				})
 				.join("\n");
 			deny(`Fix existing errors before editing other files:\n${fileList}`);
 		}

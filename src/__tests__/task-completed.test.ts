@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAllCaches } from "../state/flush.ts";
 
 vi.mock("node:child_process", () => ({
-	execSync: vi.fn(),
+	spawnSync: vi.fn(),
 }));
 
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-task-completed-test");
 const STATE_DIR = join(TEST_DIR, ".qult", ".state");
@@ -47,7 +47,7 @@ beforeEach(() => {
 	process.chdir(TEST_DIR);
 	stderrCapture = [];
 	exitCode = null;
-	vi.mocked(execSync).mockReset();
+	vi.mocked(spawnSync).mockReset();
 
 	vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 	vi.spyOn(process.stderr, "write").mockImplementation((data) => {
@@ -76,7 +76,7 @@ describe("taskCompleted: no-op conditions (fail-open)", () => {
 		await taskCompleted({});
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 
 	it("returns without action when no active plan", async () => {
@@ -85,7 +85,7 @@ describe("taskCompleted: no-op conditions (fail-open)", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 
 	it("returns without action when task subject doesn't match any plan task", async () => {
@@ -98,7 +98,7 @@ describe("taskCompleted: no-op conditions (fail-open)", () => {
 		await taskCompleted({ task_subject: "Nonexistent task" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 
 	it("returns without action when task has no Verify field", async () => {
@@ -109,7 +109,7 @@ describe("taskCompleted: no-op conditions (fail-open)", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 });
 
@@ -128,7 +128,7 @@ describe("taskCompleted: task matching", () => {
 		await taskCompleted({ task_subject: "Task 3: Build widget" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledOnce();
+		expect(spawnSync).toHaveBeenCalledOnce();
 	});
 
 	it("matches task by exact name", async () => {
@@ -141,7 +141,7 @@ describe("taskCompleted: task matching", () => {
 		await taskCompleted({ task_subject: "Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledOnce();
+		expect(spawnSync).toHaveBeenCalledOnce();
 	});
 });
 
@@ -154,7 +154,7 @@ describe("taskCompleted: shell safety", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 
 	it("skips execution for unsafe shell arg in test name", async () => {
@@ -165,7 +165,7 @@ describe("taskCompleted: shell safety", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 
 	it("allows safe shell args through", async () => {
@@ -176,7 +176,7 @@ describe("taskCompleted: shell safety", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledOnce();
+		expect(spawnSync).toHaveBeenCalledOnce();
 	});
 });
 
@@ -189,8 +189,9 @@ describe("taskCompleted: test runner detection", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledWith(
-			'vitest run src/__tests__/foo.test.ts -t "testFoo"',
+		expect(spawnSync).toHaveBeenCalledWith(
+			"vitest",
+			["run", "src/__tests__/foo.test.ts", "-t", "testFoo"],
 			expect.anything(),
 		);
 	});
@@ -203,8 +204,9 @@ describe("taskCompleted: test runner detection", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledWith(
-			'jest src/__tests__/foo.test.ts -t "testFoo"',
+		expect(spawnSync).toHaveBeenCalledWith(
+			"jest",
+			["src/__tests__/foo.test.ts", "-t", "testFoo"],
 			expect.anything(),
 		);
 	});
@@ -217,8 +219,9 @@ describe("taskCompleted: test runner detection", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledWith(
-			'pytest tests/test_foo.py -k "test_bar"',
+		expect(spawnSync).toHaveBeenCalledWith(
+			"pytest",
+			["tests/test_foo.py", "-k", "test_bar"],
 			expect.anything(),
 		);
 	});
@@ -231,7 +234,7 @@ describe("taskCompleted: test runner detection", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledWith("go test ./pkg/foo", expect.anything());
+		expect(spawnSync).toHaveBeenCalledWith("go", ["test", "./pkg/foo"], expect.anything());
 	});
 
 	it("builds cargo test command", async () => {
@@ -242,7 +245,7 @@ describe("taskCompleted: test runner detection", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledWith("cargo test test_bar", expect.anything());
+		expect(spawnSync).toHaveBeenCalledWith("cargo", ["test", "test_bar"], expect.anything());
 	});
 
 	it("returns without action when no on_commit gates", async () => {
@@ -253,7 +256,7 @@ describe("taskCompleted: test runner detection", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 
 	it("returns without action when no gates file exists", async () => {
@@ -263,7 +266,7 @@ describe("taskCompleted: test runner detection", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).not.toHaveBeenCalled();
+		expect(spawnSync).not.toHaveBeenCalled();
 	});
 });
 
@@ -271,19 +274,26 @@ describe("taskCompleted: execution (fail-open)", () => {
 	it("succeeds silently when test passes", async () => {
 		writePlan(makePlanContent({ verify: "src/__tests__/foo.test.ts:testFoo" }));
 		writeGates({ on_commit: { test: { command: "vitest run", timeout: 5000 } } });
-		vi.mocked(execSync).mockReturnValue("");
+		vi.mocked(spawnSync).mockReturnValue({
+			status: 0,
+			stdout: "",
+			stderr: "",
+			pid: 0,
+			output: [],
+			signal: null,
+		});
 
 		const taskCompleted = await loadTaskCompleted();
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledOnce();
+		expect(spawnSync).toHaveBeenCalledOnce();
 	});
 
 	it("does not block when test fails (fail-open)", async () => {
 		writePlan(makePlanContent({ verify: "src/__tests__/foo.test.ts:testFoo" }));
 		writeGates({ on_commit: { test: { command: "vitest run", timeout: 5000 } } });
-		vi.mocked(execSync).mockImplementation(() => {
+		vi.mocked(spawnSync).mockImplementation(() => {
 			throw new Error("test failed");
 		});
 
@@ -291,6 +301,6 @@ describe("taskCompleted: execution (fail-open)", () => {
 		await taskCompleted({ task_subject: "Task 1: Add feature" });
 
 		expect(exitCode).toBeNull();
-		expect(execSync).toHaveBeenCalledOnce();
+		expect(spawnSync).toHaveBeenCalledOnce();
 	});
 });

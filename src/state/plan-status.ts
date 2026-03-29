@@ -89,17 +89,41 @@ function getLatestPlanPath(): string | null {
 	}
 }
 
+// Process-scoped cache for active plan
+let _planCache: { tasks: PlanTask[]; path: string } | null = null;
+let _planCachePath: string | null = null;
+let _planCacheMtime: number | null = null;
+
 /** Find and parse the latest plan file. Returns null if no plan found or no tasks. */
 export function getActivePlan(): { tasks: PlanTask[]; path: string } | null {
 	const path = getLatestPlanPath();
 	if (!path) return null;
 
+	// Return cache if same path and mtime (plan file hasn't changed)
+	let mtime: number | null = null;
+	try {
+		mtime = statSync(path).mtimeMs;
+		if (_planCache && _planCachePath === path && _planCacheMtime === mtime) return _planCache;
+	} catch {
+		// fall through to re-read
+	}
+
 	try {
 		const content = readFileSync(path, "utf-8");
 		const tasks = parsePlanTasks(content);
 		if (tasks.length === 0) return null;
-		return { tasks, path };
+		_planCache = { tasks, path };
+		_planCachePath = path;
+		_planCacheMtime = mtime;
+		return _planCache;
 	} catch {
 		return null; // fail-open
 	}
+}
+
+/** Reset plan cache (for tests). */
+export function resetPlanCache(): void {
+	_planCache = null;
+	_planCachePath = null;
+	_planCacheMtime = null;
 }

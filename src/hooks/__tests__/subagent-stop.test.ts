@@ -412,6 +412,13 @@ describe("validatePlanHeuristics", () => {
 	});
 
 	it("flags registry file without consumer file in plan", async () => {
+		// Write config with registry_files to enable the check
+		writeFileSync(
+			join(TEST_DIR, ".qult", "config.json"),
+			JSON.stringify({ plan_eval: { registry_files: ["session-state.ts", "types.ts"] } }),
+		);
+		resetAllCaches();
+
 		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
 		const plan = [
 			"## Context",

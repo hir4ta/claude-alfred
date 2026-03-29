@@ -278,6 +278,13 @@ Why this change is needed.
 	});
 
 	it("registry file without consumer triggers warning", () => {
+		// Write config with registry_files to enable the check
+		writeFileSync(
+			join(TEST_DIR, ".qult", "config.json"),
+			JSON.stringify({ plan_eval: { registry_files: ["types.ts", "session-state.ts"] } }),
+		);
+		resetAllCaches();
+
 		const plan = validPlan.replace("src/foo.ts", "src/types.ts");
 		const warnings = validatePlanHeuristics(plan);
 		expect(warnings.length).toBeGreaterThan(0);
