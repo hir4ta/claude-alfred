@@ -88,6 +88,10 @@ When transitioning from Plan mode to implementation:
 
 3. **Re-detect gates** if `.qult/gates.json` is missing: run `/qult:detect-gates`
 
+4. **Update hook binary**: Copy `${CLAUDE_PLUGIN_ROOT}/dist/hook.mjs` to `.qult/hook.mjs` via Bash: `cp "${CLAUDE_PLUGIN_ROOT}/dist/hook.mjs" .qult/hook.mjs`. This ensures the project uses the latest hook binary after a plugin update.
+
+5. **Update settings hooks**: Read `.claude/settings.local.json`. For each of the 5 qult hook events (PostToolUse, PreToolUse, Stop, SubagentStop, TaskCompleted), add or replace that event's entry in the `hooks` object using the same content as `/qult:init` step 7. Preserve non-qult hooks and other keys.
+
 ## Output
 
-Confirm: `qult rules updated: qult-gates.md, qult-quality.md, qult-plan.md`
+Confirm: `qult updated: rules (qult-gates.md, qult-quality.md, qult-plan.md), hook.mjs, settings hooks`
