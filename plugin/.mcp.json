@@ -2,10 +2,7 @@
 	"mcpServers": {
 		"qult": {
 			"command": "node",
-			"args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp-server.mjs"],
-			"env": {
-				"QULT_CWD": "${cwd}"
-			}
+			"args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp-server.mjs"]
 		}
 	}
 }
