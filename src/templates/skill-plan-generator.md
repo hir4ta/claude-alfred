@@ -19,8 +19,24 @@ Write the final plan to `.claude/plans/plan-<timestamp>.md`.
 
 Use format: `plan-YYYYMMDD-HHMMSS.md` for the filename.
 
+## Stage 3: Plan evaluation (independent agent)
+
+Spawn one `qult-plan-evaluator` agent with the plan file path from Stage 2.
+
+The evaluator reads the plan file and scores it on three dimensions:
+- **Feasibility**: Can Claude Code execute each task as described?
+- **Completeness**: Are all affected files covered, including consumers and tests?
+- **Clarity**: Is each task unambiguous and actionable?
+
+If the evaluator's verdict is `Plan: REVISE`:
+1. Read the evaluator's findings
+2. Fix the issues in the plan file
+3. Re-spawn the evaluator on the updated plan
+
+The SubagentStop hook enforces the score threshold mechanically (aggregate >= 10/15, max 2 iterations).
+
 ## Output
 
-Summary line: `Plan generated: .claude/plans/<filename> (N tasks)`
+Summary line: `Plan generated: .claude/plans/<filename> (N tasks, evaluation: Feasibility=N Completeness=N Clarity=N)`
 
-Then suggest: "Enter plan mode (Shift+Tab ×2) to review and approve the plan."
+Then suggest: "Enter plan mode (Shift+Tab x2) to review and approve the plan."

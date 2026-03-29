@@ -29,6 +29,8 @@ export interface SessionState {
 	changed_file_paths: string[];
 	review_iteration: number;
 	review_last_aggregate: number;
+	plan_eval_iteration: number;
+	plan_eval_last_aggregate: number;
 }
 
 function filePath(): string {
@@ -46,6 +48,8 @@ function defaultState(): SessionState {
 		changed_file_paths: [],
 		review_iteration: 0,
 		review_last_aggregate: 0,
+		plan_eval_iteration: 0,
+		plan_eval_last_aggregate: 0,
 	};
 }
 
@@ -215,6 +219,8 @@ export function clearOnCommit(): void {
 	state.changed_file_paths = [];
 	state.review_iteration = 0;
 	state.review_last_aggregate = 0;
+	state.plan_eval_iteration = 0;
+	state.plan_eval_last_aggregate = 0;
 	writeState(state);
 }
 
@@ -238,5 +244,28 @@ export function resetReviewIteration(): void {
 	const state = readSessionState();
 	state.review_iteration = 0;
 	state.review_last_aggregate = 0;
+	writeState(state);
+}
+
+// --- Plan evaluation iteration tracking ---
+
+/** Get current plan evaluation iteration count (0 = not started). */
+export function getPlanEvalIteration(): number {
+	return readSessionState().plan_eval_iteration ?? 0;
+}
+
+/** Record a plan evaluation iteration with aggregate score. */
+export function recordPlanEvalIteration(aggregate: number): void {
+	const state = readSessionState();
+	state.plan_eval_iteration = (state.plan_eval_iteration ?? 0) + 1;
+	state.plan_eval_last_aggregate = aggregate;
+	writeState(state);
+}
+
+/** Reset plan evaluation iteration state. */
+export function resetPlanEvalIteration(): void {
+	const state = readSessionState();
+	state.plan_eval_iteration = 0;
+	state.plan_eval_last_aggregate = 0;
 	writeState(state);
 }

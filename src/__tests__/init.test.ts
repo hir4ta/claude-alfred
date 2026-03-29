@@ -210,6 +210,18 @@ describe("qult init", () => {
 		expect(content).toContain("plan generator");
 	});
 
+	it("writes agent file for qult-plan-evaluator", async () => {
+		const { runInit } = await import("../init.ts");
+		await runInit(false);
+
+		const agentPath = join(TEST_HOME, ".claude", "agents", "qult-plan-evaluator.md");
+		expect(existsSync(agentPath)).toBe(true);
+
+		const content = readFileSync(agentPath, "utf-8");
+		expect(content).toContain("plan evaluator");
+		expect(content).toContain("Feasibility");
+	});
+
 	it("writes skill file for /qult:plan-generator", async () => {
 		const { runInit } = await import("../init.ts");
 		await runInit(false);

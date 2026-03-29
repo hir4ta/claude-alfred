@@ -1,6 +1,6 @@
 # qult
 
-![Version](https://img.shields.io/badge/version-0.14.3-7fbbb3?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.14.4-7fbbb3?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Bun_1.3+-a7c080?style=flat-square&logo=typescript&logoColor=d3c6aa)
 ![Hooks](https://img.shields.io/badge/hooks-5-dbbc7f?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-83c092?style=flat-square)
@@ -126,7 +126,7 @@ Gate は自動検出:
 |------|------|
 | **壁 > 情報提示** | DENY (exit 2) で止める。advisory は無視される前提 |
 | **fail-open** | 全 hook は try-catch。qult の障害で Claude を止めない |
-| **simplest solution** | 全コンポーネントは仮定を持つ。崩れたら捨てる |
+| **structural guarantee** | 品質を構造で保証する。仮定を stress-test し、崩れたら削除 |
 | **dependencies ゼロ** | 全て devDependencies + bun build バンドル |
 
 ---

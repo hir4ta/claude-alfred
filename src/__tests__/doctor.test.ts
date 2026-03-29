@@ -36,6 +36,7 @@ function setupValidEnv(): void {
 	mkdirSync(join(claudeDir, "agents"), { recursive: true });
 	writeFileSync(join(claudeDir, "agents", "qult-reviewer.md"), "# reviewer agent");
 	writeFileSync(join(claudeDir, "agents", "qult-plan-generator.md"), "# plan-generator agent");
+	writeFileSync(join(claudeDir, "agents", "qult-plan-evaluator.md"), "# plan-evaluator agent");
 
 	// rules
 	mkdirSync(join(claudeDir, "rules"), { recursive: true });
@@ -258,7 +259,7 @@ describe("doctor: overall", () => {
 		setupValidEnv();
 		const { runChecks } = await import("../doctor.ts");
 		const results = runChecks();
-		expect(results).toHaveLength(11);
+		expect(results).toHaveLength(12);
 	});
 
 	it("all checks pass with valid setup", async () => {

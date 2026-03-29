@@ -775,6 +775,7 @@ describe("Scenario 23: Init → Doctor reports all OK", () => {
 			writeFileSync(join(claudeDir, "skills", "qult-plan-generator", "SKILL.md"), "# skill");
 			writeFileSync(join(claudeDir, "agents", "qult-reviewer.md"), "# agent");
 			writeFileSync(join(claudeDir, "agents", "qult-plan-generator.md"), "# agent");
+			writeFileSync(join(claudeDir, "agents", "qult-plan-evaluator.md"), "# agent");
 			mkdirSync(join(claudeDir, "rules"), { recursive: true });
 			writeFileSync(join(claudeDir, "rules", "qult-quality.md"), "# rules");
 			writeFileSync(join(claudeDir, "rules", "qult-plan.md"), "# rules");
@@ -819,5 +820,134 @@ describe("Scenario: gates.json with on_review section loads correctly", () => {
 		expect(loaded).not.toBeNull();
 		expect(loaded!.on_review).toBeDefined();
 		expect(loaded!.on_review!.e2e!.command).toBe("playwright test");
+	});
+});
+
+// ============================================================
+// Plan validation: Level 1 + Level 2 + Level 3 (plan-evaluator)
+// ============================================================
+
+describe("Scenario: Plan validation full flow", () => {
+	it("L1 blocks plan missing ## Context (via SubagentStop)", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "incomplete-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Add auth [pending]",
+				"- **File**: src/auth.ts",
+				"- **Change**: Add JWT auth middleware with token verification",
+				"- **Boundary**: Do not modify route handlers",
+				"- **Verify**: src/__tests__/auth.test.ts:testAuth",
+				"",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` -- pass",
+			].join("\n"),
+		);
+
+		const handler = (await import("../hooks/subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "Plan",
+				last_assistant_message: "Plan created.",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+		expect(stdoutCapture.join("")).toContain("Context");
+	});
+
+	it("L2 blocks plan with vague Change field", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "vague-plan.md"),
+			[
+				"## Context",
+				"Fixing auth issues.",
+				"",
+				"## Tasks",
+				"### Task 1: Fix auth [pending]",
+				"- **File**: src/auth.ts",
+				"- **Change**: Fix the auth",
+				"- **Boundary**: none",
+				"- **Verify**: src/__tests__/auth.test.ts:testAuth",
+				"",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` -- pass",
+			].join("\n"),
+		);
+
+		const handler = (await import("../hooks/subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "Plan",
+				last_assistant_message: "Plan created.",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+		expect(stdoutCapture.join("")).toContain("vague");
+	});
+
+	it("L1+L2 pass for well-formed plan", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "good-plan.md"),
+			[
+				"## Context",
+				"Adding JWT auth middleware for API routes.",
+				"",
+				"## Tasks",
+				"### Task 1: Add auth middleware [pending]",
+				"- **File**: src/auth.ts",
+				"- **Change**: Create verifyJWT middleware that validates Bearer tokens using jose library",
+				"- **Boundary**: Do not modify existing route handlers or auth config",
+				"- **Verify**: src/__tests__/auth.test.ts:testVerifyJWT",
+				"",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` -- all tests pass",
+			].join("\n"),
+		);
+
+		const handler = (await import("../hooks/subagent-stop.ts")).default;
+		await handler({
+			hook_type: "SubagentStop",
+			agent_type: "Plan",
+			last_assistant_message: "Plan created.",
+		});
+		expect(exitCode).toBeNull();
+	});
+
+	it("plan-evaluator PASS with high score allows completion", async () => {
+		const handler = (await import("../hooks/subagent-stop.ts")).default;
+		await handler({
+			hook_type: "SubagentStop",
+			agent_type: "qult-plan-evaluator",
+			last_assistant_message:
+				"Plan: PASS\nScore: Feasibility=5 Completeness=4 Clarity=5\n\nNo issues found.",
+		});
+		expect(exitCode).toBeNull();
+	});
+
+	it("plan-evaluator REVISE blocks completion", async () => {
+		const handler = (await import("../hooks/subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "qult-plan-evaluator",
+				last_assistant_message:
+					"Plan: REVISE\nScore: Feasibility=2 Completeness=3 Clarity=3\n\n- [critical] Task 1 — File references non-existent path\nFix: use correct path",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
 	});
 });

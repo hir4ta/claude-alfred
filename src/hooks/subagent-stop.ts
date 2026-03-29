@@ -1,7 +1,10 @@
 import {
+	getPlanEvalIteration,
 	getReviewIteration,
+	recordPlanEvalIteration,
 	recordReview,
 	recordReviewIteration,
+	resetPlanEvalIteration,
 	resetReviewIteration,
 } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
@@ -41,6 +44,198 @@ export function parseScores(output: string): ReviewScores | null {
 
 const DEFAULT_REVIEW_SCORE_THRESHOLD = 12;
 const DEFAULT_MAX_REVIEW_ITERATIONS = 3;
+
+const DEFAULT_PLAN_EVAL_SCORE_THRESHOLD = 10;
+const DEFAULT_MAX_PLAN_EVAL_ITERATIONS = 2;
+
+// Plan evaluator verdicts
+const PLAN_PASS_RE = /^Plan:\s*PASS/im;
+const PLAN_REVISE_RE = /^Plan:\s*REVISE/im;
+
+/** Generic dimension score parser. Builds regex from dimension names with graduated fallback. */
+export function parseDimensionScores(
+	output: string,
+	dimensions: string[],
+): Record<string, number> | null {
+	// Strict: Score: Dim1=N Dim2=N Dim3=N
+	const strictPattern = dimensions.map((d) => `${d}=(\\d)`).join("\\s+");
+	const strictRe = new RegExp(`Score:\\s*${strictPattern}`, "i");
+
+	// Colon: Dim1: N ... Dim2: N
+	const colonParts = dimensions.map((d) => `${d}[=:]\\s*(\\d)`).join(".*?");
+	const colonRe = new RegExp(colonParts, "i");
+
+	for (const re of [strictRe, colonRe]) {
+		const m = re.exec(output);
+		if (m) {
+			const result: Record<string, number> = {};
+			for (let i = 0; i < dimensions.length; i++) {
+				result[dimensions[i]!] = Number.parseInt(m[i + 1]!, 10);
+			}
+			return result;
+		}
+	}
+	return null;
+}
+
+// --- Level 1: Structural validation ---
+
+const TASK_HEADER_G = /^### Task \d+:/gm;
+const FIELD_RES: Record<string, RegExp> = {
+	File: /^\s*-\s*\*\*File\*\*/m,
+	Change: /^\s*-\s*\*\*Change\*\*/m,
+	Boundary: /^\s*-\s*\*\*Boundary\*\*/m,
+	Verify: /^\s*-\s*\*\*Verify\*\*/m,
+};
+
+/** Level 1: Validate plan structure. Returns error messages (empty = pass). */
+export function validatePlanStructure(content: string): string[] {
+	const errors: string[] = [];
+
+	if (!/^## Context/m.test(content)) {
+		errors.push("Missing required section: ## Context");
+	}
+
+	if (!/^## Tasks/m.test(content)) {
+		errors.push("Missing required section: ## Tasks");
+		return errors; // can't check tasks without section
+	}
+
+	const taskCount = (content.match(TASK_HEADER_G) ?? []).length;
+	if (taskCount === 0) {
+		errors.push("## Tasks section has no task entries (### Task N:)");
+	} else if (taskCount > 15) {
+		errors.push(`Too many tasks (${taskCount}). Maximum is 15. Split into smaller plans.`);
+	}
+
+	// Extract individual task blocks and check fields
+	const tasksSection = content.slice(content.search(/^## Tasks/m));
+	const firstNewline = tasksSection.indexOf("\n");
+	const nextSection = firstNewline >= 0 ? tasksSection.slice(firstNewline).search(/^## /m) : -1;
+	const tasksContent =
+		nextSection >= 0 ? tasksSection.slice(0, firstNewline + nextSection) : tasksSection;
+
+	const taskHeaders = [...tasksContent.matchAll(/^### Task (\d+):.*$/gm)];
+	for (let i = 0; i < taskHeaders.length; i++) {
+		const start = taskHeaders[i]!.index!;
+		const end = i + 1 < taskHeaders.length ? taskHeaders[i + 1]!.index! : tasksContent.length;
+		const block = tasksContent.slice(start, end);
+		const taskNum = taskHeaders[i]![1];
+
+		for (const [field, re] of Object.entries(FIELD_RES)) {
+			if (!re.test(block)) {
+				errors.push(`Task ${taskNum}: missing required field **${field}**`);
+			}
+		}
+	}
+
+	if (!/^## Success Criteria/m.test(content)) {
+		errors.push("Missing required section: ## Success Criteria");
+	} else {
+		const scStart = content.search(/^## Success Criteria/m);
+		const scContent = content.slice(scStart);
+		if (!/`.+`/.test(scContent)) {
+			errors.push("Success Criteria must contain at least one backtick-wrapped command");
+		}
+	}
+
+	return errors;
+}
+
+// --- Level 2: Heuristic validation ---
+
+const VAGUE_VERBS_RE =
+	/^(improve|update|fix|refactor|clean\s*up|enhance|optimize|modify|adjust|change)\b/i;
+const VERIFY_FORMAT_RE = /\S+\.\w+:\S+/;
+const REGISTRY_FILES = ["init.ts", "types.ts", "session-state.ts"];
+
+/** Level 2: Heuristic plan quality checks. Returns warning messages (empty = pass). */
+export function validatePlanHeuristics(content: string): string[] {
+	const warnings: string[] = [];
+
+	// Extract task blocks
+	if (!/^## Tasks/m.test(content)) return warnings;
+
+	const tasksSection = content.slice(content.search(/^## Tasks/m));
+	const firstNewline = tasksSection.indexOf("\n");
+	const nextSection = firstNewline >= 0 ? tasksSection.slice(firstNewline).search(/^## /m) : -1;
+	const tasksContent =
+		nextSection >= 0 ? tasksSection.slice(0, firstNewline + nextSection) : tasksSection;
+
+	const taskHeaders = [...tasksContent.matchAll(/^### Task (\d+):.*$/gm)];
+	const taskBlocks: { num: string; block: string }[] = [];
+
+	for (let i = 0; i < taskHeaders.length; i++) {
+		const start = taskHeaders[i]!.index!;
+		const end = i + 1 < taskHeaders.length ? taskHeaders[i + 1]!.index! : tasksContent.length;
+		taskBlocks.push({ num: taskHeaders[i]![1]!, block: tasksContent.slice(start, end) });
+	}
+
+	// Collect all File fields across all tasks for consumer check
+	const allFiles: string[] = [];
+	for (const { block } of taskBlocks) {
+		const fileMatch = block.match(/^\s*-\s*\*\*File\*\*:\s*(.+)$/m);
+		if (fileMatch) allFiles.push(fileMatch[1]!);
+	}
+	const allFilesJoined = allFiles.join(" ");
+
+	for (const { num, block } of taskBlocks) {
+		// Check vague Change
+		const changeMatch = block.match(/^\s*-\s*\*\*Change\*\*:\s*(.+)$/m);
+		if (changeMatch) {
+			const changeValue = changeMatch[1]!.trim();
+			if (VAGUE_VERBS_RE.test(changeValue)) {
+				// Count words after the vague verb
+				const words = changeValue.split(/\s+/);
+				if (words.length < 6) {
+					warnings.push(
+						`Task ${num}: Change field is too vague ("${changeValue}"). Be specific about what to do.`,
+					);
+				}
+			}
+		}
+
+		// Check Verify format
+		const verifyMatch = block.match(/^\s*-\s*\*\*Verify\*\*:\s*(.+)$/m);
+		if (verifyMatch) {
+			const verifyValue = verifyMatch[1]!.trim();
+			if (!VERIFY_FORMAT_RE.test(verifyValue)) {
+				warnings.push(
+					`Task ${num}: Verify field should reference a test file:function (got "${verifyValue}")`,
+				);
+			}
+		}
+
+		// Check registry file consumer coverage
+		const fileMatch = block.match(/^\s*-\s*\*\*File\*\*:\s*(.+)$/m);
+		if (fileMatch) {
+			const fileValue = fileMatch[1]!;
+			for (const registry of REGISTRY_FILES) {
+				if (fileValue.includes(registry)) {
+					// Check if any OTHER task references a consumer file (not the same registry)
+					const hasConsumer = allFilesJoined
+						.split(/[\s,]+/)
+						.some(
+							(f) =>
+								!f.includes(registry) &&
+								(f.includes("test") ||
+									f.includes("spec") ||
+									f.includes("doctor") ||
+									f.includes("hook") ||
+									f.includes("cli")),
+						);
+					if (!hasConsumer) {
+						warnings.push(
+							`Task ${num}: File references registry file "${registry}" but no consumer file (test, hook, etc.) found in plan`,
+						);
+					}
+				}
+			}
+		}
+	}
+
+	return warnings;
+}
 
 /** SubagentStop: verify subagent output quality */
 export default async function subagentStop(ev: HookEvent): Promise<void> {
@@ -86,6 +281,8 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 		}
 		resetReviewIteration();
 		recordReview();
+	} else if (agentType === "qult-plan-evaluator") {
+		validatePlanEvaluator(output);
 	} else if (agentType === "Plan") {
 		validatePlan();
 	}
@@ -109,12 +306,65 @@ function validatePlan(): void {
 
 		if (files.length === 0) return;
 		const content = readFileSync(join(planDir, files[0]!.name), "utf-8") as string;
-		if (!content.includes("## Tasks")) {
-			block("Plan is missing required section: ## Tasks. Add it before exiting.");
+
+		// Level 1: Structural validation
+		const structErrors = validatePlanStructure(content);
+		if (structErrors.length > 0) {
+			block(`Plan structural issues:\n${structErrors.map((e) => `  - ${e}`).join("\n")}`);
 		}
-	} catch {
-		// fail-open
+
+		// Level 2: Heuristic validation
+		const heuristicWarnings = validatePlanHeuristics(content);
+		if (heuristicWarnings.length > 0) {
+			block(`Plan quality issues:\n${heuristicWarnings.map((w) => `  - ${w}`).join("\n")}`);
+		}
+	} catch (err) {
+		// fail-open — but re-throw block() exits
+		if (err instanceof Error && err.message.startsWith("process.exit")) throw err;
 	}
+}
+
+const PLAN_EVAL_DIMENSIONS = ["Feasibility", "Completeness", "Clarity"];
+
+function validatePlanEvaluator(output: string): void {
+	const hasPassed = PLAN_PASS_RE.test(output);
+	const hasRevise = PLAN_REVISE_RE.test(output);
+	const scores = parseDimensionScores(output, PLAN_EVAL_DIMENSIONS);
+
+	// Validate output format — require verdict + score at minimum
+	if ((!hasPassed && !hasRevise) || !scores) {
+		block(
+			"Plan evaluator output must include: (1) 'Plan: PASS' or 'Plan: REVISE', (2) 'Score: Feasibility=N Completeness=N Clarity=N', and (3) findings or 'No issues found'. Rerun the evaluation.",
+		);
+	}
+
+	if (hasRevise) {
+		block("Plan: REVISE. Fix the issues identified by the evaluator and regenerate the plan.");
+	}
+
+	// Score threshold enforcement
+	if (hasPassed && scores) {
+		const aggregate = Object.values(scores).reduce((sum, v) => sum + v, 0);
+		const threshold = DEFAULT_PLAN_EVAL_SCORE_THRESHOLD;
+		const maxIter = DEFAULT_MAX_PLAN_EVAL_ITERATIONS;
+
+		try {
+			recordPlanEvalIteration(aggregate);
+		} catch {
+			/* fail-open */
+		}
+
+		const iterCount = getPlanEvalIteration();
+
+		if (aggregate < threshold && iterCount < maxIter) {
+			block(
+				`Plan: PASS but aggregate score ${aggregate}/15 is below threshold ${threshold}/15. ` +
+					`Iteration ${iterCount}/${maxIter}. Fix weak areas and re-evaluate.`,
+			);
+		}
+	}
+
+	resetPlanEvalIteration();
 }
 
 function validateReviewer(output: string): void {

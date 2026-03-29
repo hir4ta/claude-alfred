@@ -169,7 +169,20 @@ describe("subagentStop", () => {
 		mkdirSync(planDir, { recursive: true });
 		writeFileSync(
 			join(planDir, "good-plan.md"),
-			"## Context\nAdding auth\n\n## Tasks\n### Task 1: Add middleware [pending]",
+			[
+				"## Context",
+				"Adding auth",
+				"",
+				"## Tasks",
+				"### Task 1: Add middleware [pending]",
+				"- **File**: src/auth.ts",
+				"- **Change**: Extract token validation into middleware function with JWT checks",
+				"- **Boundary**: Do not modify existing route handlers",
+				"- **Verify**: src/__tests__/auth.test.ts:testMiddleware",
+				"",
+				"## Success Criteria",
+				"- [ ] `bun vitest run` -- all tests pass",
+			].join("\n"),
 		);
 
 		const handler = (await import("../subagent-stop.ts")).default;
@@ -189,5 +202,357 @@ describe("subagentStop", () => {
 			last_assistant_message: "I created a plan.",
 		});
 		expect(exitCode).toBeNull();
+	});
+});
+
+// --- Level 1: validatePlanStructure ---
+
+describe("validatePlanStructure", () => {
+	it("returns no errors for a valid plan", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding auth middleware.",
+			"",
+			"## Tasks",
+			"### Task 1: Add middleware [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Extract token validation into middleware function",
+			"- **Boundary**: Do not modify existing route handlers",
+			"- **Verify**: src/__tests__/auth.test.ts:testMiddleware",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- all tests pass",
+		].join("\n");
+		expect(validatePlanStructure(plan)).toEqual([]);
+	});
+
+	it("reports missing ## Context", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Tasks",
+			"### Task 1: Add middleware [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Extract token validation into middleware function",
+			"- **Boundary**: Do not modify existing route handlers",
+			"- **Verify**: src/__tests__/auth.test.ts:testMiddleware",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- all tests pass",
+		].join("\n");
+		const errors = validatePlanStructure(plan);
+		expect(errors.length).toBeGreaterThan(0);
+		expect(errors.some((e) => e.includes("Context"))).toBe(true);
+	});
+
+	it("reports missing ## Tasks", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const plan = "## Context\nDoing stuff\n\n## Success Criteria\n- [ ] `test` -- pass";
+		const errors = validatePlanStructure(plan);
+		expect(errors.some((e) => e.includes("Tasks"))).toBe(true);
+	});
+
+	it("reports zero task entries", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const plan = "## Context\nDoing stuff\n\n## Tasks\n\n## Success Criteria\n- [ ] `test` -- pass";
+		const errors = validatePlanStructure(plan);
+		expect(errors.some((e) => /task/i.test(e))).toBe(true);
+	});
+
+	it("reports more than 15 tasks", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const tasks = Array.from(
+			{ length: 16 },
+			(_, i) =>
+				`### Task ${i + 1}: Thing ${i + 1} [pending]\n- **File**: f.ts\n- **Change**: do\n- **Boundary**: none\n- **Verify**: t.ts:fn`,
+		).join("\n");
+		const plan = `## Context\nBig plan\n\n## Tasks\n${tasks}\n\n## Success Criteria\n- [ ] \`test\` -- pass`;
+		const errors = validatePlanStructure(plan);
+		expect(errors.some((e) => /15/i.test(e))).toBe(true);
+	});
+
+	it("reports missing task fields", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding auth.",
+			"",
+			"## Tasks",
+			"### Task 1: Add middleware [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Extract token validation",
+			// Missing Boundary and Verify
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- all tests pass",
+		].join("\n");
+		const errors = validatePlanStructure(plan);
+		expect(errors.some((e) => e.includes("Boundary"))).toBe(true);
+		expect(errors.some((e) => e.includes("Verify"))).toBe(true);
+	});
+
+	it("reports missing ## Success Criteria", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding auth.",
+			"",
+			"## Tasks",
+			"### Task 1: Add middleware [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Extract token validation into middleware function",
+			"- **Boundary**: Do not modify existing route handlers",
+			"- **Verify**: src/__tests__/auth.test.ts:testMiddleware",
+		].join("\n");
+		const errors = validatePlanStructure(plan);
+		expect(errors.some((e) => e.includes("Success Criteria"))).toBe(true);
+	});
+
+	it("reports Success Criteria without backtick command", async () => {
+		const { validatePlanStructure } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding auth.",
+			"",
+			"## Tasks",
+			"### Task 1: Add middleware [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Extract token validation into middleware function",
+			"- **Boundary**: Do not modify existing route handlers",
+			"- **Verify**: src/__tests__/auth.test.ts:testMiddleware",
+			"",
+			"## Success Criteria",
+			"- [ ] All tests should pass",
+		].join("\n");
+		const errors = validatePlanStructure(plan);
+		expect(errors.some((e) => /command|backtick/i.test(e))).toBe(true);
+	});
+});
+
+// --- Level 2: validatePlanHeuristics ---
+
+describe("validatePlanHeuristics", () => {
+	it("returns no warnings for a well-formed plan", async () => {
+		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding auth.",
+			"",
+			"## Tasks",
+			"### Task 1: Add middleware [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Extract token validation into middleware function with JWT verification",
+			"- **Boundary**: Do not modify existing route handlers",
+			"- **Verify**: src/__tests__/auth.test.ts:testMiddleware",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- all tests pass",
+		].join("\n");
+		expect(validatePlanHeuristics(plan)).toEqual([]);
+	});
+
+	it("flags vague Change field (single verb + short object)", async () => {
+		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Fixing auth.",
+			"",
+			"## Tasks",
+			"### Task 1: Fix auth [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Fix the auth module",
+			"- **Boundary**: none",
+			"- **Verify**: src/__tests__/auth.test.ts:testAuth",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- pass",
+		].join("\n");
+		const warnings = validatePlanHeuristics(plan);
+		expect(warnings.some((w) => /vague|Change/i.test(w))).toBe(true);
+	});
+
+	it("allows specific Change field starting with vague verb", async () => {
+		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Improving auth.",
+			"",
+			"## Tasks",
+			"### Task 1: Improve auth [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Improve auth by adding rate limiting with exponential backoff and Redis-based token bucket",
+			"- **Boundary**: none",
+			"- **Verify**: src/__tests__/auth.test.ts:testRateLimit",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- pass",
+		].join("\n");
+		const warnings = validatePlanHeuristics(plan);
+		expect(warnings.filter((w) => /vague|Change/i.test(w))).toEqual([]);
+	});
+
+	it("flags invalid Verify format (no colon separator)", async () => {
+		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding auth.",
+			"",
+			"## Tasks",
+			"### Task 1: Add middleware [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Extract token validation into middleware function with JWT verification",
+			"- **Boundary**: Do not modify route handlers",
+			"- **Verify**: manual testing",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- pass",
+		].join("\n");
+		const warnings = validatePlanHeuristics(plan);
+		expect(warnings.some((w) => /Verify/i.test(w))).toBe(true);
+	});
+
+	it("flags registry file without consumer file in plan", async () => {
+		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding new state field.",
+			"",
+			"## Tasks",
+			"### Task 1: Add field to session-state [pending]",
+			"- **File**: src/state/session-state.ts",
+			"- **Change**: Add plan_eval_iteration field to SessionState interface and defaultState",
+			"- **Boundary**: Do not modify existing fields",
+			"- **Verify**: src/__tests__/session-state.test.ts:testNewField",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- pass",
+		].join("\n");
+		const warnings = validatePlanHeuristics(plan);
+		expect(warnings.some((w) => /consumer/i.test(w))).toBe(true);
+	});
+
+	it("allows specific Change with many words even starting with vague verb", async () => {
+		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Refactoring.",
+			"",
+			"## Tasks",
+			"### Task 1: Refactor auth [pending]",
+			"- **File**: src/auth.ts",
+			"- **Change**: Refactor by extracting token refresh logic into a separate refreshToken function with exponential backoff",
+			"- **Boundary**: none",
+			"- **Verify**: src/__tests__/auth.test.ts:testRefresh",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- pass",
+		].join("\n");
+		const warnings = validatePlanHeuristics(plan);
+		expect(warnings.filter((w) => /vague|Change/i.test(w))).toEqual([]);
+	});
+
+	it("passes when registry file has consumer file in another task", async () => {
+		const { validatePlanHeuristics } = await import("../subagent-stop.ts");
+		const plan = [
+			"## Context",
+			"Adding new state field.",
+			"",
+			"## Tasks",
+			"### Task 1: Add field to session-state [pending]",
+			"- **File**: src/state/session-state.ts",
+			"- **Change**: Add plan_eval_iteration field to SessionState interface and defaultState",
+			"- **Boundary**: Do not modify existing fields",
+			"- **Verify**: src/__tests__/session-state.test.ts:testNewField",
+			"",
+			"### Task 2: Update subagent-stop to use new field [pending]",
+			"- **File**: src/hooks/subagent-stop.ts",
+			"- **Change**: Use plan_eval_iteration in plan-evaluator handling",
+			"- **Boundary**: Do not modify reviewer handling",
+			"- **Verify**: src/hooks/__tests__/subagent-stop.test.ts:testPlanEval",
+			"",
+			"## Success Criteria",
+			"- [ ] `bun vitest run` -- pass",
+		].join("\n");
+		const warnings = validatePlanHeuristics(plan);
+		expect(warnings.filter((w) => /consumer/i.test(w))).toEqual([]);
+	});
+});
+
+// --- Level 3: plan-evaluator SubagentStop handling ---
+
+describe("plan-evaluator SubagentStop", () => {
+	it("allows qult-plan-evaluator with PASS and high scores", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		await handler({
+			hook_type: "SubagentStop",
+			agent_type: "qult-plan-evaluator",
+			last_assistant_message:
+				"Plan: PASS\nScore: Feasibility=5 Completeness=4 Clarity=4\n\nNo issues found.",
+		});
+		expect(exitCode).toBeNull();
+	});
+
+	it("blocks qult-plan-evaluator with REVISE verdict", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "qult-plan-evaluator",
+				last_assistant_message:
+					"Plan: REVISE\nScore: Feasibility=2 Completeness=3 Clarity=4\n\n- [critical] Task 1 — references non-existent file\nFix: check file path",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+		expect(stdoutCapture.join("")).toContain("REVISE");
+	});
+
+	it("blocks qult-plan-evaluator with PASS but low aggregate score", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "qult-plan-evaluator",
+				last_assistant_message:
+					"Plan: PASS\nScore: Feasibility=3 Completeness=3 Clarity=3\n\n- [medium] Task 2 — vague Change\nFix: be specific",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+		expect(stdoutCapture.join("")).toContain("below threshold");
+	});
+
+	it("blocks qult-plan-evaluator with malformed output", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		try {
+			await handler({
+				hook_type: "SubagentStop",
+				agent_type: "qult-plan-evaluator",
+				last_assistant_message: "The plan looks good, I recommend proceeding.",
+			});
+		} catch {
+			// process.exit(2)
+		}
+		expect(exitCode).toBe(2);
+	});
+
+	it("allows qult-plan-evaluator with borderline score (exactly at threshold)", async () => {
+		const handler = (await import("../subagent-stop.ts")).default;
+		await handler({
+			hook_type: "SubagentStop",
+			agent_type: "qult-plan-evaluator",
+			last_assistant_message:
+				"Plan: PASS\nScore: Feasibility=4 Completeness=3 Clarity=3\n\nNo issues found.",
+		});
+		expect(exitCode).toBeNull();
+	});
+
+	it("parses plan-evaluator scores with colon format", async () => {
+		const { parseDimensionScores } = await import("../subagent-stop.ts");
+		const output = "Score: Feasibility: 4, Completeness: 3, Clarity: 5";
+		const scores = parseDimensionScores(output, ["Feasibility", "Completeness", "Clarity"]);
+		expect(scores).toEqual({ Feasibility: 4, Completeness: 3, Clarity: 5 });
 	});
 });

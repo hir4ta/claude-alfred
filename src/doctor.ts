@@ -225,6 +225,11 @@ export function runChecks(): CheckResult[] {
 			join(claudeDir, "skills", "qult-plan-generator", "SKILL.md"),
 			"/qult:plan-generator skill",
 		),
+		checkFileExists(
+			"agent",
+			join(claudeDir, "agents", "qult-plan-evaluator.md"),
+			"qult-plan-evaluator agent",
+		),
 		checkFileExists("rules", join(claudeDir, "rules", "qult-quality.md"), "qult-quality rules"),
 		checkFileExists("rules", join(claudeDir, "rules", "qult-plan.md"), "qult-plan rules"),
 		checkGates(),

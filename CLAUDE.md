@@ -21,7 +21,7 @@ bun run test     # vitest run
 
 1. **壁 > 情報提示** — DENY (exit 2) > additionalContext
 2. **fail-open** — 全 hook は try-catch で握りつぶす。qult の障害で Claude を止めない
-3. **simplest solution** — 全コンポーネントは load-bearing 仮定を持つ。仮定が崩れたら削除
+3. **structural guarantee** — 品質を構造で保証する。仮定を stress-test し、崩れたら削除
 
 ## ルール
 

@@ -40,9 +40,13 @@ If an active plan exists in `.claude/plans/`, extract acceptance criteria to pas
 
 ## Stage 1: Reviewer (independent evaluator)
 
-Spawn one `qult-reviewer` agent with the diff to review.
-Include the on_review gate results (from Stage 0) in the agent prompt so the reviewer can factor runtime failures into its Correctness score.
-If plan acceptance criteria were extracted (Stage 0.5), include them in the agent prompt as a separate section after the gate results.
+Spawn one `qult-reviewer` agent. The reviewer has `Bash(git diff *)` in its allowed-tools and will retrieve the diff itself — do NOT run `git diff` beforehand and pass the output.
+
+In the agent prompt, include only:
+- The on_review gate results from Stage 0 (if any)
+- The plan acceptance criteria from Stage 0.5 (if any)
+- A one-line instruction: "Review the uncommitted changes in this repository."
+
 The reviewer evaluates correctness, design, and security in an independent context.
 
 ## Stage 2: Judge filter
