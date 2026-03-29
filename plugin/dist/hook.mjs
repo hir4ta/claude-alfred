@@ -16,12 +16,35 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
+// src/gates/load.ts
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+function loadGates() {
+  if (_cache !== undefined)
+    return _cache;
+  try {
+    const path = join(process.cwd(), ".qult", "gates.json");
+    if (!existsSync(path)) {
+      _cache = null;
+      return null;
+    }
+    const parsed = JSON.parse(readFileSync(path, "utf-8"));
+    _cache = parsed;
+    return parsed;
+  } catch {
+    _cache = null;
+    return null;
+  }
+}
+var _cache;
+var init_load = () => {};
+
 // src/state/atomic-write.ts
-import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync as existsSync2, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 function atomicWriteJson(filePath, data) {
   const dir = dirname(filePath);
-  if (!existsSync(dir))
+  if (!existsSync2(dir))
     mkdirSync(dir, { recursive: true });
   const tmp = `${filePath}.${process.pid}.tmp`;
   try {
@@ -37,34 +60,34 @@ function atomicWriteJson(filePath, data) {
 var init_atomic_write = () => {};
 
 // src/state/pending-fixes.ts
-import { existsSync as existsSync2, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync as existsSync3, readFileSync as readFileSync2 } from "node:fs";
+import { join as join2 } from "node:path";
 function setFixesSessionScope(sessionId) {
   _sessionScope = sessionId;
 }
 function fixesPath() {
   const file = _sessionScope ? `pending-fixes-${_sessionScope}.json` : FIXES_FILE;
-  return join(process.cwd(), STATE_DIR, file);
+  return join2(process.cwd(), STATE_DIR, file);
 }
 function readPendingFixes() {
-  if (_cache)
-    return _cache;
+  if (_cache2)
+    return _cache2;
   try {
     const path = fixesPath();
-    if (!existsSync2(path)) {
-      _cache = [];
-      return _cache;
+    if (!existsSync3(path)) {
+      _cache2 = [];
+      return _cache2;
     }
-    const raw = readFileSync(path, "utf-8");
-    _cache = JSON.parse(raw);
-    return _cache;
+    const raw = readFileSync2(path, "utf-8");
+    _cache2 = JSON.parse(raw);
+    return _cache2;
   } catch {
-    _cache = [];
-    return _cache;
+    _cache2 = [];
+    return _cache2;
   }
 }
 function writePendingFixes(fixes) {
-  _cache = fixes;
+  _cache2 = fixes;
   _dirty = true;
 }
 function addPendingFixes(file, newFixes) {
@@ -79,10 +102,10 @@ function clearPendingFixesForFile(file) {
   }
 }
 function flush() {
-  if (!_dirty || !_cache)
+  if (!_dirty || !_cache2)
     return;
   try {
-    atomicWriteJson(fixesPath(), _cache);
+    atomicWriteJson(fixesPath(), _cache2);
   } catch (e) {
     if (e instanceof Error)
       process.stderr.write(`[qult] write error: ${e.message}
@@ -90,22 +113,22 @@ function flush() {
   }
   _dirty = false;
 }
-var STATE_DIR = ".qult/.state", FIXES_FILE = "pending-fixes.json", _cache = null, _dirty = false, _sessionScope = null;
+var STATE_DIR = ".qult/.state", FIXES_FILE = "pending-fixes.json", _cache2 = null, _dirty = false, _sessionScope = null;
 var init_pending_fixes = __esm(() => {
   init_atomic_write();
 });
 
 // src/config.ts
-import { existsSync as existsSync3, readFileSync as readFileSync2 } from "node:fs";
-import { join as join2 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync3 } from "node:fs";
+import { join as join3 } from "node:path";
 function loadConfig() {
-  if (_cache2)
-    return _cache2;
+  if (_cache3)
+    return _cache3;
   const config = structuredClone(DEFAULTS);
   try {
-    const configPath = join2(process.cwd(), ".qult", "config.json");
-    if (existsSync3(configPath)) {
-      const raw = JSON.parse(readFileSync2(configPath, "utf-8"));
+    const configPath = join3(process.cwd(), ".qult", "config.json");
+    if (existsSync4(configPath)) {
+      const raw = JSON.parse(readFileSync3(configPath, "utf-8"));
       if (raw.review) {
         if (typeof raw.review.score_threshold === "number")
           config.review.score_threshold = raw.review.score_threshold;
@@ -134,10 +157,10 @@ function loadConfig() {
   config.review.required_changed_files = envInt("QULT_REVIEW_REQUIRED_FILES") ?? config.review.required_changed_files;
   config.gates.output_max_chars = envInt("QULT_GATE_OUTPUT_MAX") ?? config.gates.output_max_chars;
   config.gates.default_timeout = envInt("QULT_GATE_DEFAULT_TIMEOUT") ?? config.gates.default_timeout;
-  _cache2 = config;
+  _cache3 = config;
   return config;
 }
-var DEFAULTS, _cache2 = null;
+var DEFAULTS, _cache3 = null;
 var init_config = __esm(() => {
   DEFAULTS = {
     review: {
@@ -151,21 +174,6 @@ var init_config = __esm(() => {
     }
   };
 });
-
-// src/gates/load.ts
-import { existsSync as existsSync4, readFileSync as readFileSync3 } from "node:fs";
-import { join as join3 } from "node:path";
-function loadGates() {
-  try {
-    const path = join3(process.cwd(), ".qult", "gates.json");
-    if (!existsSync4(path))
-      return null;
-    return JSON.parse(readFileSync3(path, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-var init_load = () => {};
 
 // src/state/plan-status.ts
 import { existsSync as existsSync5, readdirSync, readFileSync as readFileSync4, statSync } from "node:fs";
@@ -277,13 +285,13 @@ function defaultState() {
   };
 }
 function readSessionState() {
-  if (_cache3)
-    return _cache3;
+  if (_cache4)
+    return _cache4;
   try {
     const path = filePath();
     if (!existsSync6(path)) {
-      _cache3 = defaultState();
-      return _cache3;
+      _cache4 = defaultState();
+      return _cache4;
     }
     const raw = JSON.parse(readFileSync5(path, "utf-8"));
     if (!Array.isArray(raw.review_score_history) && typeof raw.review_last_aggregate === "number" && raw.review_last_aggregate > 0) {
@@ -293,22 +301,22 @@ function readSessionState() {
       raw.plan_eval_score_history = [raw.plan_eval_last_aggregate];
     }
     const state = { ...defaultState(), ...raw };
-    _cache3 = state;
+    _cache4 = state;
     return state;
   } catch {
-    _cache3 = defaultState();
-    return _cache3;
+    _cache4 = defaultState();
+    return _cache4;
   }
 }
 function writeState(state) {
-  _cache3 = state;
+  _cache4 = state;
   _dirty2 = true;
 }
 function flush2() {
-  if (!_dirty2 || !_cache3)
+  if (!_dirty2 || !_cache4)
     return;
   try {
-    atomicWriteJson(filePath(), _cache3);
+    atomicWriteJson(filePath(), _cache4);
   } catch (e) {
     if (e instanceof Error)
       process.stderr.write(`[qult] state write error: ${e.message}
@@ -459,7 +467,7 @@ function recordPlanSelfcheckBlocked() {
   state.plan_selfcheck_blocked_at = new Date().toISOString();
   writeState(state);
 }
-var STATE_DIR2 = ".qult/.state", FILE = "session-state.json", _cache3 = null, _dirty2 = false, _sessionScope2 = null, TOOL_EXTS;
+var STATE_DIR2 = ".qult/.state", FILE = "session-state.json", _cache4 = null, _dirty2 = false, _sessionScope2 = null, TOOL_EXTS;
 var init_session_state = __esm(() => {
   init_config();
   init_load();
@@ -487,6 +495,7 @@ function flushAll() {
   } catch {}
 }
 var init_flush = __esm(() => {
+  init_load();
   init_pending_fixes();
   init_session_state();
 });

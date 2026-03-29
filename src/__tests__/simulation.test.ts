@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetGatesCache } from "../gates/load.ts";
 import { resetAllCaches } from "../state/flush.ts";
 import { readPendingFixes } from "../state/pending-fixes.ts";
 import type { GatesConfig } from "../types.ts";
@@ -26,6 +27,7 @@ function setupFailingLintGate(): void {
 		},
 	};
 	writeFileSync(join(QULT_DIR, "gates.json"), JSON.stringify(gates));
+	resetGatesCache();
 }
 
 function setupPassingGates(): void {
@@ -35,6 +37,7 @@ function setupPassingGates(): void {
 		},
 	};
 	writeFileSync(join(QULT_DIR, "gates.json"), JSON.stringify(gates));
+	resetGatesCache();
 }
 
 beforeEach(() => {

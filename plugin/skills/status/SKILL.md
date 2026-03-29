@@ -10,9 +10,9 @@ Show the current qult quality gate status.
 
 ## Steps
 
-1. Call `mcp__qult__get_pending_fixes()` for current lint/typecheck errors
-2. Call `mcp__qult__get_session_status()` for session state
-3. Call `mcp__qult__get_gate_config()` for gate configuration
+1. Call `mcp__plugin_qult_qult__get_pending_fixes()` for current lint/typecheck errors
+2. Call `mcp__plugin_qult_qult__get_session_status()` for session state
+3. Call `mcp__plugin_qult_qult__get_gate_config()` for gate configuration
 
 ## Output format
 

@@ -12,10 +12,10 @@ Diagnose qult setup issues in the current project.
 
 1. **`.qult/` directory**: Exists with `.state/` subdirectory
 2. **Gates**: `.qult/gates.json` exists and has at least one gate in `on_write` or `on_commit`
-3. **Rules**: `Project/.claude/rules/qult.md` exists with MCP tool invocation rules
-4. **MCP server**: Call `mcp__qult__get_gate_config()` to verify the MCP server is responding
-5. **Pending fixes**: Call `mcp__qult__get_pending_fixes()` to check for stale errors
-6. **Session state**: Call `mcp__qult__get_session_status()` to verify state tracking works
+3. **Rules**: `Project/.claude/rules/qult-gates.md` exists with MCP tool invocation rules
+4. **MCP server**: Call `mcp__plugin_qult_qult__get_gate_config()` to verify the MCP server is responding
+5. **Pending fixes**: Call `mcp__plugin_qult_qult__get_pending_fixes()` to check for stale errors
+6. **Session state**: Call `mcp__plugin_qult_qult__get_session_status()` to verify state tracking works
 
 ## Output format
 
