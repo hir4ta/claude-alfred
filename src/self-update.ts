@@ -6,7 +6,7 @@ import { existsSync, renameSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 
-const REPO = "user/qult";
+const REPO = "hir4ta/qult";
 
 /** Detect current platform in the same format as release artifacts */
 function detectPlatform(): string | null {

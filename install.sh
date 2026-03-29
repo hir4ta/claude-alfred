@@ -8,7 +8,7 @@
 
 set -eu
 
-REPO="user/qult"
+REPO="hir4ta/qult"
 INSTALL_DIR="${QULT_INSTALL_DIR:-$HOME/.local/bin}"
 
 # --- Platform detection ---
