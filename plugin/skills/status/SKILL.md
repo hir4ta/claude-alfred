@@ -1,5 +1,5 @@
 ---
-name: qult-status
+name: status
 description: Show current qult session status including pending fixes, test/review gates, and changed files.
 user_invocable: true
 ---

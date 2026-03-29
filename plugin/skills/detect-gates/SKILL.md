@@ -1,5 +1,5 @@
 ---
-name: qult-detect-gates
+name: detect-gates
 description: >
   Detect project lint/typecheck/test/e2e tools and write .qult/gates.json.
   Use when gates are empty, after changing toolchain, or when prompted by qult hooks.

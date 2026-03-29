@@ -1,5 +1,5 @@
 ---
-name: qult-init
+name: init
 description: Set up qult quality gates for the current project. Creates .qult/ directory, detects gates, and places rules files.
 user_invocable: true
 ---

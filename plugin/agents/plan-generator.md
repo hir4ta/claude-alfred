@@ -1,5 +1,5 @@
 ---
-name: qult-plan-generator
+name: plan-generator
 description: "Independent plan generator. Analyzes codebase and expands brief feature descriptions into structured implementation plans. Use when /qult:plan-generator is invoked."
 model: opus
 allowed-tools:

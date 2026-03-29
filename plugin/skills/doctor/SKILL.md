@@ -1,5 +1,5 @@
 ---
-name: qult-doctor
+name: doctor
 description: Check qult health for the current project. Verifies state files, gates, rules, and MCP server connectivity.
 user_invocable: true
 ---

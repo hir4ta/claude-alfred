@@ -1,6 +1,6 @@
 ---
-name: qult-review
-description: "Independent code review using a separate evaluator agent (HubSpot 2-stage pattern). Spawns qult-reviewer to find issues, then filters findings by Succinctness/Accuracy/Actionability. Use when completing a milestone, before a major commit, or as a review gate in a plan. NOT for trivial changes (typo, rename, log line)."
+name: review
+description: "Independent code review using a separate evaluator agent (HubSpot 2-stage pattern). Spawns reviewer to find issues, then filters findings by Succinctness/Accuracy/Actionability. Use when completing a milestone, before a major commit, or as a review gate in a plan. NOT for trivial changes (typo, rename, log line)."
 ---
 
 # /qult:review
@@ -40,7 +40,7 @@ If an active plan exists in `.claude/plans/`, extract acceptance criteria to pas
 
 ## Stage 1: Reviewer (independent evaluator)
 
-Spawn one `qult-reviewer` agent. The reviewer has `Bash(git diff *)` in its allowed-tools and will retrieve the diff itself — do NOT run `git diff` beforehand and pass the output.
+Spawn one `reviewer` agent. The reviewer has `Bash(git diff *)` in its allowed-tools and will retrieve the diff itself — do NOT run `git diff` beforehand and pass the output.
 
 In the agent prompt, include only:
 - The on_review gate results from Stage 0 (if any)
@@ -66,7 +66,7 @@ SubagentStop blocks with the current score and iteration count.
 
 When blocked:
 1. Fix the weakest dimension(s) identified by findings
-2. Re-spawn `qult-reviewer` on the updated diff
+2. Re-spawn `reviewer` on the updated diff
 3. Re-apply Judge filter on new findings
 
 Maximum 3 iterations. After max iterations, the review proceeds regardless.

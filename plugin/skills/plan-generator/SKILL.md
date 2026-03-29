@@ -1,6 +1,6 @@
 ---
-name: qult-plan-generator
-description: "Generate a structured plan from a feature description. Spawns qult-plan-generator agent to analyze the codebase and produce a task-by-task plan. Use when starting new work or to expand a brief description into a detailed plan. NOT for modifying existing plans."
+name: plan-generator
+description: "Generate a structured plan from a feature description. Spawns plan-generator agent to analyze the codebase and produce a task-by-task plan. Use when starting new work or to expand a brief description into a detailed plan. NOT for modifying existing plans."
 ---
 
 # /qult:plan-generator
@@ -9,7 +9,7 @@ Generate a structured implementation plan from a brief feature description.
 
 ## Stage 1: Plan generation (independent agent)
 
-Spawn one `qult-plan-generator` agent with the user's feature description: `$ARGUMENTS`
+Spawn one `plan-generator` agent with the user's feature description: `$ARGUMENTS`
 
 The agent analyzes the codebase independently and outputs a complete plan in markdown format.
 
@@ -21,7 +21,7 @@ Use format: `plan-YYYYMMDD-HHMMSS.md` for the filename.
 
 ## Stage 3: Plan evaluation (independent agent)
 
-Spawn one `qult-plan-evaluator` agent with the plan file path from Stage 2.
+Spawn one `plan-evaluator` agent with the plan file path from Stage 2.
 
 The evaluator reads the plan file and scores it on three dimensions:
 - **Feasibility**: Can Claude Code execute each task as described?

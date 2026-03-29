@@ -1,5 +1,5 @@
 ---
-name: qult-reviewer
+name: reviewer
 description: "Independent code evaluator. Reviews diffs for correctness, design, and security issues. Returns structured findings — filtering is done by the Judge (skill), not by you. Use when /qult:review is invoked or as a review gate before commit."
 model: opus
 allowed-tools:
