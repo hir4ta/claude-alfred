@@ -70,19 +70,9 @@ Monitor:
 2. `gh run watch <run-id>` — watch until completion
 3. If CI fails → fix the issue, delete the tag (`git tag -d v<VERSION> && git push origin :refs/tags/v<VERSION>`), and re-release
 
-## Post-Release: Build & Install
+## Post-Release
 
-After CI succeeds, rebuild and install locally:
-
-```
-bun build.ts
-qult init --force
-qult doctor
-```
-
-All 3 commands must succeed. `qult doctor` must show all `[OK]`.
-
-Note: `bun link` is NOT used — users install via `curl` (standalone binary). `bun link` creates a symlink in `~/.bun/bin/` that shadows the curl-installed binary.
+No local steps needed. Users update via `qult self-update` (which runs `init --force` automatically).
 
 ## Verify Release
 
