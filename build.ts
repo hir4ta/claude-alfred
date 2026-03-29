@@ -2,7 +2,7 @@
  * Build script — Bun.build() for plugin bundles
  *
  * Usage:
- *   bun build.ts    # Bundle hook.mjs + mcp-server.mjs to dist/
+ *   bun build.ts    # Bundle hook.mjs + mcp-server.mjs to plugin/dist/
  */
 export type {};
 
@@ -12,7 +12,7 @@ const version = pkg.version ?? "dev";
 // Build hook entry (plugin: node dist/hook.mjs <event>)
 const hookResult = await Bun.build({
 	entrypoints: ["./src/hook-entry.ts"],
-	outdir: "./dist",
+	outdir: "./plugin/dist",
 	target: "node",
 	minify: false,
 	naming: "hook.mjs",
@@ -29,7 +29,7 @@ if (!hookResult.success) {
 // Build MCP server (plugin: node dist/mcp-server.mjs)
 const mcpResult = await Bun.build({
 	entrypoints: ["./src/mcp-server.ts"],
-	outdir: "./dist",
+	outdir: "./plugin/dist",
 	target: "node",
 	minify: false,
 	naming: "mcp-server.mjs",
@@ -44,4 +44,4 @@ if (!mcpResult.success) {
 }
 
 const total = hookResult.outputs.length + mcpResult.outputs.length;
-console.log(`Built ${total} file(s) to dist/`);
+console.log(`Built ${total} file(s) to plugin/dist/`);
