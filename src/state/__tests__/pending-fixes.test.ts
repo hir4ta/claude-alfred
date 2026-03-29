@@ -2,7 +2,12 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resetAllCaches } from "../flush.ts";
-import { readPendingFixes, writePendingFixes } from "../pending-fixes.ts";
+import {
+	addPendingFixes,
+	clearPendingFixesForFile,
+	readPendingFixes,
+	writePendingFixes,
+} from "../pending-fixes.ts";
 
 const TEST_DIR = join(import.meta.dirname, ".tmp-pf-test");
 const STATE_DIR = join(TEST_DIR, ".qult", ".state");
@@ -65,5 +70,60 @@ describe("writePendingFixes", () => {
 		expect(result).toHaveLength(2);
 		expect(result.map((f) => f.file)).toContain("a.ts");
 		expect(result.map((f) => f.file)).toContain("b.ts");
+	});
+});
+
+describe("addPendingFixes", () => {
+	it("appends without dropping fixes for other files", () => {
+		writePendingFixes([{ file: "a.ts", errors: ["err1"], gate: "lint" }]);
+
+		addPendingFixes("b.ts", [{ file: "b.ts", errors: ["err2"], gate: "typecheck" }]);
+
+		const result = readPendingFixes();
+		expect(result).toHaveLength(2);
+		expect(result.map((f) => f.file)).toContain("a.ts");
+		expect(result.map((f) => f.file)).toContain("b.ts");
+	});
+
+	it("replaces fixes for the same file", () => {
+		writePendingFixes([{ file: "a.ts", errors: ["old error"], gate: "lint" }]);
+
+		addPendingFixes("a.ts", [{ file: "a.ts", errors: ["new error"], gate: "lint" }]);
+
+		const result = readPendingFixes();
+		expect(result).toHaveLength(1);
+		expect(result[0]!.errors[0]).toBe("new error");
+	});
+
+	it("adds to empty state", () => {
+		addPendingFixes("a.ts", [{ file: "a.ts", errors: ["err"], gate: "lint" }]);
+
+		const result = readPendingFixes();
+		expect(result).toHaveLength(1);
+		expect(result[0]!.file).toBe("a.ts");
+	});
+});
+
+describe("clearPendingFixesForFile", () => {
+	it("removes only fixes for specified file", () => {
+		writePendingFixes([
+			{ file: "a.ts", errors: ["err1"], gate: "lint" },
+			{ file: "b.ts", errors: ["err2"], gate: "typecheck" },
+		]);
+
+		clearPendingFixesForFile("a.ts");
+
+		const result = readPendingFixes();
+		expect(result).toHaveLength(1);
+		expect(result[0]!.file).toBe("b.ts");
+	});
+
+	it("is a no-op for non-existent file", () => {
+		writePendingFixes([{ file: "a.ts", errors: ["err1"], gate: "lint" }]);
+
+		clearPendingFixesForFile("nonexistent.ts");
+
+		const result = readPendingFixes();
+		expect(result).toHaveLength(1);
 	});
 });

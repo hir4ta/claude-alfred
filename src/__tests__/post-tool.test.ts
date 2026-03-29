@@ -128,6 +128,79 @@ describe("postTool: non-gated extension skip", () => {
 	});
 });
 
+describe("postTool: test command detection from gates", () => {
+	it("detects custom test command from on_commit gate", async () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_commit: { test: { command: "npm run test:integration", timeout: 30000 } },
+			}),
+		);
+
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		await postTool({
+			tool_name: "Bash",
+			tool_input: { command: "npm run test:integration" },
+			tool_response: { stdout: "All tests passed", stderr: "" },
+		});
+
+		const { readLastTestPass } = await import("../state/session-state.ts");
+		expect(readLastTestPass()).toBeTruthy();
+	});
+
+	it("detects test when bash command contains gate command", async () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_commit: { test: { command: "bun vitest run", timeout: 30000 } },
+			}),
+		);
+
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		await postTool({
+			tool_name: "Bash",
+			tool_input: { command: "bun vitest run --reporter=verbose" },
+			tool_response: { stdout: "Tests passed", stderr: "" },
+		});
+
+		const { readLastTestPass } = await import("../state/session-state.ts");
+		expect(readLastTestPass()).toBeTruthy();
+	});
+
+	it("falls back to TEST_CMD_RE when no on_commit gates", async () => {
+		// No gates.json at all
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		await postTool({
+			tool_name: "Bash",
+			tool_input: { command: "bun vitest run" },
+			tool_response: { stdout: "Tests passed", stderr: "" },
+		});
+
+		const { readLastTestPass } = await import("../state/session-state.ts");
+		expect(readLastTestPass()).toBeTruthy();
+	});
+
+	it("does not fallback to regex when on_commit gates exist but command differs", async () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_commit: { test: { command: "npm run test:integration", timeout: 30000 } },
+			}),
+		);
+
+		const postTool = (await import("../hooks/post-tool.ts")).default;
+		// "vitest" would match TEST_CMD_RE, but should NOT match since on_commit has a different command
+		await postTool({
+			tool_name: "Bash",
+			tool_input: { command: "bun vitest run" },
+			tool_response: { stdout: "Tests passed", stderr: "" },
+		});
+
+		const { readLastTestPass } = await import("../state/session-state.ts");
+		expect(readLastTestPass()).toBeFalsy();
+	});
+});
+
 describe("postTool: Bash handling", () => {
 	it("clears state on git commit", async () => {
 		writeFileSync(

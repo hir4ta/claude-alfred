@@ -26,10 +26,11 @@ export default async function taskCompleted(ev: HookEvent): Promise<void> {
 	const plan = getActivePlan();
 	if (!plan) return;
 
-	// Match task: prefer exact match, then fall back to substring containment
-	const task =
-		plan.tasks.find((t) => t.name === subject) ??
-		plan.tasks.find((t) => subject.includes(t.name) || t.name.includes(subject));
+	// Match task: prefer task number, then exact name match (no substring fallback)
+	const taskNumMatch = subject.match(/\bTask\s+(\d+)\b/i);
+	const task = taskNumMatch
+		? plan.tasks.find((t) => t.taskNumber === Number(taskNumMatch[1]))
+		: plan.tasks.find((t) => t.name === subject);
 	if (!task?.verify) return;
 
 	const parsed = parseVerifyField(task.verify);

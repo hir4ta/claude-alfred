@@ -124,16 +124,22 @@ const TOOL_EXTS: [RegExp, string[]][] = [
 	[/\bcargo\s+(clippy|check)\b/, [".rs"]],
 ];
 
-/** Get file extensions covered by on_write gates */
+/** Get file extensions covered by on_write gates.
+ *  If a gate defines `extensions`, those are used directly.
+ *  Otherwise, falls back to TOOL_EXTS heuristic. */
 export function getGatedExtensions(): Set<string> {
 	const gates = loadGates();
 	if (!gates?.on_write) return new Set();
 
 	const exts = new Set<string>();
 	for (const gate of Object.values(gates.on_write)) {
-		for (const [pattern, extensions] of TOOL_EXTS) {
-			if (pattern.test(gate.command)) {
-				for (const ext of extensions) exts.add(ext);
+		if (gate.extensions && gate.extensions.length > 0) {
+			for (const ext of gate.extensions) exts.add(ext);
+		} else {
+			for (const [pattern, extensions] of TOOL_EXTS) {
+				if (pattern.test(gate.command)) {
+					for (const ext of extensions) exts.add(ext);
+				}
 			}
 		}
 	}

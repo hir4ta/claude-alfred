@@ -1,7 +1,12 @@
 import { extname, resolve } from "node:path";
 import { loadGates } from "../gates/load.ts";
 import { runGate } from "../gates/runner.ts";
-import { readPendingFixes, writePendingFixes } from "../state/pending-fixes.ts";
+import {
+	addPendingFixes,
+	clearPendingFixesForFile,
+	readPendingFixes,
+	writePendingFixes,
+} from "../state/pending-fixes.ts";
 import {
 	clearOnCommit,
 	getGatedExtensions,
@@ -10,10 +15,25 @@ import {
 	recordTestPass,
 	shouldSkipGate,
 } from "../state/session-state.ts";
-import type { HookEvent, PendingFix } from "../types.ts";
+import type { GatesConfig, HookEvent, PendingFix } from "../types.ts";
 import { respond } from "./respond.ts";
 
+/** Fallback regex for test command detection when no on_commit gates configured */
 const TEST_CMD_RE = /\b(vitest|jest|mocha|pytest|go\s+test|cargo\s+test)\b/;
+
+/** Check if a bash command matches an on_commit gate command.
+ *  Falls back to TEST_CMD_RE only when no on_commit gates are configured. */
+function isTestCommand(command: string, gates: GatesConfig | null): boolean {
+	if (gates?.on_commit) {
+		for (const gate of Object.values(gates.on_commit)) {
+			if (command.includes(gate.command)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	return TEST_CMD_RE.test(command);
+}
 
 /** PostToolUse: lint/type gate after Edit/Write, test gate after git commit */
 export default async function postTool(ev: HookEvent): Promise<void> {
@@ -43,9 +63,6 @@ function handleEditWrite(ev: HookEvent): void {
 	const fileExt = extname(file).toLowerCase();
 	const gatedExts = getGatedExtensions();
 
-	// Read existing fixes once — compute both "other files" and "had fixes for this file"
-	const before = readPendingFixes();
-	const existingFixes = before.filter((f) => f.file !== file);
 	const newFixes: PendingFix[] = [];
 	const messages: string[] = [];
 
@@ -79,7 +96,11 @@ function handleEditWrite(ev: HookEvent): void {
 		}
 	}
 
-	writePendingFixes([...existingFixes, ...newFixes]);
+	if (newFixes.length > 0) {
+		addPendingFixes(file, newFixes);
+	} else {
+		clearPendingFixesForFile(file);
+	}
 
 	// Record changed file path for gated-file review threshold
 	try {
@@ -131,8 +152,9 @@ function handleBash(ev: HookEvent): void {
 		revalidatePendingFixes();
 	}
 
-	// Detect test command → record pass
-	if (TEST_CMD_RE.test(command)) {
+	// Detect test command → record pass (gates-aware, falls back to regex)
+	const gates = loadGates();
+	if (isTestCommand(command, gates)) {
 		const output = getToolOutput(ev);
 		const exitCodeMatch = output.match(/exit code (\d+)/i) ?? output.match(/exited with (\d+)/i);
 		const isError = exitCodeMatch ? Number(exitCodeMatch[1]) !== 0 : false;

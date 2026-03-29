@@ -4,11 +4,12 @@ import { join } from "node:path";
 export interface PlanTask {
 	name: string;
 	status: "done" | "pending" | "in-progress";
+	taskNumber?: number;
 	verify?: string;
 }
 
 // ### Task N: <name> [status]
-export const TASK_RE = /^###\s+Task\s+\d+:\s*(.+?)(?:\s*\[(done|pending|in-progress)\])?\s*$/;
+export const TASK_RE = /^###\s+Task\s+(\d+):\s*(.+?)(?:\s*\[(done|pending|in-progress)\])?\s*$/;
 
 // - [x] or - [ ] checkbox (Review Gates)
 const CHECKBOX_RE = /^-\s+\[([ xX])\]\s*(.+)$/;
@@ -25,8 +26,9 @@ export function parsePlanTasks(content: string): PlanTask[] {
 		// Match task headers: ### Task N: name [status]
 		const taskMatch = trimmed.match(TASK_RE);
 		if (taskMatch) {
-			const name = taskMatch[1]!.trim();
-			const status = (taskMatch[2] as PlanTask["status"]) ?? "pending";
+			const taskNumber = Number(taskMatch[1]);
+			const name = taskMatch[2]!.trim();
+			const status = (taskMatch[3] as PlanTask["status"]) ?? "pending";
 			// Look ahead for **Verify** field in the task block
 			let verify: string | undefined;
 			for (let j = i + 1; j < lines.length; j++) {
@@ -39,7 +41,7 @@ export function parsePlanTasks(content: string): PlanTask[] {
 					break;
 				}
 			}
-			tasks.push({ name, status, verify });
+			tasks.push({ name, status, taskNumber, verify });
 			continue;
 		}
 

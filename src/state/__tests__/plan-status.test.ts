@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parsePlanTasks } from "../plan-status.ts";
 
 describe("parsePlanTasks", () => {
-	it("parses tasks with status markers", () => {
+	it("parses tasks with status markers and taskNumber", () => {
 		const plan = `## Context
 Adding auth feature
 
@@ -22,11 +22,24 @@ Adding auth feature
 
 		const tasks = parsePlanTasks(plan);
 		expect(tasks).toHaveLength(5); // 3 tasks + 2 review gates
-		expect(tasks[0]).toEqual({ name: "Add middleware", status: "done" });
-		expect(tasks[1]).toEqual({ name: "Add routes", status: "pending" });
-		expect(tasks[2]).toEqual({ name: "Update config", status: "in-progress" });
+		expect(tasks[0]).toEqual({ name: "Add middleware", status: "done", taskNumber: 1 });
+		expect(tasks[1]).toEqual({ name: "Add routes", status: "pending", taskNumber: 2 });
+		expect(tasks[2]).toEqual({ name: "Update config", status: "in-progress", taskNumber: 3 });
 		expect(tasks[3]).toEqual({ name: "Design Review", status: "done" });
 		expect(tasks[4]).toEqual({ name: "Final Review", status: "pending" });
+	});
+
+	it("populates taskNumber from header", () => {
+		const plan = `## Tasks
+### Task 5: Fix bug [pending]
+- **File**: src/fix.ts
+### Task 12: Add feature [done]
+- **File**: src/feature.ts`;
+
+		const tasks = parsePlanTasks(plan);
+		expect(tasks).toHaveLength(2);
+		expect(tasks[0]!.taskNumber).toBe(5);
+		expect(tasks[1]!.taskNumber).toBe(12);
 	});
 
 	it("defaults to pending when no status marker", () => {
@@ -36,7 +49,7 @@ Adding auth feature
 
 		const tasks = parsePlanTasks(plan);
 		expect(tasks).toHaveLength(1);
-		expect(tasks[0]).toEqual({ name: "Add helper", status: "pending" });
+		expect(tasks[0]).toEqual({ name: "Add helper", status: "pending", taskNumber: 1 });
 	});
 
 	it("returns empty for plan without tasks", () => {

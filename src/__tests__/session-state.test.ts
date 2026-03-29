@@ -5,6 +5,7 @@ import { resetAllCaches } from "../state/flush.ts";
 import {
 	clearOnCommit,
 	countGatedFiles,
+	getGatedExtensions,
 	isReviewRequired,
 	markGateRan,
 	readSessionState,
@@ -159,6 +160,61 @@ describe("session-state: countGatedFiles", () => {
 		recordChangedFile("/project/src/app.ts");
 		recordChangedFile("/project/src/app.ts");
 		expect(countGatedFiles()).toBe(1);
+	});
+});
+
+describe("session-state: getGatedExtensions with gate.extensions", () => {
+	it("uses gate extensions when provided", () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_write: {
+					lint: {
+						command: "biome check {file}",
+						extensions: [".ts", ".tsx", ".vue"],
+					},
+				},
+			}),
+		);
+		const exts = getGatedExtensions();
+		expect(exts.has(".ts")).toBe(true);
+		expect(exts.has(".vue")).toBe(true);
+		// .css would come from TOOL_EXTS fallback for biome, but gate.extensions overrides
+		expect(exts.has(".css")).toBe(false);
+	});
+
+	it("falls back to TOOL_EXTS when extensions not provided", () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_write: { lint: { command: "biome check {file}" } },
+			}),
+		);
+		const exts = getGatedExtensions();
+		expect(exts.has(".ts")).toBe(true);
+		expect(exts.has(".tsx")).toBe(true);
+		expect(exts.has(".css")).toBe(true);
+	});
+
+	it("combines gate.extensions and TOOL_EXTS fallback across gates", () => {
+		writeFileSync(
+			join(TEST_DIR, ".qult", "gates.json"),
+			JSON.stringify({
+				on_write: {
+					lint: {
+						command: "biome check {file}",
+						extensions: [".ts", ".vue"],
+					},
+					typecheck: { command: "tsc --noEmit" },
+				},
+			}),
+		);
+		const exts = getGatedExtensions();
+		// lint gate: explicit .ts, .vue
+		expect(exts.has(".vue")).toBe(true);
+		// typecheck gate: TOOL_EXTS fallback for tsc
+		expect(exts.has(".tsx")).toBe(true);
+		expect(exts.has(".mts")).toBe(true);
 	});
 });
 

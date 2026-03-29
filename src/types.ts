@@ -77,4 +77,5 @@ export interface GateDefinition {
 	command: string;
 	timeout?: number;
 	run_once_per_batch?: boolean;
+	extensions?: string[];
 }

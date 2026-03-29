@@ -47,6 +47,21 @@ export function writePendingFixes(fixes: PendingFix[]): void {
 	_dirty = true;
 }
 
+/** Add pending fixes for a file, replacing any existing fixes for that file. */
+export function addPendingFixes(file: string, newFixes: PendingFix[]): void {
+	const existing = readPendingFixes().filter((f) => f.file !== file);
+	writePendingFixes([...existing, ...newFixes]);
+}
+
+/** Remove all pending fixes for a specific file. */
+export function clearPendingFixesForFile(file: string): void {
+	const current = readPendingFixes();
+	const remaining = current.filter((f) => f.file !== file);
+	if (remaining.length !== current.length) {
+		writePendingFixes(remaining);
+	}
+}
+
 /** Flush cached fixes to disk if dirty. */
 export function flush(): void {
 	if (!_dirty || !_cache) return;
