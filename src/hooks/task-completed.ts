@@ -1,0 +1,85 @@
+import { execSync } from "node:child_process";
+import { loadGates } from "../gates/load.ts";
+import { getActivePlan, parseVerifyField } from "../state/plan-status.ts";
+import type { HookEvent } from "../types.ts";
+import { respond } from "./respond.ts";
+
+const TEST_RUNNER_RE: [RegExp, (file: string, testName: string) => string][] = [
+	[/\bvitest\b/, (f, t) => `vitest run ${f} -t "${t}"`],
+	[/\bjest\b/, (f, t) => `jest ${f} -t "${t}"`],
+	[/\bpytest\b/, (f, t) => `pytest ${f} -k "${t}"`],
+	[/\bgo\s+test\b/, (f, _t) => `go test ./${f}`],
+	[/\bcargo\s+test\b/, (_f, t) => `cargo test ${t}`],
+	[/\bmocha\b/, (f, t) => `mocha ${f} --grep "${t}"`],
+];
+
+const VERIFY_TIMEOUT = 15_000;
+
+/** Only allow safe characters in shell arguments (alphanumeric, path separators, dots, hyphens, underscores). */
+const SAFE_SHELL_ARG_RE = /^[a-zA-Z0-9_/.\-:]+$/;
+
+/** TaskCompleted: verify plan task's Verify field by running the specified test. */
+export default async function taskCompleted(ev: HookEvent): Promise<void> {
+	const subject = ev.task_subject;
+	if (!subject) return;
+
+	const plan = getActivePlan();
+	if (!plan) return;
+
+	// Match task: prefer exact match, then fall back to substring containment
+	const task =
+		plan.tasks.find((t) => t.name === subject) ??
+		plan.tasks.find((t) => subject.includes(t.name) || t.name.includes(subject));
+	if (!task?.verify) return;
+
+	const parsed = parseVerifyField(task.verify);
+	if (!parsed) return;
+
+	// Reject arguments containing shell metacharacters
+	if (!SAFE_SHELL_ARG_RE.test(parsed.file) || !SAFE_SHELL_ARG_RE.test(parsed.testName)) return;
+
+	// Detect test runner from on_commit gates
+	const cmdBuilder = detectTestRunner();
+	if (!cmdBuilder) return; // fail-open: no test runner detected
+
+	const command = cmdBuilder(parsed.file, parsed.testName);
+
+	try {
+		execSync(command, {
+			cwd: process.cwd(),
+			timeout: VERIFY_TIMEOUT,
+			stdio: ["ignore", "pipe", "pipe"],
+			env: {
+				...process.env,
+				PATH: `${process.cwd()}/node_modules/.bin:${process.env.PATH}`,
+			},
+			encoding: "utf-8",
+		});
+		respond(`Task verified: ${task.name} — ${parsed.testName} passed.`);
+	} catch (err: unknown) {
+		const e = err as { stdout?: string; stderr?: string };
+		const output = ((e.stdout ?? "") + (e.stderr ?? "")).slice(0, 300);
+		respond(
+			`Task verification failed: ${task.name} — ${parsed.testName}. Fix before moving to next task.\n${output}`,
+		);
+	}
+}
+
+/** Detect test runner from on_commit gate commands. Returns command builder or null. */
+function detectTestRunner(): ((file: string, testName: string) => string) | null {
+	try {
+		const gates = loadGates();
+		if (!gates?.on_commit) return null;
+
+		for (const gate of Object.values(gates.on_commit)) {
+			for (const [pattern, builder] of TEST_RUNNER_RE) {
+				if (pattern.test(gate.command)) {
+					return builder;
+				}
+			}
+		}
+	} catch {
+		// fail-open
+	}
+	return null;
+}

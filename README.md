@@ -1,14 +1,14 @@
 # qult
 
-![Version](https://img.shields.io/badge/version-0.14.4-7fbbb3?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.15.0-7fbbb3?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Bun_1.3+-a7c080?style=flat-square&logo=typescript&logoColor=d3c6aa)
-![Hooks](https://img.shields.io/badge/hooks-5-dbbc7f?style=flat-square)
+![Hooks](https://img.shields.io/badge/hooks-6-dbbc7f?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-83c092?style=flat-square)
 
 **Claude の悪い癖を物理的に止める。** コードの品質を構造で守る evaluator harness。
 
 > Claude は優秀だが、lint エラーを放置して次のファイルに行く。テストなしでコミットする。自分のコードを褒めてレビューを終える。
-> qult は 5 hooks + 独立 Opus evaluator で、それを **お願い (advisory) ではなく exit 2 (DENY) で止める**。
+> qult は 6 hooks + 独立 Opus evaluator で、それを **お願い (advisory) ではなく exit 2 (DENY) で止める**。
 
 > [!NOTE]
 > セッション開始時に `SessionStart:startup hook error` や `Stop hook error` と表示されることがありますが、**これは qult のバグではありません**。
@@ -45,19 +45,23 @@ Anthropic の [Harness Design](https://www.anthropic.com/engineering/harness-des
 ```mermaid
 flowchart TB
     subgraph Generator["Generator"]
-        Claude["Claude 本体\n+ 5 hooks で品質ゲート"]
+        Claude["Claude 本体\n+ 6 hooks で品質ゲート"]
     end
     subgraph Evaluator["Evaluator"]
         Rev["/qult:review\n(Opus)"]
     end
 
-    Claude -- "コード" --> Rev
-    Rev -- "FAIL → 修正" --> Claude
+    Claude -- "タスク完了" --> TV["TaskCompleted\nVerify 即時実行"]
+    TV -- "FAIL → 即修正" --> Claude
+    TV -- "PASS" --> Claude
+    Claude -- "全タスク完了" --> Rev
+    Rev -- "FAIL / score < 12\n傾向分析付き block" --> Claude
     Rev -- "PASS + score ≥ 12/15" --> Done["Commit"]
 
     style Generator fill:#7fbbb3,color:#2d353b,stroke:#7fbbb3
     style Evaluator fill:#e69875,color:#2d353b,stroke:#e69875
     style Done fill:#a7c080,color:#2d353b,stroke:#a7c080
+    style TV fill:#dbbc7f,color:#2d353b,stroke:#dbbc7f
 ```
 
 ---
@@ -69,19 +73,21 @@ flowchart TB
 | lint/type エラーを放置して別ファイルへ | **DENY** — 修正するまでブロック |
 | テスト未実行で git commit | **DENY** — テスト pass を要求 |
 | レビュー未実行/FAIL で完了宣言 | **block** — /qult:review を要求 |
-| レビュー PASS だがスコア低い | **block** — 再レビュー (最大3回反復) |
+| レビュー PASS だがスコア低い | **block** — 傾向分析付きで再レビュー (最大3回) |
 | Plan の途中で完了宣言 | **block** — 全タスク完了を要求 |
+| Plan タスク完了時 | **verify** — Verify フィールドのテストを即時実行 |
 
 ---
 
-## 5 Hooks
+## 6 Hooks
 
 | 分類 | Hook | 役割 |
 |------|------|------|
 | **壁** (enforcement) | PostToolUse | Edit/Write 後に lint/type gate 実行、pending-fixes 作成 |
 | **壁** (enforcement) | PreToolUse | pending-fixes 未修正なら DENY、commit 前にテスト/レビュー要求 |
 | **完了ゲート** (enforcement) | Stop | 未修正エラー・未完了タスク・レビュー未実施なら block |
-| **サブエージェント** (enforcement) | SubagentStop | レビュー出力検証 + スコア閾値強制 (12/15) |
+| **サブエージェント** (enforcement) | SubagentStop | レビュー出力検証 + 傾向分析付きスコア閾値強制 (12/15) |
+| **タスク検証** (advisory) | TaskCompleted | Plan タスク完了時に Verify テストを即時実行 |
 | **セットアップ** (advisory) | SessionStart | `.qult/` 初期化、gate 未設定なら検出を促す |
 
 ---
@@ -91,7 +97,7 @@ flowchart TB
 ```bash
 bun install && bun build.ts && bun link
 
-qult init       # ~/.claude/ に 5 hooks + skill + agent + rules を配置
+qult init       # ~/.claude/ に 6 hooks + skill + agent + rules を配置
 qult doctor     # セットアップの健全性を確認
 ```
 

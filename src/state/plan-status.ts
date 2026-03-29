@@ -4,6 +4,7 @@ import { join } from "node:path";
 export interface PlanTask {
 	name: string;
 	status: "done" | "pending" | "in-progress";
+	verify?: string;
 }
 
 // ### Task N: <name> [status]
@@ -11,20 +12,34 @@ export const TASK_RE = /^###\s+Task\s+\d+:\s*(.+?)(?:\s*\[(done|pending|in-progr
 
 // - [x] or - [ ] checkbox (Review Gates)
 const CHECKBOX_RE = /^-\s+\[([ xX])\]\s*(.+)$/;
+const VERIFY_LINE_RE = /^\s*-\s*\*\*Verify\*\*:\s*(.+)$/;
 
 /** Parse tasks and review gates from a plan markdown string */
 export function parsePlanTasks(content: string): PlanTask[] {
 	const tasks: PlanTask[] = [];
+	const lines = content.split("\n");
 
-	for (const line of content.split("\n")) {
-		const trimmed = line.trim();
+	for (let i = 0; i < lines.length; i++) {
+		const trimmed = lines[i]!.trim();
 
 		// Match task headers: ### Task N: name [status]
 		const taskMatch = trimmed.match(TASK_RE);
 		if (taskMatch) {
 			const name = taskMatch[1]!.trim();
 			const status = (taskMatch[2] as PlanTask["status"]) ?? "pending";
-			tasks.push({ name, status });
+			// Look ahead for **Verify** field in the task block
+			let verify: string | undefined;
+			for (let j = i + 1; j < lines.length; j++) {
+				const nextTrimmed = lines[j]!.trim();
+				// Stop at next task header or section header
+				if (/^###?\s/.test(nextTrimmed)) break;
+				const verifyMatch = nextTrimmed.match(VERIFY_LINE_RE);
+				if (verifyMatch) {
+					verify = verifyMatch[1]!.trim();
+					break;
+				}
+			}
+			tasks.push({ name, status, verify });
 			continue;
 		}
 
@@ -38,6 +53,17 @@ export function parsePlanTasks(content: string): PlanTask[] {
 	}
 
 	return tasks;
+}
+
+/** Parse a Verify field value into file and test name.
+ *  Format: "src/__tests__/foo.test.ts:testFoo" → { file, testName } */
+export function parseVerifyField(verify: string): { file: string; testName: string } | null {
+	const colonIdx = verify.lastIndexOf(":");
+	if (colonIdx <= 0) return null;
+	const file = verify.slice(0, colonIdx).trim();
+	const testName = verify.slice(colonIdx + 1).trim();
+	if (!file || !testName) return null;
+	return { file, testName };
 }
 
 /** Get the path of the latest plan file (by mtime). Returns null if none found. */

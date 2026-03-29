@@ -14,6 +14,7 @@ export const HOOK_CLASS: Record<string, "enforcement" | "advisory"> = {
 	stop: "enforcement", // block: pending-fixes, incomplete plan, no review
 	"subagent-stop": "enforcement", // block: incomplete reviewer output
 	"session-start": "advisory", // respond: gate detection prompt
+	"task-completed": "advisory", // respond: plan task Verify execution
 };
 
 const EVENT_MAP: Record<string, () => Promise<{ default: (ev: HookEvent) => Promise<void> }>> = {
@@ -22,6 +23,7 @@ const EVENT_MAP: Record<string, () => Promise<{ default: (ev: HookEvent) => Prom
 	"session-start": () => import("./session-start.ts"),
 	stop: () => import("./stop.ts"),
 	"subagent-stop": () => import("./subagent-stop.ts"),
+	"task-completed": () => import("./task-completed.ts"),
 };
 
 export async function dispatch(event: string): Promise<void> {

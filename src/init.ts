@@ -80,6 +80,12 @@ export const QULT_HOOKS: Record<
 			hooks: [{ type: "command", command: "qult hook subagent-stop", timeout: 5000 }],
 		},
 	],
+	TaskCompleted: [
+		{
+			matcher: "",
+			hooks: [{ type: "command", command: "qult hook task-completed", timeout: 15000 }],
+		},
+	],
 };
 
 export async function runInit(force: boolean): Promise<void> {

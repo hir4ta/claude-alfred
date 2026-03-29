@@ -29,13 +29,14 @@ bun run test     # vitest run
 - `bun build.ts` → `dist/cli.mjs`、`bun build.ts --compile` → シングルバイナリ
 - **dependencies ゼロ** — 全て devDependencies + bun build バンドル
 
-### Hook 設計 (5 hooks)
+### Hook 設計 (6 hooks)
 - 全 hook は fail-open (try-catch で握りつぶす)
 - exit 2 = DENY/block (唯一の強制手段)。stderr にも理由を出力
 - PostToolUse 検出 → PreToolUse ブロックの二段構え
+- TaskCompleted で Plan タスクの Verify テストを即時実行
 - 全 state file 書き込みは atomic write (write-to-temp + rename)
 - **出力スキーマ対応表** (hooks docs 準拠):
-  - respond(): SessionStart, PostToolUse
+  - respond(): SessionStart, PostToolUse, TaskCompleted
   - deny(): PreToolUse
   - block(): Stop, SubagentStop
 

@@ -2,14 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { HOOK_CLASS } from "../dispatcher.ts";
 
 describe("HOOK_CLASS", () => {
-	it("has entries for all 5 hook events", () => {
+	it("has entries for all 6 hook events", () => {
 		const events = Object.keys(HOOK_CLASS);
-		expect(events).toHaveLength(5);
+		expect(events).toHaveLength(6);
 		expect(events).toContain("pre-tool");
 		expect(events).toContain("post-tool");
 		expect(events).toContain("stop");
 		expect(events).toContain("session-start");
 		expect(events).toContain("subagent-stop");
+		expect(events).toContain("task-completed");
 	});
 
 	it("classifies enforcement vs advisory correctly", () => {
@@ -18,6 +19,7 @@ describe("HOOK_CLASS", () => {
 		expect(HOOK_CLASS.stop).toBe("enforcement");
 		expect(HOOK_CLASS["session-start"]).toBe("advisory");
 		expect(HOOK_CLASS["subagent-stop"]).toBe("enforcement");
+		expect(HOOK_CLASS["task-completed"]).toBe("advisory");
 	});
 });
 

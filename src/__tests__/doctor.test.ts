@@ -85,14 +85,14 @@ describe("doctor: check 1 — Bun version", () => {
 });
 
 describe("doctor: check 2 — hooks registered", () => {
-	it("returns ok when all 5 hooks are registered", async () => {
+	it("returns ok when all 6 hooks are registered", async () => {
 		setupValidEnv();
 		const { runChecks } = await import("../doctor.ts");
 		const results = runChecks();
 		const check = findCheck(results, "hooks");
 		expect(check).toBeDefined();
 		expect(check!.status).toBe("ok");
-		expect(check!.message).toContain("5/5");
+		expect(check!.message).toContain("6/6");
 	});
 
 	it("returns fail when hooks are missing", async () => {

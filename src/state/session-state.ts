@@ -28,9 +28,9 @@ export interface SessionState {
 	ran_gates: Record<string, { session_id: string; ran_at: string }>;
 	changed_file_paths: string[];
 	review_iteration: number;
-	review_last_aggregate: number;
+	review_score_history: number[];
 	plan_eval_iteration: number;
-	plan_eval_last_aggregate: number;
+	plan_eval_score_history: number[];
 }
 
 function filePath(): string {
@@ -47,9 +47,9 @@ function defaultState(): SessionState {
 		ran_gates: {},
 		changed_file_paths: [],
 		review_iteration: 0,
-		review_last_aggregate: 0,
+		review_score_history: [],
 		plan_eval_iteration: 0,
-		plan_eval_last_aggregate: 0,
+		plan_eval_score_history: [],
 	};
 }
 
@@ -63,6 +63,21 @@ export function readSessionState(): SessionState {
 			return _cache;
 		}
 		const raw = JSON.parse(readFileSync(path, "utf-8"));
+		// Migrate legacy scalar fields before merge
+		if (
+			!Array.isArray(raw.review_score_history) &&
+			typeof raw.review_last_aggregate === "number" &&
+			raw.review_last_aggregate > 0
+		) {
+			raw.review_score_history = [raw.review_last_aggregate];
+		}
+		if (
+			!Array.isArray(raw.plan_eval_score_history) &&
+			typeof raw.plan_eval_last_aggregate === "number" &&
+			raw.plan_eval_last_aggregate > 0
+		) {
+			raw.plan_eval_score_history = [raw.plan_eval_last_aggregate];
+		}
 		const state = { ...defaultState(), ...raw };
 		_cache = state;
 		return state;
@@ -218,9 +233,9 @@ export function clearOnCommit(): void {
 	state.ran_gates = {};
 	state.changed_file_paths = [];
 	state.review_iteration = 0;
-	state.review_last_aggregate = 0;
+	state.review_score_history = [];
 	state.plan_eval_iteration = 0;
-	state.plan_eval_last_aggregate = 0;
+	state.plan_eval_score_history = [];
 	writeState(state);
 }
 
@@ -235,15 +250,20 @@ export function getReviewIteration(): number {
 export function recordReviewIteration(aggregate: number): void {
 	const state = readSessionState();
 	state.review_iteration = (state.review_iteration ?? 0) + 1;
-	state.review_last_aggregate = aggregate;
+	state.review_score_history.push(aggregate);
 	writeState(state);
+}
+
+/** Get review score history (one entry per iteration). */
+export function getReviewScoreHistory(): number[] {
+	return readSessionState().review_score_history;
 }
 
 /** Reset review iteration state (called on review gate clear). */
 export function resetReviewIteration(): void {
 	const state = readSessionState();
 	state.review_iteration = 0;
-	state.review_last_aggregate = 0;
+	state.review_score_history = [];
 	writeState(state);
 }
 
@@ -258,14 +278,19 @@ export function getPlanEvalIteration(): number {
 export function recordPlanEvalIteration(aggregate: number): void {
 	const state = readSessionState();
 	state.plan_eval_iteration = (state.plan_eval_iteration ?? 0) + 1;
-	state.plan_eval_last_aggregate = aggregate;
+	state.plan_eval_score_history.push(aggregate);
 	writeState(state);
+}
+
+/** Get plan evaluation score history. */
+export function getPlanEvalScoreHistory(): number[] {
+	return readSessionState().plan_eval_score_history;
 }
 
 /** Reset plan evaluation iteration state. */
 export function resetPlanEvalIteration(): void {
 	const state = readSessionState();
 	state.plan_eval_iteration = 0;
-	state.plan_eval_last_aggregate = 0;
+	state.plan_eval_score_history = [];
 	writeState(state);
 }

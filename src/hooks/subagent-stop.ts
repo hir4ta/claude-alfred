@@ -1,6 +1,8 @@
 import {
 	getPlanEvalIteration,
+	getPlanEvalScoreHistory,
 	getReviewIteration,
+	getReviewScoreHistory,
 	recordPlanEvalIteration,
 	recordReview,
 	recordReviewIteration,
@@ -47,6 +49,105 @@ const DEFAULT_MAX_REVIEW_ITERATIONS = 3;
 
 const DEFAULT_PLAN_EVAL_SCORE_THRESHOLD = 10;
 const DEFAULT_MAX_PLAN_EVAL_ITERATIONS = 2;
+
+// --- Adaptive block message builders ---
+
+type Trend = "improving" | "stagnant" | "regressing";
+
+function detectTrend(history: number[]): Trend {
+	if (history.length < 2) return "stagnant";
+	const prev = history[history.length - 2]!;
+	const curr = history[history.length - 1]!;
+	if (curr > prev) return "improving";
+	if (curr < prev) return "regressing";
+	return "stagnant";
+}
+
+function findWeakestDimension(dimensions: Record<string, number>): {
+	name: string;
+	score: number;
+} | null {
+	let weakest: { name: string; score: number } | null = null;
+	for (const [name, score] of Object.entries(dimensions)) {
+		if (!weakest || score < weakest.score) {
+			weakest = { name, score };
+		}
+	}
+	return weakest;
+}
+
+/** Build trend-aware block message for review iterations. */
+export function buildReviewBlockMessage(
+	scores: ReviewScores,
+	history: number[],
+	aggregate: number,
+	threshold: number,
+	iterCount: number,
+	maxIter: number,
+): string {
+	const trend = detectTrend(history);
+	const weakest = findWeakestDimension({
+		Correctness: scores.correctness,
+		Design: scores.design,
+		Security: scores.security,
+	});
+
+	const header = `Review: PASS but aggregate score ${aggregate}/15 is below threshold ${threshold}/15. Iteration ${iterCount}/${maxIter}.`;
+
+	if (!weakest) {
+		return `${header} Fix weak areas and run /qult:review again.`;
+	}
+
+	if (trend === "improving" && history.length >= 2) {
+		const prev = history[history.length - 2]!;
+		return `${header} Score improved ${prev}→${aggregate}. Focus on remaining weak dimension: ${weakest.name} (${weakest.score}/5).`;
+	}
+
+	if (trend === "regressing" && history.length >= 2) {
+		const prev = history[history.length - 2]!;
+		return `${header} Score regressed ${prev}→${aggregate}. Last changes introduced new issues — revert recent ${weakest.name.toLowerCase()}-related changes and take a minimal approach.`;
+	}
+
+	// stagnant or first iteration
+	if (history.length >= 2) {
+		return `${header} ${weakest.name} stuck at ${weakest.score}/5 for ${history.length} iterations. Current approach is not working — try a fundamentally different structure.`;
+	}
+	return `${header} Weakest dimension: ${weakest.name} (${weakest.score}/5). Fix this area first.`;
+}
+
+/** Build trend-aware block message for plan evaluation iterations. */
+export function buildPlanEvalBlockMessage(
+	dimensions: Record<string, number>,
+	history: number[],
+	aggregate: number,
+	threshold: number,
+	iterCount: number,
+	maxIter: number,
+): string {
+	const trend = detectTrend(history);
+	const weakest = findWeakestDimension(dimensions);
+
+	const header = `Plan: PASS but aggregate score ${aggregate}/15 is below threshold ${threshold}/15. Iteration ${iterCount}/${maxIter}.`;
+
+	if (!weakest) {
+		return `${header} Fix weak areas and re-evaluate.`;
+	}
+
+	if (trend === "improving" && history.length >= 2) {
+		const prev = history[history.length - 2]!;
+		return `${header} Score improved ${prev}→${aggregate}. Focus on remaining weak dimension: ${weakest.name} (${weakest.score}/5).`;
+	}
+
+	if (trend === "regressing" && history.length >= 2) {
+		const prev = history[history.length - 2]!;
+		return `${header} Score regressed ${prev}→${aggregate}. Last revision made the plan worse — revert recent changes to ${weakest.name.toLowerCase()} and try a different approach.`;
+	}
+
+	if (history.length >= 2) {
+		return `${header} ${weakest.name} stuck at ${weakest.score}/5 for ${history.length} iterations. Current approach is not working — restructure the plan differently.`;
+	}
+	return `${header} Weakest dimension: ${weakest.name} (${weakest.score}/5). Fix this area first.`;
+}
 
 // Plan evaluator verdicts
 const PLAN_PASS_RE = /^Plan:\s*PASS/im;
@@ -271,12 +372,10 @@ export default async function subagentStop(ev: HookEvent): Promise<void> {
 			}
 
 			const iterCount = getReviewIteration();
+			const history = getReviewScoreHistory();
 
 			if (aggregate < threshold && iterCount < maxIter) {
-				block(
-					`Review: PASS but aggregate score ${aggregate}/15 is below threshold ${threshold}/15. ` +
-						`Iteration ${iterCount}/${maxIter}. Fix weak areas and run /qult:review again.`,
-				);
+				block(buildReviewBlockMessage(scores, history, aggregate, threshold, iterCount, maxIter));
 			}
 		}
 		resetReviewIteration();
@@ -355,12 +454,10 @@ function validatePlanEvaluator(output: string): void {
 		}
 
 		const iterCount = getPlanEvalIteration();
+		const history = getPlanEvalScoreHistory();
 
 		if (aggregate < threshold && iterCount < maxIter) {
-			block(
-				`Plan: PASS but aggregate score ${aggregate}/15 is below threshold ${threshold}/15. ` +
-					`Iteration ${iterCount}/${maxIter}. Fix weak areas and re-evaluate.`,
-			);
+			block(buildPlanEvalBlockMessage(scores, history, aggregate, threshold, iterCount, maxIter));
 		}
 	}
 

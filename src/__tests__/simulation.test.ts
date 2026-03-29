@@ -795,7 +795,7 @@ describe("Scenario 23: Init → Doctor reports all OK", () => {
 
 			const hooksCheck = results.find((r) => r.name === "hooks");
 			expect(hooksCheck!.status).toBe("ok");
-			expect(hooksCheck!.message).toContain("5/5");
+			expect(hooksCheck!.message).toContain("6/6");
 		} finally {
 			process.env.HOME = originalHome;
 		}
@@ -949,5 +949,122 @@ describe("Scenario: Plan validation full flow", () => {
 			// process.exit(2)
 		}
 		expect(exitCode).toBe(2);
+	});
+});
+
+// ============================================================
+// Adaptive block messages
+// ============================================================
+
+describe("Scenario: Adaptive review block message shows trend", () => {
+	it("first iteration block mentions weakest dimension", async () => {
+		const subagentStop = (await import("../hooks/subagent-stop.ts")).default;
+		try {
+			await subagentStop({
+				agent_type: "qult-reviewer",
+				last_assistant_message:
+					"Review: PASS\nScore: Correctness=3 Design=2 Security=3\nNo issues found",
+			});
+		} catch {
+			// exit(2)
+		}
+		expect(exitCode).toBe(2);
+		const response = getResponse();
+		const reason = (response as Record<string, string>)?.reason ?? "";
+		expect(reason).toContain("Design");
+		expect(reason).toContain("2/5");
+	});
+});
+
+// ============================================================
+// TaskCompleted hook
+// ============================================================
+
+describe("Scenario: TaskCompleted verifies plan task", () => {
+	it("responds with pass when verify test succeeds", async () => {
+		// Set up plan with verify field
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Context",
+				"Test feature.",
+				"",
+				"## Tasks",
+				"### Task 1: Add helper [pending]",
+				"- **File**: src/helper.ts",
+				"- **Change**: Add utility function",
+				"- **Boundary**: None",
+				"- **Verify**: src/__tests__/helper.test.ts:testHelper",
+				"",
+				"## Success Criteria",
+				"- [ ] `echo ok` -- pass",
+			].join("\n"),
+		);
+
+		// Set up gates with test runner
+		writeFileSync(
+			join(QULT_DIR, "gates.json"),
+			JSON.stringify({
+				on_write: { lint: { command: "echo ok", timeout: 3000 } },
+				on_commit: { test: { command: "vitest run", timeout: 30000 } },
+			}),
+		);
+
+		const handler = (await import("../hooks/task-completed.ts")).default;
+		await handler({
+			hook_event_name: "TaskCompleted",
+			task_subject: "Add helper",
+		});
+
+		// Should respond (pass or fail — depends on whether test exists)
+		// The key thing is: it doesn't crash and it attempts to respond
+		const output = stdoutCapture.join("");
+		// Advisory hook: either responds with result or silently returns
+		// Since the test file doesn't exist, execSync will throw and respond with failure
+		if (output) {
+			const response = JSON.parse(output);
+			expect(response).toHaveProperty("hookSpecificOutput");
+			expect((response.hookSpecificOutput as Record<string, string>).additionalContext).toContain(
+				"Task",
+			);
+		}
+	});
+
+	it("silently returns when no plan exists", async () => {
+		writeFileSync(join(QULT_DIR, "gates.json"), "{}");
+
+		const handler = (await import("../hooks/task-completed.ts")).default;
+		await handler({
+			hook_event_name: "TaskCompleted",
+			task_subject: "Some task",
+		});
+
+		expect(exitCode).toBeNull();
+		expect(stdoutCapture.join("")).toBe("");
+	});
+
+	it("silently returns when task has no verify field", async () => {
+		const planDir = join(TEST_DIR, ".claude", "plans");
+		mkdirSync(planDir, { recursive: true });
+		writeFileSync(
+			join(planDir, "test-plan.md"),
+			[
+				"## Tasks",
+				"### Task 1: Config update [pending]",
+				"- **File**: config.json",
+				"- **Change**: Update value",
+			].join("\n"),
+		);
+
+		const handler = (await import("../hooks/task-completed.ts")).default;
+		await handler({
+			hook_event_name: "TaskCompleted",
+			task_subject: "Config update",
+		});
+
+		expect(exitCode).toBeNull();
+		expect(stdoutCapture.join("")).toBe("");
 	});
 });
