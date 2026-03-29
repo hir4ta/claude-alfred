@@ -108,6 +108,8 @@ flowchart TB
 /plugin install qult@hir4ta-qult
 ```
 
+インストール後、Claude Code を再起動する（セッションを終了して新しいセッションを開始）。
+
 ### 2. プロジェクトのセットアップ (プロジェクトごとに1回)
 
 ```
