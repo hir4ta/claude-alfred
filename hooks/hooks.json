@@ -1,0 +1,61 @@
+{
+	"hooks": {
+		"PostToolUse": [
+			{
+				"matcher": "Edit|Write|Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node ${CLAUDE_PLUGIN_ROOT}/dist/hook.mjs post-tool",
+						"timeout": 15000
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "Edit|Write|Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node ${CLAUDE_PLUGIN_ROOT}/dist/hook.mjs pre-tool",
+						"timeout": 3000
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node ${CLAUDE_PLUGIN_ROOT}/dist/hook.mjs stop",
+						"timeout": 5000
+					}
+				]
+			}
+		],
+		"SubagentStop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node ${CLAUDE_PLUGIN_ROOT}/dist/hook.mjs subagent-stop",
+						"timeout": 5000
+					}
+				]
+			}
+		],
+		"TaskCompleted": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node ${CLAUDE_PLUGIN_ROOT}/dist/hook.mjs task-completed",
+						"timeout": 15000
+					}
+				]
+			}
+		]
+	}
+}

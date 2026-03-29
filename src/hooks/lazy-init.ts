@@ -1,26 +1,34 @@
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { writePendingFixes } from "../state/pending-fixes.ts";
-import type { HookEvent } from "../types.ts";
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const SCOPED_FILE_RE = /^(session-state|pending-fixes)-.+\.json$/;
 
-/** SessionStart: ensure .qult/ exists, prompt gate detection if empty */
-export default async function sessionStart(_ev: HookEvent): Promise<void> {
-	const qultDir = join(process.cwd(), ".qult");
-	const stateDir = join(qultDir, ".state");
-	if (!existsSync(stateDir)) {
-		mkdirSync(stateDir, { recursive: true });
+let _initialized = false;
+
+/**
+ * Lazy initialization: replaces SessionStart hook.
+ * Called at the start of every dispatch(), idempotent.
+ *
+ * - Ensures .qult/.state/ exists
+ * - Cleans up stale session-scoped files (>24h)
+ * - Clears pending-fixes for fresh session start
+ */
+export function lazyInit(): void {
+	if (_initialized) return;
+	_initialized = true;
+
+	try {
+		const stateDir = join(process.cwd(), ".qult", ".state");
+		if (!existsSync(stateDir)) {
+			mkdirSync(stateDir, { recursive: true });
+		}
+		cleanupStaleScopedFiles(stateDir);
+		writePendingFixes([]);
+	} catch {
+		/* fail-open */
 	}
-
-	// Clean up stale session-scoped state files (>24h old)
-	cleanupStaleScopedFiles(stateDir);
-
-	// Clear this session's pending-fixes. Gates will re-detect on edit.
-	writePendingFixes([]);
-
-	// Gate detection prompt moved to MCP server instructions + rules
 }
 
 /** Remove session-scoped state files older than 24h. */
@@ -38,4 +46,9 @@ function cleanupStaleScopedFiles(stateDir: string): void {
 	} catch {
 		/* fail-open */
 	}
+}
+
+/** Reset for testing. */
+export function resetLazyInit(): void {
+	_initialized = false;
 }

@@ -2,6 +2,7 @@ import { flushAll } from "../state/flush.ts";
 import { setFixesSessionScope } from "../state/pending-fixes.ts";
 import { setStateSessionScope } from "../state/session-state.ts";
 import type { HookEvent } from "../types.ts";
+import { lazyInit } from "./lazy-init.ts";
 import { setCurrentEvent } from "./respond.ts";
 
 /**
@@ -13,14 +14,12 @@ export const HOOK_CLASS: Record<string, "enforcement" | "advisory"> = {
 	"post-tool": "enforcement", // Indirect: populates pending-fixes → pre-tool DENY
 	stop: "enforcement", // block: pending-fixes, incomplete plan, no review
 	"subagent-stop": "enforcement", // block: incomplete reviewer output
-	"session-start": "advisory", // respond: gate detection prompt
-	"task-completed": "advisory", // respond: plan task Verify execution
+	"task-completed": "advisory", // plan task Verify execution
 };
 
 const EVENT_MAP: Record<string, () => Promise<{ default: (ev: HookEvent) => Promise<void> }>> = {
 	"post-tool": () => import("./post-tool.ts"),
 	"pre-tool": () => import("./pre-tool.ts"),
-	"session-start": () => import("./session-start.ts"),
 	stop: () => import("./stop.ts"),
 	"subagent-stop": () => import("./subagent-stop.ts"),
 	"task-completed": () => import("./task-completed.ts"),
@@ -52,6 +51,8 @@ export async function dispatch(event: string): Promise<void> {
 		setStateSessionScope(ev.session_id);
 		setFixesSessionScope(ev.session_id);
 	}
+
+	lazyInit();
 
 	const debug = !!process.env.QULT_DEBUG;
 	setCurrentEvent(event);

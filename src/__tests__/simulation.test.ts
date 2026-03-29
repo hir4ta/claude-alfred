@@ -315,15 +315,17 @@ describe("Scenario 13: Stop infinite loop prevention", () => {
 // Session start + init
 // ============================================================
 
-describe("Scenario 15: Init creates empty gates, session-start clears state", () => {
-	it("session-start produces no stdout when gates are empty", async () => {
+describe("Scenario 15: lazyInit creates state dir and clears pending-fixes", () => {
+	it("lazyInit initializes .qult/.state/ and produces no stdout", async () => {
 		writeFileSync(join(QULT_DIR, "gates.json"), "{}");
 
-		const sessionStart = (await import("../hooks/session-start.ts")).default;
-		await sessionStart({ session_id: "test" });
+		const { lazyInit, resetLazyInit } = await import("../hooks/lazy-init.ts");
+		resetLazyInit();
+		lazyInit();
 
-		// Gate detection is now handled by MCP server instructions, not stdout
 		expect(stdoutCapture.join("")).toBe("");
+		const { existsSync } = await import("node:fs");
+		expect(existsSync(join(TEST_DIR, ".qult", ".state"))).toBe(true);
 	});
 });
 
@@ -752,51 +754,7 @@ describe("Scenario: Reviewer output with plan criteria findings passes SubagentS
 // Doctor
 // ============================================================
 
-describe("Scenario 23: Init → Doctor reports all OK", () => {
-	it("doctor passes after valid init-like setup", async () => {
-		const gates = { on_write: { lint: { command: "echo ok", timeout: 3000 } } };
-		writeFileSync(join(QULT_DIR, "gates.json"), JSON.stringify(gates));
-
-		const originalHome = process.env.HOME;
-		process.env.HOME = TEST_DIR;
-
-		try {
-			const claudeDir = join(TEST_DIR, ".claude");
-			mkdirSync(join(claudeDir, "skills", "qult-review"), { recursive: true });
-			mkdirSync(join(claudeDir, "skills", "qult-plan-generator"), {
-				recursive: true,
-			});
-			mkdirSync(join(claudeDir, "agents"), { recursive: true });
-			writeFileSync(join(claudeDir, "skills", "qult-review", "SKILL.md"), "# skill");
-			writeFileSync(join(claudeDir, "skills", "qult-plan-generator", "SKILL.md"), "# skill");
-			writeFileSync(join(claudeDir, "agents", "qult-reviewer.md"), "# agent");
-			writeFileSync(join(claudeDir, "agents", "qult-plan-generator.md"), "# agent");
-			writeFileSync(join(claudeDir, "agents", "qult-plan-evaluator.md"), "# agent");
-			mkdirSync(join(claudeDir, "rules"), { recursive: true });
-			writeFileSync(join(claudeDir, "rules", "qult-quality.md"), "# rules");
-			writeFileSync(join(claudeDir, "rules", "qult-plan.md"), "# rules");
-
-			const { QULT_HOOKS } = await import("../init.ts");
-			const hooks: Record<string, unknown> = {};
-			for (const event of Object.keys(QULT_HOOKS)) {
-				hooks[event] = QULT_HOOKS[event];
-			}
-			writeFileSync(join(claudeDir, "settings.json"), JSON.stringify({ hooks }));
-
-			const { runChecks } = await import("../doctor.ts");
-			const results = runChecks();
-
-			const failures = results.filter((r) => r.status === "fail");
-			expect(failures).toHaveLength(0);
-
-			const hooksCheck = results.find((r) => r.name === "hooks");
-			expect(hooksCheck!.status).toBe("ok");
-			expect(hooksCheck!.message).toContain("6/6");
-		} finally {
-			process.env.HOME = originalHome;
-		}
-	});
-});
+// Scenario 23 removed: init/doctor are now skills, not CLI commands
 
 // ============================================================
 // on_review gate in gates.json

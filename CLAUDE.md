@@ -1,15 +1,15 @@
 # qult
 
-Claude Code の品質を構造で守る evaluator harness。
+Claude Code の品質を構造で守る evaluator harness。Claude Code Plugin として配布。
 
 ## スタック
 
-TypeScript (Bun 1.3+, ESM) / citty (CLI) / vitest (テスト) / Biome (lint)
+TypeScript (Bun 1.3+, ESM) / vitest (テスト) / Biome (lint) / MCP SDK (状態公開)
 
 ## コマンド
 
 ```bash
-bun run build    # bun build (バンドル)
+bun run build    # bun build (hook.mjs + mcp-server.mjs)
 bun run typecheck && bun run lint  # tsc --noEmit + Biome lint
 bun run lint:fix # Biome 自動修正
 bun run test     # vitest run
@@ -17,35 +17,53 @@ bun run test     # vitest run
 
 `bun tsc` / `bun vitest` を使う（`npx` 不要）
 
+## Plugin 構造
+
+```
+qult/
+├── .claude-plugin/plugin.json   # マニフェスト
+├── hooks/hooks.json             # 5 hooks (PostToolUse, PreToolUse, Stop, SubagentStop, TaskCompleted)
+├── .mcp.json                    # MCP server (get_pending_fixes, get_session_status, get_gate_config)
+├── skills/                      # 6 skills (init, review, detect-gates, plan-generator, doctor, status)
+├── agents/                      # 3 agents (reviewer, plan-generator, plan-evaluator)
+├── dist/hook.mjs                # hook dispatcher バンドル
+└── dist/mcp-server.mjs          # MCP server バンドル
+```
+
 ## 設計原則
 
-1. **壁 > 情報提示** — DENY (exit 2) > additionalContext
+1. **壁 > 情報提示** — DENY (exit 2) が唯一の強制手段
 2. **fail-open** — 全 hook は try-catch で握りつぶす。qult の障害で Claude を止めない
 3. **structural guarantee** — 品質を構造で保証する。仮定を stress-test し、崩れたら削除
+4. **hooks = 検出 + ブロック、MCP = 情報伝達** — stdout 不使用 (#16538 回避)
 
 ## ルール
 
 ### ビルド
-- `bun build.ts` → `dist/cli.mjs`、`bun build.ts --compile` → シングルバイナリ
+- `bun build.ts` → `dist/hook.mjs` + `dist/mcp-server.mjs`
 - **dependencies ゼロ** — 全て devDependencies + bun build バンドル
 
-### Hook 設計 (6 hooks)
+### Hook 設計 (5 hooks)
 - 全 hook は fail-open (try-catch で握りつぶす)
-- exit 2 = DENY/block (唯一の強制手段)。stderr にも理由を出力
-- PostToolUse 検出 → PreToolUse ブロックの二段構え
-- TaskCompleted で Plan タスクの Verify テストを即時実行
+- exit 2 = DENY/block (唯一の強制手段)。stderr に理由を出力
+- **stdout は一切使わない** — plugin hook output bug (#16538) を回避
+- PostToolUse: gate 実行 → state 書き込み (pending-fixes)
+- PreToolUse: pending-fixes チェック → exit 2 (DENY)
+- Stop/SubagentStop: 完了条件チェック → exit 2 (block)
+- TaskCompleted: Verify テスト実行 → state 書き込み
 - 全 state file 書き込みは atomic write (write-to-temp + rename)
-- **出力スキーマ対応表** (hooks docs 準拠):
-  - respond(): SessionStart, PostToolUse, TaskCompleted
-  - deny(): PreToolUse
-  - block(): Stop, SubagentStop
+- lazyInit: dispatcher 冒頭で .qult/.state/ 初期化 (SessionStart hook の代替)
+
+### MCP Server
+- Claude が状態を取得する唯一の経路
+- tools: get_pending_fixes, get_session_status, get_gate_config
+- instructions で DENY 時の呼び出しルールを Claude に指示
 
 ### Gates
 - on_write: 編集時 (lint, typecheck) / on_commit: コミット時 (test) / on_review: レビュー時 (e2e)
 
 ### 消費者チェック
-- レジストリ変更 (init.ts, types.ts, session-state.ts) は必ず消費者への波及を確認
-- 例: init.ts に agent 追加 → doctor.ts, テストも更新が必要
+- 型変更 (types.ts, session-state.ts) は必ず消費者への波及を確認
 
 ### Phase Gate (各コミット前に必ず実行)
 1. `bun vitest run` — 全テスト pass

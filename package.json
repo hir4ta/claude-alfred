@@ -2,9 +2,6 @@
   "name": "qult",
   "version": "0.15.3",
   "type": "module",
-  "bin": {
-    "qult": "dist/cli.mjs"
-  },
   "files": [
     "dist/"
   ],
@@ -13,7 +10,7 @@
   },
   "scripts": {
     "build": "bun build.ts",
-    "dev": "bun --watch src/cli.ts",
+    "dev": "bun --watch src/hook-entry.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
@@ -25,7 +22,6 @@
     "@biomejs/biome": "^2.4.7",
     "@modelcontextprotocol/sdk": "1.28.0",
     "@types/bun": "^1.3.11",
-    "citty": "^0.2",
     "typescript": "^5.8",
     "vitest": "^3"
   }

@@ -2,13 +2,14 @@
 
 ![Version](https://img.shields.io/badge/version-0.15.3-7fbbb3?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-standalone_binary-a7c080?style=flat-square&logo=typescript&logoColor=d3c6aa)
-![Hooks](https://img.shields.io/badge/hooks-6-dbbc7f?style=flat-square)
+![Hooks](https://img.shields.io/badge/hooks-5-dbbc7f?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-83c092?style=flat-square)
 
 **Claude の悪い癖を物理的に止める。** コードの品質を構造で守る evaluator harness。
 
 > Claude は優秀だが、lint エラーを放置して次のファイルに行く。テストなしでコミットする。自分のコードを褒めてレビューを終える。
-> qult は 6 hooks + 独立 Opus evaluator で、それを **お願い (advisory) ではなく exit 2 (DENY) で止める**。
+> qult は 5 hooks + MCP server + 独立 Opus evaluator で、それを **お願い (advisory) ではなく exit 2 (DENY) で止める**。
+> Claude Code Plugin として配布。`/plugin install` で導入完了。
 
 > [!NOTE]
 > セッション開始時に `SessionStart:startup hook error` や `Stop hook error` と表示されることがありますが、**これは qult のバグではありません**。
@@ -16,7 +17,7 @@
 > hook 自体は正常に動作しています。
 
 > [!WARNING]
-> **PreToolUse hook の DENY が無視される場合があります。** qult は正しく `exit 2` + `permissionDecision: "deny"` を返しますが、
+> **PreToolUse hook の DENY が無視される場合があります。** qult は正しく `exit 2` を返しますが、
 > Claude Code がブロックせずにツールを実行してしまうケースが報告されています
 > ([#21988](https://github.com/anthropics/claude-code/issues/21988), [#4669](https://github.com/anthropics/claude-code/issues/4669), [#24327](https://github.com/anthropics/claude-code/issues/24327))。
 > Claude Code 側の修正待ちです。
@@ -79,50 +80,56 @@ flowchart TB
 
 ---
 
-## 6 Hooks
+## 5 Hooks + MCP Server
 
 | 分類 | Hook | 役割 |
 |------|------|------|
-| **壁** (enforcement) | PostToolUse | Edit/Write 後に lint/type gate 実行、pending-fixes 作成 |
+| **壁** (enforcement) | PostToolUse | Edit/Write 後に lint/type gate 実行、state に書き込み |
 | **壁** (enforcement) | PreToolUse | pending-fixes 未修正なら DENY、commit 前にテスト/レビュー要求 |
 | **完了ゲート** (enforcement) | Stop | 未修正エラー・未完了タスク・レビュー未実施なら block |
 | **サブエージェント** (enforcement) | SubagentStop | レビュー出力検証 + 傾向分析付きスコア閾値強制 (12/15) |
 | **タスク検証** (advisory) | TaskCompleted | Plan タスク完了時に Verify テストを即時実行 |
-| **セットアップ** (advisory) | SessionStart | `.qult/` 初期化、gate 未設定なら検出を促す |
+
+| MCP Tool | 役割 |
+|----------|------|
+| get_pending_fixes | lint/typecheck エラーの詳細を返す |
+| get_session_status | テスト/レビュー状態を返す |
+| get_gate_config | ゲート設定を返す |
 
 ---
 
 ## インストール
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/hir4ta/qult/main/install.sh | bash
+Claude Code Plugin として導入:
+
+```
+/plugin install qult
 ```
 
-シェルを再起動 (または `source ~/.zshrc`) した後:
+プロジェクトごとに初期セットアップ:
 
-```bash
-cd your-project
-qult init       # 6 hooks + skill + agent + rules + ゲート自動検出
-qult doctor     # セットアップの健全性を確認
+```
+/qult:init
 ```
 
-`qult init` はプロジェクトの toolchain を自動検出し `.qult/gates.json` を生成する。
+`.qult/gates.json` (ゲート設定) + `.claude/rules/qult*.md` (ルール) が生成される。
 手動で再検出する場合は `/qult:detect-gates` を実行。
 
 ## 更新
 
-```bash
-qult self-update
+```
+/plugin
 ```
 
-GitHub Releases から最新バイナリをダウンロードし、hooks とテンプレートを自動更新する。
+Plugin 詳細画面から更新。
 
 ## アンインストール
 
-```bash
-qult uninstall --yes   # hooks, skills, agents, rules, state を除去
-rm $(which qult)       # バイナリを削除
 ```
+/plugin
+```
+
+Plugin 一覧から qult を削除。プロジェクトの `.qult/` と `.claude/rules/qult*.md` は手動で削除。
 
 ## 設定
 
@@ -201,7 +208,6 @@ rm $(which qult)       # バイナリを削除
 
 ## スタック
 
-TypeScript / citty (CLI) / vitest (テスト) / Biome (lint)
+TypeScript / MCP SDK / vitest (テスト) / Biome (lint)
 
-ユーザーは Bun 不要。`curl` でスタンドアロンバイナリをインストールするだけ。
-開発には Bun 1.3+ が必要。
+Claude Code Plugin として配布。開発には Bun 1.3+ が必要。
