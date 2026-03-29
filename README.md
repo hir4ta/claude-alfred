@@ -1,7 +1,7 @@
 # qult
 
 ![Version](https://img.shields.io/badge/version-0.15.3-7fbbb3?style=flat-square)
-![TypeScript](https://img.shields.io/badge/TypeScript-Bun_1.3+-a7c080?style=flat-square&logo=typescript&logoColor=d3c6aa)
+![TypeScript](https://img.shields.io/badge/TypeScript-standalone_binary-a7c080?style=flat-square&logo=typescript&logoColor=d3c6aa)
 ![Hooks](https://img.shields.io/badge/hooks-6-dbbc7f?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-83c092?style=flat-square)
 
@@ -95,17 +95,54 @@ flowchart TB
 ## インストール
 
 ```bash
-bun install && bun build.ts && bun link
+curl -fsSL https://raw.githubusercontent.com/hir4ta/qult/main/install.sh | bash
+```
 
-qult init       # ~/.claude/ に 6 hooks + skill + agent + rules を配置
+シェルを再起動 (または `source ~/.zshrc`) した後:
+
+```bash
+cd your-project
+qult init       # 6 hooks + skill + agent + rules + ゲート自動検出
 qult doctor     # セットアップの健全性を確認
 ```
 
-Gate は自動検出:
+`qult init` はプロジェクトの toolchain を自動検出し `.qult/gates.json` を生成する。
+手動で再検出する場合は `/qult:detect-gates` を実行。
+
+## 更新
 
 ```bash
-/qult:detect-gates    # → .qult/gates.json に書き込み
+qult self-update
 ```
+
+GitHub Releases から最新バイナリをダウンロードし、hooks とテンプレートを自動更新する。
+
+## アンインストール
+
+```bash
+qult uninstall --yes   # hooks, skills, agents, rules, state を除去
+rm $(which qult)       # バイナリを削除
+```
+
+## 設定
+
+`.qult/config.json` で閾値をカスタマイズできる (全てオプション):
+
+```json
+{
+  "review": {
+    "score_threshold": 12,
+    "max_iterations": 3,
+    "required_changed_files": 5
+  },
+  "gates": {
+    "output_max_chars": 2000,
+    "default_timeout": 10000
+  }
+}
+```
+
+環境変数でも上書き可能: `QULT_REVIEW_SCORE_THRESHOLD`, `QULT_GATE_OUTPUT_MAX` など。
 
 <details>
 <summary><strong>対応言語・ツール</strong></summary>
@@ -164,4 +201,7 @@ Gate は自動検出:
 
 ## スタック
 
-TypeScript (Bun 1.3+, ESM) / citty (CLI) / vitest (テスト) / Biome (lint)
+TypeScript / citty (CLI) / vitest (テスト) / Biome (lint)
+
+ユーザーは Bun 不要。`curl` でスタンドアロンバイナリをインストールするだけ。
+開発には Bun 1.3+ が必要。

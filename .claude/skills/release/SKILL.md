@@ -76,12 +76,13 @@ After CI succeeds, rebuild and install locally:
 
 ```
 bun build.ts
-qult init
-bun link
+qult init --force
 qult doctor
 ```
 
-All 4 commands must succeed. `qult doctor` must show all `[OK]`.
+All 3 commands must succeed. `qult doctor` must show all `[OK]`.
+
+Note: `bun link` is NOT used — users install via `curl` (standalone binary). `bun link` creates a symlink in `~/.bun/bin/` that shadows the curl-installed binary.
 
 ## Verify Release
 
